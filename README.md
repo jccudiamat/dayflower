@@ -1,2 +1,2 @@
-# 2Lip
+# twolip
 LDR app
