@@ -244,6 +244,152 @@ class FinanceRepository {
     await _client.from('finance_entries').delete().eq('id', id);
   }
 
+  /* ── Recurring ───────────────────────────────────────────── */
+
+  Stream<List<RecurringRule>> watchRecurring(String pairId) => _client
+      .from('finance_recurring')
+      .stream(primaryKey: ['id'])
+      .eq('pair_id', pairId)
+      .order('next_due', ascending: true)
+      .map((rows) => rows.map(RecurringRule.fromMap).toList());
+
+  Future<void> saveRecurring({
+    String? id,
+    required String pairId,
+    required String? ownerId,
+    required String name,
+    required EntryKind kind,
+    required String category,
+    required String emoji,
+    required double amount,
+    required String currency,
+    String? accountId,
+    String? toAccountId,
+    String? budgetId,
+    required RecurringInterval interval,
+    required DateTime nextDue,
+    DateTime? endsOn,
+    required bool autoPost,
+    bool active = true,
+    required String userId,
+  }) async {
+    final values = {
+      'owner_id': ownerId,
+      'name': name.trim(),
+      'kind': kind.name,
+      'category': category,
+      'emoji': emoji,
+      'amount': amount,
+      'currency': currency,
+      'account_id': accountId,
+      'to_account_id': kind == EntryKind.transfer ? toAccountId : null,
+      'budget_id': kind == EntryKind.expense ? budgetId : null,
+      'interval': interval.name,
+      'next_due': dateOnly(nextDue),
+      'ends_on': endsOn == null ? null : dateOnly(endsOn),
+      'auto_post': autoPost,
+      'active': active,
+    };
+    if (id == null) {
+      await _client.from('finance_recurring').insert({
+        ...values,
+        'pair_id': pairId,
+        'created_by': userId,
+      });
+    } else {
+      await _client.from('finance_recurring').update(values).eq('id', id);
+    }
+  }
+
+  Future<void> deleteRecurring(String id) async {
+    await _client.from('finance_recurring').delete().eq('id', id);
+  }
+
+  /// Turns one due occurrence of [rule] into a real entry and advances the
+  /// rule to its next date.
+  ///
+  /// The entry is dated the day it was *due*, not today: a subscription that
+  /// billed on the 1st belongs in the 1st's numbers even if the app was not
+  /// opened until the 9th. That is also what makes catching up on several
+  /// missed periods produce a correct month rather than a pile of entries
+  /// all dated today.
+  Future<void> postOccurrence({
+    required RecurringRule rule,
+    required String userId,
+  }) async {
+    await saveEntry(
+      pairId: rule.pairId,
+      ownerId: rule.ownerId,
+      accountId: rule.accountId,
+      toAccountId: rule.toAccountId,
+      budgetId: rule.budgetId,
+      kind: rule.kind,
+      category: rule.category,
+      amount: rule.amount,
+      currency: rule.currency,
+      note: rule.name,
+      occurredOn: rule.nextDue,
+      userId: userId,
+    );
+
+    final next = rule.interval.next(rule.nextDue);
+    await _client.from('finance_recurring').update({
+      'next_due': dateOnly(next),
+      // A rule that has run past its end date stops rather than being
+      // deleted — the entries it already posted still refer to it.
+      'active': rule.endsOn == null || !next.isAfter(rule.endsOn!),
+    }).eq('id', rule.id);
+  }
+
+  /// Posts every occurrence that has come due for the rules that opted into
+  /// [RecurringRule.autoPost], catching up one period at a time.
+  ///
+  /// Returns how many entries were written. Rules that need confirming are
+  /// left alone for the screen to surface.
+  ///
+  /// The loop is capped: a yearly rule left dormant for a decade should
+  /// produce ten entries, but a corrupt date must not spin forever.
+  Future<int> postDueAutomatic({
+    required List<RecurringRule> rules,
+    required String userId,
+  }) async {
+    final now = DateTime.now();
+    var posted = 0;
+    for (final rule in rules) {
+      if (!rule.active || !rule.autoPost || rule.isFinished) continue;
+      var current = rule;
+      var guard = 0;
+      while (current.isDue(now) && !current.isFinished && guard++ < 60) {
+        await postOccurrence(rule: current, userId: userId);
+        posted++;
+        // Walk forward locally rather than re-reading: the stream will
+        // catch up on its own, and re-querying inside the loop would race
+        // with it.
+        current = RecurringRule(
+          id: current.id,
+          pairId: current.pairId,
+          ownerId: current.ownerId,
+          name: current.name,
+          kind: current.kind,
+          category: current.category,
+          emoji: current.emoji,
+          amount: current.amount,
+          currency: current.currency,
+          accountId: current.accountId,
+          toAccountId: current.toAccountId,
+          budgetId: current.budgetId,
+          interval: current.interval,
+          nextDue: current.interval.next(current.nextDue),
+          endsOn: current.endsOn,
+          autoPost: current.autoPost,
+          active: current.active,
+          createdBy: current.createdBy,
+        );
+      }
+    }
+    return posted;
+  }
+
   /* ── Exchange rates ──────────────────────────────────────── */
 
   Future<void> saveRate({
@@ -365,6 +511,13 @@ final financeBudgetsProvider =
   final pair = ref.watch(currentPairProvider).valueOrNull;
   if (pair == null || !pair.isLinked) return Stream.value(const []);
   return ref.watch(financeRepositoryProvider).watchBudgets(pair.id);
+});
+
+final financeRecurringProvider =
+    StreamProvider.autoDispose<List<RecurringRule>>((ref) {
+  final pair = ref.watch(currentPairProvider).valueOrNull;
+  if (pair == null || !pair.isLinked) return Stream.value(const []);
+  return ref.watch(financeRepositoryProvider).watchRecurring(pair.id);
 });
 
 /// Every rate on file, indexed for conversion. Empty is a valid state and

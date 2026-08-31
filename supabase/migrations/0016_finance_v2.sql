@@ -285,6 +285,16 @@ create table if not exists public.finance_recurring (
   created_at timestamptz not null default now()
 );
 
+-- Same rule as finance_entries: only spending can consume a budget. The
+-- client normalises this already, but a constraint that lives in only one
+-- of the two tables is a rule you have to remember rather than one the
+-- database keeps for you.
+alter table public.finance_recurring
+  drop constraint if exists finance_recurring_budget_only_on_expense;
+alter table public.finance_recurring
+  add constraint finance_recurring_budget_only_on_expense
+  check (budget_id is null or kind = 'expense');
+
 create index if not exists finance_recurring_pair_due_idx
   on public.finance_recurring (pair_id, active, next_due);
 

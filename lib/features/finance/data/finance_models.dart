@@ -489,3 +489,126 @@ class FxTable {
 
   bool has(String currency) => rateFor(currency) != null;
 }
+
+/* ── Recurring ──────────────────────────────────────────────── */
+
+/// How often a recurring rule comes round. Separate from [FinancePeriod]
+/// because a subscription can be quarterly and a budget cannot.
+enum RecurringInterval {
+  weekly('Weekly'),
+  monthly('Monthly'),
+  quarterly('Quarterly'),
+  yearly('Yearly');
+
+  const RecurringInterval(this.label);
+  final String label;
+
+  static RecurringInterval fromName(String? name) =>
+      RecurringInterval.values.firstWhere(
+        (i) => i.name == name,
+        orElse: () => RecurringInterval.monthly,
+      );
+
+  /// The next occurrence after [from].
+  ///
+  /// Month arithmetic is done with `DateTime(y, m + n, d)` so Dart
+  /// normalises the overflow: a rule due on the 31st rolls to 1 March in a
+  /// non-leap year rather than throwing or silently skipping the month.
+  DateTime next(DateTime from) => switch (this) {
+        RecurringInterval.weekly => from.add(const Duration(days: 7)),
+        RecurringInterval.monthly =>
+          DateTime(from.year, from.month + 1, from.day),
+        RecurringInterval.quarterly =>
+          DateTime(from.year, from.month + 3, from.day),
+        RecurringInterval.yearly =>
+          DateTime(from.year + 1, from.month, from.day),
+      };
+}
+
+/// A rule that produces entries — a subscription, rent, a salary, a loan
+/// payment. Deliberately not a ledger of its own: it posts ordinary
+/// [FinanceEntry] rows, so nothing downstream has to know it existed.
+@immutable
+class RecurringRule {
+  const RecurringRule({
+    required this.id,
+    required this.pairId,
+    this.ownerId,
+    required this.name,
+    required this.kind,
+    required this.category,
+    required this.emoji,
+    required this.amount,
+    required this.currency,
+    this.accountId,
+    this.toAccountId,
+    this.budgetId,
+    required this.interval,
+    required this.nextDue,
+    this.endsOn,
+    required this.autoPost,
+    required this.active,
+    required this.createdBy,
+  });
+
+  final String id;
+  final String pairId;
+  final String? ownerId;
+  final String name;
+  final EntryKind kind;
+  final String category;
+  final String emoji;
+  final double amount;
+  final String currency;
+  final String? accountId;
+  final String? toAccountId;
+  final String? budgetId;
+  final RecurringInterval interval;
+  final DateTime nextDue;
+  final DateTime? endsOn;
+
+  /// True: posts by itself once due. False: waits to be confirmed.
+  /// Subscriptions want true; a variable electricity bill wants false.
+  final bool autoPost;
+
+  final bool active;
+  final String createdBy;
+
+  bool get isShared => ownerId == null;
+
+  /// Due today or overdue. Compared date-only: a rule due today should read
+  /// as due all day, not from midnight-plus-one-tick.
+  bool isDue(DateTime now) {
+    final today = DateTime(now.year, now.month, now.day);
+    final due = DateTime(nextDue.year, nextDue.month, nextDue.day);
+    return !due.isAfter(today);
+  }
+
+  /// A rule past its end date stops producing anything, but is kept so the
+  /// history it already posted still has something to point at.
+  bool get isFinished =>
+      endsOn != null && nextDue.isAfter(endsOn!);
+
+  factory RecurringRule.fromMap(Map<String, dynamic> map) => RecurringRule(
+        id: map['id'] as String,
+        pairId: map['pair_id'] as String,
+        ownerId: map['owner_id'] as String?,
+        name: map['name'] as String,
+        kind: EntryKind.fromName(map['kind'] as String?),
+        category: map['category'] as String? ?? 'Other',
+        emoji: map['emoji'] as String? ?? '🔁',
+        amount: toDouble(map['amount']),
+        currency: map['currency'] as String? ?? 'PHP',
+        accountId: map['account_id'] as String?,
+        toAccountId: map['to_account_id'] as String?,
+        budgetId: map['budget_id'] as String?,
+        interval: RecurringInterval.fromName(map['interval'] as String?),
+        nextDue: DateTime.parse(map['next_due'] as String),
+        endsOn: map['ends_on'] == null
+            ? null
+            : DateTime.parse(map['ends_on'] as String),
+        autoPost: map['auto_post'] as bool? ?? false,
+        active: map['active'] as bool? ?? true,
+        createdBy: map['created_by'] as String,
+      );
+}

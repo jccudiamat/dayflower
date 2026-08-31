@@ -39,6 +39,11 @@ class FinanceScreen extends ConsumerStatefulWidget {
 
 class _FinanceScreenState extends ConsumerState<FinanceScreen> {
   FinanceScope _scope = FinanceScope.shared;
+
+  /// Auto-posting runs once per visit. Posting writes entries, which the
+  /// stream reports back as a change, which rebuilds this screen — without
+  /// this flag that is a loop that keeps posting.
+  bool _autoPosted = false;
   late DateTime _month = _thisMonth();
 
   static DateTime _thisMonth() {
@@ -66,6 +71,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final accountsAsync = ref.watch(financeAccountsProvider);
     final entriesAsync = ref.watch(financeEntriesProvider);
     final budgetsAsync = ref.watch(financeBudgetsProvider);
+    final recurringAsync = ref.watch(financeRecurringProvider);
 
     final partnerId =
         userId == null ? null : pair?.partnerIdFor(userId);
@@ -90,6 +96,23 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final budgets = (budgetsAsync.valueOrNull ?? const [])
         .where((b) => scopeMatches(b.ownerId))
         .toList();
+    final recurring = (recurringAsync.valueOrNull ?? const [])
+        .where((r) => scopeMatches(r.ownerId))
+        .toList();
+    final dueNow = recurring
+        .where((r) => r.active && !r.isFinished && r.isDue(DateTime.now()))
+        .toList();
+
+    // Catch up anything that opted into auto-posting, once per visit. Only
+    // in a writable scope — posting into the partner's ledger from a
+    // read-only view would be writing on their behalf.
+    if (!_autoPosted && !readOnly && !recurringAsync.isLoading) {
+      _autoPosted = true;
+      final auto = recurring.where((r) => r.autoPost).toList();
+      if (auto.isNotEmpty) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _autoPost(auto));
+      }
+    }
 
     final summary = FinanceSummary.from(
       accounts: accounts,
@@ -107,7 +130,8 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
 
     final loading = accountsAsync.isLoading ||
         entriesAsync.isLoading ||
-        budgetsAsync.isLoading;
+        budgetsAsync.isLoading ||
+        recurringAsync.isLoading;
     // Both streams feed `valueOrNull ?? const []`, so a failure would
     // otherwise render as "you have no accounts" — which looks exactly
     // like the honest empty state and means the opposite.
@@ -222,6 +246,57 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                                           ),
                                 ),
                               )),
+                        // ── Recurring ──────────────────────────
+                        // Above Budgets because a due subscription is the
+                        // thing most likely to need acting on right now.
+                        const SizedBox(height: AppSpace.md),
+                        _SectionHeader(
+                          label: dueNow.isEmpty
+                              ? 'Recurring'
+                              : 'Recurring · ${dueNow.length} due',
+                          action: readOnly ? null : 'Add',
+                          onAction: () => _openRecurringSheet(
+                            ownerId: owner,
+                            accounts: accounts,
+                            budgets: budgets,
+                            currency: currency,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.xs),
+                        if (recurring.isEmpty)
+                          _EmptyHint(
+                            emoji: '🔁',
+                            title: 'Nothing repeating yet',
+                            body: readOnly
+                                ? "They haven't set any up."
+                                : 'Rent, salary, subscriptions, a loan '
+                                    'payment — set it once and it posts '
+                                    'itself, or waits for you to confirm.',
+                          )
+                        else
+                          ...recurring.map((rule) => Padding(
+                                padding:
+                                    const EdgeInsets.only(bottom: AppSpace.xs),
+                                child: _RecurringCard(
+                                  rule: rule,
+                                  onTap: readOnly
+                                      ? null
+                                      : () => _openRecurringSheet(
+                                            ownerId: owner,
+                                            accounts: accounts,
+                                            budgets: budgets,
+                                            currency: currency,
+                                            existing: rule,
+                                          ),
+                                  onPost: readOnly ||
+                                          !rule.isDue(DateTime.now()) ||
+                                          rule.autoPost ||
+                                          !rule.active
+                                      ? null
+                                      : () => _postNow(rule),
+                                ),
+                              )),
+
                         // ── Budgets ────────────────────────────
                         const SizedBox(height: AppSpace.md),
                         _SectionHeader(
@@ -413,8 +488,112 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           );
         case _EntrySaved():
         case _BudgetSaved():
+        case _RecurringSaved():
           break; // not reachable from this sheet
       }
+    } catch (e) {
+      if (mounted) _showError(context, e);
+    }
+  }
+
+  Future<void> _openRecurringSheet({
+    required String? ownerId,
+    required List<FinanceAccount> accounts,
+    required List<FinanceBudget> budgets,
+    required String currency,
+    RecurringRule? existing,
+  }) async {
+    final userId = ref.read(currentUserIdProvider);
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    if (userId == null || pair == null) return;
+
+    final result = await showModalBottomSheet<_SheetResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _RecurringSheet(
+        existing: existing,
+        accounts: accounts,
+        budgets: budgets,
+        currency: currency,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final repo = ref.read(financeRepositoryProvider);
+    try {
+      switch (result) {
+        case _Deleted():
+          final ok = await showConfirmDialog(
+            context,
+            title: 'Delete ${existing!.name}?',
+            message: 'Entries it already posted stay where they are.',
+            confirmLabel: 'Delete',
+          );
+          if (ok) await repo.deleteRecurring(existing.id);
+        case _RecurringSaved(:final draft):
+          await repo.saveRecurring(
+            id: existing?.id,
+            pairId: pair.id,
+            ownerId: existing?.ownerId ?? ownerId,
+            name: draft.name,
+            kind: draft.kind,
+            category: draft.category,
+            emoji: draft.emoji,
+            amount: draft.amount,
+            currency: draft.currency,
+            accountId: draft.accountId,
+            toAccountId: draft.toAccountId,
+            budgetId: draft.budgetId,
+            interval: draft.interval,
+            nextDue: draft.nextDue,
+            autoPost: draft.autoPost,
+            userId: userId,
+          );
+        case _AccountSaved():
+        case _EntrySaved():
+        case _BudgetSaved():
+          break; // not reachable from this sheet
+      }
+    } catch (e) {
+      if (mounted) _showError(context, e);
+    }
+  }
+
+  /// Catches up every rule that opted into posting itself.
+  ///
+  /// Failures are deliberately quiet: this runs unprompted on screen load,
+  /// and a red bar the user did not ask for, about a subscription they were
+  /// not thinking about, is worse than the rule simply staying due — which
+  /// is visible on the card anyway.
+  Future<void> _autoPost(List<RecurringRule> rules) async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
+    try {
+      final posted = await ref
+          .read(financeRepositoryProvider)
+          .postDueAutomatic(rules: rules, userId: userId);
+      if (posted > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Posted $posted recurring '
+                '${posted == 1 ? 'entry' : 'entries'}.'),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('recurring auto-post failed: $e');
+    }
+  }
+
+  /// Posts one occurrence of a rule the user confirmed by hand.
+  Future<void> _postNow(RecurringRule rule) async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
+    try {
+      await ref
+          .read(financeRepositoryProvider)
+          .postOccurrence(rule: rule, userId: userId);
     } catch (e) {
       if (mounted) _showError(context, e);
     }
@@ -481,6 +660,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           );
         case _AccountSaved():
         case _EntrySaved():
+        case _RecurringSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -540,6 +720,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           );
         case _AccountSaved():
         case _BudgetSaved():
+        case _RecurringSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -1090,6 +1271,42 @@ class _AccountSaved extends _SheetResult {
 class _EntrySaved extends _SheetResult {
   const _EntrySaved(this.draft);
   final _EntryDraft draft;
+}
+
+class _RecurringSaved extends _SheetResult {
+  const _RecurringSaved(this.draft);
+  final _RecurringDraft draft;
+}
+
+class _RecurringDraft {
+  const _RecurringDraft({
+    required this.name,
+    required this.kind,
+    required this.category,
+    required this.emoji,
+    required this.amount,
+    required this.currency,
+    required this.accountId,
+    required this.toAccountId,
+    required this.budgetId,
+    required this.interval,
+    required this.nextDue,
+    required this.autoPost,
+  });
+  final String name;
+  final EntryKind kind;
+  final String category;
+  final String emoji;
+  final double amount;
+  final String currency;
+  final String? accountId;
+  final String? toAccountId;
+  final String? budgetId;
+  final RecurringInterval interval;
+  final DateTime nextDue;
+
+  /// True posts by itself once due; false waits to be confirmed.
+  final bool autoPost;
 }
 
 class _BudgetSaved extends _SheetResult {
@@ -2385,6 +2602,482 @@ class _BudgetSheetState extends State<_BudgetSheet> {
               child: TextButton(
                 onPressed: () => Navigator.pop(context, const _Deleted()),
                 child: Text('Delete budget',
+                    style: AppText.caption(AppColors.danger)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Recurring card ──────────────────────────────────
+
+/// One repeating rule: what it is, when it next lands, and — when it needs
+/// confirming — a button to post it.
+///
+/// A rule that posts itself gets no button. Offering one would imply the
+/// entry had not been written yet, which is the opposite of what auto-post
+/// means.
+class _RecurringCard extends StatelessWidget {
+  const _RecurringCard({required this.rule, this.onTap, this.onPost});
+
+  final RecurringRule rule;
+  final VoidCallback? onTap;
+  final VoidCallback? onPost;
+
+  @override
+  Widget build(BuildContext context) {
+    final due = rule.isDue(DateTime.now()) && rule.active && !rule.isFinished;
+    final inactive = !rule.active || rule.isFinished;
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: AppSpace.card,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(
+              color: due ? AppColors.blushMid : AppColors.border,
+            ),
+          ),
+          child: Row(
+            children: [
+              Opacity(
+                opacity: inactive ? .4 : 1,
+                child: Text(rule.emoji, style: const TextStyle(fontSize: 20)),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      rule.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.body(
+                        inactive ? AppColors.muted : AppColors.ink,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      inactive
+                          ? 'Finished'
+                          : due
+                              ? '${rule.interval.label} · due now'
+                              : '${rule.interval.label} · next '
+                                  '${DateFormat('d MMM').format(rule.nextDue)}',
+                      style: AppText.caption(
+                          due ? AppColors.brand : AppColors.muted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _money(rule.amount, rule.currency),
+                    style: AppText.subtitle(
+                      rule.kind == EntryKind.income
+                          ? AppColors.success
+                          : AppColors.ink,
+                    ),
+                  ),
+                  if (onPost != null)
+                    GestureDetector(
+                      onTap: onPost,
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpace.xs, vertical: 3),
+                        decoration: BoxDecoration(
+                          gradient: AppGradients.cta,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                        ),
+                        child: Text('Post now',
+                            style: AppText.label(Colors.white)),
+                      ),
+                    )
+                  else if (rule.autoPost && !inactive)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text('Automatic', style: AppText.label()),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Recurring sheet ─────────────────────────────────
+
+class _RecurringSheet extends StatefulWidget {
+  const _RecurringSheet({
+    required this.existing,
+    required this.accounts,
+    required this.budgets,
+    required this.currency,
+  });
+
+  final RecurringRule? existing;
+  final List<FinanceAccount> accounts;
+  final List<FinanceBudget> budgets;
+  final String currency;
+
+  @override
+  State<_RecurringSheet> createState() => _RecurringSheetState();
+}
+
+class _RecurringSheetState extends State<_RecurringSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _amount;
+  late final TextEditingController _emoji;
+  late EntryKind _kind;
+  late String _category;
+  late String _currency;
+  late RecurringInterval _interval;
+  late DateTime _nextDue;
+  late bool _autoPost;
+  String? _accountId;
+  String? _toAccountId;
+  String? _budgetId;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _kind = e?.kind ?? EntryKind.expense;
+    _name = TextEditingController(text: e?.name ?? '');
+    _amount = TextEditingController(
+      text: e == null ? '' : _plain(e.amount),
+    );
+    _emoji = TextEditingController(text: e?.emoji ?? '🔁');
+    _category = e?.category ?? _kind.categories.first;
+    _accountId = e?.accountId ??
+        (widget.accounts.isEmpty ? null : widget.accounts.first.id);
+    _toAccountId = e?.toAccountId;
+    _budgetId = e?.budgetId;
+    _currency = e?.currency ?? _accountCurrency() ?? widget.currency;
+    _interval = e?.interval ?? RecurringInterval.monthly;
+    // Tomorrow, not today: a rule created today that is already due would
+    // post the moment the sheet closes, which reads as the app inventing a
+    // transaction.
+    _nextDue = e?.nextDue ??
+        DateTime.now().add(const Duration(days: 1));
+    _autoPost = e?.autoPost ?? false;
+  }
+
+  String? _accountCurrency() {
+    for (final a in widget.accounts) {
+      if (a.id == _accountId) return a.currency;
+    }
+    return null;
+  }
+
+  static String _plain(double v) =>
+      v.truncateToDouble() == v ? v.toInt().toString() : v.toString();
+
+  List<FinanceBudget> get _billableBudgets => widget.budgets
+      .where((b) => !b.archived && b.scope == BudgetScope.category)
+      .toList(growable: false);
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _amount.dispose();
+    _emoji.dispose();
+    super.dispose();
+  }
+
+  void _pickKind(EntryKind kind) {
+    setState(() {
+      _kind = kind;
+      if (!kind.categories.contains(_category)) {
+        _category = kind.categories.first;
+      }
+      if (kind != EntryKind.expense) _budgetId = null;
+    });
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _nextDue,
+      firstDate: DateTime(DateTime.now().year - 1),
+      lastDate: DateTime(DateTime.now().year + 10),
+    );
+    if (picked != null) setState(() => _nextDue = picked);
+  }
+
+  void _save() {
+    final name = _name.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Give it a name first.')),
+      );
+      return;
+    }
+    final amount = double.tryParse(_amount.text.trim().replaceAll(',', ''));
+    if (amount == null || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter an amount above zero.')),
+      );
+      return;
+    }
+    if (_kind == EntryKind.transfer &&
+        (_toAccountId == null || _toAccountId == _accountId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('A transfer needs a different account to land in.')),
+      );
+      return;
+    }
+    final emoji = _emoji.text.trim();
+    Navigator.pop(
+      context,
+      _RecurringSaved(_RecurringDraft(
+        name: name,
+        kind: _kind,
+        category: _category,
+        emoji: emoji.isEmpty ? '🔁' : emoji,
+        amount: amount,
+        currency: _currency,
+        accountId: _accountId,
+        toAccountId: _toAccountId,
+        budgetId: _budgetId,
+        interval: _interval,
+        nextDue: _nextDue,
+        autoPost: _autoPost,
+      )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isNew = widget.existing == null;
+    final isTransfer = _kind == EntryKind.transfer;
+
+    return AppBottomSheet(
+      title: isNew ? 'New recurring' : 'Edit recurring',
+      subtitle: 'Rent, salary, a subscription, a loan payment',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          AppSegmented<EntryKind>(
+            options: {for (final k in EntryKind.values) k: k.label},
+            value: _kind,
+            onChanged: _pickKind,
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 68,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppFieldLabel('Icon'),
+                    AppSheetField(
+                      controller: _emoji,
+                      maxLength: 2,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppFieldLabel('Name'),
+                    AppSheetField(
+                      controller: _name,
+                      hint: 'Netflix',
+                      autofocus: isNew,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Amount'),
+          AppSheetField(
+            controller: _amount,
+            hint: '0',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            prefix: Padding(
+              padding: const EdgeInsets.only(left: AppSpace.sm, right: 6),
+              child: Text(
+                _symbols[_currency] ?? _currency,
+                style: AppText.subtitle(AppColors.brand),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          AppFieldLabel(isTransfer ? 'From' : 'Account'),
+          _AccountPicker(
+            accounts: widget.accounts,
+            selected: _accountId,
+            allowNone: !isTransfer,
+            onChanged: (id) => setState(() {
+              _accountId = id;
+              final adopted = _accountCurrency();
+              if (adopted != null) _currency = adopted;
+            }),
+          ),
+          if (isTransfer) ...[
+            const SizedBox(height: AppSpace.sm),
+            const AppFieldLabel('To'),
+            _AccountPicker(
+              accounts:
+                  widget.accounts.where((a) => a.id != _accountId).toList(),
+              selected: _toAccountId,
+              allowNone: false,
+              onChanged: (id) => setState(() => _toAccountId = id),
+            ),
+          ],
+          if (_kind == EntryKind.expense && _billableBudgets.isNotEmpty) ...[
+            const SizedBox(height: AppSpace.sm),
+            const AppFieldLabel('Charge to budget'),
+            Wrap(
+              spacing: AppSpace.xxs,
+              runSpacing: AppSpace.xxs,
+              children: [
+                _BudgetChip(
+                  label: 'None',
+                  selected: _budgetId == null,
+                  onTap: () => setState(() => _budgetId = null),
+                ),
+                for (final b in _billableBudgets)
+                  _BudgetChip(
+                    label: '${b.emoji} ${b.name}',
+                    selected: b.id == _budgetId,
+                    onTap: () => setState(() => _budgetId = b.id),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Category'),
+          Wrap(
+            spacing: AppSpace.xxs,
+            runSpacing: AppSpace.xxs,
+            children: _kind.categories.map((category) {
+              final selected = category == _category;
+              return GestureDetector(
+                onTap: () => setState(() => _category = category),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.xs, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.blush : AppColors.background,
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border: Border.all(
+                      color: selected ? AppColors.brand : AppColors.border,
+                    ),
+                  ),
+                  child: Text(category,
+                      style: AppText.caption(
+                          selected ? AppColors.brandDark : AppColors.body)),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Repeats'),
+          AppSegmented<RecurringInterval>(
+            options: const {
+              RecurringInterval.weekly: 'Weekly',
+              RecurringInterval.monthly: 'Monthly',
+              RecurringInterval.quarterly: 'Quarterly',
+              RecurringInterval.yearly: 'Yearly',
+            },
+            value: _interval,
+            onChanged: (value) => setState(() => _interval = value),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Next due'),
+          GestureDetector(
+            onTap: _pickDate,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.sm, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Row(
+                children: [
+                  const Icon(CupertinoIcons.calendar,
+                      size: 16, color: AppColors.muted),
+                  const SizedBox(width: AppSpace.xs),
+                  Text(DateFormat('EEEE, d MMMM y').format(_nextDue),
+                      style: AppText.body(AppColors.ink)),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _autoPost = !_autoPost),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Post it automatically',
+                          style: AppText.body(AppColors.ink)
+                              .copyWith(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text(
+                        _autoPost
+                            ? 'Written the next time you open Finance, '
+                                'dated the day it was due.'
+                            : 'Shows up as due and waits for you to confirm '
+                                '— better when the amount varies.',
+                        style: AppText.caption(),
+                      ),
+                    ],
+                  ),
+                ),
+                Switch(
+                  value: _autoPost,
+                  activeThumbColor: AppColors.brand,
+                  onChanged: (value) => setState(() => _autoPost = value),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          GradientButton(
+            label: isNew ? 'Add' : 'Save changes',
+            onPressed: _save,
+          ),
+          if (!isNew) ...[
+            const SizedBox(height: AppSpace.xs),
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, const _Deleted()),
+                child: Text('Delete',
                     style: AppText.caption(AppColors.danger)),
               ),
             ),
