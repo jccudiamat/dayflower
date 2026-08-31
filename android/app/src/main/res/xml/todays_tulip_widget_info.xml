@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sized like a story, not like a status line.
+
+     targetCellWidth/Height are what actually decide the default footprint on
+     Android 12+; minWidth/minHeight are the pre-12 fallback and are kept in
+     the same 3:4-ish proportion. 3 x 4 cells lands near a portrait card on a
+     typical 5-column grid — big enough to read a photo across the room,
+     short of swallowing the whole home screen.
+
+     minResize* stay small so the widget can still be squeezed by anyone who
+     wants it that way; the default is what changed, not the range. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/todays_tulip_widget"
+    android:previewLayout="@layout/todays_tulip_widget"
+    android:minWidth="180dp"
+    android:minHeight="330dp"
+    android:targetCellWidth="3"
+    android:targetCellHeight="4"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="150dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="640dp"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/widget_description"
+    android:updatePeriodMillis="1800000" />

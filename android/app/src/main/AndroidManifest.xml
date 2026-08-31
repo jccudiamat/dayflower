@@ -1,0 +1,195 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter's template only declares this in the debug/profile manifests,
+         so release builds ship with no network access and every Supabase call
+         fails. Required here for release APKs to work at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Incoming-heartbeat alert: the buzz and the notification that carries
+         the heartbeat sound. POST_NOTIFICATIONS is requested at runtime on
+         API 33+ (see PulseAlerts.requestPermission). -->
+    <!-- Live camera preview in the "Share your day" bar. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+    <!-- Reminder alarms (Activities -> Reminders). All four are what turn a
+         scheduled notification into something that behaves like an alarm
+         clock; without them it degrades to a banner you sleep through.
+
+         SCHEDULE_EXACT_ALARM: without it Android 12+ silently downgrades
+           exactAllowWhileIdle to an inexact alarm that can drift by minutes
+           in doze. It is user-grantable, not automatic - the app asks via
+           ReminderScheduler.ensureAlarmPermissions(), which opens the system
+           screen.
+         NOTE: android.permission.USE_EXACT_ALARM is the no-prompt
+           alternative and is deliberately NOT declared. It is auto-granted,
+           but Google Play restricts it to apps whose *core* purpose is an
+           alarm clock or calendar. Dayflower would have to argue that case
+           at review. Add it only if the prompt proves to be a real problem.
+
+         USE_FULL_SCREEN_INTENT: lets the alarm take over the screen over the
+           lock screen instead of appearing as a heads-up strip.
+         RECEIVE_BOOT_COMPLETED: pending alarms are lost on reboot unless the
+           plugin's boot receiver (declared below) can reschedule them.
+         WAKE_LOCK: keeps the device awake long enough to actually ring. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+
+    <!-- In-app updater: lets the app hand a downloaded APK to Android's
+         package installer instead of the user re-sideloading by hand. The
+         user still confirms in the system installer dialog, and still has to
+         allow "Install unknown apps" for Dayflower once, in Settings.
+         See lib/features/updates/data/update_repository.dart. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+
+    <application
+        android:label="Dayflower"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <!-- showWhenLocked/turnScreenOn: a reminder alarm's full-screen
+             intent launches this activity. Without these two the intent
+             resolves but the phone stays dark and locked, so the alarm looks
+             like nothing happened even while it is ringing. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- Deep link fired by the Today's Tulip home-screen widget. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="dayflower"/>
+            </intent-filter>
+        </activity>
+
+        <!-- Today's Flower home-screen widget (class name predates the label) -->
+        <receiver
+            android:name=".TodaysTulipWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/todays_tulip_widget_info"/>
+        </receiver>
+
+        <!-- Heartbeat widget — taps send a pulse via the background receiver -->
+        <receiver
+            android:name=".HeartbeatWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/heartbeat_widget_info"/>
+        </receiver>
+
+        <!-- Adaptive widget — follows Settings → Home screen widget -->
+        <receiver
+            android:name=".DayflowerWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/dayflower_widget_info"/>
+        </receiver>
+
+        <!-- Runs the Dart background callback when the Heartbeat widget is
+             tapped. home_widget ships an EMPTY manifest, so the app must
+             declare this itself — without it the widget's broadcast silently
+             goes nowhere and taps do nothing.
+             exported=false is fine: the PendingIntent targets this component
+             explicitly and fires with our own app identity. If background
+             taps ever stop working, this flag is the first thing to check. -->
+        <receiver
+            android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="es.antonborri.home_widget.action.BACKGROUND"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- flutter_local_notifications ships a manifest containing ONLY
+             permissions - it declares none of its own receivers, exactly like
+             home_widget's empty manifest above. Every scheduled notification
+             in this app (reminders, and any future scheduled alert) is
+             delivered by these three classes, so without these declarations
+             nothing scheduled ever fires and there is no error anywhere: the
+             AlarmManager PendingIntent simply targets a component that does
+             not exist and the broadcast is dropped.
+
+             ScheduledNotificationReceiver     - delivers the alarm itself.
+             ScheduledNotificationBootReceiver - reschedules pending alarms
+               after a reboot or an app update, which is why the intent-filter
+               carries MY_PACKAGE_REPLACED as well as BOOT_COMPLETED.
+             ActionBroadcastReceiver           - carries the Snooze / Done
+               buttons to the Dart background isolate.
+
+             exported=false is correct for all three: every PendingIntent
+             targets the component explicitly under our own app identity.
+
+             Verify after a release build by dumping the APK's manifest with
+             "aapt2 dump xmltree" and grepping for dexterous; all three
+             receivers must be present. -->
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"
+            android:exported="false"/>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver"
+            android:exported="false"/>
+        <receiver
+            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
+
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

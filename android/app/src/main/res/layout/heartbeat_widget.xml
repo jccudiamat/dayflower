@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Heartbeat widget. Tapping anywhere fires a background broadcast that
+     sends a pulse without opening the app (see dayflowerWidgetBackground in
+     lib/features/widget/widget_sync.dart). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/beat_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:background="@drawable/widget_background"
+    android:padding="12dp">
+
+    <TextView
+        android:id="@+id/beat_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/heartbeat_widget_label"
+        android:textColor="#9C92AC"
+        android:textSize="10sp"
+        android:letterSpacing="0.08"
+        android:textStyle="bold" />
+
+    <!-- The heart sits inside a fixed square so the ripple ring behind it has
+         somewhere to expand into without moving the text below. -->
+    <FrameLayout
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:layout_marginTop="2dp">
+
+        <ImageView
+            android:id="@+id/beat_ring"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:src="@drawable/ripple_ring_1"
+            android:contentDescription="@null" />
+
+        <TextView
+            android:id="@+id/beat_heart"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:text="💗"
+            android:textSize="32sp" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/beat_mine"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:text="@string/heartbeat_widget_prompt"
+        android:textColor="#F5F2F8"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/beat_partner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text=""
+        android:textColor="#9C92AC"
+        android:textSize="11sp" />
+</LinearLayout>

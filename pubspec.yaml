@@ -1,0 +1,89 @@
+name: dayflower
+description: Connecting hearts, one kiss at a time.
+publish_to: none
+version: 1.0.0+6
+environment:
+  sdk: ">=3.2.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+
+  # ── Backend ──────────────────────────────────
+  supabase_flutter: ^2.12.4
+
+  # ── State management ─────────────────────────
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+
+  # ── Navigation ───────────────────────────────
+  go_router: ^13.2.5
+
+  # ── UI & fonts ───────────────────────────────
+  google_fonts: ^8.0.2
+  cached_network_image: ^3.3.1
+  flutter_svg: ^2.0.10+1
+
+  # ── Image / Camera ───────────────────────────
+  image_picker: ^1.0.7
+  image_cropper: ^12.2.1
+
+  # ── Notifications & haptics ───────────────────
+  flutter_local_notifications: ^21.0.0
+  vibration: ^3.1.8
+
+  # ── Home screen widget ────────────────────────
+  home_widget: ^0.9.1
+
+  # ── Utilities ────────────────────────────────
+  intl: ^0.20.2
+  timezone: ^0.11.0 # IANA database for the dual clocks
+  uuid: ^4.3.3
+  shared_preferences: ^2.2.3
+  connectivity_plus: ^7.1.1
+  flutter_dotenv: ^6.0.1
+  timeago: ^3.6.1
+  collection: ^1.18.0
+  device_preview: ^1.2.0
+  camera: ^0.12.0+2
+
+  # ── In-app updater (see lib/features/updates/) ─
+  package_info_plus: ^10.2.1 # the installed build number, at runtime
+  path_provider: ^2.1.6 # where the downloaded APK lands
+  open_filex: ^4.7.0 # hands the APK to Android's installer
+  image: ^4.9.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.2
+  flutter_launcher_icons: ^0.14.1
+  build_runner: ^2.4.13
+  riverpod_generator: ^2.4.0
+  custom_lint: ^0.6.4
+  riverpod_lint: ^2.3.10
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/
+    - assets/images/flowers/
+    - assets/fonts/
+    - .env
+
+# App launcher icon. Regenerate after changing logo.png with:
+#   dart run flutter_launcher_icons
+# logo.png is already a full-bleed squircle, so it doubles as the legacy
+# icon. For Android adaptive icons the launcher mask crops the foreground,
+# so it's inset and sat on the same peach as the artwork (AppColors.iconBg)
+# — the seam is invisible and the tulip stays inside the safe zone.
+flutter_launcher_icons:
+  image_path: "assets/images/logo.png"
+  android: true
+  min_sdk_android: 21
+  adaptive_icon_background: "#F9EBE4"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  adaptive_icon_foreground_inset: 18
+  ios: true
+  remove_alpha_ios: true

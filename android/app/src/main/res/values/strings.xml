@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Flower widget. Shows the last flower the partner pinned here, which
+         is no longer once-a-day, so the label can't say "today's". Keep this
+         in sync with the Home card in home_screen.dart. -->
+    <string name="widget_description">The last flower your partner sent to your home screen.</string>
+
+    <!-- Heartbeat widget -->
+    <string name="heartbeat_widget_description">Tap to send a heartbeat.</string>
+    <string name="heartbeat_widget_label">HEARTBEAT</string>
+    <string name="heartbeat_widget_prompt">No heartbeat yet today \u2014 tap to send</string>
+
+    <!-- Adaptive widget (follows the in-app Settings preference) -->
+    <string name="adaptive_widget_description">Flower or heartbeat — your choice in Settings.</string>
+</resources>

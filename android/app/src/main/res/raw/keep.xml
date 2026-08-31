@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The heartbeat alert's icon and sound are referenced only by name from Dart
+     (PulseAlerts), never from XML or Java, so the release resource shrinker
+     drops them: the first release APK built without this had no
+     @drawable/ic_notification and the notification could not post at all.
+     Verify after a release build with:
+       aapt2 dump resources <apk> | grep -E "ic_notification|raw/heartbeat|raw/alarm" -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification,@raw/heartbeat,@raw/alarm" />

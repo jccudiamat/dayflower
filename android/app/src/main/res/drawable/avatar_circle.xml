@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The initial-in-a-circle avatar, matching the app's own convention.
+     There is no avatar column on `users`, so there is no photo to show —
+     the chat header and conversation card both draw the first initial on
+     the signature pink→purple gradient, and the widget follows suit. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:startColor="#F0709F"
+        android:endColor="#906FE8"
+        android:angle="0" />
+</shape>

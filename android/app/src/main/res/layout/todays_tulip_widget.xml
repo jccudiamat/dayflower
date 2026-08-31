@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Today's Flower home-screen widget, shaped like a story card.
+
+     The photo is the widget: full-bleed, edge to edge, with the caption
+     floating over it rather than sitting in a row beneath it. There is
+     deliberately no header label — the picture says what it is, and a
+     "A FLOWER FOR YOU" strip only ate the space the photo wanted.
+
+     Values are written by TodaysTulipWidget.renderFlower() from the data
+     DayflowerWidgets.syncFlower() pushes across; the ids here are that
+     contract, so renaming one means changing the Kotlin too.
+
+     FrameLayout, ImageView, LinearLayout and TextView are all on the
+     RemoteViews-supported list — nothing here needs a custom view. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background">
+
+    <!-- The photo, when there is a live one. centerCrop is what makes it fill
+         a widget of any aspect without letterboxing; Android 12+ launchers
+         round the widget's corners for us, so the bitmap needs no mask. -->
+    <ImageView
+        android:id="@+id/widget_photo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/widget_description"
+        android:visibility="gone" />
+
+    <!-- No photo: the flower glyph carries the card instead, centred and
+         large so the widget still reads as a picture rather than a form. -->
+    <TextView
+        android:id="@+id/widget_emoji"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="🌷"
+        android:textSize="68sp" />
+
+    <!-- Story header: avatar, whose day it is, and how long it has left.
+         Sits on its own top scrim so it stays legible over a bright photo.
+         Hidden wholesale when there is no live photo — a name and a
+         countdown over the fallback flower glyph would be describing
+         something that isn't there. -->
+    <LinearLayout
+        android:id="@+id/widget_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/widget_header_scrim"
+        android:paddingLeft="10dp"
+        android:paddingRight="12dp"
+        android:paddingTop="9dp"
+        android:paddingBottom="26dp"
+        android:visibility="gone">
+
+        <!-- No avatar column on `users`, so this is the first initial on the
+             brand gradient — the same thing the chat header draws. -->
+        <TextView
+            android:id="@+id/widget_avatar"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:background="@drawable/avatar_circle"
+            android:gravity="center"
+            android:text="?"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/widget_owner"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginLeft="8dp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="13sp"
+            android:textStyle="bold"
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+
+        <!-- "16h" — what is left of the 24, so the widget says how long it
+             has rather than only that something is there. -->
+        <TextView
+            android:id="@+id/widget_left"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="6dp"
+            android:text=""
+            android:textColor="#D8CFE8"
+            android:textSize="12sp"
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+    </LinearLayout>
+
+    <!-- Caption. Sits on the scrim at the bottom edge, story-style. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="@drawable/widget_caption_scrim"
+        android:paddingLeft="14dp"
+        android:paddingRight="14dp"
+        android:paddingTop="32dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text="Nothing here yet"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+
+        <TextView
+            android:id="@+id/widget_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:text="Tap to send a flower."
+            android:textColor="#E4DEEC"
+            android:textSize="12.5sp"
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+    </LinearLayout>
+</FrameLayout>
