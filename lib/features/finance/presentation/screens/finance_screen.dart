@@ -440,7 +440,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         accounts: accounts,
         currency: currency,
         // Only one overall budget is allowed per owner per period — a
-        // partial unique index in 0015 enforces it, so the sheet hides the
+        // partial unique index in 0016 enforces it, so the sheet hides the
         // option rather than letting the save come back a 23505.
         overallTaken: budgets.any((b) =>
             !b.archived &&
@@ -1200,7 +1200,7 @@ class _AccountSheet extends StatefulWidget {
   final String currency;
 
   /// Shared accounts skip the privacy switch: "Ours" and "hidden from you"
-  /// are contradictory, and 0015 forces them visible anyway.
+  /// are contradictory, and 0016 forces them visible anyway.
   final bool isShared;
 
   @override
@@ -1240,7 +1240,7 @@ class _AccountSheetState extends State<_AccountSheet> {
     _creditLimit = TextEditingController(
       text: existing?.creditLimit == null ? '' : _plain(existing!.creditLimit!),
     );
-    // Solo accounts are private until their owner says otherwise — 0015
+    // Solo accounts are private until their owner says otherwise — 0016
     // reverses the old behaviour of partners seeing everything by default.
     _visible = existing?.visibleToPartner ?? false;
   }

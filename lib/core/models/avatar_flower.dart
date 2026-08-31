@@ -4,7 +4,7 @@
 /// artwork, meanings and retired entries, none of which an avatar needs, and
 /// an avatar must never disappear because a sendable flower was retired.
 ///
-/// Stored as [id] on `users.avatar` (migration 0015).
+/// Stored as [id] on `users.avatar` (migration 0017).
 enum AvatarFlower {
   daisy('daisy', '🌼', 'Daisy'),
   tulip('tulip', '🌷', 'Tulip'),
@@ -54,7 +54,7 @@ enum AvatarFlower {
       case 'woman':
         return AvatarFlower.tulip;
       default:
-        // Unset — including every account that existed before 0015. A neutral
+        // Unset — including every account that existed before 0017. A neutral
         // default beats guessing from a name.
         return fallback;
     }

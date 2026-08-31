@@ -31,7 +31,7 @@ class UserProfile {
         displayName: map['display_name'] as String,
         petName: map['pet_name'] as String?,
         timezone: map['timezone'] as String? ?? 'UTC',
-        // Both absent on rows written before migration 0015.
+        // Both absent on rows written before migration 0017.
         avatar: map['avatar'] as String?,
         gender: map['gender'] as String?,
       );

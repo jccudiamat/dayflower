@@ -17,7 +17,7 @@ class FlowerAvatar extends StatelessWidget {
   });
 
   /// From a profile — falls back to the gender default, then to a tulip,
-  /// so this never renders empty even before migration 0015 has run.
+  /// so this never renders empty even before migration 0017 has run.
   FlowerAvatar.of(UserProfile? profile, {super.key, this.size = 44})
       : flower = profile?.flower ?? AvatarFlower.fallback;
 

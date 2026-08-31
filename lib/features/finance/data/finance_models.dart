@@ -5,7 +5,7 @@ import '../../../core/theme/app_colors.dart';
 /// Whose money a row is. Mirrors `owner_id` across the finance tables:
 /// null = the couple's, a user id = that partner's own.
 ///
-/// [partner] is a **read-only view**, and a partial one: 0015 makes solo
+/// [partner] is a **read-only view**, and a partial one: 0016 makes solo
 /// accounts private by default, so this scope shows only what the partner
 /// ticked `visible_to_partner` on. The screen hides every write control
 /// here rather than letting a save fail with a 42501 nobody can act on.
@@ -137,7 +137,7 @@ enum FinancePeriod {
 
 /// `overall` is the month's total allowance; `category` caps one slice of
 /// it. At most one active overall budget per owner — enforced by a partial
-/// unique index in 0015, not just by the UI.
+/// unique index in 0016, not just by the UI.
 enum BudgetScope {
   overall('Overall'),
   category('Category');

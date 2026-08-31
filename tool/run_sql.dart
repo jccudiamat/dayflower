@@ -1,7 +1,7 @@
 // Runs SQL against the Supabase project, the way the dashboard's SQL editor
 // does — POST /v1/projects/{ref}/database/query on the Management API.
 //
-//   dart run tool/run_sql.dart supabase/migrations/0015_finance_v2.sql
+//   dart run tool/run_sql.dart supabase/migrations/0016_finance_v2.sql
 //   dart run tool/run_sql.dart -c "select count(*) from finance_accounts;"
 //   dart run tool/run_sql.dart --dry-run <file>   Print what would be sent.
 //

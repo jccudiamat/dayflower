@@ -120,7 +120,7 @@ class FinanceRepository {
       'target_date': targetDate == null ? null : dateOnly(targetDate),
       'credit_limit': creditLimit,
       'interest_rate': interestRate,
-      // A shared account is forced visible by a trigger in 0015; sending
+      // A shared account is forced visible by a trigger in 0016; sending
       // the honest value here keeps the client and the DB telling the same
       // story rather than relying on the trigger to paper over a lie.
       'visible_to_partner': ownerId == null ? true : visibleToPartner,
@@ -139,7 +139,7 @@ class FinanceRepository {
   }
 
   /// Entries that referenced it survive with a null `account_id`
-  /// (`on delete set null` in 0015) — the spending history outlives the
+  /// (`on delete set null` in 0016) — the spending history outlives the
   /// bank you closed.
   Future<void> deleteAccount(String id) async {
     await _client.from('finance_accounts').delete().eq('id', id);

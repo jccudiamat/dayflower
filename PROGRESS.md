@@ -173,7 +173,7 @@ The "A FLOWER FOR YOU" card on Home is gone, replaced by a compact **Set your mo
 
 - `features/booth/domain/strip_templates.dart` — the 10 templates lifted out of `booth_screen.dart`, where they were private and only ever rendered mock emoji. 7 duo, 3 solo. `stacked` decides vertical strip vs side-by-side.
 - `features/booth/domain/strip_compositor.dart` — renders the finished strip with the `image` package (**added as a direct dependency**; it was only transitive before). Runs via `compute` because compositing is hundreds of ms of CPU that would visibly hitch the camera preview.
-- `supabase/migrations/0014_photo_strips.sql` — 🔴 **not yet run.**
+- `supabase/migrations/0015_photo_strips.sql` — **applied** (verified live 2026-08-31).
 - `test/strip_compositor_test.dart` — **the project's only tests.** (The old `widget_test.dart` was Flutter's counter-app stub referencing a `MyApp` that never existed here; deleted 2026-08-01.)
 
 **Async only, and that is a product decision not a shortcut.** "Together" means both halves, not both at once. A live/sync session only works when both people are awake holding their phones — the exact situation this app exists because they are *not* in. A half-strip waiting overnight IS the feature.
@@ -200,7 +200,7 @@ flutter build apk --debug
 
 ## Flower avatars (2026-08-31)
 
-`users` had no avatar at all — every surface drew the first initial. An avatar is now a **flower id**, not an uploaded image: no Storage, no moderation, no upload failure path, and it fits an app whose whole vocabulary is flowers. 🔴 **Migration `0015_avatars.sql` not yet run.**
+`users` had no avatar at all — every surface drew the first initial. An avatar is now a **flower id**, not an uploaded image: no Storage, no moderation, no upload failure path, and it fits an app whose whole vocabulary is flowers. 🔴 **Migration `0017_avatars.sql` not yet run.**
 
 - `core/models/avatar_flower.dart` — eight flowers, **deliberately not `FlowerCatalog`**. That one carries artwork, meanings and *retired* entries; an avatar must never vanish because a sendable flower was retired.
 - `core/widgets/flower_avatar.dart` — one widget for every surface. The chat header and conversation card each drew their own initial circle before; now they cannot drift, and adding real uploaded avatars later is a change in one place.
@@ -578,7 +578,7 @@ app gets. A real iOS alarm is the system Clock app.
 
 ## Finances v2 — 2026-08-31
 
-Rebuilt from two tables into a full personal-finance model. **`0015_finance_v2.sql` EXTENDS 0011 in place — it drops nothing.** Applied 2026-08-31.
+Rebuilt from two tables into a full personal-finance model. **`0016_finance_v2.sql` EXTENDS 0011 in place — it drops nothing.** Applied 2026-08-31.
 
 ⚠️ A first draft opened with `drop table ... cascade`, trusting this file's claim that 0011 had never been run. It had — the live DB held 2 accounts and 11 entries. **Check `information_schema` before trusting these notes.**
 
@@ -642,7 +642,8 @@ A year is twelve chapters, one per month. Files: `features/chapters/data/chapter
 ## Supabase (project `kjvucdxqgzybhxdqszgi`)
 
 - Claude has only the **anon key** (`.env`). All DDL runs via the user pasting `supabase/migrations/*.sql` into the dashboard SQL editor. Write migrations as **single self-contained scripts** (drop-and-recreate for dev tables) — separate executions have caused ordering failures.
-- **Migrations — ALL APPLIED as of 2026-08-31.** 0001–0015 are live. ⚠️ The previous version of this line was wrong in a way that nearly caused data loss: it claimed 0010, 0011 and 0012 were unrun when all three had been applied and `finance_accounts`/`finance_entries` held real rows. A first draft of 0015 opened with `drop table ... cascade` on the strength of that note. **Check `information_schema` before trusting this file** — `dart run tool/run_sql.dart -c "select ..."` takes seconds. 0008 was the only genuinely outstanding one and was applied 2026-08-31.
+- **Migration numbers were deduplicated 2026-08-31.** Two pairs shared a number — `0014_app_builds`/`0014_photo_strips` and `0015_avatars`/`0015_finance_v2` — which is exactly how a migration goes missing: two files claim one slot, one gets run, the other looks done. Renumbered in date order to `0014_app_builds`, `0015_photo_strips`, `0016_finance_v2`, `0017_avatars`, and every code comment referencing the old numbers was updated. All four were already applied; the renumber is bookkeeping, not a re-run.
+- **Migrations — ALL APPLIED as of 2026-08-31.** 0001–0017 are live. ⚠️ The previous version of this line was wrong in a way that nearly caused data loss: it claimed 0010, 0011 and 0012 were unrun when all three had been applied and `finance_accounts`/`finance_entries` held real rows. A first draft of 0015 opened with `drop table ... cascade` on the strength of that note. **Check `information_schema` before trusting this file** — `dart run tool/run_sql.dart -c "select ..."` takes seconds. 0008 was the only genuinely outstanding one and was applied 2026-08-31.
 - ⚠️ **This list has been wrong before.** It claimed 0009 was unrun for a whole session while the chat was in fact working against it. Confirm against the live schema rather than trusting this line: a `select=*&limit=1` on the table shows which columns really exist, and an insert aimed at a non-existent `pair_id` is a safe probe — it can never commit, and the error code tells you what fired first (`23502` = a NOT NULL still in place, `42501` = the column was fine and only RLS objected).
 - **0009 joins 0007 as idempotent-but-preserving**, for the same reason: `flower_messages` holds the couple's real exchange history. It alters in place and is safe to re-run — do NOT rewrite it into the usual drop-and-recreate.
 - **Every realtime table needs** `alter publication supabase_realtime add table public.<t>;` in its migration or streams silently receive nothing.
