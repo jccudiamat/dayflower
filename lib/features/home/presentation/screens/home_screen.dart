@@ -768,8 +768,9 @@ class _HomeBar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return Row(
       children: [
-        const Text('🌷', style: TextStyle(fontSize: 20)),
-        const SizedBox(width: AppSpace.xs),
+        // Wordmark only. The tulip already appears beside the name in the
+        // greeting directly below, and twice in one glance made it read as
+        // decoration rather than as the app's mark.
         Text(
           AppConstants.appName,
           style: AppText.title(AppColors.ink).copyWith(
