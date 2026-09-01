@@ -210,6 +210,22 @@ flutter build apk --debug
 - ⚠️ **Onboarding does not collect gender yet.** Until it does, every new account gets the tulip fallback and the daisy default is unreachable except by editing the row directly. Adding the step, or a Settings row, is the remaining piece.
 - The widget's avatar is **pushed from Dart as an emoji** (`day_photo_owner_flower`), not derived in Kotlin — the choice lives in Postgres and the widget has no database, same reason the name is pushed.
 
+## Five-tab nav + camera rework (2026-09-02)
+
+**Nav is five tabs now** — Home, Flowers, Camera, Dates, Activities — and **only the selected tab shows its label**. Five labels across a phone means five truncated words; showing one makes the selection obvious without a pill or underline, and `AnimatedSize` collapses the gap so the icons do not shift as it comes and goes. Every tab keeps its `Semantics(label:)` so an unselected tab is not an unlabelled button to a screen reader.
+
+⚠️ **Route naming is now misleading and worth knowing.** `Routes.flowers` (`/app/flowers`) renders the **camera**, and `Routes.chat` (`/app/flowers/chat`) renders the conversation. The Flowers tab goes to `chat`, the Camera tab to `flowers`. Selection uses `==`, never `startsWith` — chat is nested under the camera's path, so `startsWith` would light both tabs at once.
+
+**Camera (`share_your_day.dart`):**
+
+- **Nothing uploads on the shutter any more.** The frame is held in `_pending`, the viewfinder freezes on it, and it leaves the device only after the send button and a destination choice. Mis-tapping used to put a photo on someone's home screen for 24 hours. Gallery picks go through the same review — picking the wrong thumbnail is at least as easy as mis-tapping.
+- **The shutter becomes the send button** rather than a second control appearing: same button, same place, next step. The gradient disc stays and only gains a paper-plane.
+- **Cancel and save replace flash and flip** in the same corner while a shot is held, so the thumb does not learn a second place to look.
+- ⚠️ **"Save" writes to the app's own external folder, not the system gallery.** MediaStore needs a plugin; the toast says where it went rather than implying it landed in Photos.
+- **Destination is an explicit choice** — home screen (`to_widget: true`) or chat only (`to_widget: false`). Two different acts, so two buttons rather than a setting.
+- **Templates are a scrollable row of circles** over the viewfinder, replacing the chip-plus-sheet. Circles read as controls; rectangles would read as content already shot.
+- The flower button and the "your day / their day" chips are gone — the home arch shows both, and sending a flower is a different errand.
+
 ## Home header redesign (2026-09-01)
 
 Greeting, partner's whereabouts, distance, and today's photos in one block.

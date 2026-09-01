@@ -45,12 +45,10 @@ class MessagesScreen extends StatelessWidget {
             // The camera takes every pixel the conversation row doesn't:
             // Expanded, not a fixed height, so it fills a tall phone and
             // still fits a short one without overflowing.
-            const Expanded(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: AppSpace.sm),
-                child: ShareYourDayBar(),
-              ),
-            ),
+            // Edge to edge: the viewfinder is the screen here, and a
+            // 16pt gutter down each side made it read as a card about the
+            // camera rather than as the camera.
+            const Expanded(child: ShareYourDayBar()),
           ],
         ),
       ),

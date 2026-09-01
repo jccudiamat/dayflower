@@ -1,21 +1,22 @@
 import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_bottom_sheet.dart';
 import '../../../booth/data/strip_repository.dart';
 import '../../../booth/domain/strip_templates.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
-import '../../domain/flower_catalog.dart';
-import 'flower_catalog_panel.dart';
 
 /// The "Share your day" bar at the top of the Flowers tab.
 ///
@@ -48,6 +49,15 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   bool _camUnavailable = false;
 
   bool _busy = false;
+
+  /// The shot that has been taken but not sent.
+  ///
+  /// Pressing the shutter used to upload immediately, which made every
+  /// mis-tap a photo on someone's home screen for 24 hours. Now the frame
+  /// is held here, the viewfinder freezes on it, and nothing leaves the
+  /// device until the send button is pressed and a destination chosen.
+  Uint8List? _pending;
+  String _pendingExt = 'jpg';
 
   /// Null means a plain day photo. Selecting a template routes the next
   /// shot through the booth compositor instead.
@@ -153,7 +163,11 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
   // ── Sending ───────────────────────────────────────
 
-  Future<void> _shareBytes(Uint8List bytes, String ext) async {
+  Future<void> _shareBytes(
+    Uint8List bytes,
+    String ext, {
+    bool toWidget = true,
+  }) async {
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
     if (pair == null || userId == null) return;
@@ -165,8 +179,13 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             senderId: userId,
             bytes: bytes,
             fileExtension: ext,
+            toWidget: toWidget,
           );
-      if (mounted) _toast('Shared to their home screen for 24 hours 🌼');
+      if (mounted) {
+        _toast(toWidget
+            ? 'Shared to their home screen for 24 hours 🌼'
+            : 'Sent to the conversation 💬');
+      }
     } catch (_) {
       // A Storage 404 here almost always means migration 0013 has not run.
       if (mounted) _toast("Couldn't share that. Try again?");
@@ -181,15 +200,68 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (cam == null || !_camReady) return _pickFrom(ImageSource.camera);
     try {
       final shot = await cam.takePicture();
-      await _handleShot(await shot.readAsBytes());
+      final bytes = await shot.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _pending = bytes;
+        _pendingExt = 'jpg';
+      });
     } catch (_) {
       if (mounted) _toast("Couldn't take that photo.");
     }
   }
 
+  /// Throws the held shot away and goes back to the live viewfinder.
+  void _discardPending() => setState(() => _pending = null);
+
+  /// Writes the held shot to the app's own external folder.
+  ///
+  /// ⚠️ Not the system gallery: putting a file there needs MediaStore on
+  /// modern Android, which needs a plugin. This keeps the photo without
+  /// adding one, and the toast says where it went rather than implying it
+  /// landed in Photos.
+  Future<void> _savePending() async {
+    final bytes = _pending;
+    if (bytes == null) return;
+    try {
+      final base = await getExternalStorageDirectory() ??
+          await getApplicationDocumentsDirectory();
+      final dir = Directory('${base.path}/Saved');
+      if (!await dir.exists()) await dir.create(recursive: true);
+      final file = File(
+        '${dir.path}/day_${DateTime.now().millisecondsSinceEpoch}.$_pendingExt',
+      );
+      await file.writeAsBytes(bytes);
+      if (mounted) _toast('Saved a copy to the app folder.');
+    } catch (_) {
+      if (mounted) _toast("Couldn't save that.");
+    }
+  }
+
+  /// Asks where the shot should go, then sends it there.
+  ///
+  /// Chat-only and home-screen are genuinely different acts — one is a
+  /// message, the other parks a photo on someone's home screen for a day —
+  /// so the choice is made explicitly rather than inferred from a setting.
+  Future<void> _sendPending() async {
+    final bytes = _pending;
+    if (bytes == null || _busy) return;
+
+    final toWidget = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _SendTargetSheet(),
+    );
+    if (toWidget == null || !mounted) return;
+
+    await _handleShot(bytes, toWidget: toWidget);
+    if (mounted) setState(() => _pending = null);
+  }
+
   /// One entry point for every source, so the camera, the gallery and a
   /// "join their strip" tap all take the same route.
-  Future<void> _handleShot(Uint8List bytes) async {
+  Future<void> _handleShot(Uint8List bytes, {bool toWidget = true}) async {
     final waiting = ref.read(stripAwaitingMeProvider);
 
     // Joining beats starting: if a half is already waiting on me, the
@@ -197,7 +269,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (waiting != null) return _joinStrip(waiting, bytes);
 
     final t = _template;
-    if (t == null) return _shareBytes(bytes, 'jpg');
+    if (t == null) return _shareBytes(bytes, _pendingExt, toWidget: toWidget);
     return t.isDuo ? _startDuo(t, bytes) : _postSolo(t, bytes);
   }
 
@@ -259,19 +331,6 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     }
   }
 
-  Future<void> _pickTemplate() async {
-    final chosen = await showModalBottomSheet<StripTemplate?>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _TemplateSheet(selected: _template),
-    );
-    // The sheet returns the sentinel below for "no template" so that
-    // choosing Plain photo is distinguishable from dismissing the sheet.
-    if (chosen == null) return;
-    setState(() => _template = chosen == _kPlain ? null : chosen);
-  }
-
   Future<void> _pickFrom(ImageSource source) async {
     if (_busy) return;
     try {
@@ -283,48 +342,19 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
         imageQuality: 82,
       );
       if (file == null || !mounted) return;
-      await _handleShot(await file.readAsBytes());
+      // Held for review like a fresh shot, rather than uploaded on the
+      // spot. Picking the wrong photo from a grid of thumbnails is at
+      // least as easy as mis-tapping the shutter.
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _pending = bytes;
+        _pendingExt = (file.path.split('.').last.toLowerCase() == 'png')
+            ? 'png'
+            : 'jpg';
+      });
     } catch (_) {
       if (mounted) _toast("Couldn't open that.");
-    }
-  }
-
-  Future<void> _sendFlower() async {
-    if (_busy) return;
-    final partner = ref.read(partnerProfileProvider).valueOrNull;
-    final flower = await showModalBottomSheet<Flower>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _FlowerPickSheet(),
-    );
-    if (flower == null || !mounted) return;
-
-    final result = await showFlowerSendSheet(
-      context,
-      flower: flower,
-      partnerName: partner?.petName ?? partner?.displayName ?? 'their',
-    );
-    if (result == null || !mounted) return;
-
-    final pair = ref.read(currentPairProvider).valueOrNull;
-    final userId = ref.read(currentUserIdProvider);
-    if (pair == null || userId == null) return;
-
-    setState(() => _busy = true);
-    try {
-      await ref.read(flowerRepositoryProvider).sendFlower(
-            pairId: pair.id,
-            senderId: userId,
-            flowerType: flower.id,
-            note: result.note,
-            toWidget: result.toWidget,
-          );
-      if (mounted) _toast('${flower.name} sent 🌷');
-    } catch (_) {
-      if (mounted) _toast("Couldn't send ${flower.name}. Try again?");
-    } finally {
-      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -354,33 +384,33 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   @override
   Widget build(BuildContext context) {
     final mine = ref.watch(myDayPhotoProvider);
-    final theirs = ref.watch(partnerDayPhotoProvider);
 
     ref.listen(openStripsProvider, (_, __) => _recoverStranded());
 
-    return Column(
-      children: [
-        Expanded(child: _cameraCard(mine)),
-        // Below the viewfinder, not floating over it — chips inside the
-        // frame read as part of the shot you are composing.
-        if (mine != null || theirs != null) ...[
-          const SizedBox(height: AppSpace.xs),
-          _LiveDays(mine: mine, theirs: theirs),
-        ],
-      ],
-    );
+    // The "your day / their day" chips used to sit under the viewfinder.
+    // The home screen's arch now shows both, and saying it twice made this
+    // screen about reviewing rather than shooting.
+    return _cameraCard(mine);
   }
 
   Widget _cameraCard(FlowerMessage? mine) {
+    // Rounded only at the top: the card now runs to both edges and into the
+    // nav bar, so rounding the bottom would leave two slivers of background
+    // beside it.
     return ClipRRect(
-      borderRadius: BorderRadius.circular(AppRadius.xl),
+      borderRadius: const BorderRadius.vertical(
+        top: Radius.circular(AppRadius.xl),
+      ),
       child: Container(
         width: double.infinity,
         color: Colors.black,
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _preview(),
+            if (_pending != null)
+              Image.memory(_pending!, fit: BoxFit.cover)
+            else
+              _preview(),
 
             // Controls float over the viewfinder rather than stacking around
             // it — the point of the big card is that the picture is the card.
@@ -392,7 +422,9 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
+                    child: _pending != null
+                        ? const SizedBox.shrink()
+                        : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('SHARE YOUR DAY',
@@ -409,7 +441,23 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                       ],
                     ),
                   ),
-                  if (_camReady) ...[
+                  // While a shot is held, the two controls that acted on
+                  // the live camera are replaced by the two that act on the
+                  // frame — same corner, so the thumb does not have to
+                  // learn a second place to look.
+                  if (_pending != null) ...[
+                    _GlassButton(
+                      icon: CupertinoIcons.xmark,
+                      tooltip: 'Discard',
+                      onTap: _busy ? null : _discardPending,
+                    ),
+                    const SizedBox(width: AppSpace.xs),
+                    _GlassButton(
+                      icon: CupertinoIcons.arrow_down_to_line,
+                      tooltip: 'Save a copy',
+                      onTap: _busy ? null : _savePending,
+                    ),
+                  ] else if (_camReady) ...[
                     _GlassButton(
                       icon: _torchOn
                           ? CupertinoIcons.bolt_fill
@@ -512,49 +560,61 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     }
   }
 
-  /// The armed template, as a single chip. A full grid over a live camera
-  /// would cover the thing you are framing, so the choosing happens in a
-  /// sheet and only the choice stays on screen.
+  /// The template picker, as a scrollable row of circles.
+  ///
+  /// The old design hid these behind a chip that opened a sheet, on the
+  /// grounds that a grid would cover the shot you were framing. A single
+  /// row of thumbnails costs one strip of the frame and makes the choice
+  /// visible while you compose, which is how every camera app does it.
   Widget _templateRow() {
-    final t = _template;
     final awaiting = ref.watch(stripAwaitingMeProvider);
-    // While a half waits on you the template is theirs, not yours to pick.
-    final label = awaiting != null
-        ? '${awaiting.style.emoji}  ${awaiting.style.name}'
-        : t == null
-            ? '🖼️  Plain photo'
-            : '${t.emoji}  ${t.name}${t.isDuo ? " · duo" : ""}';
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpace.md),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: GestureDetector(
-          onTap: awaiting != null ? null : _pickTemplate,
+    // While a half waits on you the template is theirs, not yours to pick —
+    // the strip becomes a statement of what you are joining.
+    if (awaiting != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.md, vertical: AppSpace.xs),
+        child: Align(
+          alignment: Alignment.centerLeft,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: .38),
               borderRadius: BorderRadius.circular(AppRadius.pill),
-              border: Border.all(
-                color: (t == null && awaiting == null)
-                    ? Colors.white.withValues(alpha: .25)
-                    : AppColors.brandLight,
-              ),
+              border: Border.all(color: AppColors.brandLight),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(label, style: AppText.caption(Colors.white)),
-                if (awaiting == null) ...[
-                  const SizedBox(width: 6),
-                  const Icon(CupertinoIcons.chevron_up_chevron_down,
-                      size: 12, color: Colors.white),
-                ],
-              ],
+            child: Text(
+              'Joining ${awaiting.style.emoji} ${awaiting.style.name}',
+              style: AppText.caption(Colors.white),
             ),
           ),
         ),
+      );
+    }
+
+    return SizedBox(
+      height: 74,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+        children: [
+          _TemplateDot(
+            label: 'Plain',
+            emoji: '📷',
+            selected: _template == null,
+            onTap: () => setState(() => _template = null),
+          ),
+          for (final t in StripTemplate.all)
+            _TemplateDot(
+              label: t.isDuo ? '${t.name} · duo' : t.name,
+              emoji: t.emoji,
+              paper: t.paper,
+              accent: t.accent,
+              selected: _template?.id == t.id,
+              onTap: () => setState(() => _template = t),
+            ),
+        ],
       ),
     );
   }
@@ -578,16 +638,20 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             icon: CupertinoIcons.photo_on_rectangle,
             tooltip: 'Upload a photo',
             big: true,
-            onTap: _busy ? null : () => _pickFrom(ImageSource.gallery),
+            onTap: (_busy || _pending != null)
+                ? null
+                : () => _pickFrom(ImageSource.gallery),
           ),
-          _ShutterButton(onTap: _busy ? null : _shoot),
-          _GlassButton(
-            icon: Icons.local_florist_rounded,
-            tooltip: 'Send a flower',
-            big: true,
-            tint: AppColors.brandLight,
-            onTap: _busy ? null : _sendFlower,
+          // The same button in the same place, because it is the same
+          // gesture continued: take the picture, then send the picture.
+          _ShutterButton(
+            sending: _pending != null,
+            onTap: _busy ? null : (_pending != null ? _sendPending : _shoot),
           ),
+          // Balances the row where the flower button used to sit. The
+          // flower moved out with the templates coming in — this screen is
+          // the camera now, and sending a flower is a different errand.
+          const SizedBox(width: 46),
         ],
       ),
     );
@@ -596,17 +660,22 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
 /// The big centre shutter.
 class _ShutterButton extends StatelessWidget {
-  const _ShutterButton({required this.onTap});
+  const _ShutterButton({required this.onTap, this.sending = false});
   final VoidCallback? onTap;
+
+  /// True once a shot is held: the ring becomes a send button.
+  final bool sending;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: 'Take photo',
+      label: sending ? 'Send photo' : 'Take photo',
       child: GestureDetector(
         onTap: onTap,
-        child: Container(
+        child: AnimatedContainer(
+          duration: AppMotion.standard,
+          curve: AppMotion.easeOut,
           width: 72,
           height: 72,
           decoration: BoxDecoration(
@@ -621,6 +690,13 @@ class _ShutterButton extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: AppGradients.cta,
               ),
+              // The gradient disc stays; only its contents change, so the
+              // control reads as the same button doing the next step
+              // rather than a different button appearing.
+              child: sending
+                  ? const Icon(CupertinoIcons.paperplane_fill,
+                      color: Colors.white, size: 26)
+                  : null,
             ),
           ),
         ),
@@ -635,7 +711,6 @@ class _GlassButton extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
-    this.tint,
     this.active = false,
     this.big = false,
   });
@@ -643,7 +718,6 @@ class _GlassButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
   final VoidCallback? onTap;
-  final Color? tint;
   final bool active;
   final bool big;
 
@@ -664,102 +738,10 @@ class _GlassButton extends StatelessWidget {
             width: size,
             height: size,
             child:
-                Icon(icon, color: tint ?? Colors.white, size: big ? 24 : 18),
+                Icon(icon, color: Colors.white, size: big ? 24 : 18),
           ),
         ),
       ),
-    );
-  }
-}
-
-/// The live days — yours and theirs — shown only while one exists.
-class _LiveDays extends ConsumerWidget {
-  const _LiveDays({required this.mine, required this.theirs});
-
-  final FlowerMessage? mine;
-  final FlowerMessage? theirs;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
-    final partnerName = partner?.petName ?? partner?.displayName ?? 'Theirs';
-
-    return Row(
-      children: [
-        if (theirs != null) ...[
-          _DayChip(message: theirs!, label: partnerName),
-          const SizedBox(width: AppSpace.xs),
-        ],
-        if (mine != null) _DayChip(message: mine!, label: 'Yours'),
-      ],
-    );
-  }
-}
-
-class _DayChip extends ConsumerWidget {
-  const _DayChip({required this.message, required this.label});
-
-  final FlowerMessage message;
-  final String label;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute<void>(
-          fullscreenDialog: true,
-          builder: (_) => DayPhotoViewer(message: message, who: label),
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: AppColors.blushMid),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ClipOval(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: _Thumb(message: message),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(label, style: AppText.label(AppColors.body)),
-            const SizedBox(width: 6),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Signed-URL thumbnail. The bucket is private, so there is no permanent URL
-/// to cache — each render mints one that expires.
-class _Thumb extends ConsumerWidget {
-  const _Thumb({required this.message});
-  final FlowerMessage message;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<String>(
-      future:
-          ref.read(flowerRepositoryProvider).signedPhotoUrl(message.imagePath!),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return const ColoredBox(color: AppColors.surfaceSubtle);
-        }
-        return Image.network(
-          snap.data!,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => const Icon(CupertinoIcons.photo,
-              size: 14, color: AppColors.muted),
-        );
-      },
     );
   }
 }
@@ -839,88 +821,8 @@ class DayPhotoViewer extends ConsumerWidget {
   }
 }
 
-/// Grid of the catalog, for the flower button on the right of the bar.
-class _FlowerPickSheet extends StatelessWidget {
-  const _FlowerPickSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md,
-          AppSpace.lg + MediaQuery.paddingOf(context).bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpace.md),
-          Text('Send a flower', style: AppText.hero()),
-          const SizedBox(height: AppSpace.sm),
-          Wrap(
-            spacing: AppSpace.xs,
-            runSpacing: AppSpace.xs,
-            children: [
-              // `pickable`, not `all`: retired flowers stay renderable for
-              // old messages but must not be offered as new sends.
-              for (final f in FlowerCatalog.pickable)
-                GestureDetector(
-                  onTap: () => Navigator.pop(context, f),
-                  child: Container(
-                    width: 72,
-                    padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-                    decoration: BoxDecoration(
-                      color: AppColors.background,
-                      borderRadius: BorderRadius.circular(AppRadius.sm),
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(f.emoji, style: const TextStyle(fontSize: 24)),
-                        const SizedBox(height: 2),
-                        Text(
-                          f.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: AppText.label(),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// Sentinel for "no template" — lets the sheet distinguish choosing a plain
 /// photo from being dismissed, which returning null alone cannot.
-const _kPlain = StripTemplate(
-  id: '__plain__',
-  name: 'Plain photo',
-  tagline: 'No frame',
-  isDuo: false,
-  emoji: '🖼️',
-  accent: Color(0xFF8E8698),
-  paper: Color(0xFFFFFFFF),
-  ink: Color(0xFF1C1024),
-);
 
 /// "They started one / yours is waiting" — the async half of the feature.
 ///
@@ -985,137 +887,163 @@ class _StripBanner extends ConsumerWidget {
   }
 }
 
-/// Template chooser. Duo templates are listed first and labelled, because
-/// picking one commits your partner to a second shot.
-class _TemplateSheet extends StatelessWidget {
-  const _TemplateSheet({required this.selected});
+/// One template in the horizontal picker.
+///
+/// A circle rather than a card: the row sits over a live viewfinder, and
+/// circles read as controls while rectangles read as content you might have
+/// already shot.
+class _TemplateDot extends StatelessWidget {
+  const _TemplateDot({
+    required this.label,
+    required this.emoji,
+    required this.selected,
+    required this.onTap,
+    this.paper,
+    this.accent,
+  });
 
-  final StripTemplate? selected;
+  final String label;
+  final String emoji;
+  final bool selected;
+  final VoidCallback onTap;
+
+  /// The template's own paper and accent, so the dot previews the look
+  /// instead of being a generic swatch. Null for the plain-photo option.
+  final Color? paper;
+  final Color? accent;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md,
-          AppSpace.lg + MediaQuery.paddingOf(context).bottom),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: AppMotion.micro,
+                curve: AppMotion.easeOut,
+                width: 46,
+                height: 46,
+                alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  shape: BoxShape.circle,
+                  color: paper ?? Colors.black.withValues(alpha: .38),
+                  border: Border.all(
+                    color: selected
+                        ? Colors.white
+                        : (accent ?? Colors.white).withValues(alpha: .35),
+                    width: selected ? 2.5 : 1.2,
+                  ),
+                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 18)),
+              ),
+              const SizedBox(height: 4),
+              SizedBox(
+                width: 58,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: AppText.label(
+                    selected ? Colors.white : Colors.white70,
+                  ).copyWith(fontSize: 8.5, letterSpacing: 0),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpace.md),
-            Text('Booth templates', style: AppText.hero()),
-            const SizedBox(height: 4),
-            Text(
-              'Duo templates wait for their half — they can add it whenever '
-              'they wake up.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.md),
-            _Tile(
-              template: _kPlain,
-              selected: selected == null,
-              onTap: () => Navigator.pop(context, _kPlain),
-            ),
-            const SizedBox(height: AppSpace.md),
-            Text('TOGETHER', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            for (final t in StripTemplate.duo) ...[
-              _Tile(
-                template: t,
-                selected: selected?.id == t.id,
-                onTap: () => Navigator.pop(context, t),
-              ),
-              const SizedBox(height: AppSpace.xs),
             ],
-            const SizedBox(height: AppSpace.xs),
-            Text('ON YOUR OWN', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            for (final t in StripTemplate.solo) ...[
-              _Tile(
-                template: t,
-                selected: selected?.id == t.id,
-                onTap: () => Navigator.pop(context, t),
-              ),
-              const SizedBox(height: AppSpace.xs),
-            ],
-          ],
+          ),
         ),
       ),
     );
   }
 }
 
-class _Tile extends StatelessWidget {
-  const _Tile({
-    required this.template,
-    required this.selected,
+/// Where the held shot should go.
+///
+/// Two genuinely different acts, so they are two buttons rather than a
+/// toggle someone sets once and forgets: a chat photo is a message, a home
+/// screen photo parks itself on their phone for a day.
+class _SendTargetSheet extends StatelessWidget {
+  const _SendTargetSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppBottomSheet(
+      title: 'Send it where?',
+      subtitle: 'You can always send the other way next time',
+      child: Column(
+        children: [
+          _SendOption(
+            emoji: '🏠',
+            title: 'Their home screen',
+            blurb: 'Lands on the widget and in the chat. Gone after 24 hours.',
+            onTap: () => Navigator.pop(context, true),
+          ),
+          const SizedBox(height: AppSpace.xs),
+          _SendOption(
+            emoji: '💬',
+            title: 'Just the conversation',
+            blurb: 'Stays in the thread. Nothing changes on their home screen.',
+            onTap: () => Navigator.pop(context, false),
+          ),
+          const SizedBox(height: AppSpace.xs),
+        ],
+      ),
+    );
+  }
+}
+
+class _SendOption extends StatelessWidget {
+  const _SendOption({
+    required this.emoji,
+    required this.title,
+    required this.blurb,
     required this.onTap,
   });
 
-  final StripTemplate template;
-  final bool selected;
+  final String emoji;
+  final String title;
+  final String blurb;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.background,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
+      borderRadius: BorderRadius.circular(AppRadius.lg),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
         child: Container(
-          padding: const EdgeInsets.all(AppSpace.xs + 2),
+          width: double.infinity,
+          padding: AppSpace.card,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-            // design.md: selection is a tinted outline, never a fill swap.
-            border: Border.all(
-              color: selected ? AppColors.brand : AppColors.border,
-              width: selected ? 1.5 : 1,
-            ),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.border),
           ),
           child: Row(
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: template.accent.withValues(alpha: .14),
-                  borderRadius: BorderRadius.circular(AppRadius.sm - 4),
-                ),
-                child:
-                    Text(template.emoji, style: const TextStyle(fontSize: 18)),
-              ),
+              Text(emoji, style: const TextStyle(fontSize: 22)),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(template.name,
-                        style: AppText.body(AppColors.ink)
-                            .copyWith(fontWeight: FontWeight.w600)),
-                    Text(template.tagline, style: AppText.caption()),
+                    Text(title,
+                        style: AppText.subtitle(AppColors.ink)),
+                    const SizedBox(height: 2),
+                    Text(blurb, style: AppText.caption()),
                   ],
                 ),
               ),
-              if (selected)
-                const Icon(CupertinoIcons.checkmark_alt,
-                    size: 16, color: AppColors.brand),
+              const Icon(CupertinoIcons.chevron_forward,
+                  size: 18, color: AppColors.muted),
             ],
           ),
         ),
