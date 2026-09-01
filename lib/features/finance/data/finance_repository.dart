@@ -390,6 +390,53 @@ class FinanceRepository {
     return posted;
   }
 
+  /* ── Holdings ────────────────────────────────────────────── */
+
+  Stream<List<Holding>> watchHoldings(String pairId) => _client
+      .from('finance_holdings')
+      .stream(primaryKey: ['id'])
+      .eq('pair_id', pairId)
+      .map((rows) => rows.map(Holding.fromMap).toList());
+
+  Future<void> saveHolding({
+    String? id,
+    required String pairId,
+    required String accountId,
+    required String symbol,
+    String? label,
+    required double quantity,
+    required double unitCost,
+    required double unitPrice,
+    required String currency,
+    required String userId,
+  }) async {
+    final values = {
+      'account_id': accountId,
+      'symbol': symbol.trim().toUpperCase(),
+      'label': label?.trim().isEmpty ?? true ? null : label!.trim(),
+      'quantity': quantity,
+      'unit_cost': unitCost,
+      'unit_price': unitPrice,
+      'currency': currency,
+      // Stamped on every save: a price is only meaningful next to the date
+      // it was true, and this is the only moment we know it was current.
+      'price_as_of': DateTime.now().toUtc().toIso8601String(),
+    };
+    if (id == null) {
+      await _client.from('finance_holdings').insert({
+        ...values,
+        'pair_id': pairId,
+        'created_by': userId,
+      });
+    } else {
+      await _client.from('finance_holdings').update(values).eq('id', id);
+    }
+  }
+
+  Future<void> deleteHolding(String id) async {
+    await _client.from('finance_holdings').delete().eq('id', id);
+  }
+
   /* ── Exchange rates ──────────────────────────────────────── */
 
   Future<void> saveRate({
@@ -518,6 +565,13 @@ final financeRecurringProvider =
   final pair = ref.watch(currentPairProvider).valueOrNull;
   if (pair == null || !pair.isLinked) return Stream.value(const []);
   return ref.watch(financeRepositoryProvider).watchRecurring(pair.id);
+});
+
+final financeHoldingsProvider =
+    StreamProvider.autoDispose<List<Holding>>((ref) {
+  final pair = ref.watch(currentPairProvider).valueOrNull;
+  if (pair == null || !pair.isLinked) return Stream.value(const []);
+  return ref.watch(financeRepositoryProvider).watchHoldings(pair.id);
 });
 
 /// Every rate on file, indexed for conversion. Empty is a valid state and

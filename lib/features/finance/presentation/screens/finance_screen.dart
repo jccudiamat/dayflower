@@ -72,6 +72,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final entriesAsync = ref.watch(financeEntriesProvider);
     final budgetsAsync = ref.watch(financeBudgetsProvider);
     final recurringAsync = ref.watch(financeRecurringProvider);
+    final holdingsAsync = ref.watch(financeHoldingsProvider);
 
     final partnerId =
         userId == null ? null : pair?.partnerIdFor(userId);
@@ -99,6 +100,12 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final recurring = (recurringAsync.valueOrNull ?? const [])
         .where((r) => scopeMatches(r.ownerId))
         .toList();
+    // Holdings follow the visibility of the account they sit in, so scope
+    // is applied through the account rather than on the holding itself.
+    final accountIds = {for (final a in accounts) a.id};
+    final holdings = (holdingsAsync.valueOrNull ?? const [])
+        .where((h) => accountIds.contains(h.accountId))
+        .toList();
     final dueNow = recurring
         .where((r) => r.active && !r.isFinished && r.isDue(DateTime.now()))
         .toList();
@@ -118,6 +125,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       accounts: accounts,
       entries: entries,
       budgets: budgets,
+      holdings: holdings,
       month: _month,
       mainCurrency: currency,
       fx: fx,
@@ -131,7 +139,8 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final loading = accountsAsync.isLoading ||
         entriesAsync.isLoading ||
         budgetsAsync.isLoading ||
-        recurringAsync.isLoading;
+        recurringAsync.isLoading ||
+        holdingsAsync.isLoading;
     // Both streams feed `valueOrNull ?? const []`, so a failure would
     // otherwise render as "you have no accounts" — which looks exactly
     // like the honest empty state and means the opposite.
@@ -345,6 +354,51 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                                 ),
                               )),
 
+                        // ── Investments ────────────────────────
+                        // Only when there is something to say: an empty
+                        // section on every screen would be furniture.
+                        if (holdings.isNotEmpty ||
+                            accounts.any((a) =>
+                                a.kind == AccountKind.investment &&
+                                !a.archived)) ...[
+                          const SizedBox(height: AppSpace.md),
+                          _SectionHeader(
+                            label: 'Investments',
+                            action: readOnly ? null : 'Add',
+                            onAction: () => _openHoldingSheet(
+                              accounts: accounts,
+                              currency: currency,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpace.xs),
+                          if (holdings.isEmpty)
+                            _EmptyHint(
+                              emoji: '📈',
+                              title: 'No positions yet',
+                              body: readOnly
+                                  ? "They haven't added any."
+                                  : 'Add what you actually hold — coins, '
+                                      'grams, shares — and the account is '
+                                      'valued at what it is worth today '
+                                      'instead of what you paid in.',
+                            )
+                          else
+                            ...holdings.map((holding) => Padding(
+                                  padding: const EdgeInsets.only(
+                                      bottom: AppSpace.xs),
+                                  child: _HoldingCard(
+                                    holding: holding,
+                                    onTap: readOnly
+                                        ? null
+                                        : () => _openHoldingSheet(
+                                              accounts: accounts,
+                                              currency: currency,
+                                              existing: holding,
+                                            ),
+                                  ),
+                                )),
+                        ],
+
                         const SizedBox(height: AppSpace.md),
                         _SectionHeader(
                           label: DateFormat('MMMM').format(_month).toUpperCase(),
@@ -489,6 +543,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _EntrySaved():
         case _BudgetSaved():
         case _RecurringSaved():
+        case _HoldingSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -553,6 +608,68 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _AccountSaved():
         case _EntrySaved():
         case _BudgetSaved():
+        case _HoldingSaved():
+          break; // not reachable from this sheet
+      }
+    } catch (e) {
+      if (mounted) _showError(context, e);
+    }
+  }
+
+  Future<void> _openHoldingSheet({
+    required List<FinanceAccount> accounts,
+    required String currency,
+    Holding? existing,
+  }) async {
+    final userId = ref.read(currentUserIdProvider);
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    if (userId == null || pair == null) return;
+
+    // A position has to live in something that holds positions.
+    final investmentAccounts = accounts
+        .where((a) => a.kind == AccountKind.investment && !a.archived)
+        .toList();
+
+    final result = await showModalBottomSheet<_SheetResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _HoldingSheet(
+        existing: existing,
+        accounts: investmentAccounts,
+        currency: currency,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final repo = ref.read(financeRepositoryProvider);
+    try {
+      switch (result) {
+        case _Deleted():
+          final ok = await showConfirmDialog(
+            context,
+            title: 'Delete ${existing!.symbol}?',
+            message: 'The account it sat in goes back to its cash balance.',
+            confirmLabel: 'Delete',
+          );
+          if (ok) await repo.deleteHolding(existing.id);
+        case _HoldingSaved(:final draft):
+          await repo.saveHolding(
+            id: existing?.id,
+            pairId: pair.id,
+            accountId: draft.accountId,
+            symbol: draft.symbol,
+            label: draft.label,
+            quantity: draft.quantity,
+            unitCost: draft.unitCost,
+            unitPrice: draft.unitPrice,
+            currency: draft.currency,
+            userId: userId,
+          );
+        case _AccountSaved():
+        case _EntrySaved():
+        case _BudgetSaved():
+        case _RecurringSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -661,6 +778,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _AccountSaved():
         case _EntrySaved():
         case _RecurringSaved():
+        case _HoldingSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -721,6 +839,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _AccountSaved():
         case _BudgetSaved():
         case _RecurringSaved():
+        case _HoldingSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -1271,6 +1390,34 @@ class _AccountSaved extends _SheetResult {
 class _EntrySaved extends _SheetResult {
   const _EntrySaved(this.draft);
   final _EntryDraft draft;
+}
+
+class _HoldingSaved extends _SheetResult {
+  const _HoldingSaved(this.draft);
+  final _HoldingDraft draft;
+}
+
+class _HoldingDraft {
+  const _HoldingDraft({
+    required this.accountId,
+    required this.symbol,
+    required this.label,
+    required this.quantity,
+    required this.unitCost,
+    required this.unitPrice,
+    required this.currency,
+  });
+  final String accountId;
+  final String symbol;
+  final String label;
+  final double quantity;
+
+  /// Optional — zero means "no cost basis", which shows as no gain rather
+  /// than as a total loss.
+  final double unitCost;
+
+  final double unitPrice;
+  final String currency;
 }
 
 class _RecurringSaved extends _SheetResult {
@@ -3078,6 +3225,396 @@ class _RecurringSheetState extends State<_RecurringSheet> {
               child: TextButton(
                 onPressed: () => Navigator.pop(context, const _Deleted()),
                 child: Text('Delete',
+                    style: AppText.caption(AppColors.danger)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ── Holding card ────────────────────────────────────
+
+/// One position: what you hold, what it is worth now, and whether that is
+/// good news.
+///
+/// Gain is shown as a figure *and* a percentage because they answer
+/// different questions — "how much did I make" and "was it a good buy" —
+/// and a position with no cost basis shows neither rather than a
+/// misleading -100%.
+class _HoldingCard extends StatelessWidget {
+  const _HoldingCard({required this.holding, this.onTap});
+
+  final Holding holding;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final gain = holding.gain;
+    final percent = holding.gainPercent;
+    final up = gain >= 0;
+    final color = gain == 0
+        ? AppColors.muted
+        : up
+            ? AppColors.success
+            : AppColors.danger;
+
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        child: Container(
+          padding: AppSpace.card,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          holding.symbol,
+                          style: AppText.body(AppColors.ink)
+                              .copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        if (holding.label != null) ...[
+                          const SizedBox(width: AppSpace.xxs),
+                          Flexible(
+                            child: Text(
+                              holding.label!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.caption(),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_qty(holding.quantity)} @ '
+                      '${_money(holding.unitPrice, holding.currency)}',
+                      style: AppText.caption(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    _money(holding.marketValue, holding.currency),
+                    style: AppText.subtitle(AppColors.ink),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    percent == null
+                        ? 'no cost basis'
+                        : '${up ? '+' : ''}${_money(gain, holding.currency)}'
+                            '  ${(percent * 100).toStringAsFixed(1)}%',
+                    style: AppText.caption(color),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Crypto needs decimals, shares usually don't. Trailing zeros are
+  /// trimmed so 12 grams of gold reads "12" rather than "12.00000000".
+  static String _qty(double v) {
+    if (v.truncateToDouble() == v && v.abs() < 1e12) {
+      return v.toInt().toString();
+    }
+    return v.toStringAsFixed(8).replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+  }
+}
+
+// ── Holding sheet ───────────────────────────────────
+
+class _HoldingSheet extends StatefulWidget {
+  const _HoldingSheet({
+    required this.existing,
+    required this.accounts,
+    required this.currency,
+  });
+
+  final Holding? existing;
+
+  /// Investment accounts only — a position has to live in something that
+  /// holds positions.
+  final List<FinanceAccount> accounts;
+
+  final String currency;
+
+  @override
+  State<_HoldingSheet> createState() => _HoldingSheetState();
+}
+
+class _HoldingSheetState extends State<_HoldingSheet> {
+  late final TextEditingController _symbol;
+  late final TextEditingController _label;
+  late final TextEditingController _quantity;
+  late final TextEditingController _unitCost;
+  late final TextEditingController _unitPrice;
+  late String _currency;
+  String? _accountId;
+
+  @override
+  void initState() {
+    super.initState();
+    final e = widget.existing;
+    _symbol = TextEditingController(text: e?.symbol ?? '');
+    _label = TextEditingController(text: e?.label ?? '');
+    _quantity = TextEditingController(text: e == null ? '' : _plain(e.quantity));
+    _unitCost = TextEditingController(text: e == null ? '' : _plain(e.unitCost));
+    _unitPrice =
+        TextEditingController(text: e == null ? '' : _plain(e.unitPrice));
+    _accountId = e?.accountId ??
+        (widget.accounts.isEmpty ? null : widget.accounts.first.id);
+    _currency = e?.currency ?? _accountCurrency() ?? widget.currency;
+  }
+
+  String? _accountCurrency() {
+    for (final a in widget.accounts) {
+      if (a.id == _accountId) return a.currency;
+    }
+    return null;
+  }
+
+  static String _plain(double v) =>
+      v.truncateToDouble() == v ? v.toInt().toString() : v.toString();
+
+  @override
+  void dispose() {
+    _symbol.dispose();
+    _label.dispose();
+    _quantity.dispose();
+    _unitCost.dispose();
+    _unitPrice.dispose();
+    super.dispose();
+  }
+
+  double? _num(TextEditingController c) =>
+      double.tryParse(c.text.trim().replaceAll(',', ''));
+
+  void _save() {
+    final symbol = _symbol.text.trim();
+    if (symbol.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('What is it? BTC, XAU, a ticker…')),
+      );
+      return;
+    }
+    if (_accountId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Make an investment account for it first.')),
+      );
+      return;
+    }
+    final quantity = _num(_quantity);
+    if (quantity == null || quantity <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('How much of it do you hold?')),
+      );
+      return;
+    }
+    Navigator.pop(
+      context,
+      _HoldingSaved(_HoldingDraft(
+        accountId: _accountId!,
+        symbol: symbol,
+        label: _label.text,
+        quantity: quantity,
+        // Cost basis is optional — a position you were given still has a
+        // value, it just has no gain to report.
+        unitCost: _num(_unitCost) ?? 0,
+        unitPrice: _num(_unitPrice) ?? 0,
+        currency: _currency,
+      )),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isNew = widget.existing == null;
+    final quantity = _num(_quantity) ?? 0;
+    final price = _num(_unitPrice) ?? 0;
+    final cost = _num(_unitCost) ?? 0;
+    final value = quantity * price;
+    final gain = value - quantity * cost;
+
+    return AppBottomSheet(
+      title: isNew ? 'Add a holding' : 'Edit holding',
+      subtitle: 'Quantity × price — gold in grams, crypto in coins',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.accounts.isEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpace.xs),
+              decoration: BoxDecoration(
+                color: AppColors.dangerSubtle,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Text(
+                'No investment accounts yet. Add an account of kind '
+                '"Investment" first — a position has to live somewhere.',
+                style: AppText.caption(AppColors.danger),
+              ),
+            )
+          else ...[
+            const AppFieldLabel('Held in'),
+            _AccountPicker(
+              accounts: widget.accounts,
+              selected: _accountId,
+              allowNone: false,
+              onChanged: (id) => setState(() {
+                _accountId = id;
+                final adopted = _accountCurrency();
+                if (adopted != null) _currency = adopted;
+              }),
+            ),
+            const SizedBox(height: AppSpace.sm),
+          ],
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 96,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppFieldLabel('Symbol'),
+                    AppSheetField(
+                      controller: _symbol,
+                      hint: 'BTC',
+                      autofocus: isNew,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppFieldLabel('Name'),
+                    AppSheetField(controller: _label, hint: 'Bitcoin'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Quantity'),
+          AppSheetField(
+            controller: _quantity,
+            hint: '0.5',
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppFieldLabel('Bought at'),
+                    AppSheetField(
+                      controller: _unitCost,
+                      hint: 'Optional',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpace.xs),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const AppFieldLabel('Worth now'),
+                    AppSheetField(
+                      controller: _unitPrice,
+                      hint: '0',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.xxs),
+          Text(
+            'Both per unit, in $_currency. Prices are yours to update — '
+            'nothing fetches a crypto or metal price for you.',
+            style: AppText.caption(),
+          ),
+
+          // Live arithmetic, so the numbers can be checked before saving
+          // rather than after.
+          if (quantity > 0 && price > 0) ...[
+            const SizedBox(height: AppSpace.sm),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpace.xs),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSubtle,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Worth ${_money(value, _currency)}',
+                      style: AppText.subtitle(AppColors.ink)),
+                  if (cost > 0)
+                    Text(
+                      gain >= 0
+                          ? 'Up ${_money(gain, _currency)}'
+                          : 'Down ${_money(-gain, _currency)}',
+                      style: AppText.caption(
+                          gain >= 0 ? AppColors.success : AppColors.danger),
+                    ),
+                ],
+              ),
+            ),
+          ],
+
+          const SizedBox(height: AppSpace.md),
+          GradientButton(
+            label: isNew ? 'Add holding' : 'Save changes',
+            onPressed: widget.accounts.isEmpty ? null : _save,
+          ),
+          if (!isNew) ...[
+            const SizedBox(height: AppSpace.xs),
+            Center(
+              child: TextButton(
+                onPressed: () => Navigator.pop(context, const _Deleted()),
+                child: Text('Delete holding',
                     style: AppText.caption(AppColors.danger)),
               ),
             ),

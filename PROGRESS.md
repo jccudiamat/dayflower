@@ -599,7 +599,11 @@ Decisions worth not re-litigating:
 
 Also added `finance_recurring_budget_only_on_expense` — finance_entries had that check but recurring didn't, so the rule lived only in the client. Verified live: income+budget → 400, expense+budget → 201.
 
-**Not yet built:** investment holdings, the salary→% plan, and Insights charts.
+**Investment holdings landed 2026-09-01.** Quantity × price — gold in grams, crypto in coins, shares as shares — with `unit_cost` as the cost basis, which is the only thing that makes gain/loss possible; without it an investment can say what it is worth today but never whether that is good news. **An investment account with positions is valued at those positions, not at its cash balance.** Using the balance would report a portfolio at its funding amount forever, and adding the two would count the same money twice. A position with no cost basis shows no percentage rather than -100%. Prices are manual — nothing fetches a crypto or metal price.
+
+**`test/finance_summary_test.dart` covers the derivation** (11 tests, all passing): card expenses increasing debt, transfers paying down a liability, transfers being neither income nor spending, mark-to-market, missing cost basis, FX conversion, and an unconvertible account being excluded *and named*. These are the rules that look fine until real money is in them.
+
+**Not yet built:** the salary→% plan, and Insights charts.
 
 **Live data note:** entries were cleared 2026-08-31 at the user's request (backup in `backups/`). Both accounts (`E&`, `Dragonfi`, AED) are owned by **twolip.test.partner** because the debug build auto-logs-in as them, while entries had been created as **jccudiamat55**. Signed in as the primary user, Finance shows no accounts — they are the partner's and now private. Not a bug, but it looks like one.
 

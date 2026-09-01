@@ -612,3 +612,72 @@ class RecurringRule {
         createdBy: map['created_by'] as String,
       );
 }
+
+/* ── Holdings ───────────────────────────────────────────────── */
+
+/// One position inside an investment account — 0.5 BTC, 12 g of gold, 40
+/// shares of something.
+///
+/// Quantity × price rather than a single figure you retype: gold is grams
+/// and crypto is coins, and [unitCost] is what makes gain/loss possible at
+/// all. Without a cost basis an investment can say what it is worth today
+/// but never whether that is good news.
+@immutable
+class Holding {
+  const Holding({
+    required this.id,
+    required this.pairId,
+    required this.accountId,
+    required this.symbol,
+    this.label,
+    required this.quantity,
+    required this.unitCost,
+    required this.unitPrice,
+    required this.currency,
+    required this.priceAsOf,
+    required this.createdBy,
+  });
+
+  final String id;
+  final String pairId;
+  final String accountId;
+
+  /// BTC, XAU, AAPL — whatever the owner calls it.
+  final String symbol;
+
+  final String? label;
+  final double quantity;
+
+  /// What one unit cost when bought, in [currency].
+  final double unitCost;
+
+  /// What one unit is worth now.
+  final double unitPrice;
+
+  final String currency;
+  final DateTime priceAsOf;
+  final String createdBy;
+
+  double get marketValue => quantity * unitPrice;
+  double get bookValue => quantity * unitCost;
+  double get gain => marketValue - bookValue;
+
+  /// Null when there is no cost basis to compare against — a position you
+  /// were given, or one entered before anyone recorded what it cost. A
+  /// percentage of zero would read as a total loss rather than as unknown.
+  double? get gainPercent => bookValue == 0 ? null : gain / bookValue;
+
+  factory Holding.fromMap(Map<String, dynamic> map) => Holding(
+        id: map['id'] as String,
+        pairId: map['pair_id'] as String,
+        accountId: map['account_id'] as String,
+        symbol: map['symbol'] as String,
+        label: map['label'] as String?,
+        quantity: toDouble(map['quantity']),
+        unitCost: toDouble(map['unit_cost']),
+        unitPrice: toDouble(map['unit_price']),
+        currency: map['currency'] as String? ?? 'PHP',
+        priceAsOf: DateTime.parse(map['price_as_of'] as String).toLocal(),
+        createdBy: map['created_by'] as String,
+      );
+}

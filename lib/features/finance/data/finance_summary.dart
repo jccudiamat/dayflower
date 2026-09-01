@@ -51,6 +51,7 @@ class FinanceSummary {
     required this.invested,
     required this.budgets,
     required this.unconvertible,
+    required this.marketValues,
   });
 
   final List<FinanceAccount> accounts;
@@ -71,6 +72,10 @@ class FinanceSummary {
   final double invested;
 
   final List<BudgetProgress> budgets;
+
+  /// Account id → total market value of its positions, in the account's own
+  /// currency. Only investment accounts that actually hold something appear.
+  final Map<String, double> marketValues;
 
   /// Currencies held by some account but with no rate on file. The UI warns
   /// with these rather than pretending the total is complete — a net worth
@@ -93,6 +98,7 @@ class FinanceSummary {
     invested: 0,
     budgets: [],
     unconvertible: {},
+    marketValues: {},
   );
 
   /// Builds every number for one set of accounts and entries.
@@ -109,6 +115,7 @@ class FinanceSummary {
     required List<FinanceAccount> accounts,
     required List<FinanceEntry> entries,
     required List<FinanceBudget> budgets,
+    List<Holding> holdings = const [],
     required DateTime month,
     required String mainCurrency,
     required FxTable fx,
@@ -192,9 +199,20 @@ class FinanceSummary {
     var saved = 0.0;
     var invested = 0.0;
 
+    // An investment account with positions is worth what those positions
+    // are worth, not what was paid into it. Using the cash balance would
+    // report a portfolio at its funding amount forever; adding the two
+    // together would count the same money twice.
+    final holdingsByAccount = <String, double>{};
+    for (final holding in holdings) {
+      holdingsByAccount[holding.accountId] =
+          (holdingsByAccount[holding.accountId] ?? 0) + holding.marketValue;
+    }
+
     for (final account in live) {
       if (!account.includeInNetWorth) continue;
-      final balance = balances[account.id] ?? 0;
+      final marked = holdingsByAccount[account.id];
+      final balance = marked ?? (balances[account.id] ?? 0);
       final converted = account.currency == mainCurrency
           ? balance
           : fx.convert(balance, from: account.currency, to: mainCurrency);
@@ -235,6 +253,7 @@ class FinanceSummary {
       invested: invested,
       budgets: progress,
       unconvertible: unconvertible,
+      marketValues: holdingsByAccount,
     );
   }
 }

@@ -100,6 +100,7 @@ class AppSheetField extends StatelessWidget {
     this.autofocus = false,
     this.serif = false,
     this.prefix,
+    this.onChanged,
   });
 
   final TextEditingController controller;
@@ -116,6 +117,10 @@ class AppSheetField extends StatelessWidget {
 
   final Widget? prefix;
 
+  /// Fires on every keystroke. Added for sheets that do arithmetic as you
+  /// type — a holding's value is worth checking before saving, not after.
+  final ValueChanged<String>? onChanged;
+
   static OutlineInputBorder _border(Color color) => OutlineInputBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
         borderSide: BorderSide(color: color),
@@ -126,6 +131,7 @@ class AppSheetField extends StatelessWidget {
     final style = serif ? AppText.note() : AppText.body(AppColors.ink);
     return TextField(
       controller: controller,
+      onChanged: onChanged,
       keyboardType: keyboardType,
       maxLines: maxLines,
       maxLength: maxLength,
