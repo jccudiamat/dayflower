@@ -9,10 +9,12 @@ import 'package:intl/intl.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app_router.dart';
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/flower_avatar.dart';
 import '../../../../core/services/pulse_alerts.dart';
 import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../heartbeat/data/pulse_alert_prefs.dart';
@@ -29,25 +31,48 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Scaffold(
+    return const Scaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: const AppBottomNav(),
+      bottomNavigationBar: AppBottomNav(),
       body: SafeArea(
-        child: ListView(
-          padding: AppSpace.screen,
-          children: [
-            const SizedBox(height: AppSpace.md),
-            const _HomeHeader(),
-            const SizedBox(height: AppSpace.md),
-            const _MoodCard(),
-            const SizedBox(height: AppSpace.sm),
-            const _HeartbeatCard(),
-            const SizedBox(height: AppSpace.sm),
-            // The conversation, not the reunion countdown — that already
-            // lives on Dates, and having it twice meant two places to
-            // keep in step for no extra information.
-            const ConversationCard(),
-            const SizedBox(height: AppSpace.md),
+        // CustomScrollView rather than ListView so the top bar can be a
+        // sliver: `floating` lets it slide away as you read down the page
+        // and `snap` brings the whole thing back on the first upward
+        // flick, instead of dragging it in a pixel at a time.
+        child: CustomScrollView(
+          slivers: [
+            SliverAppBar(
+              floating: true,
+              snap: true,
+              backgroundColor: AppColors.background,
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              titleSpacing: 0,
+              toolbarHeight: 56,
+              automaticallyImplyLeading: false,
+              title: Padding(
+                padding: AppSpace.screen,
+                child: _HomeBar(),
+              ),
+            ),
+            SliverPadding(
+              padding: AppSpace.screen,
+              sliver: SliverList(
+                delegate: SliverChildListDelegate.fixed([
+                  _HomeHeader(),
+                  SizedBox(height: AppSpace.md),
+                  _MoodCard(),
+                  SizedBox(height: AppSpace.sm),
+                  _HeartbeatCard(),
+                  SizedBox(height: AppSpace.sm),
+                  // The conversation, not the reunion countdown — that
+                  // already lives on Dates, and having it twice meant two
+                  // places to keep in step for no extra information.
+                  ConversationCard(),
+                  SizedBox(height: AppSpace.md),
+                ]),
+              ),
+            ),
           ],
         ),
       ),
@@ -511,11 +536,17 @@ class _HomeHeader extends ConsumerWidget {
 
     final distance = distanceLabel(profile?.timezone, partnerZone);
 
+    // Bottom-aligned against the arch, not top-aligned: the greeting is the
+    // heavier block and hanging it from the top left it floating above a
+    // tall panel. The padding keeps it off the arch's baseline rather than
+    // sitting flush with it.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Expanded(
-          child: Column(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: AppSpace.sm),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(_greetingFor(DateTime.now()), style: AppText.display()),
@@ -556,6 +587,7 @@ class _HomeHeader extends ConsumerWidget {
                 Text(distance, style: AppText.body(AppColors.body)),
               ],
             ],
+            ),
           ),
         ),
         const SizedBox(width: AppSpace.sm),
@@ -721,4 +753,124 @@ class _DashedArchPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _DashedArchPainter oldDelegate) => false;
+}
+
+/* ── Top bar ─────────────────────────────── */
+
+/// The app's own bar: who this is on the left, who you two are on the right.
+///
+/// Lives in a `floating`/`snap` SliverAppBar, so it gets out of the way as
+/// soon as you start reading and comes back whole on the first flick up.
+class _HomeBar extends ConsumerWidget {
+  const _HomeBar();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Row(
+      children: [
+        const Text('🌷', style: TextStyle(fontSize: 20)),
+        const SizedBox(width: AppSpace.xs),
+        Text(
+          AppConstants.appName,
+          style: AppText.title(AppColors.ink).copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const Spacer(),
+        const _CouplePill(),
+      ],
+    );
+  }
+}
+
+/// Both faces and both names in one control — the "us" of the app, and the
+/// way back into Settings.
+///
+/// Replaces the lone profile avatar the old header carried: a couples app
+/// showing only your own face at the top was always slightly wrong, and the
+/// pair is what the whole screen is about.
+class _CouplePill extends ConsumerWidget {
+  const _CouplePill();
+
+  static const double _face = 26;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final me = ref.watch(userProfileProvider).valueOrNull;
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+
+    final myName = me?.petName ?? me?.displayName;
+    final theirName = partner?.petName ?? partner?.displayName;
+    // Before pairing there is no "&" to show, so the pill quietly becomes a
+    // single name rather than reading "Bunny & null".
+    final label = [
+      if (myName != null) myName,
+      if (theirName != null) theirName,
+    ].join(' & ');
+
+    return Semantics(
+      button: true,
+      label: 'Profile and settings',
+      child: GestureDetector(
+        onTap: () => context.go(Routes.settings),
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(4, 4, AppSpace.xs, 4),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Overlapped rather than side by side: two touching circles
+              // read as a couple, two spaced ones read as a list.
+              SizedBox(
+                width: partner == null ? _face : _face * 1.62,
+                height: _face,
+                child: Stack(
+                  children: [
+                    FlowerAvatar.of(me, size: _face),
+                    if (partner != null)
+                      Positioned(
+                        left: _face * 0.62,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            // A hairline of the bar's own colour behind the
+                            // second face is what separates the two circles
+                            // where they overlap.
+                            border: Border.all(
+                              color: AppColors.surface,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: FlowerAvatar.of(partner, size: _face - 3),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (label.isNotEmpty) ...[
+                const SizedBox(width: AppSpace.xs),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 132),
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.caption(AppColors.ink)
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 2),
+              const Icon(CupertinoIcons.chevron_down,
+                  size: 12, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
