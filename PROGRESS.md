@@ -210,6 +210,14 @@ flutter build apk --debug
 - ⚠️ **Onboarding does not collect gender yet.** Until it does, every new account gets the tulip fallback and the daisy default is unreachable except by editing the row directly. Adding the step, or a Settings row, is the remaining piece.
 - The widget's avatar is **pushed from Dart as an emoji** (`day_photo_owner_flower`), not derived in Kotlin — the choice lives in Postgres and the widget has no database, same reason the name is pushed.
 
+## Camera chrome, TikTok-style (2026-09-02)
+
+- **No header.** The "My Day" title and close button moved inside the frame, top-left, over the picture. The screen has no top `SafeArea` — the viewfinder runs under the status bar the way a camera should — and `MessagesScreen` is now nothing but `ShareYourDayBar`.
+- **Vertical rail down the right** for flip/flash while live, and discard/save while a shot is held. Same corner either way, so the thumb never learns a second place to look.
+- **Destination is a pill in the "Add sound" position**, centred with a `Stack` rather than a `Row` + `Spacer` — a Row would centre it in whatever space the title leaves, so it would drift as the title changed. Chosen *before* the shutter instead of confirmed after: the answer is nearly always the same, and a sheet on every send taxes the common case.
+- ⚠️ **`to_chat` (migration 0018) exists because "Widget" was not expressible.** Every day photo is a message row and the thread renders every row it can see, so `to_widget` alone gave two states, not three — "Widget" and "Both" would have been the same thing with different labels. Now: widget = `to_widget true, to_chat false`; chat = `false/true`; both = `true/true`. Defaults to true so all 32 existing rows, plus every flower and text message, stay in the thread. The thread reads `chatMessagesProvider`, which filters in Dart because the raw stream still has to feed the widget and day-photo lookups the rows it hides.
+- `chatMessagesProvider` keeps the `AsyncValue` rather than flattening to a list — `valueOrNull ?? []` would render a failed load as "no messages yet", which looks identical to the honest empty state and means the opposite.
+
 ## Five-tab nav + camera rework (2026-09-02)
 
 **Nav is five tabs now** — Home, Flowers, Camera, Dates, Activities — and **only the selected tab shows its label**. Five labels across a phone means five truncated words; showing one makes the selection obvious without a pill or underline, and `AnimatedSize` collapses the gap so the icons do not shift as it comes and goes. Every tab keeps its `Semantics(label:)` so an unselected tab is not an unlabelled button to a screen reader.

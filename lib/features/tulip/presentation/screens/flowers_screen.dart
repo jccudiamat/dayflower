@@ -247,7 +247,9 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   }
 
   Widget _buildThread() {
-    final messages = ref.watch(flowerMessagesProvider);
+    // chatMessagesProvider, not the raw stream: a photo sent only to the
+    // home screen is deliberately absent from the conversation.
+    final messages = ref.watch(chatMessagesProvider);
     final userId = ref.watch(currentUserIdProvider);
 
     return messages.when(

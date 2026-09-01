@@ -5,13 +5,14 @@ import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/app_bottom_sheet.dart';
 import '../../../booth/data/strip_repository.dart';
 import '../../../booth/domain/strip_templates.dart';
 import '../../../onboarding/data/user_repository.dart';
@@ -56,6 +57,11 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// mis-tap a photo on someone's home screen for 24 hours. Now the frame
   /// is held here, the viewfinder freezes on it, and nothing leaves the
   /// device until the send button is pressed and a destination chosen.
+  /// Where the next send goes. Widget first because parking a photo on
+  /// their home screen is what "share your day" means — the thread copy is
+  /// the extra, not the point.
+  DayPhotoTarget _target = DayPhotoTarget.widget;
+
   Uint8List? _pending;
   String _pendingExt = 'jpg';
 
@@ -166,7 +172,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Future<void> _shareBytes(
     Uint8List bytes,
     String ext, {
-    bool toWidget = true,
+    DayPhotoTarget target = DayPhotoTarget.widget,
   }) async {
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
@@ -174,17 +180,19 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
     setState(() => _busy = true);
     try {
-      await ref.read(flowerRepositoryProvider).sendDayPhoto(
+      await ref.read(flowerRepositoryProvider).sendDayPhotoTo(
             pairId: pair.id,
             senderId: userId,
             bytes: bytes,
             fileExtension: ext,
-            toWidget: toWidget,
+            target: target,
           );
       if (mounted) {
-        _toast(toWidget
-            ? 'Shared to their home screen for 24 hours 🌼'
-            : 'Sent to the conversation 💬');
+        _toast(switch (target) {
+          DayPhotoTarget.widget => 'On their home screen for 24 hours 🌼',
+          DayPhotoTarget.chat => 'Sent to the conversation 💬',
+          DayPhotoTarget.both => 'Home screen and conversation ✨',
+        });
       }
     } catch (_) {
       // A Storage 404 here almost always means migration 0013 has not run.
@@ -243,25 +251,24 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// Chat-only and home-screen are genuinely different acts — one is a
   /// message, the other parks a photo on someone's home screen for a day —
   /// so the choice is made explicitly rather than inferred from a setting.
+  /// Sends the held shot to whatever the dropdown says.
+  ///
+  /// The destination is picked before the shutter, not asked for after it:
+  /// a confirmation sheet on every send is a tax on the common case, and
+  /// the pill is on screen the whole time you are framing.
   Future<void> _sendPending() async {
     final bytes = _pending;
     if (bytes == null || _busy) return;
-
-    final toWidget = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _SendTargetSheet(),
-    );
-    if (toWidget == null || !mounted) return;
-
-    await _handleShot(bytes, toWidget: toWidget);
+    await _handleShot(bytes, target: _target);
     if (mounted) setState(() => _pending = null);
   }
 
   /// One entry point for every source, so the camera, the gallery and a
   /// "join their strip" tap all take the same route.
-  Future<void> _handleShot(Uint8List bytes, {bool toWidget = true}) async {
+  Future<void> _handleShot(
+    Uint8List bytes, {
+    DayPhotoTarget target = DayPhotoTarget.widget,
+  }) async {
     final waiting = ref.read(stripAwaitingMeProvider);
 
     // Joining beats starting: if a half is already waiting on me, the
@@ -269,7 +276,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (waiting != null) return _joinStrip(waiting, bytes);
 
     final t = _template;
-    if (t == null) return _shareBytes(bytes, _pendingExt, toWidget: toWidget);
+    if (t == null) return _shareBytes(bytes, _pendingExt, target: target);
     return t.isDuo ? _startDuo(t, bytes) : _postSolo(t, bytes);
   }
 
@@ -412,70 +419,99 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             else
               _preview(),
 
-            // Controls float over the viewfinder rather than stacking around
-            // it — the point of the big card is that the picture is the card.
+            // Top row: who this is and the way out on the left, the
+            // destination in the middle. The camera's own controls moved to
+            // a vertical rail down the right, where a thumb reaches them
+            // without crossing the shot.
             Positioned(
-              top: AppSpace.sm,
-              left: AppSpace.sm,
-              right: AppSpace.sm,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: _pending != null
-                        ? const SizedBox.shrink()
-                        : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('SHARE YOUR DAY',
-                            style: AppText.label(Colors.white)),
-                        const SizedBox(height: 2),
-                        Text(
-                          mine == null ? 'Lasts 24 hours' : _leftLabel(mine),
-                          style: AppText.caption(
-                            mine == null
-                                ? AppColors.onDarkMuted
-                                : AppColors.brandLight,
-                          ).copyWith(fontWeight: FontWeight.w600),
+              top: 0,
+              left: 0,
+              right: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpace.sm, vertical: AppSpace.xs),
+                  // A Stack, not a Row with a Spacer: the pill has to be
+                  // centred on the *frame*, and a Row would centre it in
+                  // whatever space the title happens to leave, so it would
+                  // drift as the title changed length.
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _GlassButton(
+                              icon: CupertinoIcons.xmark,
+                              tooltip: 'Close',
+                              onTap: () => context.go(Routes.home),
+                            ),
+                            const SizedBox(width: AppSpace.xs),
+                            Text('My Day',
+                                style: AppText.title(Colors.white)),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  // While a shot is held, the two controls that acted on
-                  // the live camera are replaced by the two that act on the
-                  // frame — same corner, so the thumb does not have to
-                  // learn a second place to look.
-                  if (_pending != null) ...[
-                    _GlassButton(
-                      icon: CupertinoIcons.xmark,
-                      tooltip: 'Discard',
-                      onTap: _busy ? null : _discardPending,
-                    ),
-                    const SizedBox(width: AppSpace.xs),
-                    _GlassButton(
-                      icon: CupertinoIcons.arrow_down_to_line,
-                      tooltip: 'Save a copy',
-                      onTap: _busy ? null : _savePending,
-                    ),
-                  ] else if (_camReady) ...[
-                    _GlassButton(
-                      icon: _torchOn
-                          ? CupertinoIcons.bolt_fill
-                          : CupertinoIcons.bolt_slash,
-                      tooltip: _torchOn ? 'Flash off' : 'Flash on',
-                      active: _torchOn,
-                      onTap: _toggleTorch,
-                    ),
-                    if (_canFlip) ...[
-                      const SizedBox(width: AppSpace.xs),
-                      _GlassButton(
-                        icon: CupertinoIcons.arrow_2_circlepath,
-                        tooltip: 'Flip camera',
-                        onTap: _flip,
+                      ),
+                      _TargetPill(
+                        target: _target,
+                        onChanged: (t) => setState(() => _target = t),
                       ),
                     ],
-                  ],
-                ],
+                  ),
+                ),
+              ),
+            ),
+
+            // The vertical rail. Same corner whether the camera is live or
+            // a shot is held — only what the buttons do changes, so the
+            // thumb never has to learn a second place to look.
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: AppSpace.sm,
+              child: SafeArea(
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (_pending != null) ...[
+                        _GlassButton(
+                          icon: CupertinoIcons.xmark_circle,
+                          tooltip: 'Discard',
+                          big: true,
+                          onTap: _busy ? null : _discardPending,
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+                        _GlassButton(
+                          icon: CupertinoIcons.arrow_down_to_line,
+                          tooltip: 'Save a copy',
+                          big: true,
+                          onTap: _busy ? null : _savePending,
+                        ),
+                      ] else if (_camReady) ...[
+                        _GlassButton(
+                          icon: CupertinoIcons.arrow_2_circlepath,
+                          tooltip: 'Flip camera',
+                          big: true,
+                          onTap: _canFlip ? _flip : null,
+                        ),
+                        const SizedBox(height: AppSpace.sm),
+                        _GlassButton(
+                          icon: _torchOn
+                              ? CupertinoIcons.bolt_fill
+                              : CupertinoIcons.bolt_slash,
+                          tooltip: _torchOn ? 'Flash off' : 'Flash on',
+                          big: true,
+                          active: _torchOn,
+                          onTap: _toggleTorch,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
 
@@ -503,14 +539,6 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
         ),
       ),
     );
-  }
-
-  String _leftLabel(FlowerMessage m) {
-    final left = m.widgetTimeLeft;
-    if (left == null) return 'Expired';
-    return left.inHours >= 1
-        ? '${left.inHours} h left'
-        : '${left.inMinutes} m left';
   }
 
   Widget _preview() {
@@ -964,88 +992,65 @@ class _TemplateDot extends StatelessWidget {
   }
 }
 
-/// Where the held shot should go.
+/// Where the next photo goes, as a pill in the spot TikTok gives "Add
+/// sound".
 ///
-/// Two genuinely different acts, so they are two buttons rather than a
-/// toggle someone sets once and forgets: a chat photo is a message, a home
-/// screen photo parks itself on their phone for a day.
-class _SendTargetSheet extends StatelessWidget {
-  const _SendTargetSheet();
+/// A dropdown rather than a sheet after the shutter: the choice is nearly
+/// always the same one, and a confirmation on every send taxes the common
+/// case. Having it visible while framing also means the answer is decided
+/// before the moment you are trying to catch has passed.
+class _TargetPill extends StatelessWidget {
+  const _TargetPill({required this.target, required this.onChanged});
+
+  final DayPhotoTarget target;
+  final ValueChanged<DayPhotoTarget> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return AppBottomSheet(
-      title: 'Send it where?',
-      subtitle: 'You can always send the other way next time',
-      child: Column(
-        children: [
-          _SendOption(
-            emoji: '🏠',
-            title: 'Their home screen',
-            blurb: 'Lands on the widget and in the chat. Gone after 24 hours.',
-            onTap: () => Navigator.pop(context, true),
-          ),
-          const SizedBox(height: AppSpace.xs),
-          _SendOption(
-            emoji: '💬',
-            title: 'Just the conversation',
-            blurb: 'Stays in the thread. Nothing changes on their home screen.',
-            onTap: () => Navigator.pop(context, false),
-          ),
-          const SizedBox(height: AppSpace.xs),
-        ],
+    return PopupMenuButton<DayPhotoTarget>(
+      initialValue: target,
+      onSelected: onChanged,
+      tooltip: 'Where it goes',
+      color: AppColors.darkSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
       ),
-    );
-  }
-}
-
-class _SendOption extends StatelessWidget {
-  const _SendOption({
-    required this.emoji,
-    required this.title,
-    required this.blurb,
-    required this.onTap,
-  });
-
-  final String emoji;
-  final String title;
-  final String blurb;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.background,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Container(
-          width: double.infinity,
-          padding: AppSpace.card,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.border),
+      itemBuilder: (context) => [
+        for (final t in DayPhotoTarget.values)
+          PopupMenuItem(
+            value: t,
+            height: 42,
+            child: Row(
+              children: [
+                Text(t.emoji, style: const TextStyle(fontSize: 15)),
+                const SizedBox(width: AppSpace.xs),
+                Text(t.label, style: AppText.body(AppColors.onDark)),
+                if (t == target) ...[
+                  const SizedBox(width: AppSpace.xs),
+                  const Icon(CupertinoIcons.checkmark_alt,
+                      size: 14, color: AppColors.brandLight),
+                ],
+              ],
+            ),
           ),
-          child: Row(
-            children: [
-              Text(emoji, style: const TextStyle(fontSize: 22)),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: AppText.subtitle(AppColors.ink)),
-                    const SizedBox(height: 2),
-                    Text(blurb, style: AppText.caption()),
-                  ],
-                ),
-              ),
-              const Icon(CupertinoIcons.chevron_forward,
-                  size: 18, color: AppColors.muted),
-            ],
-          ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: .42),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: Colors.white.withValues(alpha: .22)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(target.emoji, style: const TextStyle(fontSize: 13)),
+            const SizedBox(width: 6),
+            Text(target.label, style: AppText.caption(Colors.white)),
+            const SizedBox(width: 3),
+            const Icon(CupertinoIcons.chevron_down,
+                size: 11, color: Colors.white),
+          ],
         ),
       ),
     );

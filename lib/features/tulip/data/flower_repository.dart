@@ -28,6 +28,7 @@ class FlowerMessage {
     required this.sentAt,
     this.seenAt,
     this.toWidget = false,
+    this.toChat = true,
   });
 
   final String id;
@@ -51,6 +52,10 @@ class FlowerMessage {
   /// The sender chose to push this flower to the recipient's home-screen
   /// widget. Always false for text — the widget only renders flowers.
   final bool toWidget;
+
+  /// Whether this belongs in the conversation. False only for a day photo
+  /// sent straight to the home screen — flowers and text are always chat.
+  final bool toChat;
 
   bool get isSeen => seenAt != null;
 
@@ -94,6 +99,7 @@ class FlowerMessage {
             : DateTime.parse(map['seen_at'] as String).toLocal(),
         // Rows written before 0009 ran have no column at all.
         toWidget: map['to_widget'] as bool? ?? false,
+        toChat: map['to_chat'] as bool? ?? true,
       );
 }
 
@@ -164,6 +170,28 @@ class FlowerRepository {
   ///
   /// [toWidget] is what puts it on the partner's home screen; it leaves
   /// there on its own 24h later (computed, never deleted).
+  /// Where a day photo is allowed to show up.
+  ///
+  /// Three real states rather than two with a relabelled duplicate — see
+  /// the header of 0018_day_photo_targets.sql.
+  Future<FlowerMessage> sendDayPhotoTo({
+    required String pairId,
+    required String senderId,
+    required Uint8List bytes,
+    required String fileExtension,
+    required DayPhotoTarget target,
+    String? note,
+  }) =>
+      sendDayPhoto(
+        pairId: pairId,
+        senderId: senderId,
+        bytes: bytes,
+        fileExtension: fileExtension,
+        note: note,
+        toWidget: target.toWidget,
+        toChat: target.toChat,
+      );
+
   Future<FlowerMessage> sendDayPhoto({
     required String pairId,
     required String senderId,
@@ -171,6 +199,7 @@ class FlowerRepository {
     required String fileExtension,
     String? note,
     bool toWidget = true,
+    bool toChat = true,
   }) async {
     // <pair_id>/<uuid>.<ext> — the leading segment is what the Storage RLS
     // policy reads to check pair membership, so it must stay first.
@@ -192,6 +221,7 @@ class FlowerRepository {
       'image_path': path,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
       'to_widget': toWidget,
+      'to_chat': toChat,
     });
   }
 
@@ -352,4 +382,41 @@ final unreadMessageCountProvider = Provider.autoDispose<int>((ref) {
   return messages
       .where((m) => m.senderId != userId && !m.isSeen)
       .length;
+});
+
+/// Where a day photo should land. Ordered as the camera offers them, with
+/// [widget] first because parking a photo on their home screen is what
+/// "share your day" means — the thread copy is the extra, not the point.
+enum DayPhotoTarget {
+  widget('Widget', '🏠', toWidget: true, toChat: false),
+  chat('Chat', '💬', toWidget: false, toChat: true),
+  both('Both', '✨', toWidget: true, toChat: true);
+
+  const DayPhotoTarget(
+    this.label,
+    this.emoji, {
+    required this.toWidget,
+    required this.toChat,
+  });
+
+  final String label;
+  final String emoji;
+  final bool toWidget;
+  final bool toChat;
+}
+
+/// The conversation, minus anything sent only to the home screen.
+///
+/// Filtered here rather than in the query because [flowerMessagesProvider]
+/// also feeds the widget and day-photo lookups, which specifically need the
+/// rows this hides.
+/// Keeps the AsyncValue rather than flattening to a list: the thread needs
+/// loading and error apart from empty, and `valueOrNull ?? []` would render
+/// a failed load as "no messages yet" — which looks identical to the honest
+/// empty state and means the opposite.
+final chatMessagesProvider =
+    Provider.autoDispose<AsyncValue<List<FlowerMessage>>>((ref) {
+  return ref.watch(flowerMessagesProvider).whenData(
+        (messages) => messages.where((m) => m.toChat).toList(growable: false),
+      );
 });
