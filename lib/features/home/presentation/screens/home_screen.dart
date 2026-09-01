@@ -25,6 +25,7 @@ import '../../data/mood_prefs.dart';
 import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
+import '../../../tulip/presentation/widgets/share_your_day.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -620,48 +621,87 @@ class _DayArch extends ConsumerWidget {
     final theirs = ref.watch(partnerDayPhotoProvider);
     final mine = ref.watch(myDayPhotoProvider);
 
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    final theirName = partner?.petName ?? partner?.displayName ?? 'Their';
+
+    // Tapping is handled per photo rather than on the whole arch: with two
+    // stacked, one tap target would have to guess which day you meant.
     return SizedBox(
       width: _width,
       height: _width / _aspect,
-      child: GestureDetector(
-        onTap: () => context.go(Routes.chat),
-        child: ClipRRect(
-          borderRadius: _shape,
-          child: _content(theirs, mine),
-        ),
+      child: ClipRRect(
+        borderRadius: _shape,
+        child: _content(context, theirs, mine, theirName),
       ),
     );
   }
 
-  Widget _content(FlowerMessage? theirs, FlowerMessage? mine) {
+  Widget _content(
+    BuildContext context,
+    FlowerMessage? theirs,
+    FlowerMessage? mine,
+    String theirName,
+  ) {
     // Both: stacked, theirs on top — the whole point of the panel is
     // seeing their day first.
     if (theirs != null && mine != null) {
       return Column(
         children: [
-          Expanded(child: _DayPhoto(message: theirs)),
+          Expanded(
+            child: _DayPhoto(
+              message: theirs,
+              onTap: () => _open(context, theirs, "$theirName's day"),
+            ),
+          ),
           const SizedBox(height: 3),
-          Expanded(child: _DayPhoto(message: mine)),
+          Expanded(
+            child: _DayPhoto(
+              message: mine,
+              onTap: () => _open(context, mine, 'Your day'),
+            ),
+          ),
         ],
       );
     }
     // One: it fills the arch. Half a panel with an empty space under it
     // would read as something failing to load.
     final only = theirs ?? mine;
-    if (only != null) return _DayPhoto(message: only);
-    return const _DayEmpty();
+    if (only != null) {
+      return _DayPhoto(
+        message: only,
+        onTap: () => _open(
+          context,
+          only,
+          only == mine ? 'Your day' : "$theirName's day",
+        ),
+      );
+    }
+    // Nothing to look at, so the tap does the only useful thing instead:
+    // opens the camera so there is something here next time.
+    return _DayEmpty(onTap: () => context.go(Routes.flowers));
+  }
+
+  void _open(BuildContext context, FlowerMessage message, String who) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => DayPhotoViewer(message: message, who: who),
+      ),
+    );
   }
 }
 
 /// One day photo, filling whatever box it is given.
 class _DayPhoto extends ConsumerWidget {
-  const _DayPhoto({required this.message});
+  const _DayPhoto({required this.message, this.onTap});
 
   final FlowerMessage message;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return FutureBuilder<String>(
+    return GestureDetector(
+      onTap: onTap,
+      child: FutureBuilder<String>(
       future:
           ref.read(flowerRepositoryProvider).signedPhotoUrl(message.imagePath!),
       builder: (context, snap) {
@@ -678,18 +718,23 @@ class _DayPhoto extends ConsumerWidget {
           errorBuilder: (_, __, ___) =>
               Container(color: AppColors.surfaceSubtle),
         );
-      },
+        },
+      ),
     );
   }
 }
 
 /// Nothing shared today, by either of them.
 class _DayEmpty extends StatelessWidget {
-  const _DayEmpty();
+  const _DayEmpty({this.onTap});
+
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
+    return GestureDetector(
+      onTap: onTap,
+      child: CustomPaint(
       painter: _DashedArchPainter(),
       child: Center(
         child: Padding(
@@ -707,6 +752,7 @@ class _DayEmpty extends StatelessWidget {
               ),
             ],
           ),
+        ),
         ),
       ),
     );

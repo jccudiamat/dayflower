@@ -210,6 +210,12 @@ flutter build apk --debug
 - ⚠️ **Onboarding does not collect gender yet.** Until it does, every new account gets the tulip fallback and the daisy default is unreachable except by editing the row directly. Adding the step, or a Settings row, is the remaining piece.
 - The widget's avatar is **pushed from Dart as an emoji** (`day_photo_owner_flower`), not derived in Kotlin — the choice lives in Postgres and the widget has no database, same reason the name is pushed.
 
+## Home arch is tappable (2026-09-02)
+
+- **A photo opens `DayPhotoViewer`; the empty arch opens the camera.** The arch used to send every tap to the conversation, which was the one thing it was not showing.
+- **Handled per photo, not on the whole arch.** With two stacked, a single tap target would have to guess which day you meant — so each half carries its own tap and its own `who` label ("Wifey's day" / "Your day").
+- `DayPhotoViewer` had been orphaned by the camera rework: the story chips that used to open it were removed with the rest of the old chrome, and nothing else called it. This gives it a caller again rather than leaving dead code behind.
+
 ## Camera chrome, TikTok-style (2026-09-02)
 
 - **No header.** The "My Day" title and close button moved inside the frame, top-left, over the picture. The screen has no top `SafeArea` — the viewfinder runs under the status bar the way a camera should — and `MessagesScreen` is now nothing but `ShareYourDayBar`.
