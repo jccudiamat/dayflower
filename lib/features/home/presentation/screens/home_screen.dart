@@ -1,8 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
@@ -14,26 +18,17 @@ import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../heartbeat/data/pulse_alert_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
-import '../../../../core/widgets/flower_avatar.dart';
 import '../../../tulip/presentation/widgets/conversation_card.dart';
 import '../../data/mood_prefs.dart';
-import '../widgets/clocks_card.dart';
+import '../../../../core/utils/zone_distance.dart';
+import '../../../../core/widgets/timezone_picker.dart';
+import '../../../tulip/data/flower_repository.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
-  String get _greeting {
-    final h = DateTime.now().hour;
-    if (h < 12) return 'Morning';
-    if (h < 18) return 'Afternoon';
-    return 'Evening';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final profile = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
-
     return Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const AppBottomNav(),
@@ -42,50 +37,8 @@ class HomeScreen extends ConsumerWidget {
           padding: AppSpace.screen,
           children: [
             const SizedBox(height: AppSpace.md),
-
-            // ── Header ──
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '$_greeting, ${profile?.displayName ?? '...'} 🌷',
-                        style: AppText.hero(),
-                      ),
-                      if (partner != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Connected with ${partner.petName ?? partner.displayName}',
-                          style: AppText.caption(),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                // Your own flower, not a generic person glyph — it is what
-                // stands in for you everywhere else, so it is what "profile"
-                // should look like here too.
-                Semantics(
-                  button: true,
-                  label: 'Profile',
-                  child: GestureDetector(
-                    onTap: () => context.go(Routes.settings),
-                    child: Padding(
-                      padding: const EdgeInsets.all(AppSpace.xs),
-                      child: FlowerAvatar.of(profile, size: 38),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
+            const _HomeHeader(),
             const SizedBox(height: AppSpace.md),
-            // First thing on the screen: "what time is it where they are"
-            // is the question this app answers before any other.
-            const ClocksCard(),
-            const SizedBox(height: AppSpace.sm),
             const _MoodCard(),
             const SizedBox(height: AppSpace.sm),
             const _HeartbeatCard(),
@@ -525,4 +478,247 @@ class _RippleRingState extends State<_RippleRing>
       ),
     );
   }
+}
+/* ── Header ──────────────────────────────── */
+
+/// The greeting block: who you are to them, where they are, and how far
+/// away that is — with today's photos standing beside it.
+class _HomeHeader extends ConsumerWidget {
+  const _HomeHeader();
+
+  static String _greetingFor(DateTime now) {
+    final h = now.hour;
+    if (h < 12) return 'Good morning,';
+    if (h < 18) return 'Good afternoon,';
+    return 'Good evening,';
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final profile = ref.watch(userProfileProvider).valueOrNull;
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+
+    // The greeting uses the name they call you — that is the whole point of
+    // a pet name, and "Good morning, Bunny" is the line this screen exists
+    // to open with.
+    final myName = profile?.petName ?? profile?.displayName ?? '…';
+
+    final partnerName = partner?.petName ?? partner?.displayName;
+    final partnerZone = partner?.timezone;
+    final partnerTime = partnerZone == null
+        ? null
+        : tz.TZDateTime.now(safeLocation(partnerZone));
+
+    final distance = distanceLabel(profile?.timezone, partnerZone);
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_greetingFor(DateTime.now()), style: AppText.display()),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      myName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.display(AppColors.brandDark),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpace.xxs),
+                  const Text('🌷', style: TextStyle(fontSize: 22)),
+                ],
+              ),
+              const SizedBox(height: AppSpace.xs),
+
+              // Where they are and what time it is there. One line, because
+              // it is one thought.
+              if (partnerName != null && partnerTime != null)
+                Text(
+                  '$partnerName · ${zoneCity(partnerZone!)} · '
+                  '${DateFormat('h:mm a').format(partnerTime)}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.body(AppColors.body),
+                ),
+
+              // Replaces the old "Day N together". A streak counts how long
+              // you have kept a habit; this counts what the app is actually
+              // about. Hidden entirely when a zone is unknown rather than
+              // guessed at.
+              if (distance != null) ...[
+                const SizedBox(height: 2),
+                Text(distance, style: AppText.body(AppColors.body)),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpace.sm),
+        const _DayArch(),
+      ],
+    );
+  }
+}
+
+/// The arched panel beside the greeting: their day on top, yours beneath.
+///
+/// Proportions follow the reference — a tall arch, roughly 2:3, with the
+/// top corners rounded far more than the bottom so it reads as a window
+/// rather than a card.
+class _DayArch extends ConsumerWidget {
+  const _DayArch();
+
+  static const double _width = 132;
+  static const double _aspect = 0.68; // width ÷ height
+
+  static const _shape = BorderRadius.only(
+    topLeft: Radius.circular(64),
+    topRight: Radius.circular(64),
+    bottomLeft: Radius.circular(AppRadius.lg),
+    bottomRight: Radius.circular(AppRadius.lg),
+  );
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theirs = ref.watch(partnerDayPhotoProvider);
+    final mine = ref.watch(myDayPhotoProvider);
+
+    return SizedBox(
+      width: _width,
+      height: _width / _aspect,
+      child: GestureDetector(
+        onTap: () => context.go(Routes.chat),
+        child: ClipRRect(
+          borderRadius: _shape,
+          child: _content(theirs, mine),
+        ),
+      ),
+    );
+  }
+
+  Widget _content(FlowerMessage? theirs, FlowerMessage? mine) {
+    // Both: stacked, theirs on top — the whole point of the panel is
+    // seeing their day first.
+    if (theirs != null && mine != null) {
+      return Column(
+        children: [
+          Expanded(child: _DayPhoto(message: theirs)),
+          const SizedBox(height: 3),
+          Expanded(child: _DayPhoto(message: mine)),
+        ],
+      );
+    }
+    // One: it fills the arch. Half a panel with an empty space under it
+    // would read as something failing to load.
+    final only = theirs ?? mine;
+    if (only != null) return _DayPhoto(message: only);
+    return const _DayEmpty();
+  }
+}
+
+/// One day photo, filling whatever box it is given.
+class _DayPhoto extends ConsumerWidget {
+  const _DayPhoto({required this.message});
+
+  final FlowerMessage message;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return FutureBuilder<String>(
+      future:
+          ref.read(flowerRepositoryProvider).signedPhotoUrl(message.imagePath!),
+      builder: (context, snap) {
+        if (!snap.hasData) {
+          return Container(color: AppColors.surfaceSubtle);
+        }
+        return Image.network(
+          snap.data!,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          // A failed image inside a decorative panel should look like the
+          // empty state, not like a broken page.
+          errorBuilder: (_, __, ___) =>
+              Container(color: AppColors.surfaceSubtle),
+        );
+      },
+    );
+  }
+}
+
+/// Nothing shared today, by either of them.
+class _DayEmpty extends StatelessWidget {
+  const _DayEmpty();
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      painter: _DashedArchPainter(),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.xs),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('📷', style: TextStyle(fontSize: 22)),
+              const SizedBox(height: AppSpace.xxs),
+              Text(
+                'Share your day',
+                textAlign: TextAlign.center,
+                style: AppText.caption(AppColors.brand)
+                    .copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Dashed outline in the arch shape.
+///
+/// Hand-painted because Flutter's border side has no dash support and
+/// `ClipRRect` cannot outline what it clips — a dotted rectangle behind an
+/// arch-shaped hole would show the mismatch at the corners.
+class _DashedArchPainter extends CustomPainter {
+  static const double _dash = 5;
+  static const double _gap = 4;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final path = Path()
+      ..addRRect(
+        RRect.fromRectAndCorners(
+          rect.deflate(1),
+          topLeft: const Radius.circular(64),
+          topRight: const Radius.circular(64),
+          bottomLeft: const Radius.circular(AppRadius.lg),
+          bottomRight: const Radius.circular(AppRadius.lg),
+        ),
+      );
+
+    final paint = Paint()
+      ..color = AppColors.blushMid
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.6;
+
+    for (final metric in path.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = math.min(distance + _dash, metric.length);
+        canvas.drawPath(metric.extractPath(distance, end), paint);
+        distance = end + _gap;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DashedArchPainter oldDelegate) => false;
 }

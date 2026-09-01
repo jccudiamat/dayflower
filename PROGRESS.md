@@ -210,6 +210,17 @@ flutter build apk --debug
 - ⚠️ **Onboarding does not collect gender yet.** Until it does, every new account gets the tulip fallback and the daisy default is unreachable except by editing the row directly. Adding the step, or a Settings row, is the remaining piece.
 - The widget's avatar is **pushed from Dart as an emoji** (`day_photo_owner_flower`), not derived in Kotlin — the choice lives in Postgres and the widget has no database, same reason the name is pushed.
 
+## Home header redesign (2026-09-01)
+
+Greeting, partner's whereabouts, distance, and today's photos in one block.
+
+- **"Good morning," / name in brand pink / 🌷**, matching the reference. The name is `petName ?? displayName` — the pet name is the one they call you, which is the whole point of the line.
+- **`partner · city · their local time`** on one line, because it is one thought. City comes from `zoneCity()`, time from the partner's IANA zone.
+- **Distance replaced "Day N together"** — `core/utils/zone_distance.dart`, haversine over a table of zone→city coordinates. Deliberately **not GPS**: asking a couples app for location permission to print one line would be a bad trade, and the timezone is already on the profile for the dual clocks. An unknown zone returns **null and the line is hidden** rather than guessed. Same zone reads "Together 💛", not "0 miles apart" — technically true, emotionally wrong. `test/zone_distance_test.dart` checks against real distances (London↔Dubai ≈ 3,410 mi, London↔Manila ≈ 6,690 mi, NY↔LA ≈ 2,450 mi).
+- **The arch panel** shows their day photo on top and yours beneath, stacked. One photo fills the arch — half a panel with a gap under it reads as something failing to load. Neither: a **dashed arch** with "Share your day", hand-painted in `_DashedArchPainter` because Flutter's `BorderSide` has no dash support and a dotted rectangle behind an arch-shaped hole shows the mismatch at the corners.
+- **`ClocksCard` moved to Dates.** The greeting now carries the partner's city and local time, so the clocks were saying it twice; Dates is where "when" already lives.
+- ⚠️ **Settings moved into Activities.** The home avatar was the *only* route to Settings — the bottom nav has four tabs and `Routes.us` is referenced nowhere — so removing it for the new design would have stranded sign-out, timezone, disconnect and check-for-updates.
+
 ## Widget story header (2026-08-30)
 
 The photo widget now carries an Instagram-style header over the image: avatar, whose day it is, and how long it has left ("16h"). Layout `todays_tulip_widget.xml` (`widget_header`), rendered by `TodaysTulipWidget.renderStoryHeader`.

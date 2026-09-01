@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../home/presentation/widgets/clocks_card.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
 
@@ -368,6 +369,14 @@ class _EventsScreenState extends State<EventsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ── 0. What time is it where they are ──
+                    // Moved off Home 2026-09-01: the greeting there now
+                    // carries the partner's city and local time, so the
+                    // clocks were saying the same thing twice. Dates is
+                    // where "when" already lives.
+                    const ClocksCard(),
+                    const SizedBox(height: AppSpace.sm),
+
                     // ── 1. The next thing you're waiting for ──
                     _NextUpCard(
                       event: next,
