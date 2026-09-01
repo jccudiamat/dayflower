@@ -210,6 +210,18 @@ flutter build apk --debug
 - ⚠️ **Onboarding does not collect gender yet.** Until it does, every new account gets the tulip fallback and the daisy default is unreachable except by editing the row directly. Adding the step, or a Settings row, is the remaining piece.
 - The widget's avatar is **pushed from Dart as an emoji** (`day_photo_owner_flower`), not derived in Kotlin — the choice lives in Postgres and the widget has no database, same reason the name is pushed.
 
+## Selfies stopped coming out mirrored (2026-09-02)
+
+The front camera hands back the selfie view, so writing read backwards and a parting swapped sides in the saved photo.
+
+- **Only the saved frame is corrected; the preview stays mirrored.** That is what people expect while framing, and un-mirroring it would make the camera feel wrong to use in exchange for fixing the wrong half of the problem.
+- `unmirrorJpeg` is **top level and stateless** so `compute` can run it in an isolate — decoding and re-encoding a 1600px JPEG on the UI thread janks the shutter. Same reason the booth compositor does it.
+- **Never throws.** Undecodable input comes straight back out: a photo the wrong way round is a far smaller problem than one that vanishes because a decode failed.
+- `test/unmirror_test.dart` checks it actually reverses the pixels (an asymmetric 4×1 stripe — a symmetric image would pass either way), that it is its own inverse, and that junk input is returned untouched.
+- The destination pill moved back to the **top right**; centring it looked worse next to the title.
+
+⚠️ If a selfie ever looks correct in the preview but reversed in the result, this flip is the thing to remove — the two halves are deliberately different, so it is one `if` in `_shoot`.
+
 ## Home arch is tappable (2026-09-02)
 
 - **A photo opens `DayPhotoViewer`; the empty arch opens the camera.** The arch used to send every tap to the conversation, which was the one thing it was not showing.

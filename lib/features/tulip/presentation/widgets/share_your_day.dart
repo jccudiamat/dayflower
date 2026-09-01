@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -208,7 +210,17 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (cam == null || !_camReady) return _pickFrom(ImageSource.camera);
     try {
       final shot = await cam.takePicture();
-      final bytes = await shot.readAsBytes();
+      var bytes = await shot.readAsBytes();
+
+      // The front camera hands back the selfie view — mirrored, so writing
+      // reads backwards and a parting swaps sides. The preview stays
+      // mirrored because that is what people expect to see while framing;
+      // only the saved frame is corrected. Off the UI thread: decoding and
+      // re-encoding a 1600px JPEG janks the shutter animation otherwise.
+      if (_lens == CameraLensDirection.front) {
+        bytes = await compute(unmirrorJpeg, bytes);
+      }
+
       if (!mounted) return;
       setState(() {
         _pending = bytes;
@@ -432,29 +444,16 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                       horizontal: AppSpace.sm, vertical: AppSpace.xs),
-                  // A Stack, not a Row with a Spacer: the pill has to be
-                  // centred on the *frame*, and a Row would centre it in
-                  // whatever space the title happens to leave, so it would
-                  // drift as the title changed length.
-                  child: Stack(
-                    alignment: Alignment.center,
+                  child: Row(
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _GlassButton(
-                              icon: CupertinoIcons.xmark,
-                              tooltip: 'Close',
-                              onTap: () => context.go(Routes.home),
-                            ),
-                            const SizedBox(width: AppSpace.xs),
-                            Text('My Day',
-                                style: AppText.title(Colors.white)),
-                          ],
-                        ),
+                      _GlassButton(
+                        icon: CupertinoIcons.xmark,
+                        tooltip: 'Close',
+                        onTap: () => context.go(Routes.home),
                       ),
+                      const SizedBox(width: AppSpace.xs),
+                      Text('My Day', style: AppText.title(Colors.white)),
+                      const Spacer(),
                       _TargetPill(
                         target: _target,
                         onChanged: (t) => setState(() => _target = t),
@@ -1054,5 +1053,25 @@ class _TargetPill extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Flips a JPEG horizontally and re-encodes it.
+///
+/// Top level and free of any state so it can run in an isolate via
+/// `compute` — the booth compositor does the same for the same reason.
+///
+/// Returns the input untouched if it cannot be decoded. A photo that is the
+/// wrong way round is a far smaller problem than one that vanishes because
+/// a decode failed, so this never throws.
+Uint8List unmirrorJpeg(Uint8List bytes) {
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return bytes;
+    return Uint8List.fromList(
+      img.encodeJpg(img.flipHorizontal(decoded), quality: 90),
+    );
+  } catch (_) {
+    return bytes;
   }
 }
