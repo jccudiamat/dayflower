@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -44,6 +45,15 @@ class DayflowerWidgets {
 
   /// Handled in the background isolate — does NOT open the app.
   static const heartbeatAction = 'dayflower://heartbeat';
+
+  /// Tapping the widget's "Send message" pill. Opens the conversation
+  /// rather than acting in the background: there is a sentence to type, and
+  /// only the app can take one.
+  static const replyDeepLink = 'dayflower://chat';
+
+  /// Tapping the widget's tulip. Handled in the background isolate — the
+  /// whole point of a one-tap reaction is that it costs no app launch.
+  static const tulipAction = 'dayflower://tulip';
 
   // Keys read by the native layouts. Keep in sync with the Kotlin providers.
   static const keyFlowerEmoji = 'tulip_emoji';
@@ -86,6 +96,16 @@ class DayflowerWidgets {
   /// database — the same reason the name is pushed.
   static const keyDayOwnerFlower = 'day_photo_owner_flower';
 
+  /// Absolute path to the partner's avatar, already cropped to a circle and
+  /// downscaled. Empty when they have no photo, which is when the widget
+  /// falls back to their flower glyph.
+  static const keyDayOwnerAvatar = 'day_photo_owner_avatar';
+
+  /// The id of the message the widget is currently showing, so a tulip
+  /// tapped there can say what it is answering. Empty when the widget is
+  /// on its fallback glyph and there is nothing to reply to.
+  static const keyDayPhotoId = 'day_photo_id';
+
   static const keyBeatPulseAt = 'beat_pulse_at';
   static const keyBeatPulseDir = 'beat_pulse_dir';
 
@@ -125,7 +145,9 @@ class DayflowerWidgets {
     required bool sentToday,
     required String partnerName,
     String partnerFlower = '🌷',
+    String? partnerAvatarPath,
     Future<Uint8List> Function(String path)? downloadPhoto,
+    Future<Uint8List> Function(String path)? downloadAvatar,
   }) async {
     if (!isSupported) return;
 
@@ -164,8 +186,17 @@ class DayflowerWidgets {
       body = 'Tap to send $partnerName a flower.';
     }
 
+    // Only fetched when there is a photo to sit beside — the header, and
+    // therefore the avatar, is hidden without one.
+    final avatarPath = photoPath.isEmpty
+        ? ''
+        : await _cacheAvatar(partnerAvatarPath, downloadAvatar) ?? '';
+
     try {
       await HomeWidget.saveWidgetData<String>(keyDayPhotoPath, photoPath);
+      await HomeWidget.saveWidgetData<String>(keyDayOwnerAvatar, avatarPath);
+      await HomeWidget.saveWidgetData<String>(
+          keyDayPhotoId, photoPath.isEmpty ? '' : (received?.id ?? ''));
       await HomeWidget.saveWidgetData<String>(
           keyDayOwner, photoPath.isEmpty ? '' : partnerName);
       await HomeWidget.saveWidgetData<String>(
@@ -178,6 +209,58 @@ class DayflowerWidgets {
       await _refresh();
     } catch (e) {
       debugPrint('widget flower sync failed: $e');
+    }
+  }
+
+  /// Caches the partner's avatar as a circular PNG the widget can show.
+  ///
+  /// ⚠️ **Rounded here, not there.** RemoteViews cannot clip an ImageView
+  /// to a circle — there is no `ShapeableImageView` on its supported list
+  /// and no way to apply an outline provider across the IPC boundary. So
+  /// the circle is cut in Dart and what crosses is a PNG that is already
+  /// round, with transparent corners.
+  ///
+  /// Small on purpose: it draws at 30dp, so 96px covers a 3× screen with
+  /// room to spare, and RemoteViews has a hard bitmap budget that the day
+  /// photo is already spending most of.
+  static Future<String?> _cacheAvatar(
+    String? storagePath,
+    Future<Uint8List> Function(String path)? downloadAvatar,
+  ) async {
+    if (storagePath == null || storagePath.isEmpty) return null;
+    if (downloadAvatar == null) return null;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      // Keyed on the storage path, so changing your photo writes a new file
+      // and the widget cannot keep showing the old face.
+      final name = storagePath.hashCode.toUnsigned(32).toRadixString(16);
+      final file = File('${dir.path}/avatar_$name.png');
+      if (!await file.exists()) {
+        final bytes = await downloadAvatar(storagePath);
+        final circle = await compute(circleAvatarPng, bytes);
+        if (circle == null) return null;
+        await file.writeAsBytes(circle);
+        await _pruneOldAvatars(dir, keep: file.path);
+      }
+      return file.path;
+    } catch (e) {
+      debugPrint('avatar cache failed: $e');
+      return null;
+    }
+  }
+
+  static Future<void> _pruneOldAvatars(Directory dir,
+      {required String keep}) async {
+    try {
+      await for (final entity in dir.list()) {
+        if (entity is File &&
+            entity.path.contains('avatar_') &&
+            entity.path != keep) {
+          await entity.delete();
+        }
+      }
+    } catch (_) {
+      // Litter, not a failure. The widget already has what it needs.
     }
   }
 
@@ -295,7 +378,8 @@ class DayflowerWidgets {
 /// send as whoever is currently signed in.
 @pragma('vm:entry-point')
 Future<void> dayflowerWidgetBackground(Uri? uri) async {
-  if (uri?.host != 'heartbeat') return;
+  final host = uri?.host;
+  if (host != 'heartbeat' && host != 'tulip') return;
 
   try {
     WidgetsFlutterBinding.ensureInitialized();
@@ -316,8 +400,31 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
         .limit(1);
     if (pairs.isEmpty) return;
 
+    final pairId = pairs.first['id'] as String;
+
+    // A tulip tapped on the widget is a reaction to the day photo the
+    // widget is showing, so it carries `reply_to` — otherwise it arrives in
+    // the thread as an unexplained flower some hours after the thing it
+    // answers. The id is written alongside the photo at sync time; empty
+    // means the widget is on its fallback glyph, and then it is simply a
+    // flower with nothing to quote.
+    if (host == 'tulip') {
+      final replyTo =
+          await HomeWidget.getWidgetData<String>(DayflowerWidgets.keyDayPhotoId);
+      await client.from('flower_messages').insert({
+        'pair_id': pairId,
+        'sender_id': userId,
+        'flower_type': 'classic_tulip',
+        // It answers what is already on their home screen rather than
+        // replacing it.
+        'to_widget': false,
+        if (replyTo != null && replyTo.isNotEmpty) 'reply_to': replyTo,
+      });
+      return;
+    }
+
     await client.from('heartbeats').insert({
-      'pair_id': pairs.first['id'],
+      'pair_id': pairId,
       'sender_id': userId,
     });
 
@@ -344,5 +451,44 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
     );
   } catch (e) {
     debugPrint('widget heartbeat background send failed: $e');
+  }
+}
+
+/// Crops [bytes] to a circle and downscales it, for the widget's avatar.
+///
+/// Top-level so it can run in a `compute` isolate — decoding and redrawing
+/// even a small image on the UI thread is visible jank during a sync that
+/// already downloads a day photo.
+///
+/// Returns null rather than throwing on unreadable input. ⚠️ Do not
+/// "simplify" that to returning the input: `img.decodeImage` throws on
+/// truncated bytes rather than returning null, and a non-circular PNG here
+/// would render as a square face inside a round header.
+Uint8List? circleAvatarPng(Uint8List bytes) {
+  try {
+    final decoded = img.decodeImage(bytes);
+    if (decoded == null) return null;
+
+    const size = 96;
+    final square = img.copyResizeCropSquare(decoded, size: size);
+    final out = img.Image(width: size, height: size, numChannels: 4);
+
+    // A hand-cut circle rather than a mask blend: `image` has no alpha
+    // compositing primitive that keeps the source's own colours, and the
+    // arithmetic is two lines.
+    const centre = size / 2;
+    const radius = size / 2;
+    for (var y = 0; y < size; y++) {
+      for (var x = 0; x < size; x++) {
+        final dx = x + 0.5 - centre;
+        final dy = y + 0.5 - centre;
+        if (dx * dx + dy * dy <= radius * radius) {
+          out.setPixel(x, y, square.getPixel(x, y));
+        }
+      }
+    }
+    return Uint8List.fromList(img.encodePng(out));
+  } catch (_) {
+    return null;
   }
 }

@@ -58,18 +58,36 @@
         android:paddingBottom="26dp"
         android:visibility="gone">
 
-        <!-- No avatar column on `users`, so this is the first initial on the
-             brand gradient — the same thing the chat header draws. -->
-        <TextView
-            android:id="@+id/widget_avatar"
+        <!-- Their face, or their flower.
+
+             Two views stacked rather than one, because RemoteViews cannot
+             swap a TextView for an ImageView and cannot clip a bitmap to a
+             circle either. The photo is rounded in Dart before it is
+             cached, so what arrives here is already circular with a
+             transparent corner — see DayflowerWidgets._cacheAvatar. -->
+        <FrameLayout
             android:layout_width="30dp"
-            android:layout_height="30dp"
-            android:background="@drawable/avatar_circle"
-            android:gravity="center"
-            android:text="?"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:textStyle="bold" />
+            android:layout_height="30dp">
+
+            <TextView
+                android:id="@+id/widget_avatar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@drawable/avatar_circle"
+                android:gravity="center"
+                android:text="?"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:id="@+id/widget_avatar_photo"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="fitCenter"
+                android:contentDescription="@string/widget_description"
+                android:visibility="gone" />
+        </FrameLayout>
 
         <TextView
             android:id="@+id/widget_owner"
@@ -145,5 +163,52 @@
             android:shadowDx="0"
             android:shadowDy="1"
             android:shadowRadius="3" />
+
+        <!-- Reply bar, shaped after a story's.
+
+             ⚠️ The pill is a TextView, not an input. A home-screen widget
+             cannot host a real text field — RemoteViews has no EditText on
+             its supported list — so tapping it opens the conversation with
+             the keyboard, which is the closest honest thing. Pretending to
+             be a field that swallows the first sentence typed into it would
+             be worse than an obvious door.
+
+             Shown only alongside a live day photo: there is nothing to
+             reply to when the widget is showing its fallback glyph. -->
+        <LinearLayout
+            android:id="@+id/widget_reply_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/widget_reply_pill"
+                android:layout_width="0dp"
+                android:layout_height="34dp"
+                android:layout_weight="1"
+                android:background="@drawable/widget_reply_pill"
+                android:gravity="center_vertical"
+                android:paddingLeft="14dp"
+                android:paddingRight="14dp"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Send message"
+                android:textColor="#F0EAF6"
+                android:textSize="13sp" />
+
+            <!-- A tulip, not a heart. Every reaction in this app is a
+                 flower; a heart here would be borrowed from another app. -->
+            <TextView
+                android:id="@+id/widget_reply_tulip"
+                android:layout_width="38dp"
+                android:layout_height="34dp"
+                android:layout_marginLeft="6dp"
+                android:gravity="center"
+                android:text="🌷"
+                android:textSize="20sp" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

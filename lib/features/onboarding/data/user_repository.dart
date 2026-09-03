@@ -20,6 +20,21 @@ class UserRepository {
     return UserProfile.fromMap(row);
   }
 
+  /// Sets — or clears — how you are feeling.
+  ///
+  /// The timestamp goes with it every time, because a mood without one
+  /// cannot be told apart from a mood set last week. Cleared together too:
+  /// leaving a stale `mood_at` behind would make the next read think an
+  /// absent mood was a fresh one.
+  Future<void> setMood(String userId, String? moodName) async {
+    await _client.from('users').update({
+      'mood': moodName,
+      'mood_at': moodName == null
+          ? null
+          : DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', userId);
+  }
+
   Future<void> updateTimezone(String userId, String timezone) async {
     await _client
         .from('users')
@@ -120,6 +135,13 @@ class UserRepository {
     }
   }
 
+  /// The avatar's bytes.
+  ///
+  /// For the home-screen widget, which needs a real file on disk rather
+  /// than a URL — RemoteViews cannot fetch anything itself.
+  Future<Uint8List> downloadAvatar(String path) =>
+      _client.storage.from(avatarBucket).download(path);
+
   /// A URL the image loader can actually fetch.
   ///
   /// Long-lived on purpose. The bucket is private, so every render needs a
@@ -166,6 +188,28 @@ final userProfileProvider = FutureProvider<UserProfile?>((ref) async {
   final userId = ref.watch(currentUserIdProvider);
   if (userId == null) return null;
   return ref.watch(userRepositoryProvider).getProfile(userId);
+});
+
+/// The partner's profile, live.
+///
+/// A stream rather than a one-shot read, and that is what migration 0024
+/// added `users` to the realtime publication for: a mood is only worth
+/// sharing if it appears on the other phone while they are looking at it.
+/// Everything else on a profile changes rarely enough that the old
+/// re-read-on-navigation was fine.
+final partnerProfileStreamProvider =
+    StreamProvider.autoDispose<UserProfile?>((ref) {
+  final userId = ref.watch(currentUserIdProvider);
+  final pair = ref.watch(currentPairProvider).valueOrNull;
+  if (userId == null || pair == null) return Stream.value(null);
+  final partnerId = pair.partnerIdFor(userId);
+  if (partnerId == null) return Stream.value(null);
+  return ref
+      .watch(supabaseClientProvider)
+      .from('users')
+      .stream(primaryKey: ['id'])
+      .eq('id', partnerId)
+      .map((rows) => rows.isEmpty ? null : UserProfile.fromMap(rows.first));
 });
 
 /// The partner's profile, or null until paired. RLS allows reading the

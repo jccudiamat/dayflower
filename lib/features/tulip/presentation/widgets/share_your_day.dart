@@ -774,14 +774,36 @@ class _GlassButton extends StatelessWidget {
 }
 
 /// Full-bleed viewer, opened from a day chip.
-class DayPhotoViewer extends ConsumerWidget {
+class DayPhotoViewer extends ConsumerStatefulWidget {
   const DayPhotoViewer({super.key, required this.message, required this.who});
 
   final FlowerMessage message;
   final String who;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DayPhotoViewer> createState() => _DayPhotoViewerState();
+}
+
+class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
+  final _reply = TextEditingController();
+  final _focus = FocusNode();
+  bool _sending = false;
+
+  /// What the tulip button sends. The catalog's first entry is the classic
+  /// tulip — the app's own mark, and the right thing for a one-tap
+  /// reaction.
+  static const _reactionFlower = 'classic_tulip';
+
+  @override
+  void dispose() {
+    _reply.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final message = widget.message;
     final left = message.widgetTimeLeft;
     final leftLabel = left == null
         ? 'No longer on the home screen'
@@ -789,8 +811,15 @@ class DayPhotoViewer extends ConsumerWidget {
             ? '${left.inHours} h left on the home screen'
             : '${left.inMinutes} m left on the home screen';
 
+    // You do not reply to your own day. Instagram hides the bar on your own
+    // story for the same reason: there is nobody on the other end of it.
+    final isMine = message.senderId == ref.watch(currentUserIdProvider);
+
     return Scaffold(
       backgroundColor: Colors.black,
+      // The bar has to ride the keyboard, and `resizeToAvoidBottomInset`
+      // alone would squash the photo instead of moving the bar.
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Column(
           children: [
@@ -802,7 +831,8 @@ class DayPhotoViewer extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(who, style: AppText.subtitle(Colors.white)),
+                        Text(widget.who,
+                            style: AppText.subtitle(Colors.white)),
                         Text(leftLabel,
                             style: AppText.caption(AppColors.onDarkMuted)),
                       ],
@@ -837,11 +867,206 @@ class DayPhotoViewer extends ConsumerWidget {
             ),
             if (message.note != null && message.note!.isNotEmpty)
               Padding(
-                padding: const EdgeInsets.all(AppSpace.md),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpace.md, vertical: AppSpace.xs),
                 child: Text('“${message.note}”',
                     style: AppText.note(Colors.white)),
               ),
+            if (!isMine)
+              Padding(
+                // Lifted by the keyboard when there is one, so the field
+                // being typed into is never behind it.
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.viewInsetsOf(context).bottom,
+                ),
+                child: _ReplyBar(
+                  controller: _reply,
+                  focus: _focus,
+                  busy: _sending,
+                  onSend: _sendText,
+                  onReact: _sendTulip,
+                ),
+              ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Both replies go into the thread as ordinary messages.
+  ///
+  /// That is the point rather than a shortcut: a reply is a message, so the
+  /// thread, the unread badge, the notification and the realtime stream all
+  /// carry it with no second code path. `replyTo` is the only part that
+  /// could not be inferred — without it a 🌷 arriving three hours later is
+  /// just a flower.
+  Future<void> _send(Future<void> Function(String pairId, String me) send) async {
+    if (_sending) return;
+    final me = ref.read(currentUserIdProvider);
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    if (me == null || pair == null || !pair.isLinked) return;
+
+    setState(() => _sending = true);
+    try {
+      await send(pair.id, me);
+      if (!mounted) return;
+      _reply.clear();
+      _focus.unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sent 💛')),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("That didn't send. Try again?")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  Future<void> _sendText() {
+    final text = _reply.text.trim();
+    // The DB's content check rejects an empty message anyway; catching it
+    // here means the button simply does nothing rather than surfacing a
+    // constraint violation as "that didn't send".
+    if (text.isEmpty) return Future.value();
+    return _send((pairId, me) => ref.read(flowerRepositoryProvider).sendText(
+          pairId: pairId,
+          senderId: me,
+          text: text,
+          replyTo: widget.message.id,
+        ));
+  }
+
+  Future<void> _sendTulip() =>
+      _send((pairId, me) => ref.read(flowerRepositoryProvider).sendFlower(
+            pairId: pairId,
+            senderId: me,
+            flowerType: _reactionFlower,
+            // A reaction belongs in the conversation, not on their home
+            // screen: it answers what is already there rather than
+            // replacing it.
+            toWidget: false,
+            replyTo: widget.message.id,
+          ));
+}
+
+/// "Send message", a tulip, and a send arrow.
+///
+/// Shaped after the story reply bar everyone already knows — the pill on the
+/// left, the reactions on the right. The one deliberate difference is the
+/// react: a tulip rather than a heart, because this app's whole vocabulary
+/// is flowers and a heart here would be borrowed from somewhere else.
+class _ReplyBar extends StatelessWidget {
+  const _ReplyBar({
+    required this.controller,
+    required this.focus,
+    required this.busy,
+    required this.onSend,
+    required this.onReact,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focus;
+  final bool busy;
+  final Future<void> Function() onSend;
+  final Future<void> Function() onReact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.sm, AppSpace.xs, AppSpace.sm, AppSpace.sm),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                border: Border.all(color: Colors.white.withValues(alpha: .55)),
+              ),
+              child: TextField(
+                controller: controller,
+                focusNode: focus,
+                style: AppText.body(Colors.white),
+                cursorColor: AppColors.brandLight,
+                minLines: 1,
+                maxLines: 3,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => onSend(),
+                decoration: InputDecoration(
+                  isDense: true,
+                  // ⚠️ `filled: false` and every border spelled out. The
+                  // app's InputDecorationTheme fills fields with the light
+                  // surface colour and draws its own outline — correct on
+                  // every other form, and over a photo it painted a solid
+                  // white block inside this pill.
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 13),
+                  hintText: 'Send message',
+                  hintStyle: AppText.body(Colors.white.withValues(alpha: .7)),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppSpace.xs),
+          _BarButton(
+            busy: busy,
+            onTap: onReact,
+            child: const Text('🌷', style: TextStyle(fontSize: 24)),
+          ),
+          const SizedBox(width: 2),
+          _BarButton(
+            busy: busy,
+            onTap: onSend,
+            child: const Icon(CupertinoIcons.paperplane,
+                color: Colors.white, size: 24),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BarButton extends StatelessWidget {
+  const _BarButton({
+    required this.child,
+    required this.busy,
+    required this.onTap,
+  });
+
+  final Widget child;
+  final bool busy;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 44,
+      height: 44,
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: busy ? null : () => onTap(),
+          child: Center(
+            child: busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : child,
+          ),
         ),
       ),
     );

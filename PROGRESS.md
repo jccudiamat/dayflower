@@ -22,6 +22,8 @@
 | 7 | Reminders (Activities) | 🔶 **Rebuilt as alarm clocks 2026-08-31, never run.** Rings on the alarm stream, takes over the lock screen, Snooze/Done from the notification with the app dead. Also fixed the missing manifest receivers that would have made *every* scheduled notification silently fail. Needs migration **0010** (amended in place). Cannot be tested in the web preview at all — the scheduler no-ops off Android/iOS. |
 | 8 | Finances (Activities) | 🔶 **v2 schema live 2026-08-31.** Was: Accounts (bank/cash/e-wallet/savings/investment) + a ledger of income/expense/transfer, in three scopes: Ours · Mine · theirs (read-only). Balances are always derived, never stored. Needs migration **0011**. |
 | 9 | Chapters (Activities) | 🔶 **Built 2026-08-29, never run.** A year = 12 chapters. Goals at the start of a month, moments as they happen, a written review at the end. Needs migration **0012**. |
+| — | Story replies + widget face | 🔶 **Built 2026-09-04.** Reply bar on the story viewer and the home-screen widget, tulip react, `reply_to` (migration **0023**). The partner's photo renders on the widget, circle cut in Dart. |
+| — | Shared mood | 🔶 **Built 2026-09-04.** The mood card reaches the other phone at last (migration **0024**) and the chat header shows it in place of the flower count. Stale past 24h. |
 | — | Finance: Wallet, Goals, Insights | 🔶 **Rebuilt 2026-09-03.** Wallet carousel, spend card with sparkline, Goals as progress rings, and an Insights page whose card exports as one shareable PNG. Per-amount currency on all five sheets. Migration **0022 applied**. Recurring, Budgets and Investments unchanged. |
 | — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. Verified running 2026-09-03: real RPC numbers (13 flowers, 6 streak, 263 hearts), the distance row, and the premium card. |
 | — | Photo avatars | 🔶 **Built 2026-09-03.** Settings → Your picture takes a camera or gallery photo; the flower stays as the fallback everywhere. Migration **0020 applied**, storage policies exercised against a real signed-in session. 🔴 The home-screen widget still draws the flower emoji, not the photo. |
@@ -166,7 +168,7 @@ bumps `version:` in pubspec, builds the release APK, uploads it as `dayflower-<b
 
 The "A FLOWER FOR YOU" card on Home is gone, replaced by a compact **Set your mood** card (`_MoodCard` in `home_screen.dart`, state in `features/home/data/mood_prefs.dart`). Six emoji chips, one tap, tapping the active one clears it.
 
-- **Device-local only.** There is no `moods` table, so your mood does **not** reach your partner — it persists to `SharedPreferences` so the card survives a restart, and that is all. Syncing needs a migration + realtime stream shaped like `flower_messages`. Don't describe this as a working shared feature until that exists.
+- 🔴 **This was device-local for a month, and is not any more** — migration 0024 added `users.mood`/`mood_at` on 2026-09-04 and the chat header shows the partner's. The rest of this bullet is kept for the history: it said your mood did **not** reach your partner — it persists to `SharedPreferences` so the card survives a restart, and that is all. Syncing needs a migration + realtime stream shaped like `flower_messages`. Don't describe this as a working shared feature until that exists.
 - Chips are `Expanded`, not fixed-width, so six fit a 320pt screen without overflowing.
 - 🔴 **Two things silently lost their only caller when the flower card went:**
   - **`FlowerRepository.markSeen` now has no callers at all.** The Home card was the only place single-message receipts fired; `markThreadSeen` (opening the chat) is the sole receipt path now. Arguably more honest — you cannot have "seen" a message you never opened — but a partner who only glances at Home will no longer send a "Seen", which is a real behaviour change from what § Flowers tab documents.
@@ -720,6 +722,46 @@ A shared timeline on Home: the three most recent things either of you did to the
 - Route is `/app/home/activity` — a sub-route of Home, not of the Activities hub, so the Home tab stays lit inside it. `AppBottomNav` now matches Home with `startsWith` for that reason.
 
 🔴 **"Your partner set an event" is not in the feed, because events are not real yet.** `events_screen.dart` builds its list in `initState` and keeps it in `setState` — there is no events table and nothing is persisted, so there is nothing to trigger on. The only calendar thing that *is* real is `reunions` (one row per pair), logged as `reunion_set`. Giving events a table is what unblocks the rest.
+
+## Replying to a day, and a widget that shows their face (2026-09-04)
+
+The story viewer and the home-screen widget both grew a reply bar, shaped after the one everybody already knows. The one deliberate difference: the react is a **tulip**, not a heart — this app's whole vocabulary is flowers, and a heart here would be borrowed from somewhere else.
+
+**A reply is an ordinary message**, and that is the point rather than a shortcut: the thread, the unread badge, the notification and the realtime stream all carry it with no second code path. Migration **0023** adds `reply_to`, which is the only part that could not be inferred — without it a 🌷 arriving three hours later is just a flower.
+
+- ⚠️ `reply_to` is `on delete set null`, **never cascade**. Deleting your photo must not delete their reply to it: they said something, and taking their words away because you removed your picture would be the wrong owner deciding.
+- The viewer hides the bar on **your own** day. There is nobody on the other end of it.
+- ⚠️ **The widget's pill is a TextView, not an input.** RemoteViews has no `EditText` on its supported list, so a widget cannot host a text field at all. Tapping it opens the conversation — the honest version of "send message" is a door to the place that can take one, and faking a field that swallows the first sentence typed into it would be worse.
+- The widget's tulip is a **background action**, the same shape as the heartbeat tap. A one-tap reaction that costs an app launch is not a one-tap reaction. It reads `day_photo_id` from widget data so it carries the same `reply_to`.
+- The reply bar is hidden when the widget is on its fallback glyph: there is nothing being replied *to*.
+
+**The partner's photo now renders on the widget**, with their flower still underneath as the fallback.
+
+- ⚠️ **The circle is cut in Dart, not Android.** RemoteViews cannot clip a bitmap — no `ShapeableImageView`, no outline provider across the IPC boundary — so `circleAvatarPng` writes a PNG that is already round with transparent corners. `test/widget_avatar_test.dart` asserts the corners are transparent, which is the only assertion a square PNG would fail.
+- Cached at 96px, keyed on the storage path so changing your photo writes a new file and the widget cannot keep the old face. The day photo behind it is already spending most of the RemoteViews bitmap budget.
+- `partnerProfileProvider` is now also listened to at the app root, or the widget would keep the old face until the next flower arrived.
+
+**One fix on the way:** the reply pill rendered as a solid white block over the photo. The app's global `InputDecorationTheme` fills every field with the light surface colour and draws its own outline — correct on every form in the app, wrong over a photograph. That field spells out `filled: false` and every border now.
+
+## Home, reordered — and the mood finally reaches the other phone (2026-09-04)
+
+Home is now **greeting → How are you feeling? → Haptic Heartbeat → Activity**. The two things you came to *do* are first; Activity sits under them because it is what happened rather than what to do, and its badge plus the notification are what make sure it is noticed without needing the top slot.
+
+The chat card is gone — the Flowers tab is one tap away and shows the thread properly. Settings is gone from Activities: the couple pill leads to Us, and Settings is the gear in that page's corner.
+
+**The greeting flower rotates** — a different bloom each launch, from `FlowerCatalog.pickable`. ⚠️ Once per *launch*, not per build: `greetingFlower` is a lazily initialised top-level, because picking inside `build` would reshuffle it on every scroll and keystroke, and a greeting that flickers is worse than one that never changes.
+
+### 🔴 The mood card was device-local for a month
+
+Since 2026-08-01 the mood card persisted to SharedPreferences and went no further — no `moods` table, nothing reaching the other phone. PROGRESS.md said so; the card did not, which is the worse half. A couples app asking "how are you feeling?" and then keeping the answer is not a feature with a missing piece, it is a question that goes nowhere.
+
+Migration **0024** adds `users.mood` and `users.mood_at`. The chat header shows the partner's mood where it used to count the flowers between you — the count was true and told you nothing you would act on; this is the one line about them that changes.
+
+- ⚠️ **`mood_at` is the load-bearing half.** A mood with no timestamp is one set on Tuesday still being reported as how somebody feels on Friday. `UserProfile.freshMood` returns null past 24 hours, and the header shows nothing rather than an old feeling presented as a current one. Tested on both sides of the boundary.
+- ⚠️ **`users` had to join the realtime publication**, and never had before — nothing on a profile changed often enough to matter, and every screen re-read it on navigation. A mood is different: the point is that it appears while they are looking at the thread. Without it the header would show an hour-old mood until the app was reopened.
+- **SharedPreferences is still written, and that is not redundancy.** The local copy fills the chip the instant it is tapped and is what the card reads on a cold start. If the row write fails the local one stands and the next tap retries — un-selecting a chip somebody just chose because a request timed out would be the wrong failure.
+- Two columns on `users` rather than a `moods` table: a mood is one current value per person, not a history, and there is no "what were they feeling last Tuesday" anywhere in the app. A history is a new table if it is ever wanted.
+- No CHECK on the column, matching `avatar`. An unrecognised value reads as no mood, so a newer build can add a seventh without a migration landing in front of it.
 
 ## Finance: the reference layout, Goals, and per-amount currency (2026-09-03)
 

@@ -14,6 +14,7 @@ import 'core/providers/supabase_provider.dart';
 import 'features/activity/data/activity_models.dart';
 import 'features/activity/data/activity_repository.dart';
 import 'core/models/pair.dart';
+import 'core/models/user_profile.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/pairing/data/pair_repository.dart';
 import 'features/heartbeat/data/heartbeat_nudge.dart';
@@ -151,6 +152,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // Router gates still apply — a signed-out tap lands on Welcome.
     // Straight to the thread: the widget shows a flower, and the tap means
     // "show me that", not "show me a list with it in".
+    //
+    // The widget's "Send message" pill lands here too, which is the point
+    // of it: a home-screen widget cannot host a text field, so the honest
+    // version of that control is a door to the place that can take one.
+    // The tulip beside it never reaches this method — it is a background
+    // action and deliberately costs no app launch.
     ref.read(routerProvider).go(Routes.chat);
   }
 
@@ -177,6 +184,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     );
     ref.listen<bool>(
       sentFlowerTodayProvider,
+      (_, __) => _syncWidget(ref.read(widgetFlowerProvider)),
+    );
+    // Changing your picture has to reach their home screen too — without
+    // this the widget keeps the old face until the next flower arrives.
+    ref.listen<AsyncValue<UserProfile?>>(
+      partnerProfileProvider,
       (_, __) => _syncWidget(ref.read(widgetFlowerProvider)),
     );
     ref.listen<({int mine, int partner})>(
@@ -355,6 +368,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       sentToday: ref.read(sentFlowerTodayProvider),
       partnerName: _partnerName,
       partnerFlower: _partnerFlower,
+      // Their actual face on the home screen when they have uploaded one.
+      // The flower stays underneath as the fallback — same chain as every
+      // other avatar in the app.
+      partnerAvatarPath:
+          ref.read(partnerProfileProvider).valueOrNull?.avatarPath,
+      downloadAvatar: ref.read(userRepositoryProvider).downloadAvatar,
       // Passed as a callback rather than importing the repository into the
       // widget layer: widget_sync has no Riverpod container and runs from a
       // background isolate too, where providers do not exist.

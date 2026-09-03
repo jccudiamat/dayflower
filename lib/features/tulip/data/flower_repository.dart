@@ -29,6 +29,7 @@ class FlowerMessage {
     this.seenAt,
     this.toWidget = false,
     this.toChat = true,
+    this.replyTo,
   });
 
   final String id;
@@ -52,6 +53,13 @@ class FlowerMessage {
   /// The sender chose to push this flower to the recipient's home-screen
   /// widget. Always false for text — the widget only renders flowers.
   final bool toWidget;
+
+  /// The message this answers, when it is a reply from the story viewer or
+  /// the home-screen widget. Null for everything else, which is most of it.
+  ///
+  /// `set null` on the far side, so deleting a photo leaves the reply to it
+  /// intact — see migration 0023.
+  final String? replyTo;
 
   /// Whether this belongs in the conversation. False only for a day photo
   /// sent straight to the home screen — flowers and text are always chat.
@@ -124,6 +132,8 @@ class FlowerMessage {
         // Rows written before 0009 ran have no column at all.
         toWidget: map['to_widget'] as bool? ?? false,
         toChat: map['to_chat'] as bool? ?? true,
+        // Absent on rows written before migration 0023.
+        replyTo: map['reply_to'] as String?,
       );
 }
 
@@ -160,6 +170,7 @@ class FlowerRepository {
     required String flowerType,
     String? note,
     required bool toWidget,
+    String? replyTo,
   }) {
     return _insert({
       'pair_id': pairId,
@@ -167,6 +178,7 @@ class FlowerRepository {
       'flower_type': flowerType,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
       'to_widget': toWidget,
+      if (replyTo != null) 'reply_to': replyTo,
     });
   }
 
@@ -176,11 +188,13 @@ class FlowerRepository {
     required String pairId,
     required String senderId,
     required String text,
+    String? replyTo,
   }) {
     return _insert({
       'pair_id': pairId,
       'sender_id': senderId,
       'note': text.trim(),
+      if (replyTo != null) 'reply_to': replyTo,
     });
   }
 

@@ -20,8 +20,8 @@ import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../heartbeat/data/pulse_alert_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
-import '../../../tulip/presentation/widgets/conversation_card.dart';
 import '../../data/mood_prefs.dart';
+import '../../domain/greeting_flower.dart';
 import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
@@ -63,20 +63,20 @@ class HomeScreen extends ConsumerWidget {
                 delegate: SliverChildListDelegate.fixed([
                   _HomeHeader(),
                   SizedBox(height: AppSpace.md),
-                  // Above the mood chips and the heartbeat, because this is
-                  // the only block on the screen carrying news. Everything
-                  // below it is a control — something you came here to do
-                  // rather than something you came here to find out.
-                  ActivitySection(),
+                  // The two things you came to *do*, first: say how you are
+                  // and reach for them. Activity sits under both because it
+                  // is what happened rather than what to do, and the badge
+                  // plus the notification are what make sure it is noticed
+                  // without it having to be at the top.
                   _MoodCard(),
                   SizedBox(height: AppSpace.sm),
                   _HeartbeatCard(),
-                  SizedBox(height: AppSpace.sm),
-                  // The conversation, not the reunion countdown — that
-                  // already lives on Dates, and having it twice meant two
-                  // places to keep in step for no extra information.
-                  ConversationCard(),
                   SizedBox(height: AppSpace.md),
+                  // The conversation card used to sit here. It went the same
+                  // way the reunion countdown did: the Flowers tab is one
+                  // tap away and shows the thread properly, so a preview of
+                  // it on Home was a second place saying the same thing.
+                  ActivitySection(),
                 ]),
               ),
             ),
@@ -112,7 +112,9 @@ class _MoodCard extends ConsumerWidget {
         children: [
           Row(
             children: [
-              Expanded(child: Text('SET YOUR MOOD', style: AppText.label())),
+              Expanded(
+                child: Text('HOW ARE YOU FEELING?', style: AppText.label()),
+              ),
               Text(
                 mood?.label ?? 'Tap one',
                 style: AppText.caption(
@@ -357,7 +359,9 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       ),
       child: Column(
         children: [
-          Text('HEARTBEAT', style: AppText.label()),
+          // "Haptic" because that is the whole feature: the tap arrives
+          // on their phone as a buzz, not as a notification to read.
+          Text('HAPTIC HEARTBEAT', style: AppText.label()),
           const SizedBox(height: AppSpace.xs),
           SizedBox(
             width: _stageSize,
@@ -569,7 +573,10 @@ class _HomeHeader extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpace.xxs),
-                  const Text('🌷', style: TextStyle(fontSize: 22)),
+                  // A different bloom each time the app opens — see
+                  // greetingFlower for why it is picked once per launch
+                  // rather than once per build.
+                  Text(greetingFlower, style: const TextStyle(fontSize: 22)),
                 ],
               ),
               const SizedBox(height: AppSpace.xs),

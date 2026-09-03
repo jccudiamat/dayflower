@@ -2,6 +2,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/models/user_profile.dart';
+import '../../../core/providers/supabase_provider.dart';
+import '../../onboarding/data/user_repository.dart';
+
 /// The moods you can set.
 ///
 /// Deliberately six. A longer list turns a one-tap check-in into a decision,
@@ -30,14 +34,24 @@ enum Mood {
 
 /// Your current mood.
 ///
-/// **Device-local.** There is no `moods` table, so nothing here reaches your
-/// partner yet — persisting it at least means the card survives a restart
-/// instead of forgetting what you told it. Syncing needs a migration plus a
-/// realtime stream, the same shape as `flower_messages`.
+/// **It reaches your partner now** (migration 0024). It used to be
+/// device-local — persisted so the card survived a restart and going no
+/// further — which made a couples app ask "how are you feeling?" and then
+/// keep the answer.
+///
+/// ⚠️ **It is still written to SharedPreferences as well, and that is not
+/// redundancy.** The local copy is what makes the chip fill the instant it
+/// is tapped and what the card reads on a cold start before any network
+/// call returns. The row is what the other phone sees. If the write fails,
+/// the local one stands and the next tap tries again — the wrong failure
+/// here would be un-selecting a chip somebody just chose because a request
+/// timed out.
 class MoodPrefs extends StateNotifier<Mood?> {
-  MoodPrefs() : super(null) {
+  MoodPrefs(this._ref) : super(null) {
     _load();
   }
+
+  final Ref _ref;
 
   static const _kMood = 'current_mood';
 
@@ -55,6 +69,7 @@ class MoodPrefs extends StateNotifier<Mood?> {
   Future<void> select(Mood mood) async {
     final next = state == mood ? null : mood;
     state = next;
+
     try {
       final prefs = await SharedPreferences.getInstance();
       if (next == null) {
@@ -65,8 +80,28 @@ class MoodPrefs extends StateNotifier<Mood?> {
     } catch (e) {
       debugPrint('mood save failed: $e');
     }
+
+    final userId = _ref.read(currentUserIdProvider);
+    if (userId == null) return;
+    try {
+      await _ref.read(userRepositoryProvider).setMood(userId, next?.name);
+    } catch (e) {
+      // Deliberately silent, and deliberately not rolled back. The chip
+      // stays where it was tapped; the next change tries again.
+      debugPrint('mood sync failed: $e');
+    }
   }
 }
 
 final moodProvider =
-    StateNotifierProvider<MoodPrefs, Mood?>((ref) => MoodPrefs());
+    StateNotifierProvider<MoodPrefs, Mood?>((ref) => MoodPrefs(ref));
+
+/// How your partner said they are feeling, or null when they haven't said
+/// or it has gone stale.
+///
+/// Reads [UserProfile.freshMood] rather than the raw column, so a mood set
+/// two days ago shows as nothing instead of as how they feel today.
+final partnerMoodProvider = Provider.autoDispose<Mood?>((ref) {
+  final partner = ref.watch(partnerProfileStreamProvider).valueOrNull;
+  return Mood.fromName(partner?.freshMood);
+});

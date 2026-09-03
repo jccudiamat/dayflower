@@ -9,6 +9,8 @@ class UserProfile {
     this.avatar,
     this.avatarPath,
     this.gender,
+    this.mood,
+    this.moodAt,
   });
 
   final String id;
@@ -27,6 +29,34 @@ class UserProfile {
 
   /// Only ever used to choose the default avatar. Never rendered.
   final String? gender;
+
+  /// The `Mood` enum's name, or null when nothing is set. Free text on the
+  /// column and parsed leniently here, so a mood a newer build knows about
+  /// reads as "none" rather than crashing this decode.
+  final String? mood;
+
+  /// When it was set. ⚠️ Without this a mood chosen on Tuesday is still
+  /// being reported as how somebody feels on Friday — see [freshMood].
+  final DateTime? moodAt;
+
+  /// How long a mood is worth showing to the other person.
+  ///
+  /// A day. Long enough that setting one in the morning still means
+  /// something that evening, short enough that it never becomes furniture
+  /// nobody has looked at in a week.
+  static const moodLifetime = Duration(hours: 24);
+
+  /// The mood, if it is recent enough to still be true.
+  ///
+  /// Null once it has gone stale, which the UI shows as nothing at all
+  /// rather than as an old feeling presented as a current one.
+  String? get freshMood {
+    final name = mood;
+    final at = moodAt;
+    if (name == null || name.isEmpty) return null;
+    if (at == null) return null;
+    return DateTime.now().difference(at) < moodLifetime ? name : null;
+  }
 
   /// Whether this person has a photo rather than a flower.
   ///
@@ -49,6 +79,11 @@ class UserProfile {
         // Absent on rows written before migration 0020.
         avatarPath: map['avatar_path'] as String?,
         gender: map['gender'] as String?,
+        // Both absent on rows read before migration 0024.
+        mood: map['mood'] as String?,
+        moodAt: map['mood_at'] == null
+            ? null
+            : DateTime.parse(map['mood_at'] as String).toLocal(),
       );
 
   Map<String, dynamic> toInsertMap() => {

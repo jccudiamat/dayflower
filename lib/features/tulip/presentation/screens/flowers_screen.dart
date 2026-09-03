@@ -10,6 +10,7 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
+import '../../../home/data/mood_prefs.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
@@ -457,11 +458,12 @@ class _ChatHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    // The live row, not the cached one: a mood is only worth showing if it
+    // arrives while they are looking at the thread.
+    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+        ref.watch(partnerProfileProvider).valueOrNull;
     final name = partner?.petName ?? partner?.displayName ?? '…';
-    final flowers = (ref.watch(flowerMessagesProvider).valueOrNull ?? const [])
-        .where((m) => !m.isText)
-        .length;
+    final mood = ref.watch(partnerMoodProvider);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -494,10 +496,17 @@ class _ChatHeader extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(name, style: AppText.title().copyWith(fontSize: 17)),
+                // How they are, rather than a running total of flowers.
+                // The count was true and told you nothing you would act on;
+                // this is the one line about them that changes.
+                //
+                // Nothing at all when they have not said or it has gone
+                // stale — see UserProfile.freshMood. An old mood shown as a
+                // current one is worse than no mood.
                 Text(
-                  flowers == 0
-                      ? 'No flowers yet'
-                      : '$flowers ${flowers == 1 ? 'flower' : 'flowers'} between you',
+                  mood == null
+                      ? 'Tap to say hello'
+                      : '${mood.emoji}  Feeling ${mood.label.toLowerCase()}',
                   style: AppText.caption(),
                 ),
               ],

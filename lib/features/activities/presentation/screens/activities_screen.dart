@@ -86,18 +86,11 @@ class ActivitiesScreen extends ConsumerWidget {
                       badge: unwritten == null ? null : 'Review due',
                       onTap: () => context.go(Routes.chapters),
                     ),
-                    const SizedBox(height: AppSpace.xs),
-                    // Settings used to be reachable only through the avatar
-                    // on Home, and the new header has no avatar. Without a
-                    // second door, sign-out, timezone, disconnect and
-                    // check-for-updates would all be stranded.
-                    _FeatureRow(
-                      emoji: '⚙️',
-                      color: AppColors.muted,
-                      title: 'Settings',
-                      blurb: 'Profile, timezone, widget, sign out',
-                      onTap: () => context.go(Routes.settings),
-                    ),
+                    // Settings was a row here while Home's header had no
+                    // avatar to reach it through. The couple pill leads to
+                    // Us now, and Settings is the gear in that page's
+                    // corner — a better home for it than a tile among
+                    // features, and one door is enough.
                     const SizedBox(height: AppSpace.md),
                     Text('COMING SOON', style: AppText.label()),
                     const SizedBox(height: AppSpace.xs),

@@ -9,6 +9,7 @@ import android.net.Uri
 import android.view.View
 import android.widget.RemoteViews
 import java.io.File
+import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetProvider
 
@@ -77,6 +78,46 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                     Uri.parse("dayflower://flowers"),
                 ),
             )
+
+            renderReplyBar(context, views, photo != null)
+        }
+
+        /**
+         * The story-style reply bar under the caption.
+         *
+         * Only shown alongside a live day photo: with the fallback glyph
+         * there is nothing being replied *to*, and a reply bar over it would
+         * be offering to answer a picture that isn't there.
+         *
+         * ⚠️ The two halves are deliberately different kinds of action. The
+         * pill **launches the app** — a widget cannot host a text field, so
+         * the honest version of "send message" is a door to the place that
+         * can take one. The tulip is a **background action**, the same shape
+         * as the heartbeat widget's tap: a one-tap reaction that costs an
+         * app launch is not a one-tap reaction.
+         */
+        fun renderReplyBar(context: Context, views: RemoteViews, hasPhoto: Boolean) {
+            if (!hasPhoto) {
+                views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
+                return
+            }
+            views.setViewVisibility(R.id.widget_reply_bar, View.VISIBLE)
+
+            views.setOnClickPendingIntent(
+                R.id.widget_reply_pill,
+                HomeWidgetLaunchIntent.getActivity(
+                    context,
+                    MainActivity::class.java,
+                    Uri.parse("dayflower://chat"),
+                ),
+            )
+            views.setOnClickPendingIntent(
+                R.id.widget_reply_tulip,
+                HomeWidgetBackgroundIntent.getBroadcast(
+                    context,
+                    Uri.parse("dayflower://tulip"),
+                ),
+            )
         }
 
         /**
@@ -124,10 +165,44 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 R.id.widget_avatar,
                 if (flower.isEmpty()) "🌷" else flower,
             )
+
+            // Their actual face, when they have uploaded one. Already cut to
+            // a circle by Dart — RemoteViews cannot clip a bitmap, so a
+            // square photo here would sit in the round header as a square.
+            val avatar = loadAvatar(widgetData)
+            if (avatar != null) {
+                views.setImageViewBitmap(R.id.widget_avatar_photo, avatar)
+                views.setViewVisibility(R.id.widget_avatar_photo, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_avatar, View.GONE)
+            } else {
+                views.setViewVisibility(R.id.widget_avatar_photo, View.GONE)
+                views.setViewVisibility(R.id.widget_avatar, View.VISIBLE)
+            }
             views.setTextViewText(
                 R.id.widget_left,
                 timeLeftLabel(widgetData.getLong("day_photo_expires_at", 0L)),
             )
+        }
+
+        /**
+         * The circular avatar PNG Dart cached, or null when there is none.
+         *
+         * No downscaling here: it is written at 96px and drawn at 30dp, so
+         * there is nothing to save and `inSampleSize` on something this
+         * small only costs sharpness.
+         */
+        fun loadAvatar(widgetData: SharedPreferences): Bitmap? {
+            val path = widgetData.getString("day_photo_owner_avatar", "") ?: ""
+            if (path.isEmpty()) return null
+            val file = File(path)
+            if (!file.exists()) return null
+            return try {
+                BitmapFactory.decodeFile(path)
+            } catch (e: Exception) {
+                // A half-written cache file is a missing avatar, not a
+                // broken widget — the flower glyph is right there.
+                null
+            }
         }
 
         /** "16h" / "42m", and empty once there is nothing left to count. */
