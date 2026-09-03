@@ -14,7 +14,7 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
-import '../../../../core/widgets/flower_avatar.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/services/pulse_alerts.dart';
 import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../heartbeat/data/pulse_alert_prefs.dart';
@@ -68,7 +68,6 @@ class HomeScreen extends ConsumerWidget {
                   // below it is a control — something you came here to do
                   // rather than something you came here to find out.
                   ActivitySection(),
-                  SizedBox(height: AppSpace.md),
                   _MoodCard(),
                   SizedBox(height: AppSpace.sm),
                   _HeartbeatCard(),
@@ -884,7 +883,7 @@ class _CouplePill extends ConsumerWidget {
                 height: _face,
                 child: Stack(
                   children: [
-                    FlowerAvatar.of(me, size: _face),
+                    UserAvatar(me, size: _face),
                     if (partner != null)
                       Positioned(
                         left: _face * 0.62,
@@ -899,7 +898,7 @@ class _CouplePill extends ConsumerWidget {
                               width: 1.5,
                             ),
                           ),
-                          child: FlowerAvatar.of(partner, size: _face - 3),
+                          child: UserAvatar(partner, size: _face - 3),
                         ),
                       ),
                   ],

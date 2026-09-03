@@ -1,5 +1,8 @@
+import 'dart:typed_data' show Uint8List;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../../core/models/avatar_flower.dart';
 import '../../../core/models/user_profile.dart';
@@ -44,6 +47,89 @@ class UserRepository {
     if (patch.isEmpty) return;
     await _client.from('users').update(patch).eq('id', userId);
   }
+
+  /// Private Storage bucket created by migration 0020.
+  static const avatarBucket = 'avatars';
+
+  /// Uploads a processed avatar and points the profile row at it.
+  ///
+  /// [bytes] must already have been through `squareAvatarJpeg` — this does
+  /// no processing of its own, so that the expensive part can run in an
+  /// isolate and the caller can show a failure before anything is written.
+  ///
+  /// Returns the new object path.
+  Future<String> setAvatarPhoto({
+    required String userId,
+    required Uint8List bytes,
+  }) async {
+    // <user_id>/<uuid>.jpg — the leading segment is what the Storage RLS
+    // policy reads to decide who owns this, so it must stay first.
+    final path = '$userId/${const Uuid().v4()}.jpg';
+
+    await _client.storage.from(avatarBucket).uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'image/jpeg',
+            upsert: false,
+          ),
+        );
+
+    // The old object is read off the row *before* the row is repointed, so
+    // a failure here leaves the old photo intact and referenced rather than
+    // deleted and missing.
+    final previous = (await _client
+        .from('users')
+        .select('avatar_path')
+        .eq('id', userId)
+        .maybeSingle())?['avatar_path'] as String?;
+
+    await _client.from('users').update({'avatar_path': path}).eq('id', userId);
+
+    // Best effort, and deliberately after the row is updated: an orphaned
+    // object costs a few kilobytes, whereas deleting first and then failing
+    // the update would leave the profile pointing at nothing.
+    if (previous != null && previous != path) {
+      await _deleteAvatarObject(previous);
+    }
+    return path;
+  }
+
+  /// Drops back to the flower.
+  ///
+  /// Clears the pointer first for the same reason as above — the row must
+  /// never reference an object that is already gone.
+  Future<void> removeAvatarPhoto(String userId) async {
+    final previous = (await _client
+        .from('users')
+        .select('avatar_path')
+        .eq('id', userId)
+        .maybeSingle())?['avatar_path'] as String?;
+
+    await _client.from('users').update({'avatar_path': null}).eq('id', userId);
+    if (previous != null) await _deleteAvatarObject(previous);
+  }
+
+  Future<void> _deleteAvatarObject(String path) async {
+    try {
+      await _client.storage.from(avatarBucket).remove([path]);
+    } catch (_) {
+      // An avatar nobody references any more is litter, not a failure the
+      // user can do anything about. Swallowed so replacing a photo still
+      // reports success.
+    }
+  }
+
+  /// A URL the image loader can actually fetch.
+  ///
+  /// Long-lived on purpose. The bucket is private, so every render needs a
+  /// signature — but a signed URL is unique per signing, which means a
+  /// short TTL would defeat `cached_network_image`'s URL-keyed cache and
+  /// re-download the same face on every rebuild. One signature per week,
+  /// cached by [avatarUrlProvider], is the trade.
+  Future<String> signedAvatarUrl(String path,
+          {Duration ttl = const Duration(days: 7)}) =>
+      _client.storage.from(avatarBucket).createSignedUrl(path, ttl.inSeconds);
 
   Future<UserProfile> createProfile({
     required String userId,
@@ -91,4 +177,27 @@ final partnerProfileProvider = FutureProvider<UserProfile?>((ref) async {
   final partnerId = pair.partnerIdFor(userId);
   if (partnerId == null) return null;
   return ref.watch(userRepositoryProvider).getProfile(partnerId);
+});
+
+/// A signed URL for one avatar object, cached for the session.
+///
+/// Family-keyed on the storage path and deliberately **not** autoDispose:
+/// there are exactly two of these in the whole app, and re-signing every
+/// time the last widget showing a face leaves the tree would mean a
+/// round-trip on every screen change. See `signedAvatarUrl` for why the
+/// signature has to be stable rather than fresh.
+///
+/// Invalidate it after changing a photo — the path changes, so a new key is
+/// created anyway, but the old entry should not linger pointing at an
+/// object that has just been deleted.
+final avatarUrlProvider =
+    FutureProvider.family<String?, String>((ref, path) async {
+  if (path.isEmpty) return null;
+  try {
+    return await ref.watch(userRepositoryProvider).signedAvatarUrl(path);
+  } catch (_) {
+    // Signing can fail on a dead connection or a deleted object. Null means
+    // "draw the flower", which is the correct answer to both.
+    return null;
+  }
 });

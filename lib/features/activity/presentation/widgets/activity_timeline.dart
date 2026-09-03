@@ -332,6 +332,22 @@ class ActivitySection extends ConsumerWidget {
     final unseen = ref.watch(unseenActivityCountProvider);
     final lastSeen = ref.watch(activityLastSeenProvider).valueOrNull;
 
+    // ⚠️ Nothing to say means nothing on screen — not a heading over an
+    // empty card. This block sits directly under "Good morning, Wifey" and
+    // their photo, and on a quiet day an empty state there is the first
+    // thing read after the greeting. The section earns its place by only
+    // appearing when something happened; the badge and the notification are
+    // what make sure it is noticed when it does.
+    //
+    // The same is true while loading: a "Catching up…" card that resolves
+    // to nothing is a flicker of dead furniture. A failure still shows,
+    // because a feed that could not load is not the same as an empty one
+    // and must never be drawn as one.
+    final settledEmpty = recent.hasValue && recent.requireValue.isEmpty;
+    if (settledEmpty || (recent.isLoading && !recent.hasValue)) {
+      return const SizedBox.shrink();
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -369,10 +385,16 @@ class ActivitySection extends ConsumerWidget {
           error: (_, __) => const _FeedPlaceholder(
             text: "Couldn't load your activity.",
           ),
+          // Unreachable when empty — handled above — but the branch is
+          // kept so this widget stays correct if it is ever reused
+          // somewhere the empty state should show.
           data: (list) => list.isEmpty
               ? const _FeedEmpty()
               : ActivityTimeline(activities: list, lastSeen: lastSeen),
         ),
+        // Owned here rather than by Home, because a section that can
+        // disappear has to take its spacing with it.
+        const SizedBox(height: AppSpace.md),
       ],
     );
   }

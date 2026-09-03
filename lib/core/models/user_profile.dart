@@ -7,6 +7,7 @@ class UserProfile {
     this.petName,
     this.timezone = 'UTC',
     this.avatar,
+    this.avatarPath,
     this.gender,
   });
 
@@ -19,8 +20,20 @@ class UserProfile {
   /// what lets [flower] fall back to the gender default instead of a pick.
   final String? avatar;
 
+  /// Storage object path in the private `avatars` bucket, or null when no
+  /// photo has been uploaded. Not a URL — the bucket is private, so a
+  /// signed one is minted at render time (see `avatarUrlProvider`).
+  final String? avatarPath;
+
   /// Only ever used to choose the default avatar. Never rendered.
   final String? gender;
+
+  /// Whether this person has a photo rather than a flower.
+  ///
+  /// The flower stays underneath either way: it is what renders while the
+  /// signed URL is in flight, and what renders if the image fails. See the
+  /// header of migration 0020.
+  bool get hasPhoto => avatarPath != null && avatarPath!.isNotEmpty;
 
   /// The flower to draw for this person, everywhere.
   AvatarFlower get flower =>
@@ -33,6 +46,8 @@ class UserProfile {
         timezone: map['timezone'] as String? ?? 'UTC',
         // Both absent on rows written before migration 0017.
         avatar: map['avatar'] as String?,
+        // Absent on rows written before migration 0020.
+        avatarPath: map['avatar_path'] as String?,
         gender: map['gender'] as String?,
       );
 
@@ -42,6 +57,7 @@ class UserProfile {
         if (petName != null) 'pet_name': petName,
         'timezone': timezone,
         if (avatar != null) 'avatar': avatar,
+        if (avatarPath != null) 'avatar_path': avatarPath,
         if (gender != null) 'gender': gender,
       };
 }

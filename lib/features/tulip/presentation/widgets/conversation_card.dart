@@ -8,7 +8,7 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/flower_avatar.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
 
@@ -111,7 +111,7 @@ class _Row extends StatelessWidget {
           ),
           child: Row(
             children: [
-              FlowerAvatar.of(partner, size: 52),
+              UserAvatar(partner, size: 52),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Column(

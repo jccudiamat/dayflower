@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -11,7 +13,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/models/avatar_flower.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/services/avatar_image.dart';
 import '../../../../core/widgets/flower_avatar.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/timezone_picker.dart';
@@ -52,7 +56,7 @@ class SettingsScreen extends ConsumerWidget {
             _ProfileHeader(
               name: profile?.displayName ?? '—',
               petName: profile?.petName,
-              flower: profile?.flower,
+              profile: profile,
               email: email,
             ),
             const SizedBox(height: AppSpace.md),
@@ -83,10 +87,12 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const _Line(),
                 _Row(
-                  title: 'Your flower',
+                  title: 'Your picture',
                   value: profile == null
                       ? '—'
-                      : '${profile.flower.emoji}  ${profile.flower.label}',
+                      : profile.hasPhoto
+                          ? 'Photo'
+                          : '${profile.flower.emoji}  ${profile.flower.label}',
                   onTap: () => _pickAvatar(context, ref, profile),
                 ),
                 const _Line(),
@@ -408,15 +414,16 @@ class _ProfileHeader extends StatelessWidget {
     required this.name,
     required this.petName,
     required this.email,
-    this.flower,
+    this.profile,
   });
 
   final String name;
   final String? petName;
   final String? email;
 
-  /// Your avatar flower. Null only while the profile is still loading.
-  final AvatarFlower? flower;
+  /// Null only while the profile is still loading, which draws the fallback
+  /// flower — the same thing every other surface does while waiting.
+  final UserProfile? profile;
 
   @override
   Widget build(BuildContext context) {
@@ -437,20 +444,10 @@ class _ProfileHeader extends StatelessWidget {
               gradient: AppGradients.cta,
               shape: BoxShape.circle,
             ),
-            child: Container(
-              width: 66,
-              height: 66,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(
-                color: AppColors.surface,
-                shape: BoxShape.circle,
-              ),
-              child: Text(
-                (flower ?? AvatarFlower.fallback).emoji,
-                style: const TextStyle(fontSize: 32),
-                semanticsLabel: (flower ?? AvatarFlower.fallback).label,
-              ),
-            ),
+            // The ring is a padded gradient circle *behind* the avatar
+            // rather than a border on it, so a photo sits inside the ring
+            // instead of being clipped by it.
+            child: UserAvatar(profile, size: 66),
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
@@ -766,97 +763,303 @@ class _CheckForUpdatesRow extends ConsumerWidget {
   }
 }
 
-/// Your avatar flower.
+/// Your picture: a photo if you want one, a flower if you don't.
 ///
-/// Everyone sees the same eight; the daisy/tulip split only ever decides the
-/// *default* for someone who has never picked, so choosing here is free of
-/// any of that.
+/// Both live in one sheet rather than behind a "photo or flower?" fork,
+/// because they are the same decision — what stands in for you — and a fork
+/// would make the flower feel like the consolation prize. It isn't: it is
+/// the default, the fallback, and what the home-screen widget draws.
 Future<void> _pickAvatar(
   BuildContext context,
   WidgetRef ref,
   UserProfile? profile,
 ) async {
-  final current = profile?.flower ?? AvatarFlower.fallback;
-  final chosen = await showModalBottomSheet<AvatarFlower>(
+  final userId = ref.read(currentUserIdProvider);
+  if (userId == null) return;
+
+  final repository = ref.read(userRepositoryProvider);
+  var busy = false;
+  String? failure;
+
+  await showModalBottomSheet<void>(
     context: context,
     backgroundColor: Colors.transparent,
-    builder: (sheetContext) => Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
-      ),
-      padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md,
-          AppSpace.lg + MediaQuery.paddingOf(sheetContext).bottom),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: AppColors.border,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+    isScrollControlled: true,
+    // A photo upload is not something to lose by brushing the scrim.
+    isDismissible: true,
+    builder: (sheetContext) => StatefulBuilder(
+      builder: (sheetContext, setSheetState) {
+        Future<void> finish(Future<void> Function() work) async {
+          if (busy) return;
+          setSheetState(() {
+            busy = true;
+            failure = null;
+          });
+          try {
+            await work();
+            ref.invalidate(userProfileProvider);
+            if (sheetContext.mounted) Navigator.pop(sheetContext);
+          } catch (_) {
+            if (!sheetContext.mounted) return;
+            setSheetState(() {
+              busy = false;
+              failure = "That didn't save. Try again?";
+            });
+          }
+        }
+
+        Future<void> useCamera(ImageSource source) => finish(() async {
+              final picked = await ImagePicker().pickImage(
+                source: source,
+                // Cut down before the bytes ever reach an isolate: a
+                // 12-megapixel original costs real time to decode, and
+                // every one of those pixels is about to be thrown away.
+                maxWidth: 1600,
+                maxHeight: 1600,
+              );
+              // A cancelled picker is not a failure, and must not report as
+              // one — it throws nothing and simply returns null.
+              if (picked == null) return;
+              final raw = await picked.readAsBytes();
+              // Off the UI thread: decode, orient, crop and re-encode is
+              // hundreds of milliseconds and would freeze this sheet.
+              final processed = await compute(squareAvatarJpeg, raw);
+              if (processed == null) {
+                throw StateError('unreadable image');
+              }
+              await repository.setAvatarPhoto(
+                userId: userId,
+                bytes: processed,
+              );
+            });
+
+        final current = profile?.flower ?? AvatarFlower.fallback;
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            borderRadius:
+                BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
           ),
-          const SizedBox(height: AppSpace.md),
-          Text('Your flower', style: AppText.hero()),
-          const SizedBox(height: 4),
-          Text('It stands in for you everywhere — the chat, their home screen.',
-              style: AppText.caption()),
-          const SizedBox(height: AppSpace.md),
-          Wrap(
-            spacing: AppSpace.sm,
-            runSpacing: AppSpace.sm,
-            children: [
-              for (final f in AvatarFlower.values)
-                GestureDetector(
-                  onTap: () => Navigator.pop(sheetContext, f),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          // design.md: selection is a tinted outline.
-                          border: Border.all(
-                            color: f == current
-                                ? AppColors.brand
-                                : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                        child: FlowerAvatar(flower: f, size: 52),
-                      ),
-                      const SizedBox(height: 4),
-                      SizedBox(
-                        width: 62,
-                        child: Text(
-                          f.label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textAlign: TextAlign.center,
-                          style: AppText.label(
-                            f == current ? AppColors.brand : AppColors.muted,
-                          ),
-                        ),
-                      ),
-                    ],
+          padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md,
+              AppSpace.lg + MediaQuery.paddingOf(sheetContext).bottom),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
                   ),
                 ),
-            ],
+                const SizedBox(height: AppSpace.md),
+                Text('Your picture', style: AppText.hero()),
+                const SizedBox(height: 4),
+                Text(
+                  'It stands in for you everywhere — the chat, their home '
+                  'screen.',
+                  style: AppText.caption(),
+                ),
+                const SizedBox(height: AppSpace.md),
+
+                // What you look like now, and the two ways to change it.
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 72,
+                      height: 72,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          UserAvatar(profile, size: 72),
+                          if (busy)
+                            Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: .35),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: AppSpace.sm),
+                    Expanded(
+                      child: Column(
+                        children: [
+                          _AvatarAction(
+                            icon: CupertinoIcons.camera_fill,
+                            label: 'Take a photo',
+                            enabled: !busy,
+                            onTap: () => useCamera(ImageSource.camera),
+                          ),
+                          const SizedBox(height: AppSpace.xs),
+                          _AvatarAction(
+                            icon: CupertinoIcons.photo_fill,
+                            label: 'Choose a photo',
+                            enabled: !busy,
+                            onTap: () => useCamera(ImageSource.gallery),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                if (failure != null) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  Text(failure!, style: AppText.caption(AppColors.danger)),
+                ],
+
+                // Only offered when there is something to remove. Removing
+                // does not clear your flower — it uncovers it.
+                if (profile?.hasPhoto ?? false) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  GestureDetector(
+                    onTap: busy
+                        ? null
+                        : () => finish(
+                              () => repository.removeAvatarPhoto(userId),
+                            ),
+                    behavior: HitTestBehavior.opaque,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Text(
+                        'Remove photo',
+                        style: AppText.caption(AppColors.danger)
+                            .copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: AppSpace.md),
+                Text('OR PICK A FLOWER', style: AppText.label()),
+                const SizedBox(height: 4),
+                Text(
+                  profile?.hasPhoto ?? false
+                      ? 'Shown wherever your photo cannot be, including the '
+                          'home-screen widget.'
+                      : 'Everyone sees the same eight.',
+                  style: AppText.caption(),
+                ),
+                const SizedBox(height: AppSpace.sm),
+                Wrap(
+                  spacing: AppSpace.sm,
+                  runSpacing: AppSpace.sm,
+                  children: [
+                    for (final f in AvatarFlower.values)
+                      GestureDetector(
+                        onTap: busy
+                            ? null
+                            : () => finish(() => repository.updateProfile(
+                                  userId,
+                                  avatar: f,
+                                )),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(3),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                // design.md: selection is a tinted outline.
+                                border: Border.all(
+                                  color: f == current
+                                      ? AppColors.brand
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: FlowerAvatar(flower: f, size: 52),
+                            ),
+                            const SizedBox(height: 4),
+                            SizedBox(
+                              width: 62,
+                              child: Text(
+                                f.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: AppText.label(
+                                  f == current
+                                      ? AppColors.brand
+                                      : AppColors.muted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        );
+      },
     ),
   );
+}
 
-  if (chosen == null) return;
-  final id = ref.read(currentUserIdProvider);
-  if (id == null) return;
-  await ref.read(userRepositoryProvider).updateProfile(id, avatar: chosen);
-  ref.invalidate(userProfileProvider);
+/// One of the two photo buttons.
+class _AvatarAction extends StatelessWidget {
+  const _AvatarAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    required this.enabled,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : .5,
+      child: Material(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          onTap: enabled ? onTap : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.sm, vertical: 10),
+            child: Row(
+              children: [
+                Icon(icon, size: 16, color: AppColors.secondary),
+                const SizedBox(width: AppSpace.xs),
+                Text(
+                  label,
+                  style: AppText.caption(AppColors.ink)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

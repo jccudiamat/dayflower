@@ -7,7 +7,7 @@ import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/flower_avatar.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
@@ -486,7 +486,7 @@ class _ChatHeader extends ConsumerWidget {
             icon: const Icon(CupertinoIcons.chevron_back,
                 color: AppColors.muted),
           ),
-          FlowerAvatar.of(partner, size: 40),
+          UserAvatar(partner, size: 40),
           const SizedBox(width: AppSpace.xs),
           Expanded(
             child: Column(
