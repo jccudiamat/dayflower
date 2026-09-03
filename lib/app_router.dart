@@ -82,52 +82,133 @@ class Routes {
   static String alarmFor(String reminderId) => '/alarm/$reminderId';
 }
 
+/// Whether an async gate input is safe to act on.
+///
+/// ⚠️ **A present value and a *trustworthy* value are not the same thing,
+/// and the difference is a null.**
+///
+/// Riverpod keeps the previous value while a provider refreshes, which is
+/// what lets a nickname edit leave the router alone — a profile that is
+/// merely reloading is still that person. But `userProfileProvider` also
+/// legitimately resolves to **null** when nobody is signed in yet, and that
+/// null survives into the refresh that follows signing in. For a moment the
+/// gate then holds "we have an answer, and the answer is: no profile" — and
+/// routes to the onboarding wizard, for somebody who onboarded a year ago.
+///
+/// Observed: after dev auto-login the router settled on `/onboarding` while
+/// Home was on screen. So a non-null value is believed even mid-refresh; a
+/// null is only believed once it has stopped moving.
+bool isGateValueUsable(AsyncValue<Object?> value) =>
+    value.hasValue && (value.valueOrNull != null || !value.isLoading);
+
+/// Where the gates say you belong, or null to stay put.
+///
+/// Extracted from the router and taking plain booleans rather than
+/// `AsyncValue`s, because the distinction the whole thing turns on — *known*
+/// versus *loading* — is invisible when it is buried in `isLoading`, and
+/// that is exactly where this went wrong.
+///
+/// ⚠️ **"Loading" is not the same as "unknown".** Riverpod reports
+/// `isLoading == true` while a provider *refreshes*, even though it is
+/// holding a perfectly good previous value. Reading that as "we don't know
+/// who this is yet" is what sent the app to the splash screen every time
+/// somebody changed their nickname. Only [authKnown] / [profileKnown] /
+/// [pairKnown] — which mean "has a value at all" — may gate on loading.
+String? gateRedirect({
+  required String location,
+  required bool authKnown,
+  required bool signedIn,
+  required bool profileKnown,
+  required bool hasProfile,
+  required bool pairKnown,
+  required bool isLinked,
+}) {
+  // Gate order: auth → onboarding (profile) → pairing → app.
+  String gateTarget;
+  if (!authKnown) {
+    gateTarget = Routes.splash;
+  } else if (!signedIn) {
+    // Signed out: welcome is home base, login is reachable from it.
+    return (location == Routes.welcome || location == Routes.login)
+        ? null
+        : Routes.welcome;
+  } else if (!profileKnown) {
+    gateTarget = Routes.splash;
+  } else if (!hasProfile) {
+    gateTarget = Routes.onboarding;
+  } else if (!pairKnown) {
+    gateTarget = Routes.splash;
+  } else if (!isLinked) {
+    gateTarget = Routes.pair;
+  } else {
+    gateTarget = Routes.home;
+  }
+
+  if (gateTarget != Routes.home) {
+    return location == gateTarget ? null : gateTarget;
+  }
+
+  // Fully onboarded and paired — keep out of the gate routes only, and
+  // otherwise leave the user exactly where they are. This is the branch
+  // that has to stay quiet: it runs again on every profile refresh, and
+  // anything it returns here is a navigation the user did not ask for.
+  const gateRoutes = {
+    Routes.splash,
+    Routes.welcome,
+    Routes.login,
+    Routes.onboarding,
+    Routes.pair,
+  };
+  if (gateRoutes.contains(location)) return Routes.home;
+  return null;
+}
+
+/// Re-runs the router's redirect when a gate input changes.
+///
+/// The router used to `ref.watch` those providers directly, which meant
+/// every change **built a whole new GoRouter**. A new router is a new
+/// `routerConfig` for `MaterialApp.router`, so the Navigator and its entire
+/// history were thrown away and rebuilt from `initialLocation` — the splash
+/// screen. Saving a nickname genuinely restarted navigation.
+///
+/// `refreshListenable` is the supported way to say "the same router, but
+/// look at the world again".
+class _GateNotifier extends ChangeNotifier {
+  _GateNotifier(Ref ref) {
+    ref.listen(authStateProvider, (_, __) => notifyListeners());
+    ref.listen(userProfileProvider, (_, __) => notifyListeners());
+    ref.listen(currentPairProvider, (_, __) => notifyListeners());
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-  final profileAsync = ref.watch(userProfileProvider);
-  final pairAsync = ref.watch(currentPairProvider);
+  // ⚠️ Nothing is watched here, deliberately. See _GateNotifier: a watch
+  // rebuilds this provider, and rebuilding this provider replaces the
+  // router. The redirect reads the current values instead.
+  final gate = _GateNotifier(ref);
+  ref.onDispose(gate.dispose);
 
   return GoRouter(
     initialLocation: Routes.splash,
+    refreshListenable: gate,
     redirect: (context, state) {
-      final loc = state.matchedLocation;
+      final authState = ref.read(authStateProvider);
+      final profileAsync = ref.read(userProfileProvider);
+      final pairAsync = ref.read(currentPairProvider);
 
-      // Gate order: auth → onboarding (profile) → pairing → app.
-      // Each stage stays on splash while its data is still loading.
-      String gateTarget;
-      if (authState.isLoading) {
-        gateTarget = Routes.splash;
-      } else if (authState.whenOrNull(data: (s) => s.session != null) != true) {
-        // Signed out: welcome is home base, login is reachable from it.
-        return (loc == Routes.welcome || loc == Routes.login)
-            ? null
-            : Routes.welcome;
-      } else if (profileAsync.isLoading) {
-        gateTarget = Routes.splash;
-      } else if (profileAsync.valueOrNull == null) {
-        gateTarget = Routes.onboarding;
-      } else if (pairAsync.isLoading) {
-        gateTarget = Routes.splash;
-      } else if (pairAsync.valueOrNull?.isLinked != true) {
-        gateTarget = Routes.pair;
-      } else {
-        gateTarget = Routes.home;
-      }
-
-      if (gateTarget != Routes.home) {
-        return loc == gateTarget ? null : gateTarget;
-      }
-
-      // Fully onboarded and paired — keep out of the gate routes only.
-      const gateRoutes = {
-        Routes.splash,
-        Routes.welcome,
-        Routes.login,
-        Routes.onboarding,
-        Routes.pair,
-      };
-      if (gateRoutes.contains(loc)) return Routes.home;
-      return null;
+      return gateRedirect(
+        location: state.matchedLocation,
+        // Not `!isLoading`: a refreshing provider still knows the answer,
+        // and treating it as unknown is what sent this to the splash on
+        // every profile edit. Not plain `hasValue` either — see
+        // isGateValueUsable for the null that hides in there.
+        authKnown: authState.hasValue,
+        signedIn: authState.valueOrNull?.session != null,
+        profileKnown: isGateValueUsable(profileAsync),
+        hasProfile: profileAsync.valueOrNull != null,
+        pairKnown: isGateValueUsable(pairAsync),
+        isLinked: pairAsync.valueOrNull?.isLinked == true,
+      );
     },
     routes: [
       GoRoute(

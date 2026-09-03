@@ -719,6 +719,35 @@ A shared timeline on Home: the three most recent things either of you did to the
 
 🔴 **"Your partner set an event" is not in the feed, because events are not real yet.** `events_screen.dart` builds its list in `initState` and keeps it in `setState` — there is no events table and nothing is persisted, so there is nothing to trigger on. The only calendar thing that *is* real is `reunions` (one row per pair), logged as `reunion_set`. Giving events a table is what unblocks the rest.
 
+## 🔴 Saving a nickname restarted navigation (2026-09-03)
+
+**Symptom:** editing your name, nickname, timezone or avatar flashed the splash screen and dumped you back on Home. Reported by the user; it was two separate faults compounding, and both were in `app_router.dart`.
+
+**Fault 1 — the router was rebuilt, not refreshed.** `routerProvider` did `ref.watch` on `authStateProvider`, `userProfileProvider` and `currentPairProvider`, so any invalidation rebuilt the provider and **constructed a whole new `GoRouter`**. A new router is a new `routerConfig` for `MaterialApp.router`: the Navigator and its entire history are thrown away and rebuilt from `initialLocation`, which is the splash. Saving a nickname genuinely restarted navigation.
+
+Fixed by building the router **once** and giving it a `refreshListenable` (`_GateNotifier`, which `ref.listen`s the same three providers and calls `notifyListeners`). The redirect `ref.read`s the current values instead. ⚠️ **Nothing in `routerProvider` may be watched.** A watch there replaces the router.
+
+**Fault 2 — "loading" was read as "unknown".** The redirect gated on `profileAsync.isLoading`, but Riverpod reports `isLoading == true` while a provider *refreshes* — it is still holding a perfectly good previous value. So a refresh looked identical to a cold start and sent everyone to the splash.
+
+Fixed by gating on whether the value is usable, not on `isLoading`.
+
+**And a third fault the fix for #2 exposed, before it shipped.** Plain `hasValue` is *also* wrong. `userProfileProvider` legitimately resolves to **null** when nobody is signed in, and that null is carried into the refresh that follows signing in. For a moment the gate then holds "we have an answer, and the answer is: no profile" — and routes to the **onboarding wizard**, for somebody who onboarded a year ago. Caught by probing the live app, not by reading the code: the router settled on `/onboarding` while Home was on screen.
+
+`isGateValueUsable` is the rule that came out of it, and it is worth stating plainly:
+
+> A non-null value is trustworthy even mid-refresh. A **null** is only trustworthy once it has stopped moving.
+
+```dart
+bool isGateValueUsable(AsyncValue<Object?> v) =>
+    v.hasValue && (v.valueOrNull != null || !v.isLoading);
+```
+
+**Verified in the live app, not just by inspection.** A temporary probe invalidated `userProfileProvider` 40s after launch and logged every `SplashScreen` build plus the router identity. Before: splash rebuilt on the invalidate. After: two splash builds at cold start (correct) and **none** after the invalidate, `same instance: true`, and Home still on screen. Probe removed; `lib/app.dart` is byte-identical to before it.
+
+`gateRedirect` is now a **pure function taking plain booleans**, in `app_router.dart`, covered by `test/router_gate_test.dart` (15 tests). Taking booleans rather than `AsyncValue`s is deliberate: the known-versus-loading distinction is invisible when it is buried inside `isLoading`, and that is precisely where this went wrong twice.
+
+⚠️ Everything that calls `ref.invalidate(userProfileProvider)` runs this path: Settings (name, nickname, picture), `clocks_card.dart` (timezone), and `onboarding_notifier.dart`. Same for `ref.invalidate(currentPairProvider)` in the pairing screen and Settings' disconnect.
+
 ## The day arch is a deck, not two halves (2026-09-03)
 
 When both of you have posted, the arch used to split 50/50. That gave each photo a **132×96 box — a landscape letterbox**. The camera shoots `ResolutionPreset.high`, which is 720×1280 in portrait, so `BoxFit.cover` into that kept **41% of the height and threw away 59% from the centre** — on a selfie, the band from the chin down. The best possible day, where both of you posted, rendered both of you worst.
