@@ -408,6 +408,37 @@ final unreadMessageCountProvider = Provider.autoDispose<int>((ref) {
       .length;
 });
 
+/// A signed URL for one day photo, minted once and kept.
+///
+/// ⚠️ **Not a convenience — a correctness fix.** The home arch used to call
+/// `signedPhotoUrl` straight inside `build`, which hands `FutureBuilder` a
+/// brand new Future on every single rebuild: a fresh signing round-trip
+/// each time, and the placeholder flashing in between. That was survivable
+/// only because the arch almost never rebuilt. The moment anything animates
+/// it — a swipe, a transition — it becomes one network request per frame.
+///
+/// Family-keyed on the storage path and deliberately **not** autoDispose,
+/// for the same reason as `avatarUrlProvider`: the URL has to stay stable
+/// or Flutter's image cache, which keys on it, can never hit.
+///
+/// The TTL is long relative to the photo itself. A day photo leaves the
+/// home screen after 24 hours ([FlowerMessage.widgetLifetime]), so a
+/// signature that outlives any plausible session cannot outlive the thing
+/// it points at.
+final dayPhotoUrlProvider =
+    FutureProvider.family<String?, String>((ref, path) async {
+  if (path.isEmpty) return null;
+  try {
+    return await ref
+        .watch(flowerRepositoryProvider)
+        .signedPhotoUrl(path, ttl: const Duration(hours: 12));
+  } catch (_) {
+    // Null means "draw the empty panel", which is the right answer to both
+    // a dead connection and an object that is no longer there.
+    return null;
+  }
+});
+
 /// Where a day photo should land. Ordered as the camera offers them, with
 /// [widget] first because parking a photo on their home screen is what
 /// "share your day" means — the thread copy is the extra, not the point.

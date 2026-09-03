@@ -604,18 +604,37 @@ class _HomeHeader extends ConsumerWidget {
   }
 }
 
-/// The arched panel beside the greeting: their day on top, yours beneath.
+/// The arched panel beside the greeting: a two-card deck, theirs in front.
 ///
-/// Proportions follow the reference — a tall arch, roughly 2:3, with the
-/// top corners rounded far more than the bottom so it reads as a window
-/// rather than a card.
-class _DayArch extends ConsumerWidget {
+/// **Why a deck rather than two halves.** Splitting the arch 50/50 gave each
+/// photo a 132×96 box — a *landscape* letterbox. The camera shoots
+/// `ResolutionPreset.high`, which is 720×1280 in portrait, so `BoxFit.cover`
+/// into that kept 41% of the height and threw away 59% of it from the
+/// centre — which on a selfie is the band from the chin down. The best
+/// possible day, where both of you posted, rendered both of you worst.
+///
+/// Whichever card is in front now gets almost the whole arch, where a 9:16
+/// photo loses about 9% off its sides and nothing else. The other sits
+/// behind it, slightly smaller and dimmed, with a band of its arch showing
+/// above — enough to say it is there. A horizontal swipe trades them.
+///
+/// ⚠️ **The peek is carved out of the arch, not added above it.** Both cards
+/// are [_peek] shorter than the panel and the front one is aligned to the
+/// bottom, so the back one's crescent lands inside the same 132×194 box the
+/// arch has always occupied. Lifting the back card out of the box instead
+/// would have painted it over the collapsing top bar, and grown the header
+/// by 22pt to avoid that.
+class _DayArch extends ConsumerStatefulWidget {
   const _DayArch();
 
-  static const double _width = 132;
-  static const double _aspect = 0.68; // width ÷ height
+  static const double width = 132;
+  static const double aspect = 0.68; // width ÷ height
+  static double get height => width / aspect;
 
-  static const _shape = BorderRadius.only(
+  /// How much of the back card shows above the front one.
+  static const double peek = 12;
+
+  static const shape = BorderRadius.only(
     topLeft: Radius.circular(64),
     topRight: Radius.circular(64),
     bottomLeft: Radius.circular(AppRadius.lg),
@@ -623,77 +642,230 @@ class _DayArch extends ConsumerWidget {
   );
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_DayArch> createState() => _DayArchState();
+}
+
+class _DayArchState extends ConsumerState<_DayArch>
+    with SingleTickerProviderStateMixin {
+  /// 0 = their day in front, 1 = yours.
+  ///
+  /// Animated rather than toggled: without the movement a swipe just looks
+  /// like the photo changed, and there is nothing to say the other one is
+  /// still there.
+  late final AnimationController _swap = AnimationController(
+    vsync: this,
+    duration: AppMotion.standard,
+  );
+
+  /// The back card, relative to the front one.
+  static const double _backScale = 0.95;
+  static const double _backDim = 0.30;
+
+  @override
+  void dispose() {
+    _swap.dispose();
+    super.dispose();
+  }
+
+  /// Their day starts in front and returns there, always. It is what you
+  /// opened the app for; yours is the receipt that you posted.
+  void _bringForward({required bool mine}) =>
+      mine ? _swap.forward() : _swap.reverse();
+
+  @override
+  Widget build(BuildContext context) {
     final theirs = ref.watch(partnerDayPhotoProvider);
     final mine = ref.watch(myDayPhotoProvider);
 
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
     final theirName = partner?.petName ?? partner?.displayName ?? 'Their';
 
-    // Tapping is handled per photo rather than on the whole arch: with two
-    // stacked, one tap target would have to guess which day you meant.
     return SizedBox(
-      width: _width,
-      height: _width / _aspect,
-      child: ClipRRect(
-        borderRadius: _shape,
-        child: _content(context, theirs, mine, theirName),
-      ),
+      width: _DayArch.width,
+      height: _DayArch.height,
+      child: _content(theirs, mine, theirName),
     );
   }
 
   Widget _content(
-    BuildContext context,
     FlowerMessage? theirs,
     FlowerMessage? mine,
     String theirName,
   ) {
-    // Both: stacked, theirs on top — the whole point of the panel is
-    // seeing their day first.
+    // Both: a deck. Either direction swaps — with exactly two cards, "left"
+    // and "right" mean the same thing, and honouring the direction would
+    // make half of all swipes silently do nothing.
     if (theirs != null && mine != null) {
-      return Column(
-        children: [
-          Expanded(
-            child: _DayPhoto(
+      return GestureDetector(
+        onHorizontalDragEnd: (_) =>
+            _bringForward(mine: _swap.value < 0.5),
+        child: AnimatedBuilder(
+          animation: _swap,
+          builder: (context, _) {
+            final t = Curves.easeOut.transform(_swap.value);
+            final theirsInFront = t < 0.5;
+
+            final theirCard = _deckCard(
+              key: ValueKey(theirs.id),
               message: theirs,
-              onTap: () => _open(context, theirs, "$theirName's day"),
-            ),
-          ),
-          const SizedBox(height: 3),
-          Expanded(
-            child: _DayPhoto(
+              depth: t,
+              // Tapping the front card opens it; tapping the sliver of the
+              // back one brings it forward, which is the same thing the
+              // swipe does and a much easier target to find.
+              onTap: () => theirsInFront
+                  ? _open(theirs, "$theirName's day")
+                  : _bringForward(mine: false),
+            );
+            final myCard = _deckCard(
+              key: ValueKey(mine.id),
               message: mine,
-              onTap: () => _open(context, mine, 'Your day'),
-            ),
-          ),
-        ],
+              depth: 1 - t,
+              onTap: () => theirsInFront
+                  ? _bringForward(mine: true)
+                  : _open(mine, 'Your day'),
+            );
+
+            return Stack(
+              children: [
+                // Painted back to front. The keys carry each card's element
+                // through the reorder, so the photo does not get rebuilt —
+                // and its signed URL not re-fetched — every time they trade.
+                if (theirsInFront) ...[myCard, theirCard] else ...[
+                  theirCard,
+                  myCard,
+                ],
+                _DeckDots(mineIsFront: !theirsInFront),
+              ],
+            );
+          },
+        ),
       );
     }
+
     // One: it fills the arch. Half a panel with an empty space under it
     // would read as something failing to load.
     final only = theirs ?? mine;
     if (only != null) {
-      return _DayPhoto(
-        message: only,
-        onTap: () => _open(
-          context,
-          only,
-          only == mine ? 'Your day' : "$theirName's day",
+      return ClipRRect(
+        borderRadius: _DayArch.shape,
+        child: _DayPhoto(
+          message: only,
+          onTap: () => _open(
+            only,
+            only == mine ? 'Your day' : "$theirName's day",
+          ),
         ),
       );
     }
+
     // Nothing to look at, so the tap does the only useful thing instead:
     // opens the camera so there is something here next time.
-    return _DayEmpty(onTap: () => context.go(Routes.flowers));
+    return ClipRRect(
+      borderRadius: _DayArch.shape,
+      child: _DayEmpty(onTap: () => context.go(Routes.flowers)),
+    );
   }
 
-  void _open(BuildContext context, FlowerMessage message, String who) {
+  /// One card in the deck.
+  ///
+  /// [depth] runs 0 (front: full size, undimmed, sitting at the bottom of
+  /// the panel) to 1 (back: scaled down from its top edge, dimmed, sitting
+  /// at the very top). Everything between is interpolated, so the two cards
+  /// pass through each other rather than popping.
+  Widget _deckCard({
+    required Key key,
+    required FlowerMessage message,
+    required double depth,
+    required VoidCallback onTap,
+  }) {
+    return Positioned(
+      key: key,
+      left: 0,
+      right: 0,
+      top: _DayArch.peek * (1 - depth),
+      height: _DayArch.height - _DayArch.peek,
+      child: Transform.scale(
+        scale: 1 + (_backScale - 1) * depth,
+        // From the top edge, not the centre: scaling about the middle would
+        // pull the back card's top down by as much as its position raises
+        // it, and the crescent would collapse to nothing.
+        alignment: Alignment.topCenter,
+        child: ClipRRect(
+          borderRadius: _DayArch.shape,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _DayPhoto(message: message, onTap: onTap),
+              // A scrim, not opacity. Fading the card would show the one
+              // underneath *through* it, which reads as a rendering fault
+              // rather than as depth.
+              IgnorePointer(
+                child: Opacity(
+                  opacity: _backDim * depth,
+                  child: Container(color: AppColors.ink),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _open(FlowerMessage message, String who) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => DayPhotoViewer(message: message, who: who),
       ),
     );
   }
+}
+
+/// Two dots, because "swipe to see the other one" is otherwise invisible.
+///
+/// Inside the arch rather than under it: the header's height is set by the
+/// arch, so hanging an indicator below would push the whole greeting block
+/// down by a line for the sake of two dots.
+class _DeckDots extends StatelessWidget {
+  const _DeckDots({required this.mineIsFront});
+
+  final bool mineIsFront;
+
+  @override
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: 0,
+      right: 0,
+      bottom: 10,
+      child: IgnorePointer(
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _dot(active: !mineIsFront),
+            const SizedBox(width: 5),
+            _dot(active: mineIsFront),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dot({required bool active}) => Container(
+        width: 5,
+        height: 5,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          // White with a shadow rather than a palette colour: these sit on
+          // an arbitrary photo and have to stay legible on a white one.
+          color: Colors.white.withValues(alpha: active ? 1 : .45),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: .35),
+              blurRadius: 3,
+            ),
+          ],
+        ),
+      );
 }
 
 /// One day photo, filling whatever box it is given.
@@ -705,27 +877,27 @@ class _DayPhoto extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // ⚠️ Watched from a provider, never signed inline. Calling
+    // `signedPhotoUrl` in build hands FutureBuilder a brand new Future on
+    // every rebuild — one signing round-trip per frame once anything here
+    // animates, with the placeholder flashing between each. See
+    // dayPhotoUrlProvider.
+    final url = ref.watch(dayPhotoUrlProvider(message.imagePath!)).valueOrNull;
+
     return GestureDetector(
       onTap: onTap,
-      child: FutureBuilder<String>(
-      future:
-          ref.read(flowerRepositoryProvider).signedPhotoUrl(message.imagePath!),
-      builder: (context, snap) {
-        if (!snap.hasData) {
-          return Container(color: AppColors.surfaceSubtle);
-        }
-        return Image.network(
-          snap.data!,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          // A failed image inside a decorative panel should look like the
-          // empty state, not like a broken page.
-          errorBuilder: (_, __, ___) =>
-              Container(color: AppColors.surfaceSubtle),
-        );
-        },
-      ),
+      child: url == null
+          ? Container(color: AppColors.surfaceSubtle)
+          : Image.network(
+              url,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              // A failed image inside a decorative panel should look like
+              // the empty state, not like a broken page.
+              errorBuilder: (_, __, ___) =>
+                  Container(color: AppColors.surfaceSubtle),
+            ),
     );
   }
 }

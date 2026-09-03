@@ -719,6 +719,23 @@ A shared timeline on Home: the three most recent things either of you did to the
 
 🔴 **"Your partner set an event" is not in the feed, because events are not real yet.** `events_screen.dart` builds its list in `initState` and keeps it in `setState` — there is no events table and nothing is persisted, so there is nothing to trigger on. The only calendar thing that *is* real is `reunions` (one row per pair), logged as `reunion_set`. Giving events a table is what unblocks the rest.
 
+## The day arch is a deck, not two halves (2026-09-03)
+
+When both of you have posted, the arch used to split 50/50. That gave each photo a **132×96 box — a landscape letterbox**. The camera shoots `ResolutionPreset.high`, which is 720×1280 in portrait, so `BoxFit.cover` into that kept **41% of the height and threw away 59% from the centre** — on a selfie, the band from the chin down. The best possible day, where both of you posted, rendered both of you worst.
+
+It is now a two-card deck: whichever card is in front gets almost the whole arch (a 9:16 photo loses ~9% off its sides and nothing else), the other sits behind it, and a horizontal swipe trades them. Their day is in front by default and returns there — it is what you opened the app for; yours is the receipt that you posted.
+
+- ⚠️ **The peek is carved out of the arch, not added above it.** Both cards are 12pt shorter than the panel and the front one is bottom-aligned, so the back card's crescent lands inside the same 132×194 box the arch has always occupied. Lifting the back card *out* of the box would have painted it over the collapsing top bar and grown the whole header by 22pt to avoid that.
+- The back card scales from `Alignment.topCenter`, not the centre. Scaling about the middle pulls its top down by as much as its position raises it and the crescent collapses to nothing.
+- A **scrim** dims the back card, not `Opacity`. Fading the card would show the front one *through* it, which reads as a rendering fault rather than as depth.
+- Cards are keyed on the message id, so the reorder on swap moves elements rather than rebuilding them — without the keys, every swap would re-run the photo's future.
+- Two dots inside the arch, bottom-centre. "Swipe to see the other one" is otherwise invisible, and hanging an indicator *below* the arch would push the greeting block down by a line for the sake of two dots. Tapping the back card's crescent also brings it forward — the same thing the swipe does, with a much easier target.
+- Either swipe direction swaps. With exactly two cards, honouring the direction would make half of all swipes silently do nothing.
+
+🔴 **A real bug this uncovered: `_DayPhoto` was calling `signedPhotoUrl` inside `build`.** `FutureBuilder` got a **brand new Future on every rebuild** — a fresh signing round-trip each time, with the placeholder flashing in between. It survived only because the arch almost never rebuilt; the moment anything animates it, that is one network request per frame. Now `dayPhotoUrlProvider` — a `FutureProvider.family`, **not autoDispose**, keyed on the storage path, 12h TTL — so the URL is stable and Flutter's image cache (which keys on it) can actually hit. Same shape as `avatarUrlProvider` and for the same reason.
+
+**Verified in the preview** by seeding one widget-only day photo per partner (`to_chat = false`, so nothing landed in the conversation), then deleting the rows and the storage objects again — both confirmed back to zero. Confirmed: both cards in the tree at the right depths, the crescent above the front card, the dots, and the signed URL resolving. ⚠️ The photos themselves never finished loading inside a screenshot window — **Supabase calls in this web preview take 30–120 s to resolve**, which is worth knowing before chasing an "empty" home screen again. The swipe gesture itself is unverified: the preview cannot complete a tap or drag on the Flutter canvas (the glass-pane coordinate hack registers a press and never lands the release).
+
 ## Photo avatars (2026-09-03)
 
 Settings → **Your picture** now takes a real photo — camera or gallery — alongside the eight flowers, in one sheet rather than behind a "photo or flower?" fork. They are the same decision.
