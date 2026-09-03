@@ -26,6 +26,7 @@ import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
+import '../../../activity/presentation/widgets/activity_timeline.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -61,6 +62,12 @@ class HomeScreen extends ConsumerWidget {
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
                   _HomeHeader(),
+                  SizedBox(height: AppSpace.md),
+                  // Above the mood chips and the heartbeat, because this is
+                  // the only block on the screen carrying news. Everything
+                  // below it is a control — something you came here to do
+                  // rather than something you came here to find out.
+                  ActivitySection(),
                   SizedBox(height: AppSpace.md),
                   _MoodCard(),
                   SizedBox(height: AppSpace.sm),

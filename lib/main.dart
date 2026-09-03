@@ -8,9 +8,11 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'app.dart';
 import 'core/dev/dev_login.dart';
 import 'core/services/app_notifications.dart';
+import 'core/services/partner_alerts.dart';
 import 'core/services/pulse_alerts.dart';
 import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
+import 'features/updates/data/update_alerts.dart';
 import 'features/widget/widget_sync.dart';
 
 Future<void> main() async {
@@ -57,6 +59,16 @@ Future<void> main() async {
   // Its own channel again — a "you haven't tapped yet" nudge is a different
   // kind of interruption from a pulse or a partner-set reminder.
   await HeartbeatNudge.init();
+
+  // Two more: messages and photos want a heads-up banner, shared activity
+  // wants to sit quietly in the shade. Android freezes importance at
+  // channel creation, so that difference has to be two channels — and it
+  // is also what lets either be retuned from Settings without the other.
+  await PartnerAlerts.init();
+
+  // And one more for a published build, at low importance. An update is
+  // never urgent enough to interrupt anything.
+  await UpdateAlerts.init();
 
   // Debug-only shortcut past the login screen. No-op in release builds.
   await maybeDevAutoLogin();

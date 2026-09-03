@@ -41,7 +41,9 @@ class AppBottomNav extends ConsumerWidget {
               _NavItem(
                 icon: CupertinoIcons.house_fill,
                 label: 'Home',
-                selected: location == Routes.home,
+                // startsWith, not ==: the activity feed is nested under
+                // Home and the tab has to stay lit inside it.
+                selected: location.startsWith(Routes.home),
                 onTap: () => context.go(Routes.home),
               ),
               _NavItem(

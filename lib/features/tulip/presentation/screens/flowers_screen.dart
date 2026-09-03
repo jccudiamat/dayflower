@@ -215,11 +215,11 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      // No tab bar in the thread at all. The chat is a sub-route of the
-      // Messages inbox now, so the nav belongs to the list you came from —
-      // keeping it here would sit it between the composer and the keyboard
-      // and make the conversation read as a form pinned inside a tab. The
-      // header's back chevron is the way out.
+      // No tab bar in the thread, even though Flowers is a top-level tab:
+      // it would sit between the composer and the keyboard and make the
+      // conversation read as a form pinned inside a tab. The Camera tab is
+      // full-bleed for the same reason. The header's back chevron is the
+      // way out, and it goes Home like the camera's × does.
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -471,12 +471,14 @@ class _ChatHeader extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          // The thread is a sub-route of the inbox now, so it needs a way
-          // back to it.
+          // Home, not `Routes.flowers` — that path is the Camera tab now
+          // (see messages_screen.dart), so backing out of the conversation
+          // used to drop you into a viewfinder. The chat is a top-level tab
+          // in its own right, so its way out is the same as the camera's ×.
           IconButton(
             onPressed: () => context.canPop()
                 ? context.pop()
-                : context.go(Routes.flowers),
+                : context.go(Routes.home),
             tooltip: 'Back',
             iconSize: 20,
             padding: const EdgeInsets.only(right: AppSpace.xs),

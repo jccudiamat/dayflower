@@ -81,4 +81,31 @@ class AppNotifications {
       return null;
     }
   }
+
+  // ── Notifications that just want to open a screen ──────────────────
+  //
+  // A reminder alarm has its own payload shape because it carries Snooze
+  // and Done and has to survive into a background isolate. Everything else
+  // — a message, a photo, an activity — wants one thing: open this route.
+  // Rather than give each of those its own prefix and its own parser, they
+  // share one.
+
+  static const _routePrefix = 'dayflower://open?route=';
+
+  /// The payload to attach to a notification that should open [route].
+  static String payloadForRoute(String route) => '$_routePrefix$route';
+
+  /// The route carried by [payload], or null if it isn't one of ours.
+  static String? routeOf(String? payload) =>
+      (payload != null && payload.startsWith(_routePrefix))
+          ? payload.substring(_routePrefix.length)
+          : null;
+
+  /// A route a notification tap wants opened, parked for `DayflowerApp`.
+  ///
+  /// Same trick as `ringingReminderId`: the plugin's tap callback has no
+  /// `BuildContext` and no `WidgetRef`, so it cannot navigate. It leaves
+  /// the destination here and the widget that owns the router picks it up.
+  static final ValueNotifier<String?> pendingRoute =
+      ValueNotifier<String?>(null);
 }

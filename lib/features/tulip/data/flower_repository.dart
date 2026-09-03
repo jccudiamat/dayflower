@@ -81,6 +81,30 @@ class FlowerMessage {
     return left.isNegative ? null : left;
   }
 
+  /// How this message reads on a lock screen.
+  ///
+  /// Lives on the model rather than in the notification service so it can
+  /// be tested without a phone attached — and because "what is this
+  /// message, in one line" is a question the thread and the widget could
+  /// both want answered later.
+  String get alertLine {
+    final note = this.note?.trim() ?? '';
+
+    // The caption leads for a photo: "📷 at the beach" says more than
+    // "shared their day" ever does, and the emoji keeps it obvious that
+    // there is a picture behind it.
+    if (isPhoto) return note.isEmpty ? 'Shared their day 📷' : '📷  $note';
+    if (isText) return note;
+
+    // Non-null by here: the two returns above cover every case where
+    // `flowerType` is null, and `FlowerCatalog.byId` falls back to the
+    // classic tulip rather than returning null for an id it doesn't know.
+    // So an unrecognised flower is named as a tulip, never as a crash.
+    final bloom = flower!;
+    final sent = 'Sent you a ${bloom.name} ${bloom.emoji}';
+    return note.isEmpty ? sent : '$sent — $note';
+  }
+
   /// The artwork this message carries, or null if it's text.
   Flower? get flower =>
       flowerType == null ? null : FlowerCatalog.byId(flowerType!);

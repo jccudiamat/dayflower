@@ -7,6 +7,7 @@ import 'core/theme/design_tokens.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/welcome_screen.dart';
 import 'features/activities/presentation/screens/activities_screen.dart';
+import 'features/activity/presentation/screens/activity_feed_screen.dart';
 import 'features/booth/presentation/screens/booth_screen.dart';
 import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
 import 'features/chapters/presentation/screens/chapters_screen.dart';
@@ -34,11 +35,23 @@ class Routes {
   static const pair = '/pair';
   static const shell = '/app';
   static const home = '/app/home';
+
+  /// The Camera tab, despite the name — see messages_screen.dart. The path
+  /// predates the camera getting a tab of its own and is kept so existing
+  /// deep links keep resolving.
   static const flowers = '/app/flowers';
 
-  /// The conversation itself. Sub-route of the Messages inbox, and nested
-  /// under it so AppBottomNav keeps the tab lit while you're in the thread.
+  /// The Flowers tab — the conversation itself.
+  ///
+  /// Still a path under `flowers` for deep-link compatibility, but no longer
+  /// a sub-route of anything: `flowers` is the Camera tab now and these two
+  /// are siblings. Nothing may navigate to `flowers` meaning "the chat".
   static const chat = '/app/flowers/chat';
+
+  /// Everything that has happened, in one list. A sub-route of Home, not
+  /// of the Activities hub: it is reached from the Home section, and the
+  /// hub is a menu of features rather than a log of them.
+  static const activityFeed = '/app/home/activity';
   static const events = '/app/events';
   static const activities = '/app/activities';
 
@@ -146,6 +159,9 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AppShell(child: child),
         routes: [
           GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
+          GoRoute(
+              path: Routes.activityFeed,
+              builder: (_, __) => const ActivityFeedScreen()),
           GoRoute(
               path: Routes.flowers,
               builder: (_, __) => const MessagesScreen()),

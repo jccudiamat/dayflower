@@ -425,11 +425,24 @@ final ValueNotifier<String?> ringingReminderId = ValueNotifier<String?>(null);
 /// `showsUserInterface: false`, so Android routes them to the background
 /// isolate ([reminderActionBackground]) whether or not the app is running —
 /// which is the point: snoozing must not require the app to come up.
+/// It also dispatches every *other* notification the app posts, because the
+/// plugin allows exactly one foreground handler for the whole process (see
+/// the class doc on [AppNotifications]). It lives in this file rather than
+/// in core because the alarm case is the one with real logic — the rest is
+/// "open this route" and has none.
 void handleNotificationTap(NotificationResponse response) {
-  final reminderId = ReminderScheduler.reminderIdOf(response.payload);
-  if (reminderId == null) return;
   if (response.actionId != null) return; // an action, handled in background
-  ringingReminderId.value = reminderId;
+
+  final reminderId = ReminderScheduler.reminderIdOf(response.payload);
+  if (reminderId != null) {
+    ringingReminderId.value = reminderId;
+    return;
+  }
+
+  // A message, a photo, an activity, a new build — anything whose whole
+  // intent is a destination.
+  final route = AppNotifications.routeOf(response.payload);
+  if (route != null) AppNotifications.pendingRoute.value = route;
 }
 
 /// Handles Snooze / Done **when the app is not running**.
