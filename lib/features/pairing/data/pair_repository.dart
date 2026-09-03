@@ -81,6 +81,37 @@ class PairRepository {
     return Pair.fromMap(row);
   }
 
+  /// Sets the day the two of you started, or clears it.
+  ///
+  /// ⚠️ Until migration 0021 there was **no update policy covering a linked
+  /// pair** — the only one required `user_b is null`, because it exists to
+  /// let the second partner join. An UPDATE here therefore matched no rows,
+  /// and PostgREST reports that as success with zero rows changed: this
+  /// would have reported "saved" and written nothing at all. The `.select()`
+  /// is what turns that silence back into a failure the caller can show.
+  Future<void> setTogetherSince({
+    required String pairId,
+    required DateTime? date,
+  }) async {
+    final rows = await _client
+        .from('pairs')
+        .update({'together_since': date == null ? null : _isoDate(date)})
+        .eq('id', pairId)
+        .select('id');
+
+    if (rows.isEmpty) {
+      throw StateError('That did not save.');
+    }
+  }
+
+  /// Date only — the column is a `date`, and a time of day on "the day we
+  /// got together" would land the anniversary differently in each of your
+  /// timezones. See the note on Pair.togetherSince.
+  static String _isoDate(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
   /// Deletes the pair. Cascades to flower_messages, heartbeats and
   /// reunions — this erases the couple's shared history, so callers must
   /// confirm destructively before invoking.

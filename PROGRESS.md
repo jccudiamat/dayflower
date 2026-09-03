@@ -22,6 +22,7 @@
 | 7 | Reminders (Activities) | 🔶 **Rebuilt as alarm clocks 2026-08-31, never run.** Rings on the alarm stream, takes over the lock screen, Snooze/Done from the notification with the app dead. Also fixed the missing manifest receivers that would have made *every* scheduled notification silently fail. Needs migration **0010** (amended in place). Cannot be tested in the web preview at all — the scheduler no-ops off Android/iOS. |
 | 8 | Finances (Activities) | 🔶 **v2 schema live 2026-08-31.** Was: Accounts (bank/cash/e-wallet/savings/investment) + a ledger of income/expense/transfer, in three scopes: Ours · Mine · theirs (read-only). Balances are always derived, never stored. Needs migration **0011**. |
 | 9 | Chapters (Activities) | 🔶 **Built 2026-08-29, never run.** A year = 12 chapters. Goals at the start of a month, moments as they happen, a written review at the end. Needs migration **0012**. |
+| — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. 🔴 Never seen running — the web preview hangs on the splash for clean HEAD too. |
 | — | Photo avatars | 🔶 **Built 2026-09-03.** Settings → Your picture takes a camera or gallery photo; the flower stays as the fallback everywhere. Migration **0020 applied**, storage policies exercised against a real signed-in session. 🔴 The home-screen widget still draws the flower emoji, not the photo. |
 | — | Activity feed | 🔶 **Built 2026-09-03.** Shared timeline on Home (latest 3 + View all), fed by triggers in migration **0019 — applied and verified live**. Cards deep-link to the thing itself. Rendered against seeded rows in the web preview and the read watermark round-tripped through RLS; the seed was then deleted, so the feed starts empty. 🔴 Events are not in it — `events_screen.dart` is still local `setState` with no table to trigger on. |
 | — | Notifications | 🔶 **Built 2026-09-03, phone-untestable here.** Messages, day photos and activity raise local notifications; heartbeats keep `PulseAlerts`. ⚠️ **Local, not push** — only fires while the process is alive. A swiped-away app hears nothing until it is next opened. See § Notifications — how far they actually reach. |
@@ -718,6 +719,53 @@ A shared timeline on Home: the three most recent things either of you did to the
 - Route is `/app/home/activity` — a sub-route of Home, not of the Activities hub, so the Home tab stays lit inside it. `AppBottomNav` now matches Home with `startsWith` for that reason.
 
 🔴 **"Your partner set an event" is not in the feed, because events are not real yet.** `events_screen.dart` builds its list in `initState` and keeps it in `setState` — there is no events table and nothing is persisted, so there is nothing to trigger on. The only calendar thing that *is* real is `reunions` (one row per pair), logged as `reunion_set`. Giving events a table is what unblocks the rest.
+
+## The Us page, and the dates that come out of one date (2026-09-03)
+
+The pair pill on Home used to open **Settings**. That was the same mistake twice over: a control showing *both* of you led to a screen about one. It opens **Us** now (`/app/home/us`, a sub-route of Home so the tab stays lit), and Settings is the gear in that page's corner — the right depth for the one personal thing on a shared page.
+
+**The split worth keeping:** everything on Us is shared and reads identically on both phones. Anything belonging to one person — your name, your flower, your alerts — stays in Settings.
+
+`us_screen.dart` was **530 lines of unrouted mock** before this: hardcoded "Jessie"/"Sheena", a fake save button, reachable from nowhere. It has been replaced outright rather than adapted.
+
+### One date drives the rest
+
+`pairs.together_since` (migration **0021, applied**) is a `date`, not a timestamptz: "we got together on 10 April 2022" has no time of day, and giving it one lands the anniversary on a different day for each of you the moment you are in different timezones — the normal case here, not the edge case. Null means "not said yet", and everything derived stays hidden rather than guessed.
+
+From it, with nobody entering anything twice: days together, the **monthsary** (every 10th) and the **anniversary** (every 10 April). Both appear on Dates on their own, as **derived rows with negative ids** — they cannot be edited or deleted there because there is no row behind them; tapping says where they *do* change. The mock anniversary and monthsary that used to sit in the Events seed are gone, or each would have shown twice on two different days.
+
+⚠️ **The awkward cases are real and are tested** (`test/couple_dates_test.dart`, 14 tests):
+- A couple who started on the **31st** has no 31st in April. Rolling over silently lands the "monthsary" on 1 May and skips the month; it clamps to the 30th instead. One test walks two years and asserts every month produces a date *inside* that month.
+- A **29 February** couple gets 28 February in non-leap years, not 1 March, which is the wrong month.
+- `daysBetween` is built from date parts, not `Duration.inDays` — across a DST change a 24-hour block is 23 or 25 hours and "days together" would stall or jump by one for no visible reason.
+- A start date in the future reads as `Today`, not a negative.
+
+### The numbers
+
+`couple_stats(pair, offset_minutes)` — one RPC, `SECURITY INVOKER`, so it counts through the caller's own RLS and can only ever total a pair they belong to. Verified through RLS as the dev user: 263 hearts, 13 flowers, 17 photos, 36 messages, 6-day streak.
+
+- ⚠️ **Deliberately not counted client-side.** The heartbeat stream is capped at the newest 500 taps, so a client-side total would quietly stop at 500 and look like a plateau — wrong in a way nobody reports because it looks plausible.
+- The **streak** is consecutive days with *anything* exchanged — flower, photo, message or heartbeat. Generous on purpose: the number is about showing up, not about one feature. The reader's UTC offset is passed in so the day boundary is theirs; without it a couple would watch their streak break at 4am. Capped at 3,650 iterations so one card can never become a decade-long scan.
+
+### 🔴 Nothing could update a linked pair before 0021
+
+The only update policy was `pairs_accept_invite`, which requires `user_b is null` — it exists so the second partner can join. An UPDATE setting `together_since` therefore matched **no rows**, and PostgREST reports that as *success with zero rows changed*: the app would have said "saved" and written nothing. Found by reading 0001, not by running it. `setTogetherSince` now uses `.select()` so that silence becomes a failure the caller can show.
+
+⚠️ The new `pairs_update_details` policy is broad — a policy cannot compare OLD to NEW, and 0002 granted UPDATE on every column — so **`pairs_lock_identity` (a BEFORE UPDATE trigger) is what makes it safe**, pinning `user_a`, `invite_code` and `created_at`, and `user_b` once somebody has joined. Verified: a member's UPDATE setting `together_since` **and** `invite_code = 'HACKED'` wrote the date and left the code untouched. **The policy and the trigger are one unit — do not keep either without the other.**
+
+### Premium card
+
+Static, as asked. **$4.99/month is per couple, not per person** — that is a product decision and the card says so in words, because it is the half most likely to be misread later. There is no billing anywhere in this app: no store product, no receipt validation, no entitlement, and none of the listed features are gated. The button says "Not available yet — nothing is charged" rather than pretending. Do not make it look live until a real purchase flow exists.
+
+## ⚠️ The web preview hangs on the splash (2026-09-03)
+
+**Before debugging a stuck splash again, read this.** On 2026-09-03 the preview stopped getting past the splash screen: `userProfileProvider` sits in `AsyncLoading` with a previous value of null and never resolves, so the gate correctly waits forever. `currentPairProvider` resolves fine in the same session, and the same `users` query answers in **1.0s** over curl with a real user token — so it is not the server, the RLS, or the query.
+
+**It is not the app either.** Verified by `git stash`-ing all work in progress and running clean `HEAD` (build 19, the build shipped and working on the phone): **it hangs identically**. Roughly an hour went into chasing this as a regression before running that control.
+
+The lesson, cheaply: **when the preview misbehaves, run clean HEAD first.** It is one stash and one restart, and it answers "mine or not" before any theorising.
+
+`git stash push -u` on this repo prints `warning: failed to remove … Permission denied` for empty directories and leaves the working tree dirty — the stash *is* created, so follow it with `git checkout -- .` and the tree is genuinely at HEAD.
 
 ## 🔴 Saving a nickname restarted navigation (2026-09-03)
 

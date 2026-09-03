@@ -1009,11 +1009,15 @@ class _HomeBar extends ConsumerWidget {
 }
 
 /// Both faces and both names in one control — the "us" of the app, and the
-/// way back into Settings.
+/// way into the page about the two of you.
 ///
 /// Replaces the lone profile avatar the old header carried: a couples app
 /// showing only your own face at the top was always slightly wrong, and the
 /// pair is what the whole screen is about.
+///
+/// It used to open Settings, which was the same mistake one layer down: a
+/// control showing *both* of you led to a screen about one. It opens Us
+/// now, and Settings is the gear in that page's corner.
 class _CouplePill extends ConsumerWidget {
   const _CouplePill();
 
@@ -1035,9 +1039,9 @@ class _CouplePill extends ConsumerWidget {
 
     return Semantics(
       button: true,
-      label: 'Profile and settings',
+      label: 'You and your partner',
       child: GestureDetector(
-        onTap: () => context.go(Routes.settings),
+        onTap: () => context.go(Routes.us),
         child: Container(
           padding: const EdgeInsets.fromLTRB(4, 4, AppSpace.xs, 4),
           decoration: BoxDecoration(

@@ -2,11 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../home/presentation/widgets/clocks_card.dart';
+import '../../../pairing/data/pair_repository.dart';
+import '../../../us/domain/couple_dates.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
 
@@ -217,14 +220,14 @@ _Phase? _phaseOn(DateTime d) {
 //   EVENTS SCREEN — one page, no tabs
 // ═══════════════════════════════════════════════════
 
-class EventsScreen extends StatefulWidget {
+class EventsScreen extends ConsumerStatefulWidget {
   const EventsScreen({super.key});
 
   @override
-  State<EventsScreen> createState() => _EventsScreenState();
+  ConsumerState<EventsScreen> createState() => _EventsScreenState();
 }
 
-class _EventsScreenState extends State<EventsScreen> {
+class _EventsScreenState extends ConsumerState<EventsScreen> {
   Timer? _timer;
   DateTime _now = DateTime.now();
 
@@ -240,28 +243,73 @@ class _EventsScreenState extends State<EventsScreen> {
   static const String _myName = 'Bunny';
   static const String _partnerName = 'Sunshine';
 
-  // Mock seed data, anchored relative to today so the countdown is
-  // always live rather than expiring against hardcoded 2026 dates.
-  late List<_Event> _events;
+  // Mock seed data, anchored relative to today so the countdown is always
+  // live rather than expiring against hardcoded 2026 dates.
+  //
+  // 🔴 Still mock, and still not persisted anywhere — see the note in
+  // PROGRESS.md. `_derived` below is the only part of this screen backed by
+  // real data.
+  late List<_Event> _manual;
+
+  /// Everything the list shows: the couple's real milestones first, then
+  /// whatever has been added by hand.
+  ///
+  /// The monthsary and the anniversary are **derived, not stored**. They
+  /// come from one date on the pair row, so there is nothing to keep in
+  /// step and nothing to get out of step: change the start date and both
+  /// move. That is also why they cannot be edited or deleted here — there
+  /// is no row behind them to change. Editing the start date on Us is the
+  /// way to change them, which is where it belongs.
+  List<_Event> get _events => [..._derived, ..._manual];
+
+  /// Negative ids, so [_openEventSheet] can tell a derived milestone from
+  /// a real entry without carrying a second flag through the whole screen.
+  static const int _monthsaryId = -1;
+  static const int _anniversaryId = -2;
+
+  List<_Event> get _derived {
+    final start =
+        ref.watch(currentPairProvider).valueOrNull?.togetherSince;
+    // Nothing is invented before the couple has said when they started.
+    if (start == null) return const [];
+
+    final now = DateTime.now();
+    final monthsary = nextMonthsary(start, now);
+    final anniversary = nextAnniversary(start, now);
+
+    return [
+      _Event(
+        id: _monthsaryId,
+        kind: _EventKind.monthsary,
+        emoji: _kindStyles[_EventKind.monthsary]!.emoji,
+        title: '${monthsBetween(start, monthsary)} Month Monthsary',
+        date: _iso(monthsary),
+      ),
+      _Event(
+        id: _anniversaryId,
+        kind: _EventKind.anniversary,
+        emoji: _kindStyles[_EventKind.anniversary]!.emoji,
+        title:
+            '${anniversaryNumber(start, anniversary)} Year Anniversary',
+        date: _iso(anniversary),
+      ),
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
     final today = _startOfDay(DateTime.now());
-    _events = [
+    // The mock anniversary and monthsary that used to sit here are gone:
+    // both are derived from the pair's start date now, and keeping the
+    // fakes would have shown each of them twice, on two different days.
+    _manual = [
       _Event(
         id: 1,
         kind: _EventKind.birthday,
         emoji: '🎂',
         title: "$_partnerName's Birthday",
         date: _iso(today.add(const Duration(days: 21))),
-      ),
-      _Event(
-        id: 2,
-        kind: _EventKind.anniversary,
-        emoji: '💞',
-        title: '6 Month Anniversary',
-        date: _iso(today.add(const Duration(days: 47))),
       ),
       _Event(
         id: 3,
@@ -271,13 +319,6 @@ class _EventsScreenState extends State<EventsScreen> {
         date: _iso(today.add(const Duration(days: 84))),
         location: 'Tokyo, Japan 🇯🇵',
         note: "Can't wait to hold you again.",
-      ),
-      _Event(
-        id: 4,
-        kind: _EventKind.monthsary,
-        emoji: '🌷',
-        title: 'Monthsary',
-        date: _iso(today.subtract(const Duration(days: 12))),
       ),
     ];
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -310,6 +351,18 @@ class _EventsScreenState extends State<EventsScreen> {
   // ── Sheets ─────────────────────────────────────────
 
   Future<void> _openEventSheet(_Event? event) async {
+    // A derived milestone has no row behind it, so there is nothing here to
+    // edit or delete. Saying where it *does* change beats a disabled tap
+    // that leaves you guessing.
+    if (event != null && event.id < 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('This comes from your start date — change it on Us.'),
+        ),
+      );
+      return;
+    }
+
     final isNew = event == null;
     final draft = event ??
         _Event(
@@ -329,11 +382,11 @@ class _EventsScreenState extends State<EventsScreen> {
     final (deleted, saved) = result;
     setState(() {
       if (deleted) {
-        _events = _events.where((e) => e.id != saved.id).toList();
+        _manual = _manual.where((e) => e.id != saved.id).toList();
       } else if (isNew) {
-        _events = [..._events, saved];
+        _manual = [..._manual, saved];
       } else {
-        _events = _events.map((e) => e.id == saved.id ? saved : e).toList();
+        _manual = _manual.map((e) => e.id == saved.id ? saved : e).toList();
       }
     });
   }

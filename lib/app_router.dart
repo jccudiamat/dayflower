@@ -23,6 +23,7 @@ import 'features/reminders/presentation/screens/reminders_screen.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
+import 'features/us/presentation/screens/us_screen.dart';
 
 // ── Route names ──────────────────────────────
 // Tab labels: Home · Flowers · Events · Activities.
@@ -47,6 +48,12 @@ class Routes {
   /// a sub-route of anything: `flowers` is the Camera tab now and these two
   /// are siblings. Nothing may navigate to `flowers` meaning "the chat".
   static const chat = '/app/flowers/chat';
+
+  /// The couple's own page — both of you, the numbers, and the date
+  /// everything else is derived from. A sub-route of Home, like the
+  /// activity feed: it is reached from the pair pill on Home's top bar, so
+  /// the Home tab should stay lit inside it.
+  static const us = '/app/home/us';
 
   /// Everything that has happened, in one list. A sub-route of Home, not
   /// of the Activities hub: it is reached from the Home section, and the
@@ -240,6 +247,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AppShell(child: child),
         routes: [
           GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
+          GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
           GoRoute(
               path: Routes.activityFeed,
               builder: (_, __) => const ActivityFeedScreen()),

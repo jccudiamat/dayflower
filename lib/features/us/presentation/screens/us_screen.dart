@@ -1,486 +1,257 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app_router.dart';
+import '../../../../core/models/pair.dart';
+import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/ios_back_button.dart';
+import '../../../../core/widgets/timezone_picker.dart';
+import '../../../../core/widgets/user_avatar.dart';
+import '../../../../core/utils/zone_distance.dart';
+import '../../../onboarding/data/user_repository.dart';
+import '../../../pairing/data/pair_repository.dart';
+import '../../data/couple_stats.dart';
+import '../../domain/couple_dates.dart';
 
-class UsScreen extends StatefulWidget {
+/// The couple's own page — the "us" the whole app is about.
+///
+/// Reached from the pair pill on Home, which used to go straight to
+/// Settings. That was always slightly wrong: the pill shows *both* of you,
+/// and it opened a screen about one. Settings is still one tap away, from
+/// the gear in the corner, which is the right depth for it.
+///
+/// Everything here is shared and true for both of you. Anything that
+/// belongs to one person — your name, your flower, your alerts — is in
+/// Settings, and the split is worth keeping: this page should read the same
+/// on both phones.
+class UsScreen extends ConsumerWidget {
   const UsScreen({super.key});
 
   @override
-  State<UsScreen> createState() => _UsScreenState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pair = ref.watch(currentPairProvider).valueOrNull;
+    final me = ref.watch(userProfileProvider).valueOrNull;
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
 
-class _UsScreenState extends State<UsScreen> {
-  final _meCtrl = TextEditingController(text: 'Jessie');
-  final _herCtrl = TextEditingController(text: 'Sheena');
-  final _myPetCtrl = TextEditingController(text: 'Hubby');
-  final _herPetCtrl = TextEditingController(text: 'Wifey');
-  bool _saved = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _myPetCtrl.addListener(_onPetChange);
-    _herPetCtrl.addListener(_onPetChange);
-  }
-
-  void _onPetChange() => setState(() {});
-
-  @override
-  void dispose() {
-    _myPetCtrl.removeListener(_onPetChange);
-    _herPetCtrl.removeListener(_onPetChange);
-    _meCtrl.dispose();
-    _herCtrl.dispose();
-    _myPetCtrl.dispose();
-    _herPetCtrl.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    FocusScope.of(context).unfocus();
-    setState(() => _saved = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _saved = false);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      bottomNavigationBar: const AppBottomNav(),
       body: SafeArea(
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _AppHeader(onSettingsTap: () => context.go(Routes.settings)),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpace.sm, AppSpace.sm, AppSpace.sm, 0),
+              child: Row(
+                children: [
+                  IosBackButton(onTap: () => context.go(Routes.home)),
+                  const SizedBox(width: AppSpace.xs),
+                  Expanded(child: Text('Us', style: AppText.hero())),
+                  // The one personal thing on a shared page, so it is an
+                  // icon in the corner rather than a row in the list.
+                  _GearButton(onTap: () => context.go(Routes.settings)),
+                ],
+              ),
+            ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Couple card
-                    _DsCard(
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 84,
-                            height: 48,
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  left: 0,
-                                  child: _Avatar(
-                                      initials: 'L',
-                                      color: AppColors.brand,
-                                      size: 48),
-                                ),
-                                Positioned(
-                                  left: 36,
-                                  child: _Avatar(
-                                      initials: 'S',
-                                      color: AppColors.sage,
-                                      size: 48),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${_myPetCtrl.text} & ${_herPetCtrl.text}',
-                                  style: const TextStyle(
-                                    fontFamily: 'Georgia',
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w600,
-                                    color: Color(0xFF160810),
-                                    height: 1.4,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                const Text(
-                                  'Together 182 days · Day 47 streak 🔥',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.muted,
-                                    height: 1.5,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    // Stats row
-                    Row(
-                      children: [
-                        for (final stat in const [
-                          ('🌷', '47', 'Tulips'),
-                          ('🔥', '47', 'Streak'),
-                          ('💗', '312', 'Hearts'),
-                          ('🗓', '182', 'Days'),
-                        ]) ...[
-                          Expanded(
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF1C1228),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(stat.$1,
-                                      style: const TextStyle(fontSize: 22)),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    stat.$2,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                      height: 1,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    stat.$3.toUpperCase(),
-                                    style: const TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.brand,
-                                      letterSpacing: 0.7,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (stat.$3 != 'Days') const SizedBox(width: 8),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    const _SectionLabel(text: 'Endearments'),
-                    const SizedBox(height: 8),
-                    // Endearments card
-                    _DsCard(
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _EditField(
-                                  label: 'Your name',
-                                  controller: _meCtrl,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _EditField(
-                                  label: "Partner's name",
-                                  controller: _herCtrl,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _EditField(
-                                  label: 'They call you',
-                                  controller: _myPetCtrl,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _EditField(
-                                  label: 'You call them',
-                                  controller: _herPetCtrl,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _PrimaryButton(
-                            label: _saved ? '✓ Saved!' : 'Save endearments',
-                            onTap: _save,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Premium card
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        gradient: const LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF160810), Color(0xFF2D0A20)],
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Text('⭐', style: TextStyle(fontSize: 24)),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Dayflower Premium',
-                                    style: TextStyle(
-                                      fontFamily: 'Georgia',
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.white,
-                                      height: 1.4,
-                                    ),
-                                  ),
-                                  Text(
-                                    r'$4.99 / month per couple',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white.withValues(alpha: .4),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          for (final f in const [
-                            '🌷 Rare & seasonal flower variants',
-                            '🌿 Full garden view',
-                            '📷 Unlimited photo strips',
-                            '📸 Flower recognition (TFLite)',
-                            '🔥 Streak repair',
-                          ])
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 4),
-                              child: Text(
-                                f,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withValues(alpha: .5),
-                                ),
-                              ),
-                            ),
-                          const SizedBox(height: 16),
-                          _PrimaryButton(
-                            label: 'Unlock Premium 💗',
-                            onTap: () {},
-                          ),
-                        ],
-                      ),
-                    ),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                    AppSpace.sm, AppSpace.sm, AppSpace.sm, AppSpace.md),
+                children: [
+                  _CoupleHero(me: me, partner: partner, pair: pair),
+                  const SizedBox(height: AppSpace.md),
+                  const _StatsRow(),
+                  const SizedBox(height: AppSpace.md),
+                  _TogetherSinceCard(pair: pair),
+                  if (pair?.togetherSince != null) ...[
+                    const SizedBox(height: AppSpace.sm),
+                    _MilestonesCard(start: pair!.togetherSince!),
                   ],
-                ),
+                  const SizedBox(height: AppSpace.sm),
+                  _WhereYouAreCard(me: me, partner: partner),
+                  const SizedBox(height: AppSpace.md),
+                  const _PremiumCard(),
+                ],
               ),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: const AppBottomNav(),
     );
   }
 }
 
-// ── Shared atoms ─────────────────────────────────────────────────────────────
-
-class _AppHeader extends StatelessWidget {
-  const _AppHeader({required this.onSettingsTap});
-  final VoidCallback onSettingsTap;
+class _GearButton extends StatelessWidget {
+  const _GearButton({required this.onTap});
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Image.asset(
-              'assets/images/logo.png',
-              width: 30,
-              height: 30,
-              fit: BoxFit.contain,
-              errorBuilder: (_, __, ___) => const Icon(
-                Icons.local_florist_rounded,
-                size: 30,
-                color: AppColors.brand,
-              ),
-            ),
+    return Semantics(
+      button: true,
+      label: 'Your settings',
+      child: Material(
+        color: AppColors.surface,
+        shape: const CircleBorder(
+          side: BorderSide(color: AppColors.border),
+        ),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: const Padding(
+            padding: EdgeInsets.all(9),
+            child: Icon(CupertinoIcons.gear_alt_fill,
+                size: 20, color: AppColors.body),
           ),
-          const SizedBox(width: 8),
-          RichText(
-            text: const TextSpan(
-              style: TextStyle(
-                fontFamily: 'Georgia',
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                height: 1,
-                letterSpacing: -0.5,
-              ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ── Who you are ─────────────────────────── */
+
+/// Both faces, both names, and how long it has been.
+class _CoupleHero extends StatelessWidget {
+  const _CoupleHero({
+    required this.me,
+    required this.partner,
+    required this.pair,
+  });
+
+  final UserProfile? me;
+  final UserProfile? partner;
+  final Pair? pair;
+
+  static const double _face = 76;
+
+  @override
+  Widget build(BuildContext context) {
+    final start = pair?.togetherSince;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.sm, vertical: AppSpace.md),
+      decoration: BoxDecoration(
+        gradient: AppGradients.cta,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+      ),
+      child: Column(
+        children: [
+          SizedBox(
+            height: _face,
+            // Overlapped rather than side by side: two touching circles read
+            // as a couple, two spaced ones read as a list. Same reasoning as
+            // the pill this page is reached from.
+            width: partner == null ? _face : _face * 1.66,
+            child: Stack(
               children: [
-                TextSpan(
-                  text: '2',
-                  style: TextStyle(color: AppColors.brand),
-                ),
-                TextSpan(
-                  text: 'Lip',
-                  style: TextStyle(color: Color(0xFF5C1828)),
-                ),
+                _ringed(me),
+                if (partner != null)
+                  Positioned(left: _face * 0.66, child: _ringed(partner)),
               ],
             ),
           ),
-          const Spacer(),
-          GestureDetector(
-            onTap: onSettingsTap,
-            child: const Text('⚙️', style: TextStyle(fontSize: 22)),
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            _names,
+            textAlign: TextAlign.center,
+            style: AppText.title(Colors.white).copyWith(fontSize: 21),
           ),
+          if (start != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              '${togetherLabel(start, DateTime.now())} together',
+              style: AppText.body(Colors.white.withValues(alpha: .92)),
+            ),
+          ],
         ],
       ),
     );
   }
-}
 
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.initials, required this.color, this.size = 48});
-  final String initials;
-  final Color color;
-  final double size;
+  String get _names {
+    final mine = me?.petName ?? me?.displayName;
+    final theirs = partner?.petName ?? partner?.displayName;
+    // Before pairing there is no "&" to show, and "Bunny & null" is worse
+    // than one name on its own.
+    return [if (mine != null) mine, if (theirs != null) theirs].join('  &  ');
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .12),
-        shape: BoxShape.circle,
-        border: Border.all(color: color.withValues(alpha: .18), width: 2),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        initials,
-        style: TextStyle(
-          fontFamily: 'Georgia',
-          fontSize: size * .38,
-          fontWeight: FontWeight.w700,
-          color: color,
+  Widget _ringed(UserProfile? profile) => Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withValues(alpha: .9), width: 2),
         ),
-      ),
-    );
-  }
+        child: UserAvatar(profile, size: _face - 4),
+      );
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.text});
-  final String text;
+/* ── The numbers ─────────────────────────── */
+
+/// Four dark tiles, in the shape of the reference.
+///
+/// Dark on a light page on purpose: these are the only numbers on the
+/// screen, and inverting them is what makes four small tiles read as one
+/// block of statistics rather than four more cards.
+class _StatsRow extends ConsumerWidget {
+  const _StatsRow();
 
   @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 4),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: AppColors.muted,
-          letterSpacing: 1.2,
-          height: 1.2,
-        ),
-      ),
-    );
-  }
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(coupleStatsProvider);
+    final pair = ref.watch(currentPairProvider).valueOrNull;
+    final start = pair?.togetherSince;
 
-class _DsCard extends StatelessWidget {
-  const _DsCard({required this.child});
-  final Widget child;
+    final data = stats.valueOrNull;
+    // A dash, not a zero. "0 hearts" is a claim; while the count is in
+    // flight the app does not have one to make.
+    String show(int? n) => n == null ? '—' : '$n';
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: .06),
-            blurRadius: 4,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-}
-
-class _EditField extends StatelessWidget {
-  const _EditField({required this.label, required this.controller});
-  final String label;
-  final TextEditingController controller;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(
-          label.toUpperCase(),
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            color: AppColors.brand,
-            letterSpacing: 0.8,
+        Expanded(
+          child: _StatTile(
+            emoji: '🌷',
+            value: show(data?.flowers),
+            label: 'FLOWERS',
           ),
         ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          style: const TextStyle(
-            fontSize: 14,
-            color: Color(0xFF160810),
-            height: 1.6,
+        const SizedBox(width: AppSpace.xs),
+        Expanded(
+          child: _StatTile(
+            emoji: '🔥',
+            value: show(data?.streak),
+            label: 'STREAK',
           ),
-          decoration: InputDecoration(
-            isDense: true,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            filled: true,
-            fillColor: AppColors.background,
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.border, width: 1.5),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: AppColors.brand, width: 1.5),
-            ),
+        ),
+        const SizedBox(width: AppSpace.xs),
+        Expanded(
+          child: _StatTile(
+            emoji: '💗',
+            value: show(data?.hearts),
+            label: 'HEARTS',
+          ),
+        ),
+        const SizedBox(width: AppSpace.xs),
+        Expanded(
+          child: _StatTile(
+            emoji: '📅',
+            // The only tile that is not a count. Hidden behind a dash until
+            // the start date exists, rather than showing a confident 0.
+            value: start == null
+                ? '—'
+                : '${daysBetween(start, DateTime.now())}',
+            label: 'DAYS',
           ),
         ),
       ],
@@ -488,41 +259,452 @@ class _EditField extends StatelessWidget {
   }
 }
 
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({required this.label, required this.onTap});
+class _StatTile extends StatelessWidget {
+  const _StatTile({
+    required this.emoji,
+    required this.value,
+    required this.label,
+  });
+
+  final String emoji;
+  final String value;
   final String label;
-  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
+    return Semantics(
+      label: '$value $label',
       child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+        padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [AppColors.brand, AppColors.brandDark],
-          ),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: AppColors.brand.withValues(alpha: .25),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
+          color: AppColors.inkSurface,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+        ),
+        child: Column(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 20)),
+            const SizedBox(height: 6),
+            FittedBox(
+              // Four digits of heartbeats in a quarter-width tile would
+              // otherwise overflow rather than shrink.
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                maxLines: 1,
+                style: AppText.title(Colors.white).copyWith(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
+            const SizedBox(height: 2),
+            Text(label, style: AppText.label(AppColors.brandLight)),
           ],
         ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: Colors.white,
+      ),
+    );
+  }
+}
+
+/* ── The date everything else comes from ─── */
+
+class _TogetherSinceCard extends ConsumerStatefulWidget {
+  const _TogetherSinceCard({required this.pair});
+  final Pair? pair;
+
+  @override
+  ConsumerState<_TogetherSinceCard> createState() =>
+      _TogetherSinceCardState();
+}
+
+class _TogetherSinceCardState extends ConsumerState<_TogetherSinceCard> {
+  bool _saving = false;
+
+  Future<void> _pick() async {
+    final pair = widget.pair;
+    if (pair == null || !pair.isLinked || _saving) return;
+
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: pair.togetherSince ?? now,
+      // Nobody's start date is in the future, and letting one be chosen
+      // gives every derived number a negative to render.
+      firstDate: DateTime(now.year - 60),
+      lastDate: now,
+      helpText: 'When did you start?',
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(pairRepositoryProvider)
+          .setTogetherSince(pairId: pair.id, date: picked);
+      ref.invalidate(currentPairProvider);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("That didn't save. Try again?")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final start = widget.pair?.togetherSince;
+
+    return _Card(
+      onTap: _pick,
+      child: Row(
+        children: [
+          const Text('💞', style: TextStyle(fontSize: 24)),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('TOGETHER SINCE', style: AppText.label()),
+                const SizedBox(height: 3),
+                Text(
+                  start == null
+                      ? 'Tap to set the day'
+                      : DateFormat('d MMMM y').format(start),
+                  style: AppText.subtitle(
+                    start == null ? AppColors.muted : AppColors.ink,
+                  ),
+                ),
+                if (start == null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Your monthsary and anniversary come from this.',
+                    style: AppText.caption(),
+                  ),
+                ],
+              ],
+            ),
           ),
+          if (_saving)
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          else
+            const Icon(CupertinoIcons.chevron_forward,
+                size: 16, color: AppColors.muted),
+        ],
+      ),
+    );
+  }
+}
+
+/// What the start date implies, without anybody entering it twice.
+class _MilestonesCard extends StatelessWidget {
+  const _MilestonesCard({required this.start});
+  final DateTime start;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final monthsary = nextMonthsary(start, now);
+    final anniversary = nextAnniversary(start, now);
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('COMING UP', style: AppText.label()),
+          const SizedBox(height: AppSpace.xs),
+          _MilestoneRow(
+            emoji: '🌷',
+            title: '${monthsBetween(start, monthsary)} month monthsary',
+            date: monthsary,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.xs),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          _MilestoneRow(
+            emoji: '💞',
+            title:
+                '${anniversaryNumber(start, anniversary)} year anniversary',
+            date: anniversary,
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Text(
+            'Both are worked out from your start date — they appear on '
+            'Dates on their own.',
+            style: AppText.caption(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MilestoneRow extends StatelessWidget {
+  const _MilestoneRow({
+    required this.emoji,
+    required this.title,
+    required this.date,
+  });
+
+  final String emoji;
+  final String title;
+  final DateTime date;
+
+  @override
+  Widget build(BuildContext context) {
+    final days = daysBetween(DateTime.now(), date);
+    final away = days == 0
+        ? 'Today'
+        : days == 1
+            ? 'Tomorrow'
+            : 'in $days days';
+
+    return Row(
+      children: [
+        Text(emoji, style: const TextStyle(fontSize: 20)),
+        const SizedBox(width: AppSpace.xs),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: AppText.subtitle()),
+              Text(DateFormat('EEEE d MMMM').format(date),
+                  style: AppText.caption()),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+          decoration: BoxDecoration(
+            color: AppColors.blush,
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Text(
+            away,
+            style: AppText.label(AppColors.brandDark),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/* ── Where you both are ──────────────────── */
+
+class _WhereYouAreCard extends ConsumerWidget {
+  const _WhereYouAreCard({required this.me, required this.partner});
+
+  final UserProfile? me;
+  final UserProfile? partner;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final distance = distanceLabel(me?.timezone, partner?.timezone);
+
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text('WHERE YOU ARE', style: AppText.label())),
+              // Hidden entirely when a zone is unknown rather than guessed
+              // at — same rule as the home greeting.
+              if (distance != null)
+                Text(distance,
+                    style: AppText.caption(AppColors.brandDark)
+                        .copyWith(fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: AppSpace.xs),
+          _PersonRow(profile: me, isMe: true),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: AppSpace.xs),
+            child: Divider(height: 1, color: AppColors.border),
+          ),
+          _PersonRow(profile: partner, isMe: false),
+        ],
+      ),
+    );
+  }
+}
+
+class _PersonRow extends StatelessWidget {
+  const _PersonRow({required this.profile, required this.isMe});
+
+  final UserProfile? profile;
+  final bool isMe;
+
+  @override
+  Widget build(BuildContext context) {
+    final zone = profile?.timezone;
+    final localTime =
+        zone == null ? null : tz.TZDateTime.now(safeLocation(zone));
+
+    return Row(
+      children: [
+        UserAvatar(profile, size: 38),
+        const SizedBox(width: AppSpace.xs),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                profile?.petName ?? profile?.displayName ?? '—',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.subtitle(),
+              ),
+              Text(
+                zone == null ? 'No city set' : zoneCity(zone),
+                style: AppText.caption(),
+              ),
+            ],
+          ),
+        ),
+        if (localTime != null)
+          Text(
+            DateFormat('h:mm a').format(localTime),
+            style: AppText.subtitle(AppColors.body),
+          ),
+      ],
+    );
+  }
+}
+
+/* ── Premium ─────────────────────────────── */
+
+/// ⚠️ **Static on purpose — there is no billing in this app.** No store
+/// product, no receipt validation, no entitlement anywhere. None of the
+/// features listed are gated today, so this card is a statement of intent
+/// and the button says so when tapped rather than pretending to charge
+/// anyone. Wiring it up means a real purchase flow; do not make this look
+/// live until that exists.
+///
+/// The price is **per couple, not per person**: $4.99 covers both of you.
+/// That is a product decision, and it is the one thing on this card that
+/// would be easy to get wrong later, so it is on the card in words.
+class _PremiumCard extends StatelessWidget {
+  const _PremiumCard();
+
+  static const _features = <(String, String)>[
+    ('🌸', 'Rare & seasonal flower variants'),
+    ('🌿', 'Full garden view'),
+    ('📸', 'Unlimited photo strips'),
+    ('🔍', 'Flower recognition'),
+    ('🔥', 'Streak repair'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpace.md),
+      decoration: BoxDecoration(
+        color: AppColors.inkSurface,
+        borderRadius: BorderRadius.circular(AppRadius.xl),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('⭐', style: TextStyle(fontSize: 30)),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Dayflower Premium',
+                        style: AppText.title(Colors.white)),
+                    Text(
+                      // Spelled out because it is the unusual half of the
+                      // pricing and the thing most likely to be misread.
+                      r'$4.99 / month — for the two of you',
+                      style: AppText.caption(AppColors.onDarkMuted),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.md),
+          for (final (emoji, label) in _features)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpace.xs),
+              child: Row(
+                children: [
+                  Text(emoji, style: const TextStyle(fontSize: 15)),
+                  const SizedBox(width: AppSpace.xs),
+                  Expanded(
+                    child: Text(label, style: AppText.body(AppColors.onDark)),
+                  ),
+                ],
+              ),
+            ),
+          const SizedBox(height: AppSpace.xs),
+          SizedBox(
+            width: double.infinity,
+            child: Material(
+              color: AppColors.brand,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+                // Not a dead button. Nothing can be bought yet, and saying
+                // so is better than a tap that appears to fail.
+                onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Not available yet — nothing is charged.'),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Text(
+                    'Unlock Premium 💗',
+                    textAlign: TextAlign.center,
+                    style: AppText.subtitle(Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ── Shared shell ────────────────────────── */
+
+class _Card extends StatelessWidget {
+  const _Card({required this.child, this.onTap});
+
+  final Widget child;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: onTap,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpace.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: child,
         ),
       ),
     );
