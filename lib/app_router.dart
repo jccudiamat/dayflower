@@ -170,53 +170,51 @@ String? gateRedirect({
   return null;
 }
 
-/// Re-runs the router's redirect when a gate input changes.
+/// 🔴 **Do not replace these `ref.watch` calls with `ref.listen`.**
 ///
-/// The router used to `ref.watch` those providers directly, which meant
-/// every change **built a whole new GoRouter**. A new router is a new
-/// `routerConfig` for `MaterialApp.router`, so the Navigator and its entire
-/// history were thrown away and rebuilt from `initialLocation` — the splash
-/// screen. Saving a nickname genuinely restarted navigation.
+/// Build 19 did exactly that — the router was built once and refreshed
+/// through a `ChangeNotifier` fed by `ref.listen`, which is the pattern the
+/// go_router/Riverpod docs describe — and it **bricked the app on the
+/// splash screen**. `userProfileProvider` sat in `AsyncLoading` forever, so
+/// the gate correctly waited for an answer that never came. Nothing errored
+/// and nothing timed out; the phone just never got past "two lips, one
+/// garden".
 ///
-/// `refreshListenable` is the supported way to say "the same router, but
-/// look at the world again".
-class _GateNotifier extends ChangeNotifier {
-  _GateNotifier(Ref ref) {
-    ref.listen(authStateProvider, (_, __) => notifyListeners());
-    ref.listen(userProfileProvider, (_, __) => notifyListeners());
-    ref.listen(currentPairProvider, (_, __) => notifyListeners());
-  }
-}
-
+/// The `ref.listen` subscription observes the provider but does not drive
+/// it the way a watch does, so the chain
+/// `authState → currentUserIdProvider → userProfileProvider` went dirty on
+/// sign-in and was never recomputed. Watching is what makes it resolve.
+///
+/// ⚠️ **The cost, knowingly accepted:** every change to auth, profile or
+/// pair rebuilds this provider and therefore builds a **new `GoRouter`** —
+/// a new `routerConfig` for `MaterialApp.router`, so the Navigator and its
+/// history are rebuilt from `initialLocation`. That is why saving a
+/// nickname flashes the splash screen. A cosmetic flash on an app that
+/// starts beats no flash on an app that doesn't.
+///
+/// If you fix that flash, keep the watches and hoist only the `GoRouter`
+/// instance so it is built once — and **verify the app still boots from
+/// cold** before shipping it. That is the check build 19 skipped.
 final routerProvider = Provider<GoRouter>((ref) {
-  // ⚠️ Nothing is watched here, deliberately. See _GateNotifier: a watch
-  // rebuilds this provider, and rebuilding this provider replaces the
-  // router. The redirect reads the current values instead.
-  final gate = _GateNotifier(ref);
-  ref.onDispose(gate.dispose);
+  final authState = ref.watch(authStateProvider);
+  final profileAsync = ref.watch(userProfileProvider);
+  final pairAsync = ref.watch(currentPairProvider);
 
   return GoRouter(
     initialLocation: Routes.splash,
-    refreshListenable: gate,
-    redirect: (context, state) {
-      final authState = ref.read(authStateProvider);
-      final profileAsync = ref.read(userProfileProvider);
-      final pairAsync = ref.read(currentPairProvider);
-
-      return gateRedirect(
-        location: state.matchedLocation,
-        // Not `!isLoading`: a refreshing provider still knows the answer,
-        // and treating it as unknown is what sent this to the splash on
-        // every profile edit. Not plain `hasValue` either — see
-        // isGateValueUsable for the null that hides in there.
-        authKnown: authState.hasValue,
-        signedIn: authState.valueOrNull?.session != null,
-        profileKnown: isGateValueUsable(profileAsync),
-        hasProfile: profileAsync.valueOrNull != null,
-        pairKnown: isGateValueUsable(pairAsync),
-        isLinked: pairAsync.valueOrNull?.isLinked == true,
-      );
-    },
+    redirect: (context, state) => gateRedirect(
+      location: state.matchedLocation,
+      // Not `!isLoading`: a refreshing provider still knows the answer, and
+      // treating it as unknown is what sent this to the splash on every
+      // profile edit. Not plain `hasValue` either — see isGateValueUsable
+      // for the null that hides in there.
+      authKnown: authState.hasValue,
+      signedIn: authState.valueOrNull?.session != null,
+      profileKnown: isGateValueUsable(profileAsync),
+      hasProfile: profileAsync.valueOrNull != null,
+      pairKnown: isGateValueUsable(pairAsync),
+      isLinked: pairAsync.valueOrNull?.isLinked == true,
+    ),
     routes: [
       GoRoute(
         path: Routes.splash,
