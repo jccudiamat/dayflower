@@ -22,7 +22,7 @@
 | 7 | Reminders (Activities) | 🔶 **Rebuilt as alarm clocks 2026-08-31, never run.** Rings on the alarm stream, takes over the lock screen, Snooze/Done from the notification with the app dead. Also fixed the missing manifest receivers that would have made *every* scheduled notification silently fail. Needs migration **0010** (amended in place). Cannot be tested in the web preview at all — the scheduler no-ops off Android/iOS. |
 | 8 | Finances (Activities) | 🔶 **v2 schema live 2026-08-31.** Was: Accounts (bank/cash/e-wallet/savings/investment) + a ledger of income/expense/transfer, in three scopes: Ours · Mine · theirs (read-only). Balances are always derived, never stored. Needs migration **0011**. |
 | 9 | Chapters (Activities) | 🔶 **Built 2026-08-29, never run.** A year = 12 chapters. Goals at the start of a month, moments as they happen, a written review at the end. Needs migration **0012**. |
-| — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. 🔴 Never seen running — the web preview hangs on the splash for clean HEAD too. |
+| — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. Verified running 2026-09-03: real RPC numbers (13 flowers, 6 streak, 263 hearts), the distance row, and the premium card. |
 | — | Photo avatars | 🔶 **Built 2026-09-03.** Settings → Your picture takes a camera or gallery photo; the flower stays as the fallback everywhere. Migration **0020 applied**, storage policies exercised against a real signed-in session. 🔴 The home-screen widget still draws the flower emoji, not the photo. |
 | — | Activity feed | 🔶 **Built 2026-09-03.** Shared timeline on Home (latest 3 + View all), fed by triggers in migration **0019 — applied and verified live**. Cards deep-link to the thing itself. Rendered against seeded rows in the web preview and the read watermark round-tripped through RLS; the seed was then deleted, so the feed starts empty. 🔴 Events are not in it — `events_screen.dart` is still local `setState` with no table to trigger on. |
 | — | Notifications | 🔶 **Built 2026-09-03, phone-untestable here.** Messages, day photos and activity raise local notifications; heartbeats keep `PulseAlerts`. ⚠️ **Local, not push** — only fires while the process is alive. A swiped-away app hears nothing until it is next opened. See § Notifications — how far they actually reach. |
@@ -757,15 +757,31 @@ The only update policy was `pairs_accept_invite`, which requires `user_b is null
 
 Static, as asked. **$4.99/month is per couple, not per person** — that is a product decision and the card says so in words, because it is the half most likely to be misread later. There is no billing anywhere in this app: no store product, no receipt validation, no entitlement, and none of the listed features are gated. The button says "Not available yet — nothing is charged" rather than pretending. Do not make it look live until a real purchase flow exists.
 
-## ⚠️ The web preview hangs on the splash (2026-09-03)
+## 🔴 Build 19 bricked startup, and how the investigation went wrong (2026-09-03)
 
-**Before debugging a stuck splash again, read this.** On 2026-09-03 the preview stopped getting past the splash screen: `userProfileProvider` sits in `AsyncLoading` with a previous value of null and never resolves, so the gate correctly waits forever. `currentPairProvider` resolves fine in the same session, and the same `users` query answers in **1.0s** over curl with a real user token — so it is not the server, the RLS, or the query.
+**Symptom:** the app never got past the splash screen. On the phone and in the preview. `userProfileProvider` sat in `AsyncLoading` with a previous value of `null` and never resolved, so the gate correctly waited for an answer that never came. Nothing errored, nothing timed out.
 
-**It is not the app either.** Verified by `git stash`-ing all work in progress and running clean `HEAD` (build 19, the build shipped and working on the phone): **it hangs identically**. Roughly an hour went into chasing this as a regression before running that control.
+**Cause:** build 19's router refactor. It replaced `routerProvider`'s `ref.watch` calls with a `ChangeNotifier` fed by `ref.listen` — the pattern the go_router/Riverpod docs describe, and the one that stops a nickname edit rebuilding the whole router.
 
-The lesson, cheaply: **when the preview misbehaves, run clean HEAD first.** It is one stash and one restart, and it answers "mine or not" before any theorising.
+A `ref.listen` subscription **observes** a provider but does not **drive** it the way a watch does. The chain `authStateProvider → currentUserIdProvider → userProfileProvider` went dirty on sign-in and was never recomputed. Watching is what makes it resolve.
 
-`git stash push -u` on this repo prints `warning: failed to remove … Permission denied` for empty directories and leaves the working tree dirty — the stash *is* created, so follow it with `git checkout -- .` and the tree is genuinely at HEAD.
+🔴 **Do not reintroduce `ref.listen` there.** The file says so at the top of `routerProvider`. If the splash flash on a profile edit is fixed later, keep the watches and hoist only the `GoRouter` instance so it is built once — and **boot the app from cold before shipping**, which is the check build 19 skipped.
+
+### The investigation mistake, which cost more than the bug
+
+I "cleared" build 19 by stashing all work in progress and running clean `HEAD` — and reported that it hung identically, therefore the cause was environmental. **`HEAD` *was* build 19.** Treating the prime suspect as the baseline turned evidence *for* the bug into evidence *against* it, and sent an hour into the database, the RLS policies and the preview environment, none of which were involved.
+
+Two rules out of it:
+
+1. **A baseline has to predate the suspect.** `git stash` + `HEAD` is not a control when HEAD is the commit under suspicion; check what HEAD actually is first.
+2. **A code-only revert is not a control when a migration has landed in between.** The database is part of the system under test. In this case 0021 was applied before the "control" run, so even a correct baseline would have been contaminated.
+
+What finally found it: reverting **only** `routerProvider` to the watch-based version, leaving every other change and the whole database untouched, and watching the app boot. One variable.
+
+### Other things that were true and stayed true
+
+- The server was never at fault: the exact `users` query the app hangs on answers in **1.0–1.3s** over curl with a real user token, including with `maybeSingle`'s `Accept` header.
+- `git stash push -u` on this repo prints `warning: failed to remove … Permission denied` for empty directories and leaves the working tree dirty. The stash *is* created — follow it with `git checkout -- .` to actually reach the baseline.
 
 ## 🔴 Saving a nickname restarted navigation (2026-09-03)
 
@@ -773,7 +789,7 @@ The lesson, cheaply: **when the preview misbehaves, run clean HEAD first.** It i
 
 **Fault 1 — the router was rebuilt, not refreshed.** `routerProvider` did `ref.watch` on `authStateProvider`, `userProfileProvider` and `currentPairProvider`, so any invalidation rebuilt the provider and **constructed a whole new `GoRouter`**. A new router is a new `routerConfig` for `MaterialApp.router`: the Navigator and its entire history are thrown away and rebuilt from `initialLocation`, which is the splash. Saving a nickname genuinely restarted navigation.
 
-Fixed by building the router **once** and giving it a `refreshListenable` (`_GateNotifier`, which `ref.listen`s the same three providers and calls `notifyListeners`). The redirect `ref.read`s the current values instead. ⚠️ **Nothing in `routerProvider` may be watched.** A watch there replaces the router.
+🔴 **This was "fixed" by building the router once behind a `refreshListenable` fed by `ref.listen` — and that shipped as build 19 and bricked startup.** See § Build 19 bricked startup. The watches are back, and with them the splash flash on a profile edit: a cosmetic flash on an app that starts beats no flash on an app that doesn't. The other two faults below are still fixed, because they live in `gateRedirect`, not in the wiring.
 
 **Fault 2 — "loading" was read as "unknown".** The redirect gated on `profileAsync.isLoading`, but Riverpod reports `isLoading == true` while a provider *refreshes* — it is still holding a perfectly good previous value. So a refresh looked identical to a cold start and sent everyone to the splash.
 
