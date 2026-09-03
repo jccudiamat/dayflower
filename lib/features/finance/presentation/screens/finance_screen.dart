@@ -20,6 +20,7 @@ import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/finance_repository.dart';
 import '../widgets/currency_sheet.dart';
+import '../widgets/finance_cards.dart';
 
 /// The couple's money, in three views: **Ours**, **Mine**, and theirs.
 ///
@@ -73,6 +74,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final budgetsAsync = ref.watch(financeBudgetsProvider);
     final recurringAsync = ref.watch(financeRecurringProvider);
     final holdingsAsync = ref.watch(financeHoldingsProvider);
+    final goalsAsync = ref.watch(financeGoalsProvider);
 
     final partnerId =
         userId == null ? null : pair?.partnerIdFor(userId);
@@ -106,6 +108,10 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
     final holdings = (holdingsAsync.valueOrNull ?? const [])
         .where((h) => accountIds.contains(h.accountId))
         .toList();
+    final goals = (goalsAsync.valueOrNull ?? const [])
+        .where((g) => !g.archived)
+        .where((g) => scopeMatches(g.ownerId))
+        .toList();
     final dueNow = recurring
         .where((r) => r.active && !r.isFinished && r.isDue(DateTime.now()))
         .toList();
@@ -130,6 +136,25 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
       mainCurrency: currency,
       fx: fx,
     );
+    // The previous month, built the same way as this one so the two are
+    // genuinely comparable — same scope, same conversion, same rules.
+    final previousMonth = DateTime(_month.year, _month.month - 1);
+    final previousSummary = FinanceSummary.from(
+      accounts: accounts,
+      entries: entries,
+      budgets: budgets,
+      holdings: holdings,
+      month: previousMonth,
+      mainCurrency: currency,
+      fx: fx,
+    );
+    // Null, not zero, when there is nothing on file for last month: a first
+    // month has nothing to compare against, and "up 100%" would be a
+    // sentence about an absence.
+    final hadPreviousMonth = entries.any((e) =>
+        e.occurredOn.year == previousMonth.year &&
+        e.occurredOn.month == previousMonth.month);
+
     final monthEntries = entries
         .where((e) =>
             e.occurredOn.year == _month.year &&
@@ -218,10 +243,33 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                           },
                         ),
                         const SizedBox(height: AppSpace.sm),
+                        // ── Spending ───────────────────────────
+                        // Straight under net worth, because "what is it
+                        // doing this month" is the question the balance
+                        // above always prompts.
+                        SpendCard(
+                          month: _month,
+                          spent: summary.monthExpenses,
+                          previousSpent: hadPreviousMonth
+                              ? previousSummary.monthExpenses
+                              : null,
+                          daily: _dailySpend(monthEntries, currency, fx),
+                          currency: currency,
+                        ),
+                        const SizedBox(height: AppSpace.xs),
                         _MonthTiles(summary: summary, currency: currency),
+
+                        // Insights sits directly under the month's
+                        // numbers, where "why is it that?" is asked.
+                        const SizedBox(height: AppSpace.xs),
+                        _InsightsLink(
+                          onTap: () => context.go(Routes.insights),
+                        ),
+
+                        // ── Wallet ─────────────────────────────
                         const SizedBox(height: AppSpace.md),
                         _SectionHeader(
-                          label: 'Accounts',
+                          label: 'Wallet',
                           action: readOnly ? null : 'Add',
                           onAction: () => _openAccountSheet(
                             ownerId: owner,
@@ -239,22 +287,69 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                                     'investment to start tracking balances.',
                           )
                         else
-                          ...accounts.map((account) => Padding(
-                                padding:
-                                    const EdgeInsets.only(bottom: AppSpace.xs),
-                                child: _AccountCard(
-                                  account: account,
-                                  balance: summary.balances[account.id] ?? 0,
-                                  currency: currency,
-                                  onTap: readOnly
-                                      ? null
-                                      : () => _openAccountSheet(
-                                            ownerId: owner,
-                                            currency: currency,
-                                            existing: account,
-                                          ),
-                                ),
-                              )),
+                          WalletStrip(
+                            accounts: accounts,
+                            balances: summary.balances,
+                            marketValues: summary.marketValues,
+                            onTap: readOnly
+                                ? null
+                                : (account) => _openAccountSheet(
+                                      ownerId: owner,
+                                      currency: currency,
+                                      existing: account,
+                                    ),
+                            onAdd: readOnly
+                                ? null
+                                : () => _openAccountSheet(
+                                      ownerId: owner,
+                                      currency: currency,
+                                    ),
+                          ),
+
+                        // ── Goals ──────────────────────────────
+                        const SizedBox(height: AppSpace.md),
+                        _SectionHeader(
+                          label: 'Goals',
+                          action: readOnly ? null : 'Add',
+                          onAction: () => _openGoalSheet(
+                            ownerId: owner,
+                            accounts: accounts,
+                            currency: currency,
+                          ),
+                        ),
+                        const SizedBox(height: AppSpace.xs),
+                        if (goals.isEmpty)
+                          _EmptyHint(
+                            emoji: '🎯',
+                            title: 'Nothing being saved for yet',
+                            body: readOnly
+                                ? "They haven't set any."
+                                : 'A trip, a ring, a deposit. Point one at a '
+                                    'savings account and it fills itself in.',
+                          )
+                        else
+                          GoalsStrip(
+                            goals: goals,
+                            // The same balances the wallet above draws, so
+                            // a linked goal's ring and its account's card
+                            // can never tell different stories.
+                            balances: summary.balances,
+                            onTap: readOnly
+                                ? null
+                                : (goal) => _openGoalSheet(
+                                      ownerId: owner,
+                                      accounts: accounts,
+                                      currency: currency,
+                                      existing: goal,
+                                    ),
+                            onAdd: readOnly
+                                ? null
+                                : () => _openGoalSheet(
+                                      ownerId: owner,
+                                      accounts: accounts,
+                                      currency: currency,
+                                    ),
+                          ),
                         // ── Recurring ──────────────────────────
                         // Above Budgets because a due subscription is the
                         // thing most likely to need acting on right now.
@@ -543,6 +638,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _EntrySaved():
         case _BudgetSaved():
         case _RecurringSaved():
+        case _GoalSaved():
         case _HoldingSaved():
           break; // not reachable from this sheet
       }
@@ -608,6 +704,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _AccountSaved():
         case _EntrySaved():
         case _BudgetSaved():
+        case _GoalSaved():
         case _HoldingSaved():
           break; // not reachable from this sheet
       }
@@ -670,6 +767,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _EntrySaved():
         case _BudgetSaved():
         case _RecurringSaved():
+        case _GoalSaved():
           break; // not reachable from this sheet
       }
     } catch (e) {
@@ -778,6 +876,97 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _AccountSaved():
         case _EntrySaved():
         case _RecurringSaved():
+        case _GoalSaved():
+        case _HoldingSaved():
+          break; // not reachable from this sheet
+      }
+    } catch (e) {
+      if (mounted) _showError(context, e);
+    }
+  }
+
+
+  /// One figure per day of [_month], in the main currency.
+  ///
+  /// Converted here rather than in the card, because this is a total by
+  /// another name: a month's spending across a USD card and a PHP wallet
+  /// only adds up once both are in the same money. Anything with no rate on
+  /// file is left out rather than counted at 1:1 — `summary.unconvertible`
+  /// is what tells the user about it.
+  List<double> _dailySpend(
+    List<FinanceEntry> monthEntries,
+    String currency,
+    FxTable fx,
+  ) {
+    final days = DateTime(_month.year, _month.month + 1, 0).day;
+    final series = List<double>.filled(days, 0);
+    for (final entry in monthEntries) {
+      if (entry.kind != EntryKind.expense) continue;
+      final converted =
+          fx.convert(entry.amount, from: entry.currency, to: currency);
+      if (converted == null) continue;
+      final index = entry.occurredOn.day - 1;
+      if (index >= 0 && index < days) series[index] += converted;
+    }
+    return series;
+  }
+
+  Future<void> _openGoalSheet({
+    required String? ownerId,
+    required List<FinanceAccount> accounts,
+    required String currency,
+    FinanceGoal? existing,
+  }) async {
+    final userId = ref.read(currentUserIdProvider);
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    if (userId == null || pair == null) return;
+
+    final result = await showModalBottomSheet<_SheetResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _GoalSheet(
+        existing: existing,
+        // Only somewhere money can actually sit — you cannot save towards a
+        // car in a credit card.
+        accounts: accounts
+            .where((a) => a.accountClass == AccountClass.asset)
+            .toList(),
+        currency: currency,
+      ),
+    );
+    if (result == null || !mounted) return;
+
+    final repo = ref.read(financeRepositoryProvider);
+    try {
+      switch (result) {
+        case _Deleted():
+          final ok = await showConfirmDialog(
+            context,
+            title: 'Delete ${existing!.name}?',
+            message: 'The money stays exactly where it is — this removes the '
+                'goal, not the savings.',
+            confirmLabel: 'Delete',
+          );
+          if (ok) await repo.deleteGoal(existing.id);
+        case _GoalSaved(:final draft):
+          await repo.saveGoal(
+            id: existing?.id,
+            pairId: pair.id,
+            ownerId: existing?.ownerId ?? ownerId,
+            name: draft.name,
+            emoji: draft.emoji,
+            targetAmount: draft.targetAmount,
+            savedAmount: draft.savedAmount,
+            currency: draft.currency,
+            accountId: draft.accountId,
+            targetDate: draft.targetDate,
+            userId: userId,
+          );
+        case _AccountSaved():
+        case _EntrySaved():
+        case _BudgetSaved():
+        case _RecurringSaved():
         case _HoldingSaved():
           break; // not reachable from this sheet
       }
@@ -839,6 +1028,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
         case _AccountSaved():
         case _BudgetSaved():
         case _RecurringSaved():
+        case _GoalSaved():
         case _HoldingSaved():
           break; // not reachable from this sheet
       }
@@ -1141,6 +1331,54 @@ class _Tile extends StatelessWidget {
   }
 }
 
+/// The way through to the charts.
+///
+/// A row rather than a section, because Insights has nothing of its own to
+/// list here — it is a different view of the same month, and putting a
+/// preview chart on this screen would mean two places drawing the same data
+/// and one of them eventually being wrong.
+class _InsightsLink extends StatelessWidget {
+  const _InsightsLink({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(AppSpace.sm),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              const Text('📊', style: TextStyle(fontSize: 20)),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Insights', style: AppText.subtitle()),
+                    Text('Charts, where it went, and a card you can share',
+                        style: AppText.caption()),
+                  ],
+                ),
+              ),
+              const Icon(CupertinoIcons.chevron_forward,
+                  size: 16, color: AppColors.muted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   const _SectionHeader({
     required this.label,
@@ -1204,78 +1442,6 @@ class _EmptyHint extends StatelessWidget {
 }
 
 // ── Rows ────────────────────────────────────────────
-
-class _AccountCard extends StatelessWidget {
-  const _AccountCard({
-    required this.account,
-    required this.balance,
-    required this.currency,
-    required this.onTap,
-  });
-
-  final FinanceAccount account;
-  final double balance;
-  final String currency;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpace.sm),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(color: AppColors.border),
-            boxShadow: AppElevation.card,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: account.kind.color.withValues(alpha: .12),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child:
-                    Text(account.emoji, style: const TextStyle(fontSize: 19)),
-              ),
-              const SizedBox(width: AppSpace.xs),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(account.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppText.body(AppColors.ink)
-                            .copyWith(fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 1),
-                    Text(account.kind.label,
-                        style: AppText.label(account.kind.color)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: AppSpace.xs),
-              Text(
-                _money(balance, currency),
-                style: AppText.subtitle(
-                  balance < 0 ? AppColors.danger : AppColors.ink,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class _EntryRow extends StatelessWidget {
   const _EntryRow({
@@ -1548,6 +1714,358 @@ class _EntryDraft {
   final DateTime occurredOn;
 }
 
+
+// ── Goal sheet ──────────────────────────────────────
+
+class _GoalSaved extends _SheetResult {
+  const _GoalSaved(this.draft);
+  final _GoalDraft draft;
+}
+
+class _GoalDraft {
+  const _GoalDraft({
+    required this.name,
+    required this.emoji,
+    required this.targetAmount,
+    required this.savedAmount,
+    required this.currency,
+    required this.accountId,
+    required this.targetDate,
+  });
+
+  final String name;
+  final String emoji;
+  final double targetAmount;
+
+  /// Only read when [accountId] is null — but kept either way, so linking
+  /// an account and then unlinking it does not lose what was typed.
+  final double savedAmount;
+
+  final String currency;
+  final String? accountId;
+  final DateTime? targetDate;
+}
+
+class _GoalSheet extends StatefulWidget {
+  const _GoalSheet({
+    required this.currency,
+    required this.accounts,
+    this.existing,
+  });
+
+  final String currency;
+  final List<FinanceAccount> accounts;
+  final FinanceGoal? existing;
+
+  @override
+  State<_GoalSheet> createState() => _GoalSheetState();
+}
+
+class _GoalSheetState extends State<_GoalSheet> {
+  late final TextEditingController _name;
+  late final TextEditingController _target;
+  late final TextEditingController _saved;
+  late String _emoji;
+  late String _currency;
+  late String? _accountId;
+  late DateTime? _targetDate;
+
+  static const _emojis = [
+    '🎯', '🏠', '🚗', '✈️', '💍', '🎓', '🛏️', '🏖️', '💻', '🎁',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    _name = TextEditingController(text: existing?.name ?? '');
+    _target = TextEditingController(
+      text: existing == null ? '' : _plain(existing.targetAmount),
+    );
+    _saved = TextEditingController(
+      text: existing == null ? '' : _plain(existing.savedAmount),
+    );
+    _emoji = existing?.emoji ?? _emojis.first;
+    _currency = existing?.currency ?? widget.currency;
+    _accountId = existing?.accountId;
+    _targetDate = existing?.targetDate;
+  }
+
+  static String _plain(double v) =>
+      v.truncateToDouble() == v ? v.toInt().toString() : v.toString();
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _target.dispose();
+    _saved.dispose();
+    super.dispose();
+  }
+
+  String? get _accountCurrency {
+    for (final account in widget.accounts) {
+      if (account.id == _accountId) return account.currency;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isNew = widget.existing == null;
+    final linked = _accountId != null;
+
+    return AppBottomSheet(
+      title: isNew ? 'New goal' : 'Edit goal',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+        const AppFieldLabel('What for'),
+        AppSheetField(
+          controller: _name,
+          hint: 'A car, a ring, a trip home',
+          autofocus: isNew,
+        ),
+        const SizedBox(height: AppSpace.sm),
+        const AppFieldLabel('Icon'),
+        Wrap(
+          spacing: AppSpace.xxs,
+          runSpacing: AppSpace.xxs,
+          children: _emojis.map((emoji) {
+            final selected = emoji == _emoji;
+            return GestureDetector(
+              onTap: () => setState(() => _emoji = emoji),
+              child: Container(
+                width: 40,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.blush : AppColors.background,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected ? AppColors.brand : AppColors.border,
+                  ),
+                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 18)),
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        const AppFieldLabel('Target'),
+        AppSheetField(
+          controller: _target,
+          hint: '0',
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          prefix: Padding(
+            padding: const EdgeInsets.only(left: AppSpace.sm, right: 6),
+            child: Text(
+              _symbols[_currency] ?? _currency,
+              style: AppText.subtitle(AppColors.brand),
+            ),
+          ),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        const AppFieldLabel('Currency'),
+        _CurrencyChips(
+          selected: _currency,
+          onChanged: (code) => setState(() => _currency = code),
+        ),
+
+        // ── How progress is measured ─────────────────────
+        const SizedBox(height: AppSpace.sm),
+        const AppFieldLabel('Money towards it'),
+        if (widget.accounts.isNotEmpty) ...[
+          _AccountPicker(
+            accounts: widget.accounts,
+            selected: _accountId,
+            allowNone: true,
+            onChanged: (id) => setState(() {
+              _accountId = id;
+              // Follow the pot into its own currency — a goal funded from a
+              // USD savings account is a USD goal.
+              final adopted = _accountCurrency;
+              if (adopted != null) _currency = adopted;
+            }),
+          ),
+          const SizedBox(height: AppSpace.xs),
+        ],
+        // ⚠️ The two modes, and why linking is the better one.
+        if (linked)
+          Text(
+            "Progress tracks that account's balance, so it keeps itself "
+            'up to date and can never disagree with the pot.',
+            style: AppText.caption(AppColors.body),
+          )
+        else ...[
+          AppSheetField(
+            controller: _saved,
+            hint: '0',
+            keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+            prefix: Padding(
+              padding: const EdgeInsets.only(left: AppSpace.sm, right: 6),
+              child: Text(
+                _symbols[_currency] ?? _currency,
+                style: AppText.subtitle(AppColors.brand),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpace.xxs),
+          Text(
+            'A number you keep up to date yourself. Pick an account above '
+            'instead and it maintains itself.',
+            style: AppText.caption(),
+          ),
+        ],
+
+        const SizedBox(height: AppSpace.sm),
+        const AppFieldLabel('By when'),
+        GestureDetector(
+          onTap: _pickDate,
+          behavior: HitTestBehavior.opaque,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.sm, vertical: 13),
+            decoration: BoxDecoration(
+              color: AppColors.background,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _targetDate == null
+                        ? 'No deadline'
+                        : DateFormat('d MMMM y').format(_targetDate!),
+                    style: AppText.body(
+                      _targetDate == null ? AppColors.muted : AppColors.ink,
+                    ),
+                  ),
+                ),
+                if (_targetDate != null)
+                  GestureDetector(
+                    onTap: () => setState(() => _targetDate = null),
+                    child: Text('Clear',
+                        style: AppText.caption(AppColors.brandDark)),
+                  )
+                else
+                  const Icon(CupertinoIcons.calendar,
+                      size: 16, color: AppColors.muted),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: AppSpace.md),
+        GradientButton(label: isNew ? 'Add goal' : 'Save', onPressed: _save),
+        if (!isNew) ...[
+          const SizedBox(height: AppSpace.xs),
+          Center(
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context, const _Deleted()),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+                child: Text('Delete goal',
+                    style: AppText.caption(AppColors.danger)
+                        .copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _targetDate ?? DateTime(now.year + 1, now.month, now.day),
+      // A goal's deadline is ahead of you by definition; letting one be set
+      // in the past would render "-40 days left" on the card.
+      firstDate: now,
+      lastDate: DateTime(now.year + 30),
+      helpText: 'Save it by',
+    );
+    if (picked != null && mounted) setState(() => _targetDate = picked);
+  }
+
+  void _save() {
+    final name = _name.text.trim();
+    final target = double.tryParse(_target.text.trim()) ?? 0;
+    if (name.isEmpty || target <= 0) {
+      // The two fields without which the card has nothing to draw: no name
+      // and no ring.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('A goal needs a name and a target.')),
+      );
+      return;
+    }
+    Navigator.pop(
+      context,
+      _GoalSaved(_GoalDraft(
+        name: name,
+        emoji: _emoji,
+        targetAmount: target,
+        savedAmount: double.tryParse(_saved.text.trim()) ?? 0,
+        currency: _currency,
+        accountId: _accountId,
+        targetDate: _targetDate,
+      )),
+    );
+  }
+}
+
+/// Pick the currency for the amount above.
+///
+/// ⚠️ **Every amount in this app carries its own currency, and this is how
+/// it gets chosen.** The main currency is not universal: it is only what
+/// things are converted *into* when they are totalled — net worth, total
+/// saved, spend for the month. An expense in USD stays an expense in USD on
+/// every screen that shows it on its own.
+///
+/// It defaults to the selected account's currency, because spending from a
+/// USD card is a USD charge far more often than not — but a default is not
+/// a rule, which is what this row is for. Before it existed, an entry
+/// silently inherited its account and there was no way to say otherwise.
+class _CurrencyChips extends StatelessWidget {
+  const _CurrencyChips({required this.selected, required this.onChanged});
+
+  final String selected;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppSpace.xxs,
+      runSpacing: AppSpace.xxs,
+      children: _symbols.keys.map((code) {
+        final isSelected = code == selected;
+        return GestureDetector(
+          onTap: () => onChanged(code),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.xs, vertical: 7),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.blush : AppColors.background,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              border: Border.all(
+                color: isSelected ? AppColors.brand : AppColors.border,
+              ),
+            ),
+            child: Text('${_symbols[code]} $code',
+                style: AppText.caption(
+                    isSelected ? AppColors.brandDark : AppColors.body)),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
 // ── Account sheet ───────────────────────────────────
 
 class _AccountSheet extends StatefulWidget {
@@ -1754,29 +2272,9 @@ class _AccountSheetState extends State<_AccountSheet> {
           ),
           const SizedBox(height: AppSpace.sm),
           const AppFieldLabel('Currency'),
-          Wrap(
-              spacing: AppSpace.xxs,
-              runSpacing: AppSpace.xxs,
-              children: _symbols.keys.map((code) {
-                final selected = code == _currency;
-                return GestureDetector(
-                  onTap: () => setState(() => _currency = code),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpace.xs, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: selected ? AppColors.blush : AppColors.background,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                      border: Border.all(
-                        color: selected ? AppColors.brand : AppColors.border,
-                      ),
-                    ),
-                    child: Text('${_symbols[code]} $code',
-                        style: AppText.caption(
-                            selected ? AppColors.brandDark : AppColors.body)),
-                  ),
-                );
-              }).toList(),
+          _CurrencyChips(
+            selected: _currency,
+            onChanged: (code) => setState(() => _currency = code),
           ),
 
           // ── Asset or liability ───────────────────────────
@@ -2105,6 +2603,18 @@ class _EntrySheetState extends State<_EntrySheet> {
               final adopted = _accountCurrency();
               if (adopted != null) _currency = adopted;
             }),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Currency'),
+          _CurrencyChips(
+            selected: _currency,
+            onChanged: (code) => setState(() => _currency = code),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          const AppFieldLabel('Currency'),
+          _CurrencyChips(
+            selected: _currency,
+            onChanged: (code) => setState(() => _currency = code),
           ),
           if (isTransfer) ...[
             const SizedBox(height: AppSpace.sm),
@@ -2670,29 +3180,9 @@ class _BudgetSheetState extends State<_BudgetSheet> {
           ),
           const SizedBox(height: AppSpace.sm),
           const AppFieldLabel('Currency'),
-          Wrap(
-            spacing: AppSpace.xxs,
-            runSpacing: AppSpace.xxs,
-            children: _symbols.keys.map((code) {
-              final selected = code == _currency;
-              return GestureDetector(
-                onTap: () => setState(() => _currency = code),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpace.xs, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.blush : AppColors.background,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    border: Border.all(
-                      color: selected ? AppColors.brand : AppColors.border,
-                    ),
-                  ),
-                  child: Text('${_symbols[code]} $code',
-                      style: AppText.caption(
-                          selected ? AppColors.brandDark : AppColors.body)),
-                ),
-              );
-            }).toList(),
+          _CurrencyChips(
+            selected: _currency,
+            onChanged: (code) => setState(() => _currency = code),
           ),
           // Which pot this is understood to spend out of. A label on the
           // money, not a second ledger — the balance still comes from
@@ -3490,6 +3980,15 @@ class _HoldingSheetState extends State<_HoldingSheet> {
                 final adopted = _accountCurrency();
                 if (adopted != null) _currency = adopted;
               }),
+            ),
+            const SizedBox(height: AppSpace.sm),
+            const AppFieldLabel('Currency'),
+            // A position can be priced in a different currency from the
+            // account that holds it — a US stock inside a PHP brokerage is
+            // the ordinary case, not the exotic one.
+            _CurrencyChips(
+              selected: _currency,
+              onChanged: (code) => setState(() => _currency = code),
             ),
             const SizedBox(height: AppSpace.sm),
           ],

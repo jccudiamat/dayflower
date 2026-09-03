@@ -54,6 +54,12 @@ dependencies:
   open_filex: ^4.7.0 # hands the APK to Android's installer
   image: ^4.9.2
 
+  # Hands the rendered Insights PNG to Android's own share sheet. Declares
+  # its own FileProvider, so no manifest change is needed here — but see
+  # PROGRESS.md § Android builds: adding ANY plugin can leave a stale
+  # Kotlin build cache that fails with a misleading "cannot find symbol".
+  share_plus: ^13.3.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

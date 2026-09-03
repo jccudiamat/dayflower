@@ -46,6 +46,16 @@ class FinanceRepository {
       .order('created_at', ascending: true)
       .map((rows) => rows.map(FinanceBudget.fromMap).toList());
 
+  /// The pair's goals. RLS already hides a partner's personal ones, so
+  /// what arrives here is exactly what this reader is allowed to see —
+  /// no second filter in Dart, and no chance of the two disagreeing.
+  Stream<List<FinanceGoal>> watchGoals(String pairId) => _client
+      .from('finance_goals')
+      .stream(primaryKey: ['id'])
+      .eq('pair_id', pairId)
+      .order('created_at', ascending: true)
+      .map((rows) => rows.map(FinanceGoal.fromMap).toList());
+
   Stream<List<FxRate>> watchRates(String pairId) => _client
       .from('finance_rates')
       .stream(primaryKey: ['id'])
@@ -189,6 +199,50 @@ class FinanceRepository {
     } else {
       await _client.from('finance_budgets').update(values).eq('id', id);
     }
+  }
+
+  /* ── Goals ───────────────────────────────────────────────── */
+
+  Future<void> saveGoal({
+    String? id,
+    required String pairId,
+    required String? ownerId,
+    required String name,
+    required String emoji,
+    required double targetAmount,
+    required double savedAmount,
+    required String currency,
+    String? accountId,
+    DateTime? targetDate,
+    bool archived = false,
+    required String userId,
+  }) async {
+    final values = {
+      'owner_id': ownerId,
+      'name': name.trim(),
+      'emoji': emoji,
+      'target_amount': targetAmount,
+      // Kept even while an account is linked, so unlinking later does not
+      // lose what was typed. See FinanceGoal.savedGiven.
+      'saved_amount': savedAmount,
+      'currency': currency,
+      'account_id': accountId,
+      'target_date': targetDate == null ? null : dateOnly(targetDate),
+      'archived': archived,
+    };
+    if (id == null) {
+      await _client.from('finance_goals').insert({
+        ...values,
+        'pair_id': pairId,
+        'created_by': userId,
+      });
+    } else {
+      await _client.from('finance_goals').update(values).eq('id', id);
+    }
+  }
+
+  Future<void> deleteGoal(String id) async {
+    await _client.from('finance_goals').delete().eq('id', id);
   }
 
   Future<void> deleteBudget(String id) async {
@@ -558,6 +612,13 @@ final financeBudgetsProvider =
   final pair = ref.watch(currentPairProvider).valueOrNull;
   if (pair == null || !pair.isLinked) return Stream.value(const []);
   return ref.watch(financeRepositoryProvider).watchBudgets(pair.id);
+});
+
+final financeGoalsProvider =
+    StreamProvider.autoDispose<List<FinanceGoal>>((ref) {
+  final pair = ref.watch(currentPairProvider).valueOrNull;
+  if (pair == null || !pair.isLinked) return Stream.value(const []);
+  return ref.watch(financeRepositoryProvider).watchGoals(pair.id);
 });
 
 final financeRecurringProvider =

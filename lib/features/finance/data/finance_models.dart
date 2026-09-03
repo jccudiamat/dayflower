@@ -681,3 +681,125 @@ class Holding {
         createdBy: map['created_by'] as String,
       );
 }
+
+/* ── Savings goals ───────────────────────────────────────── */
+
+/// Something the two of you are saving towards.
+///
+/// Progress is measured one of two ways, and which one is the whole point
+/// of [accountId]:
+///
+///  * **Linked to an account** — progress *is* that account's balance,
+///    derived, and can never drift from the pot it describes. This is the
+///    one to prefer; it is the same rule the rest of this file lives by.
+///  * **Not linked** — progress is [savedAmount], a number somebody keeps
+///    honest by hand. For cash in a drawer, or a pot shared with other
+///    money.
+class FinanceGoal {
+  const FinanceGoal({
+    required this.id,
+    required this.pairId,
+    this.ownerId,
+    required this.name,
+    required this.emoji,
+    required this.targetAmount,
+    required this.savedAmount,
+    required this.currency,
+    this.accountId,
+    this.targetDate,
+    required this.archived,
+    required this.createdBy,
+  });
+
+  final String id;
+  final String pairId;
+
+  /// Null = the couple's goal. A goal with an owner is visible only to
+  /// them — narrower than accounts, deliberately (see migration 0022).
+  final String? ownerId;
+
+  final String name;
+  final String emoji;
+  final double targetAmount;
+
+  /// Only read when [accountId] is null. Kept even while linked, so
+  /// unlinking later does not lose what was typed.
+  final double savedAmount;
+
+  /// ⚠️ The goal's own currency, not the couple's main one. Converted only
+  /// when goals are totalled together.
+  final String currency;
+
+  final String? accountId;
+  final DateTime? targetDate;
+  final bool archived;
+  final String createdBy;
+
+  bool get isLinked => accountId != null;
+
+  /// How much is towards it, given the balances the caller already has.
+  ///
+  /// Takes the balance map rather than looking anything up, so this stays a
+  /// pure function of its inputs and the same map that draws the account
+  /// cards draws the goal rings — they cannot disagree.
+  double savedGiven(Map<String, double> balances) {
+    if (!isLinked) return savedAmount;
+    // A negative balance is nothing saved, not negative progress: an
+    // overdrawn account has not un-saved money towards a car.
+    final balance = balances[accountId] ?? 0;
+    return balance < 0 ? 0 : balance;
+  }
+
+  /// 0…1, or null when there is no target to divide by.
+  double? fractionGiven(Map<String, double> balances) {
+    if (targetAmount <= 0) return null;
+    return (savedGiven(balances) / targetAmount).clamp(0.0, 1.0);
+  }
+
+  /// What is still to go. Never negative — an overshot goal is finished,
+  /// not owed.
+  double remainingGiven(Map<String, double> balances) {
+    final left = targetAmount - savedGiven(balances);
+    return left < 0 ? 0 : left;
+  }
+
+  bool isReachedGiven(Map<String, double> balances) =>
+      savedGiven(balances) >= targetAmount;
+
+  /// Whole days until the deadline, or null when there is none. Negative
+  /// once it has passed — the card says "overdue" rather than hiding it.
+  int? get daysLeft {
+    final date = targetDate;
+    if (date == null) return null;
+    final today = DateTime.now();
+    return DateTime(date.year, date.month, date.day)
+        .difference(DateTime(today.year, today.month, today.day))
+        .inDays;
+  }
+
+  factory FinanceGoal.fromMap(Map<String, dynamic> map) => FinanceGoal(
+        id: map['id'] as String,
+        pairId: map['pair_id'] as String,
+        ownerId: map['owner_id'] as String?,
+        name: map['name'] as String? ?? '',
+        emoji: map['emoji'] as String? ?? '🎯',
+        targetAmount: _num(map['target_amount']),
+        savedAmount: _num(map['saved_amount']),
+        currency: map['currency'] as String? ?? 'PHP',
+        accountId: map['account_id'] as String?,
+        targetDate: map['target_date'] == null
+            ? null
+            : DateTime.parse(map['target_date'] as String),
+        archived: map['archived'] as bool? ?? false,
+        createdBy: map['created_by'] as String? ?? '',
+      );
+
+  /// `numeric` comes back from PostgREST as a JSON number, but a large one
+  /// can arrive as a string. The cast that assumes otherwise throws once
+  /// and takes the whole screen with it.
+  static double _num(Object? value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    return double.tryParse('$value') ?? 0;
+  }
+}

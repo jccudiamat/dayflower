@@ -102,6 +102,7 @@ class Activity {
 
       case ActivityKind.accountAdded:
       case ActivityKind.budgetSet:
+      case ActivityKind.savingGoalSet:
         return Routes.finance;
 
       case ActivityKind.unknown:
@@ -158,6 +159,9 @@ enum ActivityKind {
       'strip_done', 'Photo strip', 'finished the strip', AppColors.lavender),
   accountAdded('account_added', 'Money', 'added an account', AppColors.sage),
   budgetSet('budget_set', 'Budget', 'set a shared budget', AppColors.sage),
+  savingGoalSet(
+      'saving_goal_set', 'Goal', 'started saving for something',
+      AppColors.amber),
 
   /// A kind this build has never heard of — a newer app wrote it. Renders
   /// as a plain, untappable card rather than throwing, which is the whole

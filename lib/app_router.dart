@@ -13,6 +13,7 @@ import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
 import 'features/chapters/presentation/screens/chapters_screen.dart';
 import 'features/dates/presentation/screens/events_screen.dart';
 import 'features/finance/presentation/screens/finance_screen.dart';
+import 'features/finance/presentation/screens/insights_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -71,6 +72,10 @@ class Routes {
   /// silently goes dark inside it.
   static const reminders = '/app/activities/reminders';
   static const finance = '/app/activities/finance';
+
+  /// The month, read back to you, and exportable as one image. Nested under
+  /// finance so the Activities tab stays lit inside it.
+  static const insights = '/app/activities/finance/insights';
   static const chapters = '/app/activities/chapters';
 
   /// One month of the year. Path params rather than a query string so the
@@ -264,6 +269,9 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, __) => const RemindersScreen()),
           GoRoute(
               path: Routes.finance, builder: (_, __) => const FinanceScreen()),
+          GoRoute(
+              path: Routes.insights,
+              builder: (_, __) => const InsightsScreen()),
           GoRoute(
               path: Routes.chapters,
               builder: (_, __) => const ChaptersScreen()),

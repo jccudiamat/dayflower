@@ -437,7 +437,7 @@ class _MilestonesCard extends StatelessWidget {
           const SizedBox(height: AppSpace.xs),
           Text(
             'Both are worked out from your start date — they appear on '
-            'Dates on their own.',
+            'Events on their own.',
             style: AppText.caption(),
           ),
         ],

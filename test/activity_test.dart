@@ -48,6 +48,7 @@ void main() {
         'strip_done',
         'account_added',
         'budget_set',
+        'saving_goal_set',
       ];
       for (final id in emittedByTriggers) {
         expect(ActivityKind.fromId(id), isNot(ActivityKind.unknown),

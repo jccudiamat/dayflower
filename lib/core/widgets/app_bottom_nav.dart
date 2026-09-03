@@ -68,7 +68,7 @@ class AppBottomNav extends ConsumerWidget {
               ),
               _NavItem(
                 icon: CupertinoIcons.calendar,
-                label: 'Dates',
+                label: 'Events',
                 selected: location == Routes.events,
                 onTap: () => context.go(Routes.events),
               ),

@@ -22,6 +22,7 @@
 | 7 | Reminders (Activities) | 🔶 **Rebuilt as alarm clocks 2026-08-31, never run.** Rings on the alarm stream, takes over the lock screen, Snooze/Done from the notification with the app dead. Also fixed the missing manifest receivers that would have made *every* scheduled notification silently fail. Needs migration **0010** (amended in place). Cannot be tested in the web preview at all — the scheduler no-ops off Android/iOS. |
 | 8 | Finances (Activities) | 🔶 **v2 schema live 2026-08-31.** Was: Accounts (bank/cash/e-wallet/savings/investment) + a ledger of income/expense/transfer, in three scopes: Ours · Mine · theirs (read-only). Balances are always derived, never stored. Needs migration **0011**. |
 | 9 | Chapters (Activities) | 🔶 **Built 2026-08-29, never run.** A year = 12 chapters. Goals at the start of a month, moments as they happen, a written review at the end. Needs migration **0012**. |
+| — | Finance: Wallet, Goals, Insights | 🔶 **Rebuilt 2026-09-03.** Wallet carousel, spend card with sparkline, Goals as progress rings, and an Insights page whose card exports as one shareable PNG. Per-amount currency on all five sheets. Migration **0022 applied**. Recurring, Budgets and Investments unchanged. |
 | — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. Verified running 2026-09-03: real RPC numbers (13 flowers, 6 streak, 263 hearts), the distance row, and the premium card. |
 | — | Photo avatars | 🔶 **Built 2026-09-03.** Settings → Your picture takes a camera or gallery photo; the flower stays as the fallback everywhere. Migration **0020 applied**, storage policies exercised against a real signed-in session. 🔴 The home-screen widget still draws the flower emoji, not the photo. |
 | — | Activity feed | 🔶 **Built 2026-09-03.** Shared timeline on Home (latest 3 + View all), fed by triggers in migration **0019 — applied and verified live**. Cards deep-link to the thing itself. Rendered against seeded rows in the web preview and the read watermark round-tripped through RLS; the seed was then deleted, so the feed starts empty. 🔴 Events are not in it — `events_screen.dart` is still local `setState` with no table to trigger on. |
@@ -719,6 +720,55 @@ A shared timeline on Home: the three most recent things either of you did to the
 - Route is `/app/home/activity` — a sub-route of Home, not of the Activities hub, so the Home tab stays lit inside it. `AppBottomNav` now matches Home with `startsWith` for that reason.
 
 🔴 **"Your partner set an event" is not in the feed, because events are not real yet.** `events_screen.dart` builds its list in `initState` and keeps it in `setState` — there is no events table and nothing is persisted, so there is nothing to trigger on. The only calendar thing that *is* real is `reunions` (one row per pair), logged as `reunion_set`. Giving events a table is what unblocks the rest.
+
+## Finance: the reference layout, Goals, and per-amount currency (2026-09-03)
+
+Rebuilt the top of Finances after a reference the user supplied — a horizontal **Wallet** of account cards, a **spend** card with a sparkline and a month-on-month delta, and a horizontal row of **Goals** as progress rings.
+
+**Nothing was removed.** Accounts was renamed to Wallet and restyled from a vertical list to a carousel; Recurring, Budgets, Investments and the month's entries are untouched and in the same order under it.
+
+- ⚠️ **The palette is this app's, not the reference's.** The reference is a saturated teal; this uses the aubergine (`AppColors.inkSurface`) already carrying the net-worth card and the Us stat tiles, with brand pink for progress. Copying the teal would have put a second, unrelated colour system into an app whose identity is the pink→purple gradient.
+- The reference's **"Transfer to" row of friends' faces is deliberately absent**. This app has exactly one other person in it; a horizontal picker with one option is a control pretending to be a choice.
+- The spend card's delta chip only appears when there **is** a previous month. A first month has nothing to compare to, and "up 100%" from an absence is not a fact.
+- The sparkline plots the **running total** through the month, not each day's spend. A couple's daily spending is mostly zeroes with occasional spikes, which reads as noise at 108×46.
+- `_AccountCard` (the old vertical list item) was deleted rather than left unused.
+
+### Goals
+
+Migration **0022, applied**. Progress is measured one of two ways and the choice is the whole design:
+
+- **`account_id` set** → progress **is** that account's balance, derived, and can never drift from the pot. The card says "tracks an account".
+- **`account_id` null** → `saved_amount`, a number somebody keeps honest by hand. For cash in a drawer, or a pot shared with other money.
+
+Linking is the recommended form, and the sheet says so in its own copy: the project's rule is that balances are derived and never stored, precisely so a number cannot drift from what it describes.
+
+- 🔴 **`finance_goals` was missing from the realtime publication on the first pass, and the section rendered its empty state with both rows sitting in the database.** A Supabase `.stream()` on an unpublished table does not merely fail to update — **it never emits at all**. Only caught because the wallet carousel (`finance_accounts`, published in 0011) drew its cards right beside it. Every table this app streams is published; if you add another, publish it.
+- 🔴 **The `saving_goal_set` trigger shipped without its Dart `ActivityKind`**, so a new goal appeared in the activity feed as "Hubby did something". The unknown-kind fallback worked exactly as designed — but `test/activity_test.dart`'s contract test hand-maintains its list of kinds and I had not added the new one, so it passed. **When adding a trigger kind, add it in three places: the SQL, `ActivityKind`, and that test's list.**
+- Goal RLS is **narrower than accounts**: shared goals are visible to both, a personal goal only to its owner. Accounts have an opt-in `visible_to_partner` flag; a goal is a plan rather than a balance, and "I am saving for this" is a thing people reasonably keep to themselves.
+- Edge cases tested: an overdrawn linked account reads as **zero saved**, not negative progress; overshooting is *finished*, not owed; a deleted account leaves the goal alive (`on delete set null`) rather than cascading it away.
+
+### Per-amount currency
+
+The data model already carried a currency on every row. The gap was the **UI**: only the account and budget sheets let you set it. Entries, recurring rules and holdings silently inherited their account, so spending USD from a PHP card was unsayable.
+
+All five sheets now share one `_CurrencyChips` row. The account's currency is still the *default* — spending from a USD card is a USD charge far more often than not — but a default is not a rule, which is what the row is for.
+
+**The rule, now pinned by a test:** an amount on its own stays in the money it was recorded in; conversion happens only where amounts are totalled. `summary.balances['usd']` is **1,000** while `summary.assets` is **58,000**, from the same row.
+
+## Insights, and the shareable card (2026-09-03)
+
+Finances → **Insights**: the month read back to you as charts, with a card exportable as one PNG.
+
+- `domain/finance_insights.dart` is **pure and separate from the widgets on purpose**. A chart that is wrong looks exactly like a chart that is right, and the image goes to somebody who cannot check it — so the arithmetic is testable without a screen. 13 tests.
+- **Charts are hand-painted**, no charting package. This app already draws its own rings, dashed arch and sparkline, so a package would be a second visual language — and every charting library brings its own colour system, which is the exact thing that has to match when the output is an image.
+- ⚠️ **The export is the card, not a screenshot.** The shareable part is one widget under a `RepaintBoundary` and the page is built around it, so what lands in somebody's chat has no status bar, no nav bar and no half-scrolled third chart.
+- ⚠️ **`pixelRatio: 3` is load-bearing.** A `RepaintBoundary` renders at logical size by default, so the export would be ~340px wide — fine on the screen it came from, unreadable everywhere it is going.
+- The card carries its own heading, names, month and **"in \<currency\>"**. Once it is a PNG elsewhere there is no app around it to supply any of that, and numbers with no unit are not numbers.
+- **Unconvertible currencies are excluded and named**, on the page and in the model. A chart quietly missing a currency looks exactly like a correct one; there is a test for that specific failure.
+- The summary lines **describe rather than advise** — this app has no business telling a couple what to do with their money. A test asserts none of them contain "should" or "try to".
+- Bars for all six months are scaled against **one** peak. Scaling each to its own maximum would make a 200 month and a 2,000 month draw identical bars.
+
+**`share_plus` added** (^13.3.0 — ^10 will not resolve against `package_info_plus`). ⚠️ Per § Android builds, adding any plugin can leave a stale Kotlin cache that fails with a misleading "cannot find symbol": `cd android && ./gradlew --stop` first. Done here, and **`flutter build apk --debug` verified green before shipping**.
 
 ## The Us page, and the dates that come out of one date (2026-09-03)
 
