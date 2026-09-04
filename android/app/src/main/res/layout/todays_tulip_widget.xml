@@ -18,9 +18,18 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_background">
 
-    <!-- The photo, when there is a live one. centerCrop is what makes it fill
-         a widget of any aspect without letterboxing; Android 12+ launchers
-         round the widget's corners for us, so the bitmap needs no mask. -->
+    <!-- The photo, when there is a live one.
+
+         ⚠️ Its corners are rounded in Kotlin, not here and not by the
+         launcher. Only Android 12+ launchers clip a widget's corners, and
+         on everything else this bitmap covered the rounded background
+         entirely — which is why this widget looked square next to the
+         heartbeat one. See TodaysTulipWidget.roundCorners.
+
+         centerCrop still, because the bitmap is cut to the widget's own
+         aspect first: it is a straight scale, and a size the launcher
+         reported slightly wrong trims a sliver rather than distorting the
+         picture. -->
     <ImageView
         android:id="@+id/widget_photo"
         android:layout_width="match_parent"
@@ -164,51 +173,75 @@
             android:shadowDy="1"
             android:shadowRadius="3" />
 
-        <!-- Reply bar, shaped after a story's.
+        <!-- Reaction row.
 
-             ⚠️ The pill is a TextView, not an input. A home-screen widget
-             cannot host a real text field — RemoteViews has no EditText on
-             its supported list — so tapping it opens the conversation with
-             the keyboard, which is the closest honest thing. Pretending to
-             be a field that swallows the first sentence typed into it would
-             be worse than an obvious door.
+             ⚠️ There was a "Send message" pill here. It could never be a
+             text field — RemoteViews has no EditText on its supported list
+             — so it opened the conversation instead, which is not replying
+             from the widget, it is leaving the widget. A row of reactions
+             is the part of a story reply bar a widget can actually do.
 
-             Shown only alongside a live day photo: there is nothing to
-             reply to when the widget is showing its fallback glyph. -->
+             Each emoji is a background action, the same shape as the
+             heartbeat widget's tap: a one-tap reaction that costs an app
+             launch is not a one-tap reaction.
+
+             Ids and order mirror DayReaction.values in
+             lib/features/tulip/domain/day_reactions.dart. Shown only
+             alongside a live day photo — with the fallback glyph there is
+             nothing being reacted *to*. -->
         <LinearLayout
             android:id="@+id/widget_reply_bar"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
             android:orientation="horizontal"
-            android:gravity="center_vertical"
+            android:baselineAligned="false"
             android:visibility="gone">
 
             <TextView
-                android:id="@+id/widget_reply_pill"
+                android:id="@+id/widget_react_heart"
                 android:layout_width="0dp"
-                android:layout_height="34dp"
+                android:layout_height="38dp"
                 android:layout_weight="1"
-                android:background="@drawable/widget_reply_pill"
-                android:gravity="center_vertical"
-                android:paddingLeft="14dp"
-                android:paddingRight="14dp"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:text="Send message"
-                android:textColor="#F0EAF6"
-                android:textSize="13sp" />
+                android:gravity="center"
+                android:text="❤️"
+                android:textSize="22sp" />
 
-            <!-- A tulip, not a heart. Every reaction in this app is a
-                 flower; a heart here would be borrowed from another app. -->
             <TextView
-                android:id="@+id/widget_reply_tulip"
-                android:layout_width="38dp"
-                android:layout_height="34dp"
-                android:layout_marginLeft="6dp"
+                android:id="@+id/widget_react_like"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="👍"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/widget_react_flower"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
                 android:gravity="center"
                 android:text="🌷"
-                android:textSize="20sp" />
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/widget_react_sad"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="😢"
+                android:textSize="22sp" />
+
+            <TextView
+                android:id="@+id/widget_react_haha"
+                android:layout_width="0dp"
+                android:layout_height="38dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:text="😂"
+                android:textSize="22sp" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>

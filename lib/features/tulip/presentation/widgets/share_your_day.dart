@@ -21,6 +21,7 @@ import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/camera_lifecycle.dart';
+import '../../domain/day_reactions.dart';
 
 /// The "Share your day" bar at the top of the Flowers tab.
 ///
@@ -416,9 +417,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       if (!mounted) return;
       setState(() {
         _pending = bytes;
-        _pendingExt = (file.path.split('.').last.toLowerCase() == 'png')
-            ? 'png'
-            : 'jpg';
+        _pendingExt =
+            (file.path.split('.').last.toLowerCase() == 'png') ? 'png' : 'jpg';
       });
     } catch (_) {
       if (mounted) _toast("Couldn't open that.");
@@ -816,8 +816,7 @@ class _GlassButton extends StatelessWidget {
           child: SizedBox(
             width: size,
             height: size,
-            child:
-                Icon(icon, color: Colors.white, size: big ? 24 : 18),
+            child: Icon(icon, color: Colors.white, size: big ? 24 : 18),
           ),
         ),
       ),
@@ -840,11 +839,6 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
   final _reply = TextEditingController();
   final _focus = FocusNode();
   bool _sending = false;
-
-  /// What the tulip button sends. The catalog's first entry is the classic
-  /// tulip — the app's own mark, and the right thing for a one-tap
-  /// reaction.
-  static const _reactionFlower = 'classic_tulip';
 
   @override
   void dispose() {
@@ -883,8 +877,7 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(widget.who,
-                            style: AppText.subtitle(Colors.white)),
+                        Text(widget.who, style: AppText.subtitle(Colors.white)),
                         Text(leftLabel,
                             style: AppText.caption(AppColors.onDarkMuted)),
                       ],
@@ -936,7 +929,7 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                   focus: _focus,
                   busy: _sending,
                   onSend: _sendText,
-                  onReact: _sendTulip,
+                  onReact: _sendReaction,
                 ),
               ),
           ],
@@ -952,7 +945,8 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
   /// carry it with no second code path. `replyTo` is the only part that
   /// could not be inferred — without it a 🌷 arriving three hours later is
   /// just a flower.
-  Future<void> _send(Future<void> Function(String pairId, String me) send) async {
+  Future<void> _send(
+      Future<void> Function(String pairId, String me) send) async {
     if (_sending) return;
     final me = ref.read(currentUserIdProvider);
     final pair = ref.read(currentPairProvider).valueOrNull;
@@ -992,25 +986,32 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
         ));
   }
 
-  Future<void> _sendTulip() =>
-      _send((pairId, me) => ref.read(flowerRepositoryProvider).sendFlower(
+  /// A reaction is a **reply to this photo**, sent as text.
+  ///
+  /// ⚠️ It used to send a real `classic_tulip` flower. A flower is a
+  /// deliberate act in this app — one you pick out of a catalog and mean —
+  /// and spending one on a tap that means "nice" made the two gestures the
+  /// same thing. The emoji goes into the thread quoting the photo, which is
+  /// what a story reaction is everywhere else.
+  Future<void> _sendReaction(DayReaction reaction) =>
+      _send((pairId, me) => ref.read(flowerRepositoryProvider).sendText(
             pairId: pairId,
             senderId: me,
-            flowerType: _reactionFlower,
-            // A reaction belongs in the conversation, not on their home
-            // screen: it answers what is already there rather than
-            // replacing it.
-            toWidget: false,
+            text: reaction.emoji,
             replyTo: widget.message.id,
           ));
 }
 
-/// "Send message", a tulip, and a send arrow.
+/// A row of reactions over a field and a send arrow.
 ///
-/// Shaped after the story reply bar everyone already knows — the pill on the
-/// left, the reactions on the right. The one deliberate difference is the
-/// react: a tulip rather than a heart, because this app's whole vocabulary
-/// is flowers and a heart here would be borrowed from somewhere else.
+/// Shaped after the story reply bar everyone already knows. The reactions
+/// sit **above** the field rather than beside it: five of them do not fit
+/// next to a text field at a size anybody can hit, and putting them on
+/// their own line is what the app this is modelled on does.
+///
+/// The flower is one of the five rather than the only one. This app's
+/// vocabulary is flowers, but a tulip is a poor way to say "that's sad",
+/// and a reaction nobody can find the right one in is not used at all.
 class _ReplyBar extends StatelessWidget {
   const _ReplyBar({
     required this.controller,
@@ -1024,62 +1025,78 @@ class _ReplyBar extends StatelessWidget {
   final FocusNode focus;
   final bool busy;
   final Future<void> Function() onSend;
-  final Future<void> Function() onReact;
+  final Future<void> Function(DayReaction) onReact;
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpace.sm, AppSpace.xs, AppSpace.sm, AppSpace.sm),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.pill),
-                border: Border.all(color: Colors.white.withValues(alpha: .55)),
-              ),
-              child: TextField(
-                controller: controller,
-                focusNode: focus,
-                style: AppText.body(Colors.white),
-                cursorColor: AppColors.brandLight,
-                minLines: 1,
-                maxLines: 3,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => onSend(),
-                decoration: InputDecoration(
-                  isDense: true,
-                  // ⚠️ `filled: false` and every border spelled out. The
-                  // app's InputDecorationTheme fills fields with the light
-                  // surface colour and draws its own outline — correct on
-                  // every other form, and over a photo it painted a solid
-                  // white block inside this pill.
-                  filled: false,
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  contentPadding:
-                      const EdgeInsets.symmetric(vertical: 13),
-                  hintText: 'Send message',
-                  hintStyle: AppText.body(Colors.white.withValues(alpha: .7)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              for (final reaction in DayReaction.values)
+                _BarButton(
+                  busy: busy,
+                  onTap: () => onReact(reaction),
+                  child: Semantics(
+                    label: reaction.label,
+                    child: Text(reaction.emoji,
+                        style: const TextStyle(fontSize: 26)),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.xs),
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: .55)),
+                  ),
+                  child: TextField(
+                    controller: controller,
+                    focusNode: focus,
+                    style: AppText.body(Colors.white),
+                    cursorColor: AppColors.brandLight,
+                    minLines: 1,
+                    maxLines: 3,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => onSend(),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      // ⚠️ `filled: false` and every border spelled out. The
+                      // app's InputDecorationTheme fills fields with the light
+                      // surface colour and draws its own outline — correct on
+                      // every other form, and over a photo it painted a solid
+                      // white block inside this pill.
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 13),
+                      hintText: 'Send message',
+                      hintStyle:
+                          AppText.body(Colors.white.withValues(alpha: .7)),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: AppSpace.xs),
-          _BarButton(
-            busy: busy,
-            onTap: onReact,
-            child: const Text('🌷', style: TextStyle(fontSize: 24)),
-          ),
-          const SizedBox(width: 2),
-          _BarButton(
-            busy: busy,
-            onTap: onSend,
-            child: const Icon(CupertinoIcons.paperplane,
-                color: Colors.white, size: 24),
+              const SizedBox(width: AppSpace.xs),
+              _BarButton(
+                busy: busy,
+                onTap: onSend,
+                child: const Icon(CupertinoIcons.paperplane,
+                    color: Colors.white, size: 24),
+              ),
+            ],
           ),
         ],
       ),
@@ -1150,8 +1167,8 @@ class _StripBanner extends ConsumerWidget {
     final strip = awaiting ?? mine!;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpace.md, 0, AppSpace.md, AppSpace.xs),
+      padding:
+          const EdgeInsets.fromLTRB(AppSpace.md, 0, AppSpace.md, AppSpace.xs),
       child: Container(
         padding: const EdgeInsets.symmetric(
             horizontal: AppSpace.sm, vertical: AppSpace.xs),

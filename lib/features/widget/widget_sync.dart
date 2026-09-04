@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../tulip/data/flower_repository.dart';
+import '../tulip/domain/day_reactions.dart';
 
 /// Which content the *adaptive* widget shows. The two dedicated widgets
 /// ignore this — they always show their own thing.
@@ -46,14 +47,20 @@ class DayflowerWidgets {
   /// Handled in the background isolate — does NOT open the app.
   static const heartbeatAction = 'dayflower://heartbeat';
 
-  /// Tapping the widget's "Send message" pill. Opens the conversation
-  /// rather than acting in the background: there is a sentence to type, and
-  /// only the app can take one.
-  static const replyDeepLink = 'dayflower://chat';
+  /// Tapping one of the widget's reactions. Handled in the background
+  /// isolate — the whole point of a one-tap reaction is that it costs no
+  /// app launch. Carries the reaction's **id** as `?r=`, never its emoji.
+  ///
+  /// ⚠️ Replaces two things that were both wrong. A "Send message" pill
+  /// that could only ever *open* the conversation, because RemoteViews has
+  /// no text field to offer — leaving the widget is not replying from it.
+  /// And a tulip that sent a real `classic_tulip` flower into the thread:
+  /// giving somebody a flower is a deliberate act here, not the cost of a
+  /// tap meaning "nice".
+  static const reactAction = 'dayflower://react';
 
-  /// Tapping the widget's tulip. Handled in the background isolate — the
-  /// whole point of a one-tap reaction is that it costs no app launch.
-  static const tulipAction = 'dayflower://tulip';
+  /// The query parameter carrying the reaction id in [reactAction].
+  static const reactParam = 'r';
 
   // Keys read by the native layouts. Keep in sync with the Kotlin providers.
   static const keyFlowerEmoji = 'tulip_emoji';
@@ -87,8 +94,10 @@ class DayflowerWidgets {
   /// photo would sit on the home screen for days.
   static const keyDayPhotoExpiresAt = 'day_photo_expires_at';
 
-  /// Whose day the photo is — drives the story header's name and the
-  /// initial in its avatar circle. Empty when there is no live photo.
+  /// Who the widget's content came from — drives the header's name and
+  /// avatar. Set for a flower as well as a day photo, because the header is
+  /// now the only thing that says who sent it; empty when there is nothing
+  /// from them and the header is hidden.
   static const keyDayOwner = 'day_photo_owner';
 
   /// The owner's avatar flower, as its emoji. Pushed rather than derived in
@@ -166,29 +175,43 @@ class DayflowerWidgets {
       }
     }
 
+    // ⚠️ **The body is only ever something they wrote.** It used to carry a
+    // flower's dictionary meaning, or "Tap to open the conversation" — a
+    // caption explaining the widget to somebody already looking at it,
+    // taking the space under the picture every single day. The flower's
+    // name is the whole caption a flower needs.
+    //
+    // Nothing says "from $partnerName" any more either: the header above
+    // the caption is their avatar and their name, and saying it twice on a
+    // card this small is just noise.
     late final String emoji, title, body;
     if (photoPath.isNotEmpty) {
       emoji = '📷';
-      title = "$partnerName's day";
-      body = received?.note ?? 'Tap to open the conversation.';
+      // The header already says whose day this is. What it cannot say is
+      // what they wrote on it.
+      title = received?.note ?? '';
+      body = '';
     } else if (received?.flower != null) {
       final flower = received!.flower!;
       emoji = flower.emoji;
-      title = '${flower.name} from $partnerName';
-      body = received.note ?? flower.meaning;
+      title = flower.name;
+      body = received.note ?? '';
     } else if (sentToday) {
       emoji = '🌱';
-      title = 'On its way';
-      body = 'Nothing from $partnerName yet — soon.';
+      title = 'Nothing from $partnerName yet';
+      body = '';
     } else {
       emoji = '🌷';
       title = 'Nothing here yet';
-      body = 'Tap to send $partnerName a flower.';
+      body = '';
     }
 
-    // Only fetched when there is a photo to sit beside — the header, and
-    // therefore the avatar, is hidden without one.
-    final avatarPath = photoPath.isEmpty
+    // Whose it is — a photo or a flower, both come from them, and the
+    // header is now the only place that says so.
+    final owner = received == null ? '' : partnerName;
+
+    // Only fetched when the header will actually show it.
+    final avatarPath = owner.isEmpty
         ? ''
         : await _cacheAvatar(partnerAvatarPath, downloadAvatar) ?? '';
 
@@ -197,10 +220,9 @@ class DayflowerWidgets {
       await HomeWidget.saveWidgetData<String>(keyDayOwnerAvatar, avatarPath);
       await HomeWidget.saveWidgetData<String>(
           keyDayPhotoId, photoPath.isEmpty ? '' : (received?.id ?? ''));
+      await HomeWidget.saveWidgetData<String>(keyDayOwner, owner);
       await HomeWidget.saveWidgetData<String>(
-          keyDayOwner, photoPath.isEmpty ? '' : partnerName);
-      await HomeWidget.saveWidgetData<String>(
-          keyDayOwnerFlower, photoPath.isEmpty ? '' : partnerFlower);
+          keyDayOwnerFlower, owner.isEmpty ? '' : partnerFlower);
       await HomeWidget.saveWidgetData<int>(
           keyDayPhotoExpiresAt, photoExpiresAt);
       await HomeWidget.saveWidgetData<String>(keyFlowerEmoji, emoji);
@@ -379,7 +401,7 @@ class DayflowerWidgets {
 @pragma('vm:entry-point')
 Future<void> dayflowerWidgetBackground(Uri? uri) async {
   final host = uri?.host;
-  if (host != 'heartbeat' && host != 'tulip') return;
+  if (host != 'heartbeat' && host != 'react') return;
 
   try {
     WidgetsFlutterBinding.ensureInitialized();
@@ -402,23 +424,34 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
 
     final pairId = pairs.first['id'] as String;
 
-    // A tulip tapped on the widget is a reaction to the day photo the
-    // widget is showing, so it carries `reply_to` — otherwise it arrives in
-    // the thread as an unexplained flower some hours after the thing it
-    // answers. The id is written alongside the photo at sync time; empty
-    // means the widget is on its fallback glyph, and then it is simply a
-    // flower with nothing to quote.
-    if (host == 'tulip') {
+    // A reaction is a reply to the day photo the widget is showing — a
+    // text message carrying the emoji and `reply_to`, which is what makes
+    // it still say what it was answering when it is read hours later.
+    if (host == 'react') {
+      final reaction = DayReaction.byId(
+        uri?.queryParameters[DayflowerWidgets.reactParam],
+      );
+      if (reaction == null) return;
+
+      // ⚠️ **No photo, no reaction.** The id is written alongside the photo
+      // at sync time, so an empty one means the widget is on its fallback
+      // glyph. Sending anyway would drop a bare emoji into the conversation
+      // answering nothing — and the reaction row is hidden in that state,
+      // so getting here at all means the widget is out of date.
       final replyTo =
           await HomeWidget.getWidgetData<String>(DayflowerWidgets.keyDayPhotoId);
+      if (replyTo == null || replyTo.isEmpty) return;
+
       await client.from('flower_messages').insert({
         'pair_id': pairId,
         'sender_id': userId,
-        'flower_type': 'classic_tulip',
+        // `note` with no flower and no image is what makes this a text
+        // message — see FlowerMessage.isText.
+        'note': reaction.emoji,
         // It answers what is already on their home screen rather than
         // replacing it.
         'to_widget': false,
-        if (replyTo != null && replyTo.isNotEmpty) 'reply_to': replyTo,
+        'reply_to': replyTo,
       });
       return;
     }
@@ -450,7 +483,7 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
       qualifiedAndroidName: DayflowerWidgets.adaptiveProvider,
     );
   } catch (e) {
-    debugPrint('widget heartbeat background send failed: $e');
+    debugPrint('widget background action failed: $e');
   }
 }
 

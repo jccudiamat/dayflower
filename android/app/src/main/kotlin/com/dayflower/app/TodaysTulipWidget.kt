@@ -5,7 +5,14 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
+import android.graphics.RectF
 import android.net.Uri
+import android.os.Bundle
 import android.view.View
 import android.widget.RemoteViews
 import java.io.File
@@ -29,7 +36,12 @@ class TodaysTulipWidget : HomeWidgetProvider() {
     ) {
         appWidgetIds.forEach { widgetId ->
             val views = RemoteViews(context.packageName, R.layout.todays_tulip_widget)
-            renderFlower(context, views, widgetData)
+            renderFlower(
+                context,
+                views,
+                widgetData,
+                appWidgetManager.getAppWidgetOptions(widgetId),
+            )
             appWidgetManager.updateAppWidget(widgetId, views)
         }
     }
@@ -40,35 +52,37 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             context: Context,
             views: RemoteViews,
             widgetData: SharedPreferences,
+            options: Bundle? = null,
         ) {
             // A day photo takes the slot when there is a live one; otherwise
             // the flower glyph does. Never both.
-            val photo = loadDayPhoto(widgetData)
+            val photo = loadDayPhoto(widgetData)?.let { roundCorners(context, it, options) }
             if (photo != null) {
                 views.setImageViewBitmap(R.id.widget_photo, photo)
                 views.setViewVisibility(R.id.widget_photo, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
-                renderStoryHeader(views, widgetData)
             } else {
                 views.setViewVisibility(R.id.widget_photo, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
-                // A name and a countdown over the fallback glyph would be
-                // describing a photo that is not there.
-                views.setViewVisibility(R.id.widget_header, View.GONE)
             }
+
+            // Not only over a photo any more. A flower now says who it is
+            // from up here, with their face on it, rather than in the
+            // caption as "Tulip from Sheena" - the name belongs beside the
+            // avatar, and it was being said twice on a card this small.
+            // Hides itself when there is nothing from them at all.
+            renderStoryHeader(views, widgetData)
 
             views.setTextViewText(
                 R.id.widget_emoji,
                 widgetData.getString("tulip_emoji", "🌷"),
             )
-            views.setTextViewText(
-                R.id.widget_title,
-                widgetData.getString("tulip_title", "No flower yet today"),
-            )
-            views.setTextViewText(
-                R.id.widget_body,
-                widgetData.getString("tulip_body", "Tap to send yours first."),
-            )
+            // Empty means hidden, not a blank line. The caption is now only
+            // a flower's name or something they actually wrote, so on a day
+            // photo with no note there is genuinely nothing to say here and
+            // an empty TextView would still hold a line of space open.
+            setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
+            setTextOrHide(views, R.id.widget_body, widgetData.getString("tulip_body", ""))
 
             views.setOnClickPendingIntent(
                 R.id.widget_root,
@@ -79,45 +93,145 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 ),
             )
 
-            renderReplyBar(context, views, photo != null)
+            renderReactions(context, views, photo != null)
         }
 
         /**
-         * The story-style reply bar under the caption.
+         * The five reactions, in place of the old reply bar.
+         *
+         * WARNING: there used to be a "Send message" pill beside a tulip.
+         * The pill could not be a text field - RemoteViews has no EditText -
+         * so it launched the app, which is not replying from the widget but
+         * leaving it. And the tulip sent a real classic_tulip FLOWER into
+         * the conversation: giving somebody a flower is a deliberate act in
+         * this app, not what a tap meaning "nice" should cost.
+         *
+         * Each of these posts its emoji as a reply to the photo on screen,
+         * in the background, without opening anything.
          *
          * Only shown alongside a live day photo: with the fallback glyph
-         * there is nothing being replied *to*, and a reply bar over it would
-         * be offering to answer a picture that isn't there.
-         *
-         * ⚠️ The two halves are deliberately different kinds of action. The
-         * pill **launches the app** — a widget cannot host a text field, so
-         * the honest version of "send message" is a door to the place that
-         * can take one. The tulip is a **background action**, the same shape
-         * as the heartbeat widget's tap: a one-tap reaction that costs an
-         * app launch is not a one-tap reaction.
+         * there is nothing being reacted *to*.
          */
-        fun renderReplyBar(context: Context, views: RemoteViews, hasPhoto: Boolean) {
+        fun renderReactions(context: Context, views: RemoteViews, hasPhoto: Boolean) {
             if (!hasPhoto) {
                 views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
                 return
             }
             views.setViewVisibility(R.id.widget_reply_bar, View.VISIBLE)
 
-            views.setOnClickPendingIntent(
-                R.id.widget_reply_pill,
-                HomeWidgetLaunchIntent.getActivity(
-                    context,
-                    MainActivity::class.java,
-                    Uri.parse("dayflower://chat"),
-                ),
-            )
-            views.setOnClickPendingIntent(
-                R.id.widget_reply_tulip,
-                HomeWidgetBackgroundIntent.getBroadcast(
-                    context,
-                    Uri.parse("dayflower://tulip"),
-                ),
-            )
+            REACTIONS.forEach { (viewId, reactionId) ->
+                views.setOnClickPendingIntent(
+                    viewId,
+                    HomeWidgetBackgroundIntent.getBroadcast(
+                        context,
+                        // The id travels, never the emoji: a URI is at the
+                        // mercy of whoever percent-encodes it on the way to
+                        // the isolate, and ascii cannot be mangled.
+                        //
+                        // Distinct data is also what keeps these five
+                        // PendingIntents apart - the plugin builds them all
+                        // with request code 0, and Intent.filterEquals
+                        // compares data.
+                        Uri.parse("dayflower://react?r=" + reactionId),
+                    ),
+                )
+            }
+        }
+
+        /**
+         * WARNING: mirrors DayReaction.values in
+         * lib/features/tulip/domain/day_reactions.dart, which is the source
+         * of truth for what each id means. An id sent from here that Dart
+         * does not recognise is dropped there rather than posted.
+         */
+        private val REACTIONS = listOf(
+            R.id.widget_react_heart to "heart",
+            R.id.widget_react_like to "like",
+            R.id.widget_react_flower to "flower",
+            R.id.widget_react_sad to "sad",
+            R.id.widget_react_haha to "haha",
+        )
+
+        /** Matches @drawable/widget_background's corner radius. */
+        private const val CORNER_DP = 28f
+
+        /**
+         * Cuts the photo to the widget's own shape, with rounded corners.
+         *
+         * WARNING: this is the only thing that rounds this widget. The card
+         * behind it is a rounded shape drawable, but a full-bleed photo
+         * covers it completely, so the widget rendered as a hard-cornered
+         * rectangle beside the heartbeat widget's rounded one. Only Android
+         * 12+ launchers clip widget corners themselves, and OEM launchers
+         * often skip it; on anything else nothing else will do this.
+         *
+         * The bitmap is cropped to the widget's reported aspect first so the
+         * ImageView's centerCrop becomes a straight scale - otherwise it
+         * would trim the very corners this just drew. A launcher that
+         * reports nothing usable falls back to the bitmap's own bounds,
+         * which still rounds, just with a sliver possibly cropped.
+         */
+        fun roundCorners(context: Context, src: Bitmap, options: Bundle?): Bitmap {
+            return try {
+                val density = context.resources.displayMetrics.density
+                // Portrait dimensions: minWidth is the narrow-orientation
+                // width, maxHeight the tall-orientation height.
+                val wDp = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH, 0) ?: 0
+                val hDp = options?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT, 0) ?: 0
+
+                var outW = (wDp * density).toInt()
+                var outH = (hDp * density).toInt()
+                if (outW <= 0 || outH <= 0) {
+                    outW = src.width
+                    outH = src.height
+                }
+                // Never upscale past the source: a widget wider than the
+                // cached photo would cost memory for no extra detail, and
+                // RemoteViews has a hard bitmap budget.
+                if (outW > src.width) {
+                    outH = outH * src.width / outW
+                    outW = src.width
+                }
+                if (outW <= 0 || outH <= 0) return src
+
+                // Centre-crop rect on the source, matching the output aspect.
+                val outAspect = outW.toFloat() / outH
+                val srcAspect = src.width.toFloat() / src.height
+                val cropW: Int
+                val cropH: Int
+                if (srcAspect > outAspect) {
+                    cropH = src.height
+                    cropW = (src.height * outAspect).toInt().coerceIn(1, src.width)
+                } else {
+                    cropW = src.width
+                    cropH = (src.width / outAspect).toInt().coerceIn(1, src.height)
+                }
+                val left = (src.width - cropW) / 2
+                val top = (src.height - cropH) / 2
+                val srcRect = Rect(left, top, left + cropW, top + cropH)
+
+                val out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(out)
+                val radius = CORNER_DP * density
+                val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+                // Draw the rounded shape, then paint the photo only where it
+                // already is. A mask rather than a clipPath because
+                // clipPath is not antialiased and leaves stepped corners.
+                paint.color = 0xFF000000.toInt()
+                canvas.drawRoundRect(
+                    RectF(0f, 0f, outW.toFloat(), outH.toFloat()),
+                    radius,
+                    radius,
+                    paint,
+                )
+                paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+                canvas.drawBitmap(src, srcRect, Rect(0, 0, outW, outH), paint)
+                out
+            } catch (e: Throwable) {
+                // Out of memory, a recycled bitmap, anything: a square photo
+                // is a cosmetic problem, a blank widget is not.
+                src
+            }
         }
 
         /**
@@ -141,14 +255,26 @@ class TodaysTulipWidget : HomeWidgetProvider() {
          * expired one looks like: Dart writes an empty path once the 24h are
          * up, so expiry needs no logic on this side.
          */
+        private fun setTextOrHide(views: RemoteViews, viewId: Int, text: String?) {
+            if (text.isNullOrEmpty()) {
+                views.setViewVisibility(viewId, View.GONE)
+            } else {
+                views.setViewVisibility(viewId, View.VISIBLE)
+                views.setTextViewText(viewId, text)
+            }
+        }
+
         /**
-         * Story header — avatar, whose day it is, and the time remaining.
+         * Story header — avatar, who it is from, and the time remaining.
          *
          * The countdown is computed here rather than pushed from Dart for the
          * same reason expiry is: the widget outlives the app process, so a
          * "16h" written at sync time would still read 16h tomorrow.
          */
         fun renderStoryHeader(views: RemoteViews, widgetData: SharedPreferences) {
+            // Written for a flower as well as a day photo now; empty only
+            // when there is nothing from them, which is when there is
+            // nobody to name.
             val owner = widgetData.getString("day_photo_owner", "") ?: ""
             if (owner.isEmpty()) {
                 views.setViewVisibility(R.id.widget_header, View.GONE)

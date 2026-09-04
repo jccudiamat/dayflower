@@ -57,7 +57,12 @@ class DayflowerWidget : HomeWidgetProvider() {
                 }
             } else {
                 RemoteViews(context.packageName, R.layout.todays_tulip_widget).also {
-                    TodaysTulipWidget.renderFlower(context, it, widgetData)
+                    TodaysTulipWidget.renderFlower(
+                        context,
+                        it,
+                        widgetData,
+                        appWidgetManager.getAppWidgetOptions(widgetId),
+                    )
                 }
             }
             appWidgetManager.updateAppWidget(widgetId, views)

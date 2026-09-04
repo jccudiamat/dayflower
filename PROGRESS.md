@@ -1087,3 +1087,80 @@ merely *broken* was a different app opening in your face.
 **Not verified on hardware by me** — the emulator's fake camera does not
 reproduce a real sensor being taken away. The build compiles and the lifecycle
 mapping is under test; the trip that produced it needs the phone.
+
+## The widget reacts now, and stops explaining itself (2026-09-04)
+
+**Not shipped — held for the go-ahead.**
+
+### The reply bar was two wrong things
+
+The pill said "Send message" and opened the app. That was honest about what
+RemoteViews can do — there is no `EditText` on its supported list — but
+leaving the widget is not replying from it, and a control that reads as a
+field and turns out to be a door is worse than no control. It is gone, along
+with `widget_reply_pill.xml`.
+
+The tulip beside it worked, and did the wrong thing: it inserted a real
+`classic_tulip` **flower** into the conversation. ⚠️ A flower is a deliberate
+act in this app — chosen out of a catalog, carrying a meaning, landing on
+somebody's home screen — and spending one on a tap that means "nice" made the
+two gestures the same gesture.
+
+In their place, **five reactions**: ❤️ 👍 🌷 😢 😂. Each posts its emoji into
+the thread as a **text message carrying `reply_to`** — which is what a story
+reaction is in the app this is modelled on, and what makes an emoji read
+hours later still say what it was answering. No new table: a reaction is a
+reply, and a reply is a message, so the thread, the badge, the notification
+and the realtime stream all carry it with no second code path.
+
+- ⚠️ **The reaction *id* crosses the process boundary, never the emoji.** The
+  widget hands its tap to the background isolate as a URI, and an emoji in a
+  URI is at the mercy of whoever percent-encodes it on the way through.
+  `DayReaction` in `features/tulip/domain/day_reactions.dart` is the source of
+  truth; the Kotlin sends `dayflower://react?r=heart`.
+- ⚠️ **An empty `day_photo_id` sends nothing.** The reaction row is hidden
+  without a live photo, so reaching the isolate in that state means the widget
+  is out of date — and a bare emoji answering nothing is not a reaction.
+- 🔴 **The ids are a hand-maintained list on two sides of a language
+  boundary**, which is exactly the shape that drifted last time
+  (`saving_goal_set`). `test/day_reactions_test.dart` reads the Kotlin and the
+  layout XML rather than restating them: a button whose id Dart drops does
+  nothing, silently, with no error anywhere.
+- The in-app story viewer gets the same five, above the field rather than
+  beside it — five do not fit next to a text field at a size anybody can hit.
+
+### The corners
+
+⚠️ **The photo was the reason this widget looked square** next to the
+heartbeat one. Both sit on the same rounded `widget_background`, but a
+full-bleed bitmap covers it completely, and only Android 12+ launchers clip
+widget corners themselves — OEM launchers routinely skip it.
+
+`TodaysTulipWidget.roundCorners` cuts the corners into the bitmap, at 28dp to
+match the card. It crops to the widget's **own reported aspect** first so the
+ImageView's `centerCrop` becomes a straight scale — otherwise centerCrop would
+trim off the very corners just drawn. A launcher reporting nothing usable
+falls back to the bitmap's own bounds: still rounded, possibly a sliver
+cropped. Failure of any kind returns the original — a square photo is
+cosmetic, a blank widget is not.
+
+### The caption stopped narrating
+
+The body line carried a flower's dictionary meaning, or "Tap to open the
+conversation" — a caption explaining the widget to somebody already looking at
+it, taking the space under the picture every day. **The body is now only ever
+something they actually wrote.** A flower's caption is its name.
+
+"Tulip **from Wifey**" is now just "Tulip". ⚠️ To make that true rather than
+merely shorter, the story header — avatar, name — **now shows over a flower
+too**, not only over a day photo. Checked against the geometry: at the
+minimum resize (150dp tall) the header's real content ends at 39dp and the
+centred 68sp glyph starts at 41dp, so nothing collides.
+
+Empty title or body is `GONE`, not blank. An empty `TextView` still holds a
+line of space open, and a day photo with no note now genuinely has nothing to
+say down there.
+
+**Not verified on hardware.** Widget rendering, launcher corner behaviour and
+the five PendingIntents staying distinct are all device-side. Build compiles,
+134 tests pass.
