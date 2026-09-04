@@ -1040,3 +1040,50 @@ The older list, unchanged:
    - Legal pages at `/terms` + `/privacy` are preliminary drafts with a placeholder contact.
 5. Optional cleanup: delete the dead `features/booth`, `features/dates`, `features/us` screens (unreachable, still on the old design, and the only source of `flutter analyze` lint noise).
 6. ~~Copy inconsistency between app and site hero card~~ — resolved 2026-07-26: `website/app/page.tsx` now says "Today's Flower" too, matching the Nest card and the Android widget. Keep the three in sync if the label changes again.
+
+## 🔴 The viewfinder never came back from the gallery (2026-09-04)
+
+Reported from the phone: open the gallery, pick a photo, press the X on the
+review screen — and the camera behind it is dead. A black card with a spinner
+that never resolves. Press the shutter on it and **the phone's own camera app
+opens**, which looks like a completely separate bug and is the same one.
+
+One line, in `didChangeAppLifecycleState`:
+
+```dart
+if (_cam == null) return;   // 🔴
+```
+
+It reads as "no controller, nothing to hand back". But **pausing is what set
+the controller to null.** So the guard was true on exactly the callback it
+was paired with: the sensor was released on the way out and the resume that
+should have taken it back returned before reaching `_startCamera()`. Any trip
+out of the app did it — the picker, a notification pull, a permission dialog.
+The gallery is just the one you take on purpose.
+
+The second symptom falls out of the first. `_shoot()` falls back to
+`ImageSource.camera` when it has no controller, which is right when the device
+genuinely has no camera and wrong here: the fallback for a camera that is
+merely *broken* was a different app opening in your face.
+
+- ⚠️ **The decision now depends on the lifecycle state and nothing else** —
+  `cameraActionFor` in `features/tulip/domain/camera_lifecycle.dart`, with a
+  test that walks the whole inactive → paused → resumed trip. Every version of
+  this bug is some piece of state making one of those two answers conditional,
+  so there is no state left to make it conditional on.
+- `hidden` and `detached` now release too. `hidden` did not exist when this was
+  written and on some platforms it is what arrives instead of `paused`.
+- ⚠️ **A generation token, because `initialize()` outlives the pause that
+  cancels it.** A controller that finishes opening after its generation has
+  passed disposes itself. Without it, backgrounding the app *during* startup
+  left a live camera held while the app was away, and the next resume opened a
+  second one on top of it.
+- Opens and closes are serialised through one future chain. Two controllers on
+  one sensor is an Android "camera in use" failure, and pause/resume arrive
+  faster than `initialize()` returns.
+- The spinner is tappable now. It was the one state on that screen with no way
+  out of it.
+
+**Not verified on hardware by me** — the emulator's fake camera does not
+reproduce a real sensor being taken away. The build compiles and the lifecycle
+mapping is under test; the trip that produced it needs the phone.

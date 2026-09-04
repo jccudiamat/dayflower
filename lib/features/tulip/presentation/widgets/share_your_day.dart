@@ -20,6 +20,7 @@ import '../../../booth/domain/strip_templates.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
+import '../../domain/camera_lifecycle.dart';
 
 /// The "Share your day" bar at the top of the Flowers tab.
 ///
@@ -53,6 +54,18 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
   bool _busy = false;
 
+  /// Bumped every time the camera is opened or closed. An `initialize()`
+  /// that lands after its generation has passed belongs to a controller
+  /// nobody wants any more, so it disposes itself instead of taking the
+  /// sensor back — otherwise a pause during startup leaves a live camera
+  /// held while the app is in the background.
+  int _camGen = 0;
+
+  /// Serialises opening and closing. Two controllers on one sensor is an
+  /// Android "camera in use" failure, and pause/resume can easily arrive
+  /// faster than `initialize()` returns.
+  Future<void> _camOps = Future<void>.value();
+
   /// The shot that has been taken but not sent.
   ///
   /// Pressing the shutter used to upload immediately, which made every
@@ -85,26 +98,57 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _camGen++;
     _cam?.dispose();
+    _cam = null;
     super.dispose();
   }
 
   /// A live camera holds the sensor open, so hand it back when the app is
   /// backgrounded and take it again on resume.
+  ///
+  /// ⚠️ **Never guard this on `_cam`.** See [cameraActionFor] — a
+  /// `if (_cam == null) return` here reads as "nothing to hand back", but
+  /// pausing is what sets it to null, so it silently ate every resume and
+  /// the viewfinder never came back from the gallery picker.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cam == null) return;
-    if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused) {
-      _cam?.dispose();
-      _cam = null;
-      if (mounted) setState(() => _camReady = false);
-    } else if (state == AppLifecycleState.resumed) {
-      _startCamera();
+    switch (cameraActionFor(state)) {
+      case CameraLifecycleAction.open:
+        _startCamera();
+      case CameraLifecycleAction.close:
+        _stopCamera();
     }
   }
 
-  Future<void> _startCamera() async {
+  /// Hands the sensor back and invalidates any open still in flight.
+  Future<void> _stopCamera() {
+    _camGen++;
+    final old = _cam;
+    _cam = null;
+    if (mounted) {
+      setState(() => _camReady = false);
+    } else {
+      _camReady = false;
+    }
+    return _queue(() async => old?.dispose());
+  }
+
+  Future<void> _startCamera() {
+    // Claimed now, not when the queue reaches us: a pause arriving in the
+    // meantime has to be able to invalidate this open before it starts.
+    final gen = ++_camGen;
+    return _queue(() => _open(gen));
+  }
+
+  /// Runs camera work one piece at a time. A failure is swallowed here
+  /// because each operation already reports its own — what must not happen
+  /// is a broken chain, which would wedge every later open.
+  Future<void> _queue(Future<void> Function() op) =>
+      _camOps = _camOps.then((_) => op()).catchError((_) {});
+
+  Future<void> _open(int gen) async {
+    if (gen != _camGen) return;
     try {
       if (_cameras.isEmpty) _cameras = await availableCameras();
       if (_cameras.isEmpty) {
@@ -121,7 +165,9 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
         enableAudio: false,
       );
       await controller.initialize();
-      if (!mounted) {
+      // Superseded while we were waiting — a pause, a flip, or a teardown.
+      // Whoever moved on is not going to dispose this one for us.
+      if (!mounted || gen != _camGen) {
         await controller.dispose();
         return;
       }
@@ -135,7 +181,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       });
     } catch (_) {
       // Denied, unsupported, or already in use — fall back rather than fail.
-      if (mounted) setState(() => _camUnavailable = true);
+      if (mounted && gen == _camGen) setState(() => _camUnavailable = true);
     }
   }
 
@@ -143,16 +189,10 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
   Future<void> _flip() async {
     if (!_canFlip || _busy) return;
-    final next = _lens == CameraLensDirection.back
+    _lens = _lens == CameraLensDirection.back
         ? CameraLensDirection.front
         : CameraLensDirection.back;
-    final old = _cam;
-    setState(() {
-      _cam = null;
-      _camReady = false;
-      _lens = next;
-    });
-    await old?.dispose();
+    await _stopCamera();
     await _startCamera();
   }
 
@@ -207,7 +247,15 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Future<void> _shoot() async {
     if (_busy) return;
     final cam = _cam;
-    if (cam == null || !_camReady) return _pickFrom(ImageSource.camera);
+    if (cam == null || !_camReady) {
+      // Only when there genuinely is no camera to use. While one is still
+      // opening, a shutter tap that launches the phone's camera app is not
+      // a fallback — it is a different app arriving in your face, which is
+      // exactly what the lifecycle bug above used to cause. Otherwise try
+      // again, so a viewfinder stuck on its spinner has a way out.
+      if (_camUnavailable) return _pickFrom(ImageSource.camera);
+      return _startCamera();
+    }
     try {
       final shot = await cam.takePicture();
       var bytes = await shot.readAsBytes();
@@ -555,7 +603,11 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       );
     }
     return GestureDetector(
-      onTap: _camUnavailable ? () => _pickFrom(ImageSource.camera) : null,
+      // A spinner that never resolves is the one state with no way out of
+      // it, so tapping it asks for the camera again.
+      onTap: _camUnavailable
+          ? () => _pickFrom(ImageSource.camera)
+          : () => _startCamera(),
       child: ColoredBox(
         color: const Color(0xFF120C1F),
         child: Center(
