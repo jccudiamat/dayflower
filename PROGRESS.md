@@ -1164,3 +1164,46 @@ say down there.
 **Not verified on hardware.** Widget rendering, launcher corner behaviour and
 the five PendingIntents staying distinct are all device-side. Build compiles,
 134 tests pass.
+
+## 🔴 A widget provider closed the app on launch (2026-09-04)
+
+Build 26 opened for a split second and closed. Not the splash, not a hang —
+the process dying about a second in.
+
+⚠️ **An AppWidgetProvider is a BroadcastReceiver, and it runs in the app's
+own process.** `main()` calls `DayflowerWidgets.init()`, the app then syncs
+and calls `HomeWidget.updateWidget()`, Android delivers APPWIDGET_UPDATE, and
+`TodaysTulipWidget.onUpdate` executes **inside the app**. Anything that throws
+there is not a broken widget on a home screen nobody is looking at. It is the
+app closing, with the stack pointing somewhere the user never went.
+
+Build 26 was the first version to draw a new bitmap in that path
+(`roundCorners`), which is what made a latent structural exposure into a
+crash.
+
+- ⚠️ **`updateAppWidget()` throws on this side of the binder call.** It
+  rejects a RemoteViews whose bitmaps exceed the host's budget —
+  `6 * displayWidth * displayHeight` bytes — and that check runs in the
+  caller. So it is not enough to guard *our* drawing code; the handoff itself
+  has to be inside the frame.
+- `renderSafely` now wraps render **and** update, falls back to a bitmap-free
+  glyph-only RemoteViews, and never rethrows. `Log.e` names the throwable, so
+  the next logcat says what failed instead of leaving it to inference.
+- The same frame is on `DayflowerWidget` and `HeartbeatWidget`. Neither draws
+  a bitmap today; the frame costs nothing and the failure it prevents is not
+  proportional to the risk.
+- The rounded bitmap is now bounded on **both** axes by `TARGET_PX`, the same
+  ceiling `loadDayPhoto` already downsamples to, so it can never ask for more
+  memory than the square version did. Build 26 capped width only.
+
+🔴 **The root cause is inferred, not observed.** No device was attached and no
+logcat was read; what is established is the mechanism and the fact that build
+26's only new launch-path code lives there. The guard is correct regardless —
+a widget must never be able to close the app — but it is containment, and if
+the crash survives it, the cause is elsewhere and the log is the next step.
+
+⚠️ **An app that will not open cannot update itself.** The in-app OTA check
+needs a running app, so a launch crash is not remotely fixable. Removing the
+widget from the home screen stops `onUpdate` from ever running, which both
+confirms the diagnosis and gets the app open far enough to take an update.
+Worth remembering before shipping anything else that touches this path.

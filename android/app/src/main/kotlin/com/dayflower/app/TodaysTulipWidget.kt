@@ -35,18 +35,96 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         appWidgetIds.forEach { widgetId ->
-            val views = RemoteViews(context.packageName, R.layout.todays_tulip_widget)
-            renderFlower(
-                context,
-                views,
-                widgetData,
-                appWidgetManager.getAppWidgetOptions(widgetId),
-            )
-            appWidgetManager.updateAppWidget(widgetId, views)
+            renderSafely(context, appWidgetManager, widgetId, widgetData)
         }
     }
 
     companion object {
+
+        /**
+         * Renders one widget, and CANNOT take the app down with it.
+         *
+         * 🔴 An AppWidgetProvider is a BroadcastReceiver, and it runs in the
+         * app's own process. Opening the app syncs the widgets, so anything
+         * that throws in here is not a broken widget - it is the app dying
+         * about a second after launch, with the crash pointing at a
+         * home-screen widget nobody was looking at.
+         *
+         * The throw is not only ours to make. updateAppWidget() itself
+         * rejects a RemoteViews whose bitmaps exceed the host's budget
+         * (6 * screen width * height bytes), and that check runs on this
+         * side of the binder call. So the retry drops the photo - which is
+         * the only large thing in here - rather than trying to be cleverer
+         * about why.
+         *
+         * Whatever the cause, a widget that shows its fallback glyph is a
+         * cosmetic problem. An app that will not open is not.
+         */
+        fun renderSafely(
+            context: Context,
+            appWidgetManager: AppWidgetManager,
+            widgetId: Int,
+            widgetData: SharedPreferences,
+        ) {
+            try {
+                val views = RemoteViews(context.packageName, R.layout.todays_tulip_widget)
+                renderFlower(
+                    context,
+                    views,
+                    widgetData,
+                    appWidgetManager.getAppWidgetOptions(widgetId),
+                )
+                appWidgetManager.updateAppWidget(widgetId, views)
+            } catch (e: Throwable) {
+                // Named in the log so a logcat says what actually failed
+                // rather than leaving the next person guessing at it.
+                android.util.Log.e(TAG, "widget render failed, falling back", e)
+                try {
+                    val plain =
+                        RemoteViews(context.packageName, R.layout.todays_tulip_widget)
+                    renderFallback(context, plain, widgetData)
+                    appWidgetManager.updateAppWidget(widgetId, plain)
+                } catch (e2: Throwable) {
+                    // Give up on the widget entirely. Never rethrow: this is
+                    // the frame that stands between a bad widget and a dead
+                    // app process.
+                    android.util.Log.e(TAG, "widget fallback failed too", e2)
+                }
+            }
+        }
+
+        /**
+         * The flower glyph and nothing else - no photo, no avatar, no
+         * bitmaps of any kind. Deliberately the smallest thing that can
+         * still be called a rendered widget.
+         */
+        fun renderFallback(
+            context: Context,
+            views: RemoteViews,
+            widgetData: SharedPreferences,
+        ) {
+            views.setViewVisibility(R.id.widget_photo, View.GONE)
+            views.setViewVisibility(R.id.widget_header, View.GONE)
+            views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
+            views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
+            views.setTextViewText(
+                R.id.widget_emoji,
+                widgetData.getString("tulip_emoji", "🌷"),
+            )
+            setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
+            views.setViewVisibility(R.id.widget_body, View.GONE)
+            views.setOnClickPendingIntent(
+                R.id.widget_root,
+                HomeWidgetLaunchIntent.getActivity(
+                    context,
+                    MainActivity::class.java,
+                    Uri.parse("dayflower://flowers"),
+                ),
+            )
+        }
+
+        private const val TAG = "DayflowerWidget"
+
         /** Shared with DayflowerWidget so the adaptive variant renders identically. */
         fun renderFlower(
             context: Context,
@@ -185,12 +263,21 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                     outW = src.width
                     outH = src.height
                 }
-                // Never upscale past the source: a widget wider than the
-                // cached photo would cost memory for no extra detail, and
-                // RemoteViews has a hard bitmap budget.
-                if (outW > src.width) {
-                    outH = outH * src.width / outW
-                    outW = src.width
+                // ⚠️ Bounded on BOTH axes, and that is not tidiness.
+                // updateAppWidget() rejects a RemoteViews whose bitmaps
+                // exceed 6 * screen width * height bytes, and it throws that
+                // on this side of the binder call - inside a provider, which
+                // runs in the app's process. Getting this wrong is not a
+                // blank widget, it is the app closing on launch.
+                //
+                // TARGET_PX is what loadDayPhoto already downsamples to, so
+                // this can never ask for more memory than the square version
+                // did. Upscaling past the source buys no detail either.
+                val limit = minOf(maxOf(src.width, src.height), TARGET_PX)
+                if (maxOf(outW, outH) > limit) {
+                    val scale = limit.toFloat() / maxOf(outW, outH)
+                    outW = (outW * scale).toInt()
+                    outH = (outH * scale).toInt()
                 }
                 if (outW <= 0 || outH <= 0) return src
 

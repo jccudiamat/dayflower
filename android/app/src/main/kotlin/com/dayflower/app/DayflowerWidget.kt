@@ -51,21 +51,25 @@ class DayflowerWidget : HomeWidgetProvider() {
         val heartbeatMode = widgetData.getString("widget_mode", "flower") == "heartbeat"
 
         appWidgetIds.forEach { widgetId ->
-            val views = if (heartbeatMode) {
-                RemoteViews(context.packageName, R.layout.heartbeat_widget).also {
-                    HeartbeatWidget.renderHeartbeat(context, it, widgetData)
-                }
-            } else {
-                RemoteViews(context.packageName, R.layout.todays_tulip_widget).also {
-                    TodaysTulipWidget.renderFlower(
+            // 🔴 Same guard as TodaysTulipWidget.renderSafely, and for the
+            // same reason: this runs in the app's process, so a throw here
+            // is the app closing a second after it opened.
+            try {
+                if (heartbeatMode) {
+                    val views = RemoteViews(context.packageName, R.layout.heartbeat_widget)
+                    HeartbeatWidget.renderHeartbeat(context, views, widgetData)
+                    appWidgetManager.updateAppWidget(widgetId, views)
+                } else {
+                    TodaysTulipWidget.renderSafely(
                         context,
-                        it,
+                        appWidgetManager,
+                        widgetId,
                         widgetData,
-                        appWidgetManager.getAppWidgetOptions(widgetId),
                     )
                 }
+            } catch (e: Throwable) {
+                android.util.Log.e("DayflowerWidget", "adaptive render failed", e)
             }
-            appWidgetManager.updateAppWidget(widgetId, views)
         }
     }
 }

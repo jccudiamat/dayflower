@@ -52,9 +52,18 @@ class HeartbeatWidget : HomeWidgetProvider() {
         widgetData: SharedPreferences,
     ) {
         appWidgetIds.forEach { widgetId ->
-            val views = RemoteViews(context.packageName, R.layout.heartbeat_widget)
-            renderHeartbeat(context, views, widgetData)
-            appWidgetManager.updateAppWidget(widgetId, views)
+            // 🔴 A provider runs in the app's own process, so a throw in
+            // here closes the app about a second after it opens - see
+            // TodaysTulipWidget.renderSafely. Nothing in this one draws a
+            // bitmap, but the frame costs nothing and the failure it
+            // prevents is not proportional to the risk.
+            try {
+                val views = RemoteViews(context.packageName, R.layout.heartbeat_widget)
+                renderHeartbeat(context, views, widgetData)
+                appWidgetManager.updateAppWidget(widgetId, views)
+            } catch (e: Throwable) {
+                android.util.Log.e("DayflowerWidget", "heartbeat render failed", e)
+            }
         }
     }
 
