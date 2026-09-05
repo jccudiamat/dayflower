@@ -118,6 +118,16 @@ class FlowerMessage {
   Duration? get callDuration =>
       !isCall ? null : (callEndedAt ?? DateTime.now()).difference(sentAt);
 
+  /// Rang out. Nobody picked up.
+  ///
+  /// ⚠️ The sentinel is an end **equal to the start** — see migration 0029.
+  /// A call that ended when it began lasted no time at all, which is the
+  /// literal truth about one that was never answered, and it is a value the
+  /// answered path cannot produce: media has to negotiate before the timer
+  /// starts, so a real call always has seconds in it.
+  bool get wasMissed =>
+      isCall && callEndedAt != null && !callEndedAt!.isAfter(sentAt);
+
   /// How long this has left on the recipient's home screen.
   ///
   /// The bloom lasts a day: a photo leaves the widget 24h after it was sent,

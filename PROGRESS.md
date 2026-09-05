@@ -1991,3 +1991,61 @@ points inside the column while the name below started at the column edge —
 box-aligned and visibly not. ⚠️ **Measured, not guessed**: the header was
 rendered to a PNG and the left edge of the glyph and of the name were read
 off in pixels. -9 still left 3px; -11 puts them within 1.
+
+## Calls that ring out, and a header on one row (2026-09-06)
+
+**Migration 0029 — applied and verified** (`prosecdef` true, `authenticated`
+only).
+
+### 🔴 Sixty seconds of ringing would have been reported as a conversation
+
+`end_call` stamps `now()`, which is right for a call that happened and wrong
+for one that did not. The row has no `answered_at` to tell them apart, so
+`miss_call` writes the one timestamp that cannot be mistaken for a duration:
+**the call's own start**.
+
+⚠️ A call whose end equals its beginning lasted no time at all — the literal
+truth about one nobody answered, and a value the answered path cannot
+produce, because media has to negotiate before the timer even starts. A new
+column would say it more loudly and would also mean migrating a table two
+features already read; this says it exactly.
+
+⚠️ **The convention spans a SQL function and a Dart getter**, which is the
+shape of agreement that rots silently. `test/missed_call_test.dart` pins it,
+including clock skew: an end *before* the start still reads as missed, because
+a negative duration is not a shorter call.
+
+- ⚠️ **Only the caller arms the timer.** The receiver's phone is the one
+  ringing; it has no business deciding the caller has waited long enough, and
+  both sides racing to close one row would be two writes for one event.
+- ⚠️ Armed after the insert, not at the tap — there is nothing to mark missed
+  until the row exists.
+- Sixty seconds, matching `timeoutAfter` on the incoming-call notification,
+  with a test asserting they stay equal. Drift means a ring outliving its
+  call, or the reverse.
+- `miss_call` never overwrites a real ending: answer in the last second and
+  the answer wins.
+
+### 🔴 The name was on the wrong row, not at the wrong offset
+
+The header stacked the name *under* the back button. Last round measured the
+chevron's optical inset to the pixel and moved it eleven points — careful
+work aimed at the wrong problem, because nothing horizontal fixes something
+on the wrong line. It is one row now: `[<] Wifey`, with the clock beneath the
+name.
+
+⚠️ Worth remembering as a habit: the fix was measured before the layout was
+questioned.
+
+### Snapshots without a real call
+
+The outgoing screen was rendered from a **scratch entrypoint** that overrides
+`callNotifierProvider` with a fabricated session — a subclass can set `state`
+in its own constructor, so no production seam was needed. Deleted after, with
+its launch config. ⚠️ The alternative was placing a real call, which rings a
+real phone at 1am.
+
+The thread snapshot needed real rows: two were seeded, captured, and deleted,
+zero leftover confirmed both times. `flutter_test` blocks HTTP, so goldens can
+never load Quicksand — anything rendered there is block text, and the web
+preview is the only place the app's own typography appears.

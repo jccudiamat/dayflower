@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/supabase_provider.dart';
@@ -29,6 +31,20 @@ class CallNotifier extends StateNotifier<CallSession?> {
   /// Redraws the timer. One second is the resolution the timer is displayed
   /// at, so anything finer would be repainting for nothing.
   Timer? _tick;
+
+  /// Gives up on a call nobody is answering.
+  ///
+  /// ⚠️ Only ever armed by the **caller**. The receiver's phone is the one
+  /// ringing; it has no business deciding the caller has waited long enough,
+  /// and both sides racing to close the same row would be two writes for one
+  /// event.
+  Timer? _noAnswer;
+
+  /// How long a call rings before it is a missed call.
+  ///
+  /// A minute, matching the `timeoutAfter` on the incoming-call notification
+  /// — the ring and the call should not outlive each other.
+  static const noAnswerAfter = Duration(seconds: 60);
 
   CallRepository get _calls => _ref.read(callRepositoryProvider);
   CallTransport get _transport => _ref.read(callTransportProvider);
@@ -105,6 +121,11 @@ class CallNotifier extends StateNotifier<CallSession?> {
       isCaller: true,
       cameraEnabled: mode == CallMode.video,
     );
+
+    // ⚠️ Armed here, not at the tap: the row has to exist before it can be
+    // marked missed, and until the insert lands there is nothing to write
+    // to. Cancelled the moment they join.
+    _armNoAnswer();
 
     await _connect(identity: userId);
   }
@@ -202,6 +223,9 @@ class CallNotifier extends StateNotifier<CallSession?> {
         state = session.copyWith(status: CallStatus.connecting);
 
       case CallPartnerJoined():
+        // They picked up, so there is nothing left to give up on.
+        _noAnswer?.cancel();
+        _noAnswer = null;
         // The timer starts here, not at the tap. Seconds spent waiting for
         // someone to pick up are not part of the call.
         state = session.copyWith(
@@ -292,6 +316,7 @@ class CallNotifier extends StateNotifier<CallSession?> {
     if (session == null) return;
 
     _stopTicking();
+    _stopNoAnswer();
     await _events?.cancel();
     _events = null;
     await _transport.leave();
@@ -335,9 +360,37 @@ class CallNotifier extends StateNotifier<CallSession?> {
 
   void _fail(CallFailure failure) {
     _stopTicking();
+    _stopNoAnswer();
     _events?.cancel();
     _events = null;
     state = state?.copyWith(status: CallStatus.failed, failure: failure);
+  }
+
+  /// Starts the ring-out clock. Caller only.
+  void _armNoAnswer() {
+    _noAnswer?.cancel();
+    _noAnswer = Timer(noAnswerAfter, () async {
+      final session = state;
+      // Answered, ended, or already gone while the timer ran out.
+      if (session == null ||
+          session.status == CallStatus.live ||
+          session.status.isTerminal) {
+        return;
+      }
+      // ⚠️ Marked missed *before* tearing down. `hangUp` clears the session,
+      // and a null session is what pops this screen — writing after it would
+      // be racing the widget that is being disposed.
+      if (session.messageId.isNotEmpty) {
+        try {
+          await _calls.missCall(session.messageId);
+        } catch (e) {
+          // The thread will read it as abandoned anyway once it goes stale,
+          // which says the same thing. Not worth blocking the hang-up.
+          debugPrint('miss call failed: $e');
+        }
+      }
+      await hangUp();
+    });
   }
 
   void _startTicking() {
@@ -356,6 +409,11 @@ class CallNotifier extends StateNotifier<CallSession?> {
     });
   }
 
+  void _stopNoAnswer() {
+    _noAnswer?.cancel();
+    _noAnswer = null;
+  }
+
   void _stopTicking() {
     _tick?.cancel();
     _tick = null;
@@ -364,6 +422,7 @@ class CallNotifier extends StateNotifier<CallSession?> {
   @override
   void dispose() {
     _stopTicking();
+    _stopNoAnswer();
     _events?.cancel();
     super.dispose();
   }

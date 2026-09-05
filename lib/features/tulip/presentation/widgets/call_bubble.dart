@@ -148,7 +148,13 @@ class CallBubble extends ConsumerWidget {
     // cannot support, so it reads as missed instead.
     final abandoned = message.callEndedAt == null;
 
-    final label = abandoned
+    // Rang out, closed by the caller's own timeout. Distinct from abandoned
+    // — this one *knows* it was not answered rather than inferring it from a
+    // missing timestamp — but it reads the same in the thread, because to
+    // the two people involved it is the same thing.
+    final unanswered = abandoned || message.wasMissed;
+
+    final label = unanswered
         ? '${mode.label} · no answer'
         : '${mode.label} · ${describeCallDuration(duration ?? Duration.zero)}';
 
@@ -172,7 +178,7 @@ class CallBubble extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              abandoned ? CupertinoIcons.phone_down : mode.icon,
+              unanswered ? CupertinoIcons.phone_down : mode.icon,
               size: 12,
               color: AppColors.muted,
             ),

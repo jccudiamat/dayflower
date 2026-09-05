@@ -538,61 +538,66 @@ class _CallHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🔴 **One row, not a column.** The name used to sit *under* the back
+    // button, which put it on its own line with the chevron floating above
+    // it — and no amount of nudging the chevron sideways fixes something
+    // that is on the wrong row. Beside it, the way every conversation
+    // header in this app already reads.
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ⚠️ Minimise, not close. It looks like a back button because
-            // that is the gesture it answers — and leaving a call by going
-            // back should put it in the floating window, never end it.
-            Semantics(
-              button: true,
-              label: 'Minimise the call',
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: () => _leave(context),
-                // ⚠️ Pulled left by the glyph's own inset. The circle is
-                // 38 wide around a 20 icon, so centring it left the chevron
-                // eleven points inside the column while the name below started
-                // at the edge — box-aligned, visibly not. Measured, not
-                // guessed: see the header render in the scratchpad.
-                child: Transform.translate(
-                  offset: const Offset(-11, 0),
-                  child: Container(
-                    width: 38,
-                    height: 38,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: AppColors.darkCanvas.withValues(alpha: .5),
-                    ),
-                    child: const Icon(
-                      CupertinoIcons.chevron_back,
-                      size: 20,
-                      color: AppColors.onDark,
-                    ),
-                  ),
+        // ⚠️ Leaves the screen, not the call. See _leave: it pops back to
+        // the conversation and the shell's mini bar keeps the call one tap
+        // away. Picture-in-picture belongs to Home, not to back.
+        Semantics(
+          button: true,
+          label: 'Back to the conversation',
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _leave(context),
+            child: Container(
+              width: 38,
+              height: 38,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.darkCanvas.withValues(alpha: .5),
+              ),
+              child: const Icon(
+                CupertinoIcons.chevron_back,
+                size: 20,
+                color: AppColors.onDark,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSpace.xs),
+        // Their name, and the clock under it. Both hug the button rather
+        // than starting a second column of their own.
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.title(AppColors.onDark).copyWith(
+                  shadows: const [
+                    Shadow(color: Color(0x99000000), blurRadius: 6),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              name,
-              style: AppText.title(AppColors.onDark).copyWith(
-                shadows: const [
-                  Shadow(color: Color(0x99000000), blurRadius: 6),
-                ],
-              ),
-            ),
-            const SizedBox(height: 2),
-            // No clock until media is up: one sitting at 00:00 reads as a
-            // call that connected and went silent. The connecting state has
-            // the middle of the screen instead.
-            if (elapsed != null) _Timer(elapsed: elapsed),
-          ],
+              // No clock until media is up: one sitting at 00:00 reads as a
+              // call that connected and went silent. The connecting state
+              // has the middle of the screen instead.
+              if (elapsed != null) ...[
+                const SizedBox(height: 2),
+                _Timer(elapsed: elapsed),
+              ],
+            ],
+          ),
         ),
       ],
     );

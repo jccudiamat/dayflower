@@ -59,6 +59,16 @@ class CallRepository {
   ///
   /// Idempotent on the server, so a double-tap or a retry after a dropped
   /// response keeps the first timestamp instead of stretching the call.
+  /// Closes a call nobody answered.
+  ///
+  /// ⚠️ Separate from [end], which stamps `now()` — for sixty seconds of
+  /// ringing that would report a sixty-second conversation. `miss_call`
+  /// (migration 0029) stamps the call's own start instead, so the thread
+  /// reads it as "no answer" rather than as a duration.
+  Future<void> missCall(String messageId) async {
+    await _client.rpc<void>('miss_call', params: {'p_message_id': messageId});
+  }
+
   Future<void> end(String messageId) async {
     await _client.rpc<void>('end_call', params: {'p_message_id': messageId});
   }
