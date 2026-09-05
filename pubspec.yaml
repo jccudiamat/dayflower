@@ -1,7 +1,7 @@
 name: dayflower
 description: Connecting hearts, one kiss at a time.
 publish_to: none
-version: 1.0.0+27
+version: 1.0.0+29
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
@@ -59,6 +59,18 @@ dependencies:
   # PROGRESS.md § Android builds: adding ANY plugin can leave a stale
   # Kotlin build cache that fails with a misleading "cannot find symbol".
   share_plus: ^13.3.0
+
+  # ── Calls (see lib/features/calls/) ───────────────
+  # Carries voice and video. Chosen over Daily because its Flutter client
+  # runs on **web**, which keeps calls testable in `flutter run -d
+  # web-server` — Daily's Flutter SDK is mobile-only, so every call test
+  # would mean a full APK on two phones in two countries.
+  #
+  # ⚠️ Pulls flutter_webrtc, which is a heavy native plugin. See PROGRESS.md
+  # § Android builds: adding ANY plugin here can leave a stale Kotlin cache
+  # that fails with a misleading "cannot find symbol". If the next Android
+  # build breaks, clean before believing the error.
+  livekit_client: ^2.11.0
 
 dev_dependencies:
   flutter_test:

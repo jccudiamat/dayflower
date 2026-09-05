@@ -8,6 +8,9 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../calls/data/call_repository.dart';
+import '../../../calls/domain/call.dart';
+import '../../../calls/domain/call_notifier.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../home/data/mood_prefs.dart';
@@ -226,8 +229,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         child: Column(
           children: [
             _ChatHeader(
-              onVoiceCall: () => _comingSoon('Voice calls'),
-              onVideoCall: () => _comingSoon('Video calls'),
+              onVoiceCall: () => _startCall(CallMode.voice),
+              onVideoCall: () => _startCall(CallMode.video),
             ),
             Expanded(child: _buildThread()),
             _buildComposer(),
@@ -410,6 +413,30 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
       SnackBar(content: Text('$what is coming soon.')),
     );
   }
+
+  /// Starts a call, or joins the one already running.
+  ///
+  /// Joining wins over starting whenever a live call is in the thread —
+  /// otherwise tapping the header during a call would open a second room
+  /// beside the one your partner is sitting in, which is the worst possible
+  /// outcome of a button labelled "call".
+  ///
+  /// Navigation happens before the call connects, deliberately: dialling,
+  /// connecting and failing are all states the call screen draws, and
+  /// holding the user on the thread until the media is up would make a
+  /// failed call look like a button that does nothing.
+  void _startCall(CallMode mode) {
+    _focus.unfocus();
+    final notifier = ref.read(callNotifierProvider.notifier);
+    final live = ref.read(liveCallProvider);
+
+    if (live != null) {
+      notifier.join(live);
+    } else {
+      notifier.place(mode);
+    }
+    context.push(Routes.call);
+  }
 }
 
 /* ── Composer icon ───────────────────────────────── */
@@ -451,9 +478,14 @@ class _ComposerIcon extends StatelessWidget {
 class _ChatHeader extends ConsumerWidget {
   const _ChatHeader({required this.onVoiceCall, required this.onVideoCall});
 
-  /// Both reserved: there is no calling backend (no WebRTC, no Agora/Twilio
-  /// in pubspec), so these announce themselves rather than opening a call
-  /// that could never connect — same pattern as the composer's photo icons.
+  /// Start a call, or join the one already running — see `_startCall`.
+  ///
+  /// The media provider is still behind [CallTransport] and unconfigured, so
+  /// on today's build these reach the call screen and land on its "not
+  /// switched on yet" state. That is deliberate rather than a stub: the row
+  /// in the thread is written either way, so the partner gets a real
+  /// invitation even on a build (or a network) where the audio never comes
+  /// up. See the header of migration 0025.
   final VoidCallback onVoiceCall, onVideoCall;
 
   @override
@@ -464,6 +496,7 @@ class _ChatHeader extends ConsumerWidget {
         ref.watch(partnerProfileProvider).valueOrNull;
     final name = partner?.petName ?? partner?.displayName ?? '…';
     final mood = ref.watch(partnerMoodProvider);
+    final live = ref.watch(liveCallProvider);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -512,14 +545,19 @@ class _ChatHeader extends ConsumerWidget {
               ],
             ),
           ),
+          // A live call re-labels both icons and tints them: during a call
+          // these are the way back into it, and offering "Voice call" while
+          // one is already running invites a second empty room.
           _HeaderAction(
             icon: CupertinoIcons.phone,
-            tooltip: 'Voice call',
+            tooltip: live == null ? 'Voice call' : 'Join the call',
+            color: live == null ? null : AppColors.brand,
             onTap: onVoiceCall,
           ),
           _HeaderAction(
             icon: CupertinoIcons.video_camera,
-            tooltip: 'Video call',
+            tooltip: live == null ? 'Video call' : 'Join the call',
+            color: live == null ? null : AppColors.brand,
             onTap: onVideoCall,
           ),
         ],
@@ -533,11 +571,17 @@ class _HeaderAction extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.color,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+
+  /// Purple unless told otherwise. Overridden to pink only while a call is
+  /// live, which is the one moment these icons mean something different
+  /// from what they usually mean.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -547,7 +591,7 @@ class _HeaderAction extends StatelessWidget {
       iconSize: 22,
       padding: const EdgeInsets.all(8),
       constraints: const BoxConstraints(),
-      icon: Icon(icon, color: AppColors.secondary),
+      icon: Icon(icon, color: color ?? AppColors.secondary),
     );
   }
 }

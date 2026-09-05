@@ -9,6 +9,9 @@ import 'features/auth/presentation/screens/welcome_screen.dart';
 import 'features/activities/presentation/screens/activities_screen.dart';
 import 'features/activity/presentation/screens/activity_feed_screen.dart';
 import 'features/booth/presentation/screens/booth_screen.dart';
+import 'features/calls/data/call_repository.dart';
+import 'features/calls/domain/call_notifier.dart';
+import 'features/calls/presentation/screens/call_screen.dart';
 import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
 import 'features/chapters/presentation/screens/chapters_screen.dart';
 import 'features/dates/presentation/screens/events_screen.dart';
@@ -22,6 +25,7 @@ import 'features/pairing/presentation/screens/pairing_screen.dart';
 import 'features/reminders/presentation/screens/alarm_screen.dart';
 import 'features/reminders/presentation/screens/reminders_screen.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
+import 'features/tulip/data/flower_repository.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
@@ -92,6 +96,16 @@ class Routes {
   /// the bottom nav under it would offer a third.
   static const alarm = '/alarm/:id';
   static String alarmFor(String reminderId) => '/alarm/$reminderId';
+
+  /// A call in progress. **Top-level, outside the app shell**, for the same
+  /// reason as the alarm: a call is not a tab you can wander away from, and
+  /// drawing the bottom nav under it would offer four ways out of a screen
+  /// that has exactly one — End.
+  ///
+  /// Carries no id. The call lives in `callNotifierProvider`, so the route
+  /// is a door onto whatever call this phone is in; a path parameter would
+  /// let a stale deep link open a screen for a call that ended yesterday.
+  static const call = '/call';
 }
 
 /// Whether an async gate input is safe to act on.
@@ -246,6 +260,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             AlarmScreen(reminderId: state.pathParameters['id'] ?? ''),
       ),
+      GoRoute(
+        path: Routes.call,
+        builder: (_, __) => const CallScreen(),
+      ),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
@@ -340,10 +358,51 @@ class SplashScreen extends ConsumerWidget {
 }
 
 // ── Shell ──────────────────────────────────────
-class AppShell extends StatelessWidget {
+/// Everything inside the app, plus the one thing that can interrupt it.
+///
+/// The shell watches for a call your partner has started and puts the
+/// ringing screen on top of wherever you are. It lives here rather than in
+/// the chat because a call does not only arrive while you are looking at the
+/// conversation — that is the whole reason it is worth interrupting for.
+///
+/// ⚠️ **This is not a ringtone, and it only reaches an app that is open.**
+/// Local notifications cannot wake a backgrounded process (PROGRESS.md §
+/// Notifications), so a swiped-away app hears nothing until it is next
+/// opened — at which point the Join bubble in the thread is what delivers
+/// the call. Push is what would close that gap; until then this is the
+/// in-app half of it.
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
   final Widget child;
+
   @override
-  Widget build(BuildContext ctx) => Scaffold(body: child);
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  /// The call we have already shown a screen for. Without it, every rebuild
+  /// while the call is live would push another ringing screen onto the
+  /// stack — the notifier's own guard stops a second *session*, but not a
+  /// second route.
+  String? _ringingFor;
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<FlowerMessage?>(incomingCallProvider, (previous, next) {
+      if (next == null) {
+        _ringingFor = null;
+        return;
+      }
+      if (_ringingFor == next.id) return;
+      _ringingFor = next.id;
+
+      ref.read(callNotifierProvider.notifier).ring(next);
+      // Guarded because the stream can deliver while the app is settling a
+      // route change of its own.
+      if (mounted) context.push(Routes.call);
+    });
+
+    return Scaffold(body: widget.child);
+  }
 }
 

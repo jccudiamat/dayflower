@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/flower_repository.dart';
+import 'call_bubble.dart';
 
 /// One message in the thread — a flower or a line of text.
 ///
@@ -26,6 +27,13 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A call is neither a flower nor words, and it doesn't take the mine/
+    // theirs bubble treatment: a live one is an invitation with its own
+    // card, a finished one is a centred line of history. See CallBubble.
+    if (message.isCall) {
+      return CallBubble(message: message, isMine: isMine);
+    }
+
     const radius = Radius.circular(AppRadius.lg);
     final shape = BorderRadius.only(
       topLeft: radius,

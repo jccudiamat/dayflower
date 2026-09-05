@@ -3,7 +3,9 @@
 > **Purpose:** read this first when resuming work in a new session. It captures everything not obvious from the code: what's done, what's verified, dashboard-side config, test accounts, and how we work. Update it at every feature completion or significant decision.
 > Companion docs: [mvp.md](mvp.md) (feature checklists) · [design.md](design.md) (design system rules) · [overview.md](overview.md) (original full vision).
 
-**Last updated:** 2026-08-31 (Reminders ring like an alarm clock. 🔴 **0010 WAS already run** — this doc said otherwise and was wrong again — so the table exists WITHOUT the new `alarm` column and every insert fails with PGRST204. 0010 is now idempotent-but-preserving; re-run it. Also unrun: 0008, 0013 (day_photos), 0014 (app_builds), 0015 (avatars) — all confirmed missing against the live DB.)
+**Last updated:** 2026-09-04 (Calls built — voice and video, on LiveKit. Migrations **0025 and 0026 applied**. 🔴 Nothing connects until the LiveKit API key/secret are in Supabase Vault and `LIVEKIT_URL` is in `.env` — the two steps are in § Calls → Switching calling on. ✅ WebRTC verified reachable from Dubai on mobile data, 2026-09-04.)
+
+**Previously:** 2026-08-31 (Reminders ring like an alarm clock. 🔴 **0010 WAS already run** — this doc said otherwise and was wrong again — so the table exists WITHOUT the new `alarm` column and every insert fails with PGRST204. 0010 is now idempotent-but-preserving; re-run it. Also unrun: 0008, 0013 (day_photos), 0014 (app_builds), 0015 (avatars) — all confirmed missing against the live DB.)
 
 ---
 
@@ -23,6 +25,7 @@
 | 8 | Finances (Activities) | 🔶 **v2 schema live 2026-08-31.** Was: Accounts (bank/cash/e-wallet/savings/investment) + a ledger of income/expense/transfer, in three scopes: Ours · Mine · theirs (read-only). Balances are always derived, never stored. Needs migration **0011**. |
 | 9 | Chapters (Activities) | 🔶 **Built 2026-08-29, never run.** A year = 12 chapters. Goals at the start of a month, moments as they happen, a written review at the end. Needs migration **0012**. |
 | — | Story replies + widget face | 🔶 **Built 2026-09-04.** Reply bar on the story viewer and the home-screen widget, tulip react, `reply_to` (migration **0023**). The partner's photo renders on the widget, circle cut in Dart. |
+| — | Calls (voice + video) | 🔶 **Built 2026-09-04. LiveKit wired; needs credentials.** A call is a row in `flower_messages` (migration **0025**), so the invitation rides the realtime stream the chat already has. Ring / in-call / failure screens and a Join bubble, all verified against real rows. Tokens are signed in Postgres by `livekit_token()` (migration **0026**); a usage meter counts the month's minutes (**0027**). All three applied. 🔴 **Nothing connects until the LiveKit secrets are in Vault and `LIVEKIT_URL` is in `.env`** — see § Calls. |
 | — | Shared mood | 🔶 **Built 2026-09-04.** The mood card reaches the other phone at last (migration **0024**) and the chat header shows it in place of the flower count. Stale past 24h. |
 | — | Finance: Wallet, Goals, Insights | 🔶 **Rebuilt 2026-09-03.** Wallet carousel, spend card with sparkline, Goals as progress rings, and an Insights page whose card exports as one shareable PNG. Per-amount currency on all five sheets. Migration **0022 applied**. Recurring, Budgets and Investments unchanged. |
 | — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. Verified running 2026-09-03: real RPC numbers (13 flowers, 6 streak, 263 hearts), the distance row, and the premium card. |
@@ -67,6 +70,325 @@ Why Dayflower: it keeps the floral identity (the flower catalog and artwork are 
 🔴 **Still says Twolip: the artwork.** `assets/images/logo.png` is a squircle whose wordmark reads "2lip", and every launcher icon is generated from it. `AppColors.wordmark` / `wordNum` exist only to match that lettering. Until the logo is redrawn, the app icon on a phone home screen still says the old name. After replacing it: `dart run flutter_launcher_icons`.
 
 ⚠️ A **backup of the whole repo before the rename** is at `scratchpad/backup-pre-rename/` (370 files). This project has **no version control** — if the rename needs undoing, that copy is the only way back.
+
+## Calls (2026-09-04)
+
+Voice and video, built as far as they can go without choosing a media
+provider. The header's phone and camera icons have shown a "coming soon"
+snackbar since the thread was built; they now open a real call screen.
+
+**A call is a message, not a table** — see the header of `0025_calls.sql` for
+the full argument. Short version: nothing in this app can ring a
+backgrounded phone (§ Notifications), so the reliable way to say "let's
+talk" is a row in the conversation, which arrives over the realtime stream
+the chat is already subscribed to, counts toward the unread badge, and is
+still there an hour later. Three columns on `flower_messages`: `call_mode`
+('voice' | 'video'), `call_room`, `call_ended_at`.
+
+⚠️ **The 0013 content check had to be relaxed.** A call row carries no
+flower, no photo and no text, so every insert would have failed with 23514.
+0025 replaces the constraint.
+
+⚠️ **Hanging up needs the `end_call` RPC.** 0001's update policy is
+recipient-only — deliberately, since updates are what mark a message seen —
+so the *caller* cannot write to their own row. A definer function writes the
+one column instead of widening the policy and losing the read-receipt
+guarantee.
+
+**Room names are deterministic**: `dayflower-v1-<pairId>`, derived on both
+phones from data both already have. No handshake, no link to paste. This is
+the thing consumer Google Meet cannot do (nicknamed meetings are Workspace
+only), and it is why a Join bubble from twenty minutes ago still works.
+
+### The media provider: LiveKit
+
+`livekit_client` (2026-09-04). Chosen over Daily because its Flutter client
+runs on **web**, so calls stay testable in `flutter run -d web-server`;
+Daily's Flutter SDK is mobile-only, which would have meant a full APK on two
+phones in two countries for every call test.
+
+⚠️ It pulls `flutter_webrtc`, a heavy native plugin. See § Android builds:
+adding any plugin here can leave a stale Kotlin cache that fails with a
+misleading "cannot find symbol". Clean before believing the next Android
+build error.
+
+**Tokens are signed in Postgres, not in an Edge Function.** A LiveKit token
+is a plain HS256 JWT; `pgjwt` signs it inside `livekit_token()` (migration
+0026), which keeps the whole project on one deployment path — the SQL editor
+and `tool/run_sql.dart` — instead of adding a `supabase functions deploy`
+step for forty lines of signing. The API secret lives in **Supabase Vault**,
+readable only by postgres, so a definer function can reach it and nothing
+the app can call ever can.
+
+The security model is one check: the room name embeds a pair id
+(`dayflower-v1-<pairId>`), and `livekit_token()` refuses to sign for a pair
+you are not in. Without it any signed-in user could derive any couple's room
+name and walk into their call.
+
+**Only `call_video.dart` imports LiveKit above the data layer.** A video
+frame is a texture, not a fact, so it cannot travel as a `CallEvent` the way
+connection state does — that one file reaches into
+`LiveKitCallTransport.room` and nothing else does.
+
+### 🔴 Switching calling on
+
+Nothing connects until both of these are done, once:
+
+1. **LiveKit Cloud project** (free tier) → Settings → Keys. In the Supabase
+   SQL editor — *not* through `run_sql.dart`, so the secret stays out of the
+   shell history and out of any transcript:
+
+   ```sql
+   select vault.create_secret('<API_SECRET>', 'livekit_api_secret');
+   select vault.create_secret('<API_KEY>',    'livekit_api_key');
+   ```
+
+2. **`.env`** gets the project's WebSocket URL (not a secret):
+
+   ```
+   LIVEKIT_URL=wss://<project>.livekit.cloud
+   ```
+
+Until then `callServerUrl` is null, the app uses `UnconfiguredCallTransport`,
+and every call lands on "Calling isn't switched on yet". A build *with* the
+URL but *without* the Vault secrets gets the same message from the server
+side — `livekit_token()` raises `calling not configured`, which the transport
+maps back to the same failure.
+
+To rotate: `select vault.update_secret(id, '<new>')`. The function reads by
+name, so nothing in the code changes.
+
+### 🔴 livekit_client blew the APK past the 50 MB OTA ceiling (2026-09-05)
+
+`flutter build apk --release --target-platform android-arm64` produced
+**62.2 MB**, over the limit `tool/publish_update.dart` has to live under, so
+the build could not be published at all.
+
+Cause: `--target-platform` trims the Flutter engine and the Dart snapshot but
+does nothing to a **plugin's prebuilt JNI**. livekit_client's
+`libjingle_peerconnection_so.so` shipped three times:
+
+| ABI | native libs |
+|---|---|
+| arm64-v8a | 33.7 MB |
+| x86_64 | 15.5 MB |
+| armeabi-v7a | 6.6 MB |
+
+⚠️ **`defaultConfig.ndk.abiFilters` does not fix this.** It was tried first
+and looked right — a diagnostic confirmed it read `android-arm64 ->
+[arm64-v8a]`, and the APK was genuinely repackaged (checked the timestamp) —
+and it still contained all three architectures. The Flutter Gradle plugin
+sets `abiFilters` itself and wins.
+
+What works is excluding at **packaging** time, in `android.packaging`:
+
+```kotlin
+jniLibs { excludes += setOf("lib/x86_64/**", "lib/armeabi-v7a/**", ...) }
+```
+
+Now **39.9 MB, arm64 only**. The exclusion list is derived from Flutter's own
+`target-platform` property rather than hardcoded, so
+`publish_update.dart --abi armeabi-v7a` still yields a working 32-bit APK
+instead of one with no matching native libs, and a plain build with no
+`--target-platform` still packages everything.
+
+### ⚠️ Stop the dev server before `flutter pub get` / `clean`
+
+On Windows a running `flutter run -d web-server` holds
+`linux/flutter/ephemeral/.plugin_symlinks` (and the `windows/` twin) open, so
+`flutter clean` and `flutter pub get` fail with *"Flutter failed to delete a
+directory … cannot access the file or directory"* and a misleading
+*"ensure the SDK is installed in a location with read/write permissions"*.
+The permissions are fine; the directory is simply in use.
+
+Worse in a chained PowerShell command: the failure surfaces as a
+`NativeCommandError` that aborts everything after it, so the build never runs
+and the log looks like a clean failure rather than a skipped step.
+
+Stop the preview first, then `Remove-Item -Recurse -Force
+linux/flutter/ephemeral` if it lingers.
+
+### 🔴 livekit_client breaks the debug web preview (2026-09-05)
+
+**`flutter run -d web-server` no longer boots the app.** Not slowly — at
+all. Chased properly before blaming the code:
+
+- all **1781 DDC module scripts return 200** — nothing is missing
+- **no JS errors**, no unhandled rejections
+- `<body>` holds only a `<script>`; Flutter never attaches its view
+- survives a server restart, a wiped browser profile, and 7 minutes of waiting
+- `flutter analyze` clean
+
+So `main()` never runs. `livekit_client` roughly doubled the module count and
+pulls `dwds/src/injected/client.js` into a state where the entrypoint waits
+forever — the tool's own warning is a clue: *"the web-server device requires
+the Dart Debug Chrome extension for debugging."*
+
+✅ **The app is fine.** `flutter build web` compiles, and the release bundle
+served statically attaches in **~0 s** and renders the welcome screen with
+LiveKit compiled in. This is a **debug-harness failure, not an app failure**.
+
+⚠️ **This partly undercuts why LiveKit was chosen over Daily.** The argument
+was that its Flutter client runs on web, keeping calls testable in
+`flutter run -d web-server`. Web *does* work — in release. The debug loop,
+which is the one that matters day to day, is what broke. Worth knowing
+before treating "LiveKit keeps the web loop" as settled.
+
+**Not yet tried**, in rough order of promise:
+
+1. `flutter run -d chrome` instead of `-d web-server` — the Chrome device
+   wires the debug connection itself rather than waiting for an extension.
+   Launches a visible browser, so the preview pane cannot host it.
+2. A profile-mode dev server (`--profile`): boots via dart2js and is fast,
+   but `kDebugMode` is false, so **dev auto-login stops working** and there
+   is no way to reach a signed-in state without typing a password.
+3. Testing on the phone, which does not use DDC at all — and is the real
+   target anyway.
+
+### The usage meter (2026-09-04)
+
+The free tier runs out, and a call that fails at day 21 with no warning is
+worse than a visible limit. Modelled on how Claude Code shows its own usage:
+silent, then a warning, then a hard stop with a stated reset.
+
+| Used | What happens |
+|---|---|
+| < 70% | Nothing, anywhere |
+| 70% | A ring appears on the **Us** page |
+| 90% | The ended-call line in the thread starts carrying the remainder |
+| 100% | `CallFailure.quotaExhausted`, with the reset date |
+
+**Us, not the chat.** The allowance is shared — one media account, both of
+you drawing on it — so it is a "we" number, and Us is where those live. On
+the chat header it would sit beside their mood, turning "how are they
+feeling" into "how much talking is left".
+
+**After a call, never before one.** The only in-thread mention rides the
+*ended*-call line. A meter visible while deciding whether to ring your
+partner would make you hesitate to do the thing the app exists for.
+
+**The app counts its own minutes** (`call_usage`, migration 0027) rather
+than proxying the provider's dashboard — every call is already a row with
+`sent_at` and `call_ended_at`. Runs a few percent light; fine for "video
+tonight or voice?", not for billing.
+
+#### ⚠️ Two ceilings, one pool
+
+`CALL_TOTAL_MINUTES` is a **shared** pool that voice and video both spend;
+`CALL_VIDEO_MINUTES` is a further cap on video alone from the data
+allowance. The first cut of this modelled them as two independent budgets
+and overstated the remainder by up to double — the exact surprise the
+feature exists to prevent. A test now pins it.
+
+Both are whole-call minutes, not the provider's participant-minutes: halve
+theirs, since every call here has two people. LiveKit's free tier is roughly
+`CALL_TOTAL_MINUTES=2500` and `CALL_VIDEO_MINUTES=2000`.
+
+**Unset or 0 means unlimited**, and that is the load-bearing case —
+self-hosting has no quota, so the ring must vanish rather than read 0%. 🔴
+`int.tryParse('') ?? 0` makes an unset `.env` parse as a zero allowance, and
+an early `isMetered => allowance != null` therefore had every self-hosted
+build refusing to place calls. Both traps are covered in
+`test/call_usage_test.dart`.
+
+Refusal is **per mode**: with the data cap spent but minutes to spare, voice
+still works. Blocking it would be refusing the cheap thing because the
+expensive one ran out.
+
+### ✅ Credentials live and the token path proven (2026-09-05)
+
+LiveKit project `dayflower-test`, host
+`wss://dayflower-y6qop60s.livekit.cloud`, key and secret in Vault.
+
+⚠️ **The project name is not the host.** `dayflower-test.livekit.cloud`
+answers `200 OK` at the HTTP level like any `*.livekit.cloud` name, so the
+only way to tell them apart is to validate a token:
+
+```
+/rtc/validate  dayflower-y6qop60s -> 200 success
+/rtc/validate  dayflower-test     -> 401 invalid API key for domain
+```
+
+Verified working with the real secrets: Vault read → `pgjwt` signing →
+pair-membership check → LiveKit accepting the token → a second participant
+(the primary account, headless Chrome with fake devices) connecting to the
+pair's room and publishing audio and video.
+
+**Not yet verified:** the Flutter app's own call connecting and rendering
+video. One run got as far as minting a token, reaching LiveKit and failing
+only on the microphone — correctly classified as `noPermission` — before the
+debug web preview stopped booting entirely (see below).
+
+### ✅ WebRTC reaches the UAE — tested 2026-09-04
+
+`network-test.daily.co` run on the Dubai phone, ~21:58 local, on **mobile
+data** (4G/VoLTE):
+
+| Check | Result |
+|---|---|
+| WebRTC Connections | passed |
+| Websocket Regions | passed |
+| Daily Call Quality | good |
+
+This settles the question the whole feature was hedged against. The UAE
+block on VoIP is **per-app, not protocol-level** — Etisalat and du block
+named consumer apps (WhatsApp, FaceTime, Skype) by domain, and a custom
+WebRTC app on its own infrastructure is not on that list. Media came up
+fine, unassisted.
+
+⚠️ **What it does not prove**, and each of these is still open:
+
+- **It tested Daily's servers, not LiveKit's.** Different hostnames, IPs and
+  TURN endpoints. Strong evidence that WebRTC as such is fine; not proof
+  that `livekit.cloud` is reachable. LiveKit's own tester
+  (`livekit.com/connection-test`) needs a URL and a room token, so it can
+  only be run once the project exists — make it the first thing done after
+  the Vault secrets land.
+- **It was ~30 seconds.** The reported pattern for Zoom and Skype in the UAE
+  is being cut off after 3–4 hours, so a short pass says nothing about
+  whether a call survives an evening. One long real call is still owed.
+- **One carrier, mobile data only.** Wi-Fi and the other of e&/du are
+  untested, and enforcement differs between them.
+
+Unchanged by this: a custom calling app is unlicensed VoIP under TDRA rules
+regardless of whether it connects. Irrelevant for two people calling each
+other privately; a real constraint if Dayflower is ever published to UAE
+users.
+
+Also unchanged: voice (~40 kbps) will outlive video (several hundred kbps)
+on any degrading path, which is why the two modes are one session with a
+flag rather than two features.
+
+### What was verified, 2026-09-04
+
+Against real rows in the web preview, signed in as the test partner:
+
+- A call row inserted by the partner arrives over realtime and renders as a
+  **Join bubble**; the header icons turn pink and re-label to "Join the call".
+- `AppShell` pushes the **ring screen** on top of wherever you are —
+  partner's name, their local time from `ClocksCard`'s data, Answer/Not now.
+- Answering reaches the **failure screen**, which correctly hides "Try
+  again" for `notConfigured` (retrying could only fail identically).
+- Ending the call collapses the bubble to a centred **history line**,
+  "Video call · 4 min 12 sec".
+- `test/call_test.dart` — 10 tests, all passing.
+
+**Not verified, and not verifiable here:** the in-call screen. It needs a
+connected transport, so there is no honest way to screenshot it yet. The
+timer, mute/camera controls and the speaking ripple are code-only.
+
+⚠️ The ring only reaches an app that is **open**. A swiped-away app hears
+nothing until it is next opened, at which point the Join bubble is what
+delivers the call. FCM push is what would close that gap and is upstream of
+everything else here.
+
+### Permissions added
+
+`RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `FOREGROUND_SERVICE`,
+`FOREGROUND_SERVICE_MICROPHONE` (Android 14+ requires the typed variant for
+a service holding the mic while backgrounded), and
+`NSMicrophoneUsageDescription` on iOS. The foreground service itself belongs
+to whichever transport ships.
 
 ## Device preview (2026-08-01)
 
@@ -345,7 +667,7 @@ The Flowers tab is a messaging thread. Flowers and text share **one table and on
 - **A row is a flower OR text.** `flower_type` is nullable; `note` doubles as the caption of a flower and the body of a text message. `FlowerMessage.isText` / `.flower` are the accessors — `FlowerCatalog.byId(message.flowerType)` no longer compiles. The DB check `flower_messages_has_content` guarantees a row is never blank.
 - **`to_widget` is the sender's choice**, ticked by default in the send sheet. The recipient's app resolves `widgetFlowerProvider` (newest incoming flower carrying the flag) and pushes *that* to the home-screen widget; unticked flowers stay in the thread and never reach it. Sending another ticked flower replaces what's on their screen.
 - **Two different "latest" providers, don't merge them:** `latestReceivedFlowerProvider` (any incoming flower) feeds the in-app Home card; `widgetFlowerProvider` (ticked only) feeds the OS widget. The Home card deliberately shows flowers the sender chose *not* to pin — it mirrors the conversation, the widget honours the choice.
-- **Copy moved off "today"** in all three places that mirror each other: the Home card, `@string/widget_label`, and `widget_description` now say **"A FLOWER FOR YOU"**. ⚠️ `website/app/page.tsx` still says "Today's Flower" — the site was left alone, so those are now out of sync. Fix if the site is touched.
+- **Copy moved off "today"** in all three places that mirror each other: the Home card, `@string/widget_label`, and `widget_description` now say **"A FLOWER FOR YOU"**. ~~⚠️ `website/app/page.tsx` still says "Today's Flower"~~ — resolved 2026-09-05: the site was rebuilt and no longer shows that card at all.
 - **Read receipts are thread-wide.** `markThreadSeen(pairId, userId)` fires whenever the tab is open with anything unread, so opening the chat marks everything. The Home card still calls the single-message `markSeen` — a partner who only glances at Home would otherwise never send a "Seen". Both are safe because the recipient-only RLS update policy from 0004 rejects marking your own messages.
 - **Keyboard/drawer choreography** is the fiddly part of `flowers_screen.dart`. The catalog is an inline panel (not a modal sheet — a sheet would cover the thread you're picking for), sized to the *remembered* keyboard height captured in `didChangeDependencies` so swapping between keyboard and drawer doesn't make the conversation jump. The bottom nav is hidden whenever the keyboard or drawer is up, which is why the bottom safe-area inset is applied manually in that one case.
 - **The chat header carries reserved call + video-call buttons** (`_HeaderAction` in `flowers_screen.dart`), added 2026-08-01. There is no calling backend at all — no WebRTC, no Agora/Twilio in pubspec — so both fire the same "coming soon" snackbar as the composer's photo icons. Wiring them up is a whole feature, not a TODO.
@@ -1001,10 +1323,15 @@ Messages, day photos and activity now raise a notification on the receiving phon
 
 ## Landing site (website/)
 
-- Next.js 16 (App Router, Tailwind v4) landing + waitlist site in `website/`. Run: `npm run dev` inside `website/` (or preview config "next site", port 3001).
-- **Rebuilt 2026-07-28 to mirror [overview.md](overview.md) v3.0 end to end.** 12 sections: hero (Nest mock) · concept + 5 UX principles · flower language · 6 core features · 7-screen app tour · 10 booth templates · day-in-the-life + onboarding · post-MVP nice-to-haves · pricing · 31-item future-builds roadmap in 9 groups · competitive table · final CTA.
-- **All copy lives in [app/lib/content.ts](website/app/lib/content.ts)** — re-sync that one file when overview.md changes; `page.tsx` is just layout. Shared primitives (SectionLabel, TwoToneHeading, Card, Tag, TickList) in `app/components/ui.tsx`.
-- The flower list mirrors `lib/features/tulip/domain/flower_catalog.dart` (7 varieties + meanings) — keep them in sync rather than inventing site-only flowers.
+- Next.js 16 (App Router, Tailwind v4) landing + waitlist site in `website/`. Run: `npm run dev` inside `website/`, or preview config **`dayflower-site`** (port 3210 — 3000/8080 collide with other servers on this machine).
+- **Rebuilt 2026-09-05 around what actually ships, replacing the 2026-07-28 overview.md mirror.** That version was 12 sections long and promised the *vision*: a 31-item roadmap, a pricing table for a Premium tier that has no billing behind it, a competitive matrix, and a 7-flower catalog three months out of date. It now reads as a sneak peek — hero (a real flower message) · 5-screen snapshot rail · 3 pillars · 6 shipped features · the bloom grid · 3-step setup + an honest "still on the way" row · CTA.
+- ⚠️ **`overview.md` is no longer the source for the site.** Copy now comes from § Feature status in this file and from the screens themselves. If a feature isn't built, it goes in `later` (the "still on the way" chips), never in `features`.
+- **The snapshots are recreations, not captures.** `app/components/Snapshots.tsx` rebuilds five screens (Flowers · Home · Calling · Us · Activities) in HTML against the same tokens the app uses, inside a CSS phone frame. Chosen over real screenshots because the Flutter web build takes minutes to paint, automated taps on its canvas are unreliable (see § How to run), and a capture would carry a test account's data. **They will drift** — when a screen changes materially, change the mock or drop it. Fidelity notes baked in: bubbles are `blush`/`blushMid`, not the gradient; the chat has no bottom nav (composer instead) while Us and Activities do, matching `AppBottomNav` in each screen.
+- **The real flower artwork is now on the site.** `assets/images/flowers/*.webp` → `website/public/flowers/` (35 files, 1.7 MB, minus `lavender_fields.webp` which has no catalog entry). Re-copy when the catalog gains artwork.
+- **All copy lives in [app/lib/content.ts](website/app/lib/content.ts)** — `page.tsx` is layout only. Shared primitives (SectionLabel, TwoToneHeading, Card, Tag, TickList) in `app/components/ui.tsx`.
+- The bloom list mirrors `lib/features/tulip/domain/flower_catalog.dart` — **35 pickable** (12 flowers + 23 scenes); the two `retired: true` entries are deliberately absent. Keep them in sync rather than inventing site-only flowers.
+- `globals.css` tokens were re-synced with `lib/core/theme/app_colors.dart` on 2026-09-05 — body/muted/border/darkBorder/onDark had all drifted a shade or two, and `blush`, `blushMid`, `brandDark` and the hero gradient were missing.
+- Next 16 note: **`priority` on `next/image` is deprecated in favour of `preload`** (docs § image.md, v16.0.0 row). The hero bloom uses `preload`.
 - Design follows design.md v3 tokens: Quicksand + Lora italic (notes only), one pink→purple gradient for primary, midnight-plum darks, pills/18-radius cards, flat. **overview.md's own § Design Philosophy is stale** (still lists the pre-v3 rose/cream palette and Georgia) — design.md wins.
 - `next lint --dir` was removed in Next 16; lint with `npx eslint app`. Bundled docs live in `website/node_modules/next/dist/docs/` (per website/AGENTS.md, read before writing Next code).
 - Waitlist: form → `/api/waitlist` route → Supabase REST insert into `public.waitlist` using anon key from `website/.env.local`. Duplicate emails (409) are treated as success. ✅ **Migration 0007 run + verified end-to-end 2026-07-28**: UI submit → row persisted (proved by forcing a `23505` conflict on re-insert, since reads are blocked), case-insensitive dedupe works, invalid address → 400, success card renders.

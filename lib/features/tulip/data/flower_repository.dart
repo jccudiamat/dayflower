@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
+import '../../calls/domain/call.dart';
 import '../../pairing/data/pair_repository.dart';
 import '../domain/flower_catalog.dart';
 
@@ -13,10 +14,11 @@ import '../domain/flower_catalog.dart';
 /// The table started life as one-flower-a-day and now backs a chat, so a row
 /// is one of:
 ///  - a **flower** ([flowerType] set), optionally captioned by [note],
-///  - a **day photo** ([imagePath] set), optionally captioned by [note], or
-///  - a **text message** (neither set; [note] carries the text).
+///  - a **day photo** ([imagePath] set), optionally captioned by [note],
+///  - a **call** ([callMode] set — see migration 0025), or
+///  - a **text message** (none of the three set; [note] carries the text).
 ///
-/// Migration 0013 enforces that at least one of the three is present.
+/// Migration 0025 enforces that at least one of the four is present.
 class FlowerMessage {
   const FlowerMessage({
     required this.id,
@@ -30,6 +32,9 @@ class FlowerMessage {
     this.toWidget = false,
     this.toChat = true,
     this.replyTo,
+    this.callMode,
+    this.callRoom,
+    this.callEndedAt,
   });
 
   final String id;
@@ -65,13 +70,54 @@ class FlowerMessage {
   /// sent straight to the home screen — flowers and text are always chat.
   final bool toChat;
 
+  /// `'voice'` or `'video'` when this row is a call, null for everything
+  /// else. Decoded through [CallMode.byId], which returns null for a value
+  /// this build doesn't know — so a call placed by a newer app renders as an
+  /// ordinary message here instead of crashing the thread.
+  final String? callMode;
+
+  /// The room both phones join. Stored rather than recomputed so a call
+  /// started under an older naming scheme stays joinable from its own row.
+  final String? callRoom;
+
+  /// Null while the call is live. [sentAt] is when it started.
+  final DateTime? callEndedAt;
+
   bool get isSeen => seenAt != null;
 
   /// A "Share your day" photo.
   bool get isPhoto => imagePath != null;
 
-  /// A text-only message — no flower and no photo.
-  bool get isText => flowerType == null && imagePath == null;
+  /// A text-only message — no flower, no photo, no call.
+  ///
+  /// ⚠️ The call clause is load-bearing: a call row carries none of the
+  /// other three, so without it every call would report as text and render
+  /// as an empty bubble.
+  bool get isText => flowerType == null && imagePath == null && !isCall;
+
+  /// A call — live or long finished.
+  bool get isCall => call != null;
+
+  /// Typed [callMode]. Null for every row that is not a call.
+  CallMode? get call => CallMode.byId(callMode);
+
+  /// A call nobody has hung up.
+  ///
+  /// Time-boxed as well as flag-checked. A call whose row was never closed —
+  /// both apps killed mid-call, a hang-up that never reached the server —
+  /// would otherwise advertise itself as live in the thread forever, and the
+  /// header would keep offering to join a room with nobody in it.
+  static const staleCallAfter = Duration(hours: 2);
+
+  bool get isLiveCall =>
+      isCall &&
+      callEndedAt == null &&
+      DateTime.now().difference(sentAt) < staleCallAfter;
+
+  /// How long the call lasted, or has been running. Null if not a call.
+  Duration? get callDuration => !isCall
+      ? null
+      : (callEndedAt ?? DateTime.now()).difference(sentAt);
 
   /// How long this has left on the recipient's home screen.
   ///
@@ -102,6 +148,14 @@ class FlowerMessage {
     // "shared their day" ever does, and the emoji keeps it obvious that
     // there is a picture behind it.
     if (isPhoto) return note.isEmpty ? 'Shared their day 📷' : '📷  $note';
+
+    // A live call is the one message in this app that is worth interrupting
+    // someone for, so it says what it wants rather than what it is.
+    if (isCall) {
+      final kind = call == CallMode.video ? 'Video call' : 'Voice call';
+      return isLiveCall ? '$kind — tap to join' : '$kind ended';
+    }
+
     if (isText) return note;
 
     // Non-null by here: the two returns above cover every case where
@@ -134,6 +188,12 @@ class FlowerMessage {
         toChat: map['to_chat'] as bool? ?? true,
         // Absent on rows written before migration 0023.
         replyTo: map['reply_to'] as String?,
+        // Absent on rows written before migration 0025.
+        callMode: map['call_mode'] as String?,
+        callRoom: map['call_room'] as String?,
+        callEndedAt: map['call_ended_at'] == null
+            ? null
+            : DateTime.parse(map['call_ended_at'] as String).toLocal(),
       );
 }
 
@@ -349,7 +409,10 @@ final latestReceivedFlowerProvider =
   final userId = ref.watch(currentUserIdProvider);
   final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
   for (final m in messages) {
-    if (m.senderId != userId && !m.isText) return m;
+    // `!isText` alone used to mean "a flower or a photo". Since 0025 it also
+    // matches a call, which has no artwork and would render the Home card
+    // empty — hence the explicit exclusion rather than a tighter `!isText`.
+    if (m.senderId != userId && !m.isText && !m.isCall) return m;
   }
   return null;
 });

@@ -18,6 +18,7 @@ import '../../../../core/utils/zone_distance.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/couple_stats.dart';
+import '../widgets/calling_card.dart';
 import '../../domain/couple_dates.dart';
 
 /// The couple's own page — the "us" the whole app is about.
@@ -77,6 +78,10 @@ class UsScreen extends ConsumerWidget {
                   ],
                   const SizedBox(height: AppSpace.sm),
                   _WhereYouAreCard(me: me, partner: partner),
+                  // Silent below 70% of the month's allowance, and absent
+                  // entirely on a self-hosted build — it brings its own
+                  // leading gap so this list needs no condition.
+                  const CallingCard(),
                   const SizedBox(height: AppSpace.md),
                   const _PremiumCard(),
                 ],

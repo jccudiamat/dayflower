@@ -7,9 +7,31 @@
     <!-- Incoming-heartbeat alert: the buzz and the notification that carries
          the heartbeat sound. POST_NOTIFICATIONS is requested at runtime on
          API 33+ (see PulseAlerts.requestPermission). -->
-    <!-- Live camera preview in the "Share your day" bar. -->
+    <!-- Live camera preview in the "Share your day" bar, and the outgoing
+         video track on a video call. -->
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
+
+    <!-- Calls (see lib/features/calls/). RECORD_AUDIO is the microphone, and
+         is requested at runtime like CAMERA is — a voice call cannot publish
+         a track without it.
+
+         MODIFY_AUDIO_SETTINGS is what lets the call route itself: earpiece
+         while the phone is at your ear, speaker when it isn't, and a
+         handover to Bluetooth mid-call. Without it a call plays out of
+         whatever output happened to be selected and cannot be changed.
+
+         ⚠️ FOREGROUND_SERVICE_MICROPHONE is required on Android 14+ for a
+         service that keeps the mic open while backgrounded — which is the
+         whole point of a call surviving the screen locking. The service
+         itself belongs to whichever transport ships; the permissions are
+         declared here so that arrives as one file and not a manifest hunt. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+    <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 

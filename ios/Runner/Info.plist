@@ -6,6 +6,11 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to share your day on their home screen.</string>
+	<!-- Voice and video calls. iOS refuses the microphone outright without
+	     this string, and the refusal looks like a call that will not
+	     connect rather than a permission that was never asked for. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Talk to your partner on a Dayflower call.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a photo to share your day on their home screen.</string>
 	<key>CFBundleDevelopmentRegion</key>
