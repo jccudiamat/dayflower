@@ -37,6 +37,13 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        // Saving a picture to the gallery. Its own channel because it has
+        // nothing to do with calls — see MediaSaver.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MediaSaver.CHANNEL)
+            .setMethodCallHandler { call, result ->
+                MediaSaver.handle(applicationContext, call, result)
+            }
+
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {

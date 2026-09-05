@@ -17,6 +17,7 @@ import '../../../home/data/mood_prefs.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
 
 /// The Flowers tab — the couple's conversation.
@@ -376,15 +377,14 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                         onChanged: (_) => setState(() {}),
                       ),
                     ),
-                    _ComposerIcon(
-                      icon: CupertinoIcons.paperclip,
-                      tooltip: 'Upload a photo',
-                      onTap: () => _comingSoon('Uploading photos'),
-                    ),
+                    // The paperclip is gone. It never did anything, and
+                    // the camera screen it would have duplicated already
+                    // has a gallery picker of its own — two doors to one
+                    // room, one of them locked.
                     _ComposerIcon(
                       icon: CupertinoIcons.camera,
-                      tooltip: 'Take a photo',
-                      onTap: () => _comingSoon('Taking photos'),
+                      tooltip: 'Send a photo',
+                      onTap: _openCamera,
                     ),
                     const SizedBox(width: 4),
                   ],
@@ -403,15 +403,16 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     );
   }
 
-  /// Photo messages need a Supabase Storage bucket and a message kind that
-  /// don't exist yet, so the two icons announce themselves rather than
-  /// opening a picker that could never deliver anything. Same pattern the
-  /// login screen uses for the reserved OAuth buttons.
-  void _comingSoon(String what) {
+  /// Opens the camera, pointed at this conversation.
+  ///
+  /// ⚠️ The destination is set *before* navigating. The camera defaults to
+  /// the home-screen widget, which is right when you go there yourself and
+  /// wrong when you arrived from the thread — a photo taken from here should
+  /// land where you were, and finding out otherwise costs a send.
+  void _openCamera() {
     _focus.unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$what is coming soon.')),
-    );
+    ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.chat;
+    context.push(Routes.flowers);
   }
 
   /// Starts a call, or joins the one already running.

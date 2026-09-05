@@ -1801,3 +1801,53 @@ whose call it was, the screen never actually said.
 "Connecting…" moved from the timer pill in the corner to the middle of the
 screen. A corner is where you put what can be ignored, and while connecting
 it is the only thing happening.
+
+## The chat: a media viewer, a working camera button, one fewer icon (2026-09-05)
+
+### The paperclip is gone
+
+It said "Uploading photos is coming soon" and had since the composer was
+written. Photos have worked for weeks. It went rather than getting wired up
+because the camera screen it would have duplicated **already has a gallery
+picker in it** — two doors to one room, one of them locked.
+
+### The camera button opens the camera
+
+⚠️ **And sets the destination first.** The camera defaults to the home-screen
+widget, which is right when you walk there yourself and wrong when you arrived
+from the thread — a photo taken from the conversation should land in the
+conversation, and finding out otherwise costs a send.
+
+`_target` is lifted out of `_ShareYourDayBarState` into `dayPhotoTargetProvider`
+so the caller can say. Widget stays the default for everyone else.
+
+### 🔴 A "Save" that saves where nothing looks
+
+`share_your_day.dart` could already write a photo to disk — into
+`getExternalStorageDirectory()/Saved`, which no gallery app has ever listed.
+Its toast is careful to say "the app folder" rather than "Photos", which is
+honest, and still a save nobody can find.
+
+`MediaSaver.kt` publishes through **MediaStore**, into Pictures/Dayflower.
+⚠️ On API 29+ that needs **no permission at all** — the app owns the row it
+inserts — which is why this is thirty lines of Kotlin rather than a plugin
+plus `WRITE_EXTERNAL_STORAGE`.
+
+- ⚠️ `IS_PENDING` while the bytes are written. Without it a media scan landing
+  mid-write publishes a half-decoded image, permanently.
+- Pre-29 returns **false** rather than falling back to the invisible folder.
+  Dart shows "couldn't save"; nothing claims a success it did not have.
+
+### The viewer
+
+One viewer for day photos and flowers, because from the reader's side they
+are the same thing: a picture somebody sent. A day photo signs a URL, a
+flower is a bundled asset, and only the byte fetch cares which.
+`InteractiveViewer` for pinch and pan — a picture you cannot zoom is still a
+thumbnail. Opened on the **root** navigator so it covers the bottom nav; with
+the tab bar showing underneath it reads as a panel rather than the picture.
+
+**Verified in the web preview** end to end: tapping the Wildflower Haze card
+in the thread opens it full-screen with its name and meaning. ⚠️ The save
+button could not be — it is an Android method channel, and web has no
+implementation, which is exactly the path that returns false.

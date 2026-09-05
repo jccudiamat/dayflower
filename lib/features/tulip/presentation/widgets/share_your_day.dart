@@ -23,6 +23,19 @@ import '../../data/flower_repository.dart';
 import '../../domain/camera_lifecycle.dart';
 import '../../domain/day_reactions.dart';
 
+/// Where the next shot goes.
+///
+/// ⚠️ Lifted out of the camera's own State so somebody arriving *at* the
+/// camera can say. The chat's camera button opens this screen already set to
+/// the conversation — walking into a camera that is pointed at the home
+/// screen widget when you came from the thread is a trap you only notice
+/// after sending.
+///
+/// Widget is still the default, because parking a photo on their home screen
+/// is what "share your day" means; the thread copy is the extra.
+final dayPhotoTargetProvider =
+    StateProvider<DayPhotoTarget>((ref) => DayPhotoTarget.widget);
+
 /// The "Share your day" bar at the top of the Flowers tab.
 ///
 /// Camera-first: a live viewfinder you shoot straight from, with upload on
@@ -76,7 +89,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// Where the next send goes. Widget first because parking a photo on
   /// their home screen is what "share your day" means — the thread copy is
   /// the extra, not the point.
-  DayPhotoTarget _target = DayPhotoTarget.widget;
+  DayPhotoTarget get _target => ref.read(dayPhotoTargetProvider);
 
   Uint8List? _pending;
   String _pendingExt = 'jpg';
@@ -503,8 +516,10 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                       Text('My Day', style: AppText.title(Colors.white)),
                       const Spacer(),
                       _TargetPill(
-                        target: _target,
-                        onChanged: (t) => setState(() => _target = t),
+                        target: ref.watch(dayPhotoTargetProvider),
+                        onChanged: (t) => ref
+                            .read(dayPhotoTargetProvider.notifier)
+                            .state = t,
                       ),
                     ],
                   ),

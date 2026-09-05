@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/flower_repository.dart';
+import 'media_viewer.dart';
 import 'call_bubble.dart';
 
 /// One message in the thread — a flower or a line of text.
@@ -63,7 +64,7 @@ class ChatBubble extends StatelessWidget {
               ? _buildPhoto(context)
               : message.isText
                   ? _buildText()
-                  : _buildFlower(),
+                  : _buildFlower(context),
         ),
       ),
     );
@@ -97,36 +98,48 @@ class ChatBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: FutureBuilder<String>(
-              future: ref
-                  .read(flowerRepositoryProvider)
-                  .signedPhotoUrl(message.imagePath!),
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const SizedBox(
-                    height: 180,
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+          GestureDetector(
+            // Tapping a picture opens it. Obvious enough that its absence
+            // read as the thumbnail being all there was.
+            onTap: () => showMediaViewer(
+              context,
+              title: isMine ? 'Your day' : 'Their day',
+              subtitle: message.note,
+              imagePath: message.imagePath,
+              fileName: 'dayflower-day-${message.id}.jpg',
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: FutureBuilder<String>(
+                future: ref
+                    .read(flowerRepositoryProvider)
+                    .signedPhotoUrl(message.imagePath!),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
+                    );
+                  }
+                  return Image.network(
+                    snap.data!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 160,
+                      color: AppColors.surfaceSubtle,
+                      alignment: Alignment.center,
+                      child:
+                          Text("Photo unavailable", style: AppText.caption()),
                     ),
                   );
-                }
-                return Image.network(
-                  snap.data!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 160,
-                    color: AppColors.surfaceSubtle,
-                    alignment: Alignment.center,
-                    child: Text("Photo unavailable", style: AppText.caption()),
-                  ),
-                );
-              },
+                },
+              ),
             ),
           ),
           Padding(
@@ -136,7 +149,9 @@ class ChatBubble extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  expired ? 'Your day · expired' : 'Your day · on the home screen',
+                  expired
+                      ? 'Your day · expired'
+                      : 'Your day · on the home screen',
                   style: AppText.label(
                       expired ? AppColors.muted : AppColors.secondary),
                 ),
@@ -156,7 +171,7 @@ class ChatBubble extends StatelessWidget {
   }
 
   // ── Flower message ────────────────────────────────
-  Widget _buildFlower() {
+  Widget _buildFlower(BuildContext context) {
     final flower = message.flower!;
 
     return Column(
@@ -165,18 +180,27 @@ class ChatBubble extends StatelessWidget {
       children: [
         // The artwork is the message, so it runs edge to edge of the bubble
         // rather than sitting as a thumbnail beside text.
-        AspectRatio(
-          aspectRatio: 1,
-          child: Image.asset(
-            flower.asset,
-            fit: BoxFit.cover,
-            semanticLabel: flower.name,
-            errorBuilder: (_, __, ___) => Container(
-              color: flower.color.withValues(alpha: .14),
-              alignment: Alignment.center,
-              child: Text(
-                flower.emoji,
-                style: const TextStyle(fontSize: 56),
+        GestureDetector(
+          onTap: () => showMediaViewer(
+            context,
+            title: flower.name,
+            subtitle: flower.meaning,
+            asset: flower.asset,
+            fileName: 'dayflower-${flower.id}.jpg',
+          ),
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: Image.asset(
+              flower.asset,
+              fit: BoxFit.cover,
+              semanticLabel: flower.name,
+              errorBuilder: (_, __, ___) => Container(
+                color: flower.color.withValues(alpha: .14),
+                alignment: Alignment.center,
+                child: Text(
+                  flower.emoji,
+                  style: const TextStyle(fontSize: 56),
+                ),
               ),
             ),
           ),
