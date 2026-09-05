@@ -187,22 +187,18 @@ class _LiveView extends ConsumerWidget {
             child: SizedBox.expand(),
           ),
         _ReactionOverlay(reactions: session.reactions),
+        if (session.isVideo) _SelfView(session: session),
         SafeArea(
           child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                // The self-view used to live here, beside the timer. It is
+                // a free-floating layer now — see _SelfView — because a
+                // tile you can move is a tile that can get out of the way
+                // of their face, and one pinned into a Row cannot.
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _Timer(elapsed: elapsed),
-                    const Spacer(),
-                    // Self-view, mirrored. Kept on screen with the camera
-                    // off too, showing its own "off" state — removing the
-                    // tile would shift the timer and make muting video feel
-                    // like the layout broke.
-                    if (session.isVideo) LocalVideo(session: session),
-                  ],
+                  children: [_Timer(elapsed: elapsed)],
                 ),
               ),
               const Spacer(),
@@ -525,6 +521,145 @@ class _Timer extends StatelessWidget {
   }
 }
 
+/// Your own camera: bigger than it was, draggable, and dismissible.
+///
+/// Three complaints in one widget. It was 74×104 and pinned beside the
+/// timer, which made it too small to read your own framing and impossible
+/// to move off their face — and there was no way to be rid of it at all.
+///
+/// Position and hidden-ness are deliberately **local state, not session
+/// state**. Where you park your own thumbnail is not something the other
+/// side, the notifier, or a reconnect should ever know or reset.
+class _SelfView extends StatefulWidget {
+  const _SelfView({required this.session});
+
+  final CallSession session;
+
+  @override
+  State<_SelfView> createState() => _SelfViewState();
+}
+
+class _SelfViewState extends State<_SelfView> {
+  static const _size = Size(112, 158);
+  static const _hiddenSize = Size(48, 48);
+  static const _margin = 14.0;
+
+  /// Null until first laid out, so the tile can start pinned to the
+  /// top-right of whatever screen it actually finds itself on rather than
+  /// at a guessed offset.
+  Offset? _position;
+  bool _hidden = false;
+
+  Size get _currentSize => _hidden ? _hiddenSize : _size;
+
+  /// Keeps the tile fully on screen — after a drag, after hiding (which
+  /// changes its size), and after a rotation.
+  Offset _clamp(Offset value, Size bounds) {
+    final safeTop = MediaQuery.paddingOf(context).top + _margin;
+    return Offset(
+      value.dx.clamp(_margin, bounds.width - _currentSize.width - _margin),
+      value.dy.clamp(safeTop, bounds.height - _currentSize.height - 120),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bounds = MediaQuery.sizeOf(context);
+    final position = _clamp(
+      _position ??
+          Offset(bounds.width - _size.width - _margin,
+              MediaQuery.paddingOf(context).top + _margin),
+      bounds,
+    );
+
+    return Positioned(
+      left: position.dx,
+      top: position.dy,
+      child: GestureDetector(
+        // 🔴 `opaque`, not the default. GestureDetector defers hit testing
+        // to its child, and none of what the tile is made of — SizedBox,
+        // ClipRRect, DecoratedBox, the video texture — registers a hit. So
+        // the only draggable pixel was the hide button, which is a real
+        // GestureDetector of its own. This makes the whole tile the grab
+        // target, which is what makes it feel like an object rather than a
+        // control with a handle.
+        behavior: HitTestBehavior.opaque,
+        onPanUpdate: (details) => setState(() {
+          _position = _clamp((_position ?? position) + details.delta, bounds);
+        }),
+        onTap: _hidden ? () => setState(() => _hidden = false) : null,
+        child: _hidden ? _restoreButton() : _tile(),
+      ),
+    );
+  }
+
+  Widget _tile() {
+    return Stack(
+      children: [
+        LocalVideo(
+          session: widget.session,
+          width: _size.width,
+          height: _size.height,
+        ),
+        // Top-left, away from the thumb that just dragged it in from the
+        // right, and small enough not to cover your own face.
+        Positioned(
+          left: 4,
+          top: 4,
+          child: GestureDetector(
+            onTap: () => setState(() => _hidden = true),
+            child: Semantics(
+              button: true,
+              label: 'Hide your self-view',
+              child: Container(
+                width: 26,
+                height: 26,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AppColors.darkCanvas.withValues(alpha: .6),
+                ),
+                alignment: Alignment.center,
+                // An eye, deliberately — this hides the *view*, it does
+                // not turn the camera off. A camera glyph here would read
+                // as a second, contradictory camera button.
+                child: const Icon(
+                  CupertinoIcons.eye_slash_fill,
+                  size: 14,
+                  color: AppColors.onDark,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// What is left when it is hidden: an eye, in the same place the tile
+  /// was, so bringing it back happens where putting it away did.
+  Widget _restoreButton() {
+    return Semantics(
+      button: true,
+      label: 'Show your self-view',
+      child: Container(
+        width: _hiddenSize.width,
+        height: _hiddenSize.height,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.darkCanvas.withValues(alpha: .72),
+          border: Border.all(color: AppColors.onDark.withValues(alpha: .18)),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          CupertinoIcons.eye_fill,
+          size: 20,
+          color: AppColors.onDark,
+        ),
+      ),
+    );
+  }
+}
+
 /// Flowers in flight, floating up over the call.
 ///
 /// Each reaction gets its own controller keyed by id, so a second tulip sent
@@ -659,9 +794,20 @@ class _ControlButton extends StatelessWidget {
                     : AppColors.onDark.withValues(alpha: .1),
               ),
             ),
+            // 🔴 Centred explicitly. A Container with width/height passes
+            // tight constraints, and an Icon centres itself inside them
+            // while a Text aligns top-left — so the tulip sat high and to
+            // the left while every other control looked fine. `height: 1`
+            // matters too: emoji carry their own line metrics, which push
+            // the glyph off-centre even inside a Center.
+            alignment: Alignment.center,
             child: emoji == null
                 ? Icon(icon, color: foreground, size: 22)
-                : Text(emoji!, style: const TextStyle(fontSize: 22)),
+                : Text(
+                    emoji!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 22, height: 1),
+                  ),
           ),
         ),
       ),

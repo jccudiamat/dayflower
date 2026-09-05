@@ -56,6 +56,9 @@ website/.env.local
 # Node / Next.js (website/)
 node_modules/
 website/.next/
+# Running `next build` from the repo root instead of website/ drops a
+# stray .next/ here (trace files only). Ignore it rather than committing it.
+/.next/
 website/tsconfig.tsbuildinfo
 
 # Raw artwork originals — processed into assets/images/flowers/
