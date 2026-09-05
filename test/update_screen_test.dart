@@ -110,9 +110,9 @@ void main() {
               stage: UpdateStage.available,
               release: _release,
               installedBuild: 32));
-      expect(find.text('Update Now'), findsOneWidget);
-      expect(find.text('Not Now'), findsOneWidget);
-      expect(find.text('New\nUpdate\nAvailable'), findsOneWidget);
+      expect(find.text('Update now'), findsOneWidget);
+      expect(find.text('Not now'), findsOneWidget);
+      expect(find.text('A new\nDayflower\nis ready'), findsOneWidget);
     });
 
     testWidgets('a required update has no way out', (tester) async {
@@ -124,8 +124,8 @@ void main() {
               stage: UpdateStage.available,
               release: _mandatoryRelease,
               installedBuild: 32));
-      expect(find.text('Not Now'), findsNothing);
-      expect(find.text('Update\nRequired'), findsOneWidget);
+      expect(find.text('Not now'), findsNothing);
+      expect(find.text('Update\nrequired'), findsOneWidget);
     });
 
     testWidgets('mid-download there is nothing to dismiss to', (tester) async {
@@ -137,7 +137,7 @@ void main() {
               installedBuild: 32,
               received: 2093,
               total: 4187));
-      expect(find.text('Not Now'), findsNothing);
+      expect(find.text('Not now'), findsNothing);
       expect(find.textContaining('Downloading'), findsOneWidget);
     });
 
@@ -150,7 +150,7 @@ void main() {
               release: _release,
               installedBuild: 32,
               apkPath: '/x.apk'));
-      expect(find.text('Install Now'), findsOneWidget);
+      expect(find.text('Install now'), findsOneWidget);
       expect(find.textContaining('allow installs'), findsOneWidget);
     });
 
@@ -162,7 +162,7 @@ void main() {
               release: _release,
               installedBuild: 32,
               error: 'Download failed'));
-      expect(find.text('Try Again'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
       expect(find.text('Download failed'), findsOneWidget);
     });
   });

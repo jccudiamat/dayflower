@@ -1,9 +1,10 @@
-import 'dart:math' as math;
-
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_cta_button.dart';
 import '../../data/app_release.dart';
 import '../../data/update_repository.dart';
 
@@ -116,6 +117,15 @@ void dismissUpdate(WidgetRef ref) {
   ref.read(updateControllerProvider.notifier).skip();
 }
 
+/// The full-screen updater.
+///
+/// ⚠️ **The layout is borrowed; the language is not.** The composition came
+/// from a reference image — full screen rather than a sheet, the headline
+/// stacked, one primary, a quiet secondary under it. The first version copied
+/// that reference's *styling* as well: an invented violet ground, a white
+/// rounded-rect button, Title Case labels. Each of those was this one screen
+/// speaking a language nothing else in the app speaks. Ground, button, motif
+/// and casing are Dayflower's own now; only the composition is borrowed.
 class UpdateScreen extends ConsumerWidget {
   const UpdateScreen({
     super.key,
@@ -137,41 +147,33 @@ class UpdateScreen extends ConsumerWidget {
 
     // ⚠️ No BackButtonListener here, and no PopScope: this widget is above
     // the Router, so there is no route and no Router ancestor for either of
-    // them to attach to — BackButtonListener throws outright. The back
-    // button is handled by the Router's own dispatcher instead. See
+    // them to attach to — BackButtonListener throws outright. The back button
+    // is handled by the Router's own dispatcher instead. See
     // `_UpdateBackButtonDispatcher` in app.dart.
     return Material(
-      color: _plumTop,
-      child: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [_plumTop, _plumBottom],
-          ),
-        ),
+      color: AppColors.heroTop,
+      child: Container(
+        decoration: const BoxDecoration(gradient: AppGradients.hero),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(flex: 5, child: Center(child: _Orb())),
+                const Expanded(flex: 5, child: Center(child: _Bloom())),
 
                 Text(
-                  mandatory ? 'Update\nRequired' : 'New\nUpdate\nAvailable',
-                  style: AppText.display(Colors.white).copyWith(
-                    fontSize: 40,
-                    height: 1.08,
-                    fontWeight: FontWeight.w700,
+                  mandatory ? 'Update\nrequired' : 'A new\nDayflower\nis ready',
+                  style: AppText.display(AppColors.onDark).copyWith(
+                    fontSize: 38,
+                    height: 1.1,
                   ),
                 ),
                 const SizedBox(height: AppSpace.sm),
 
                 Text(
                   _bodyText(release, mandatory),
-                  style: AppText.body(Colors.white.withValues(alpha: .78))
-                      .copyWith(fontSize: 15),
+                  style: AppText.body(AppColors.onDarkMuted),
                 ),
 
                 if (release.notes.isNotEmpty) ...[
@@ -194,8 +196,8 @@ class UpdateScreen extends ConsumerWidget {
                 _PrimaryButton(state: state, controller: controller),
 
                 // A required update gets no way out, so it gets no button
-                // offering one either. Hidden mid-download too: there is
-                // no half of a download worth keeping.
+                // offering one either. Hidden mid-download too: there is no
+                // half of a download worth keeping.
                 SizedBox(
                   height: 52,
                   child: canDismiss
@@ -203,14 +205,13 @@ class UpdateScreen extends ConsumerWidget {
                           child: TextButton(
                             onPressed: onDismiss,
                             style: TextButton.styleFrom(
-                              foregroundColor: Colors.white,
+                              foregroundColor: AppColors.onDark,
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 24, vertical: 12),
                             ),
                             child: Text(
-                              'Not Now',
-                              style: AppText.subtitle(Colors.white)
-                                  .copyWith(fontWeight: FontWeight.w700),
+                              'Not now',
+                              style: AppText.subtitle(AppColors.onDark),
                             ),
                           ),
                         )
@@ -219,10 +220,10 @@ class UpdateScreen extends ConsumerWidget {
 
                 if (state.stage == UpdateStage.ready)
                   Text(
-                    'Android will ask you to confirm. The first time, it '
-                    'also asks you to allow installs from Dayflower.',
+                    'Android will ask you to confirm. The first time, it also '
+                    'asks you to allow installs from Dayflower.',
                     textAlign: TextAlign.center,
-                    style: AppText.caption(Colors.white.withValues(alpha: .55)),
+                    style: AppText.caption(AppColors.onDarkMuted),
                   ),
               ],
             ),
@@ -237,79 +238,126 @@ class UpdateScreen extends ConsumerWidget {
         release.readableSize.isEmpty ? '' : ' · ${release.readableSize}';
     final head = mandatory
         ? 'This build is required to keep using Dayflower.'
-        : 'A newer version of Dayflower is ready to install.';
+        : 'A newer version is ready to install.';
     return '$head\nVersion ${release.versionName} · build '
         '${release.buildNumber}$size';
   }
 }
 
-/* ── Palette ────────────────────────────────────────────────────
-   Screen-local on purpose. This is the one surface in the app that is a
-   full-bleed violet, and promoting it to AppColors would invite it onto
-   surfaces where the dark hero tokens are already the right answer. */
-
-const _plumTop = Color(0xFF3B2364);
-const _plumBottom = Color(0xFF241542);
-
 /* ── Pieces ─────────────────────────────────────────────────── */
 
-/// The soft concentric orb at the top of the screen.
+/// The app's own mark, opening out of the heartbeat's ripple.
 ///
-/// Painted rather than an asset: it is three radial gradients, and shipping
-/// a PNG of it would cost more bytes than the code and still be wrong at
-/// some screen density.
-class _Orb extends StatelessWidget {
-  const _Orb();
+/// ⚠️ This replaced a soft orb lifted straight from the reference image. Both
+/// halves here are already Dayflower's: the tulip is the launcher icon's own
+/// artwork, and the expanding rings are the heartbeat widget's ripple in the
+/// signature pink→purple. A photograph from `assets/images/flowers/` was the
+/// other candidate and would have been wrong — those are the app's *content*,
+/// the things you send each other, pasted onto its chrome.
+///
+/// Animated rather than a GIF: there is no Lottie or Rive in this project, a
+/// GIF would be both a new dependency and a far larger asset, and the ripple
+/// already exists here as motion rather than as a recording of motion.
+class _Bloom extends StatefulWidget {
+  const _Bloom();
+
+  @override
+  State<_Bloom> createState() => _BloomState();
+}
+
+class _BloomState extends State<_Bloom> with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    duration: const Duration(seconds: 4),
+    vsync: this,
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = math
-            .min(constraints.maxWidth, constraints.maxHeight)
-            .clamp(120.0, 240.0);
-        return SizedBox(
-          width: size,
-          height: size,
-          child: CustomPaint(painter: _OrbPainter()),
-        );
-      },
+    return SizedBox(
+      width: 236,
+      height: 236,
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) => CustomPaint(
+          painter: _RipplePainter(_controller.value),
+          child: child,
+        ),
+        // Built once and passed into the painter's child slot, so the ripple
+        // repaints without the image being rebuilt on every frame.
+        child: Center(
+          child: Image.asset(
+            'assets/images/mark.png',
+            width: 112,
+            height: 112,
+            // The mark is decoration. A missing asset must not cost the
+            // screen that is telling you about an update.
+            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+          ),
+        ),
+      ),
     );
   }
 }
 
-class _OrbPainter extends CustomPainter {
+class _RipplePainter extends CustomPainter {
+  const _RipplePainter(this.t);
+
+  /// 0→1, looping.
+  final double t;
+
   @override
   void paint(Canvas canvas, Size size) {
     final centre = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
+    final maxRadius = size.width / 2;
 
-    void ring(double radius, double alpha, {double lift = -0.25}) {
-      final rect = Rect.fromCircle(center: centre, radius: radius);
+    // A steady bloom behind the mark, so it sits on something rather than
+    // floating on the plum.
+    canvas.drawCircle(
+      centre,
+      maxRadius * .46,
+      Paint()
+        ..shader = RadialGradient(
+          colors: [
+            AppColors.gradientPurple.withValues(alpha: .38),
+            AppColors.gradientPurple.withValues(alpha: 0),
+          ],
+        ).createShader(
+          Rect.fromCircle(center: centre, radius: maxRadius * .46),
+        ),
+    );
+
+    // Three rings a third of a cycle apart, so one is always arriving as
+    // another fades — the heartbeat widget's ripple, slowed right down.
+    for (var i = 0; i < 3; i++) {
+      final phase = (t + i / 3) % 1.0;
+      final radius = maxRadius * (0.44 + 0.56 * phase);
+      final fade = (1 - phase) * .55;
       canvas.drawCircle(
         centre,
         radius,
         Paint()
-          ..shader = RadialGradient(
-            // Off-centre so the rings read as lit from the top, which is
-            // what stops concentric circles looking like a target.
-            center: Alignment(0, lift),
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.4
+          ..shader = LinearGradient(
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
             colors: [
-              Colors.white.withValues(alpha: alpha * 1.6),
-              Colors.white.withValues(alpha: alpha * 0.35),
+              AppColors.gradientPink.withValues(alpha: fade),
+              AppColors.gradientPurple.withValues(alpha: fade),
             ],
-          ).createShader(rect),
+          ).createShader(Rect.fromCircle(center: centre, radius: radius)),
       );
     }
-
-    ring(r, .085);
-    ring(r * .78, .105);
-    ring(r * .52, .125);
-    ring(r * .26, .17, lift: -0.1);
   }
 
   @override
-  bool shouldRepaint(covariant _OrbPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RipplePainter oldDelegate) => oldDelegate.t != t;
 }
 
 class _PrimaryButton extends StatelessWidget {
@@ -320,48 +368,39 @@ class _PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (label, onPressed) = switch (state.stage) {
-      UpdateStage.downloading => (
-          state.progress == null
+    // ⚠️ AppCtaButton, not a bare ElevatedButton. It carries the signature
+    // pink→purple gradient, the pill radius the token file calls for on ALL
+    // buttons and chips, and the press-scale every other primary action in
+    // the app has. The first version used a white rounded rect because the
+    // reference image did — and it was the only ElevatedButton in the
+    // entire codebase.
+    return switch (state.stage) {
+      UpdateStage.downloading => AppCtaButton(
+          label: state.progress == null
               ? 'Downloading…'
               : 'Downloading ${(state.progress! * 100).round()}%',
-          null,
+          // Null disables it, which is also what greys the gradient.
+          onPressed: null,
         ),
-      UpdateStage.ready => ('Install Now', controller.install),
-      UpdateStage.failed => (
-          'Try Again',
-          () {
+      UpdateStage.ready => AppCtaButton(
+          label: 'Install now',
+          icon: CupertinoIcons.checkmark_seal,
+          onPressed: controller.install,
+        ),
+      UpdateStage.failed => AppCtaButton(
+          label: 'Try again',
+          icon: CupertinoIcons.arrow_clockwise,
+          onPressed: () {
             controller.reset();
             controller.download();
-          }
+          },
         ),
-      _ => ('Update Now', controller.download),
+      _ => AppCtaButton(
+          label: 'Update now',
+          icon: CupertinoIcons.arrow_down_circle,
+          onPressed: controller.download,
+        ),
     };
-
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: _plumBottom,
-          disabledBackgroundColor: Colors.white.withValues(alpha: .55),
-          disabledForegroundColor: _plumBottom.withValues(alpha: .7),
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.sm),
-          ),
-        ),
-        child: Text(
-          label,
-          style: AppText.subtitle(_plumBottom).copyWith(
-            fontWeight: FontWeight.w700,
-            fontSize: 17,
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -383,8 +422,8 @@ class _Progress extends StatelessWidget {
           child: LinearProgressIndicator(
             value: state.progress,
             minHeight: 6,
-            backgroundColor: Colors.white.withValues(alpha: .18),
-            valueColor: const AlwaysStoppedAnimation(Colors.white),
+            backgroundColor: AppColors.darkRaised,
+            valueColor: const AlwaysStoppedAnimation(AppColors.brand),
           ),
         ),
         const SizedBox(height: AppSpace.xs),
@@ -392,7 +431,7 @@ class _Progress extends StatelessWidget {
           state.total > 0
               ? '${_mb(state.received)} of ${_mb(state.total)}'
               : _mb(state.received),
-          style: AppText.caption(Colors.white.withValues(alpha: .7)),
+          style: AppText.caption(AppColors.onDarkMuted),
         ),
       ],
     );
@@ -411,23 +450,20 @@ class _NoteLine extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 7, right: AppSpace.xs),
-            child: Container(
+          const Padding(
+            padding: EdgeInsets.only(top: 7, right: AppSpace.xs),
+            child: SizedBox(
               width: 5,
               height: 5,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: .5),
-                shape: BoxShape.circle,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.brand,
+                  shape: BoxShape.circle,
+                ),
               ),
             ),
           ),
-          Expanded(
-            child: Text(
-              text,
-              style: AppText.body(Colors.white.withValues(alpha: .8)),
-            ),
-          ),
+          Expanded(child: Text(text, style: AppText.body(AppColors.onDark))),
         ],
       ),
     );
@@ -445,13 +481,11 @@ class _ErrorNote extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpace.xs),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .1),
+        color: AppColors.darkSurface,
         borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.darkBorder),
       ),
-      child: Text(
-        message,
-        style: AppText.caption(Colors.white.withValues(alpha: .85)),
-      ),
+      child: Text(message, style: AppText.caption(AppColors.danger)),
     );
   }
 }
