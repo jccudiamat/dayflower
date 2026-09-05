@@ -24,7 +24,7 @@ import 'features/reminders/data/reminder_scheduler.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/updates/data/update_alerts.dart';
 import 'features/updates/data/update_repository.dart';
-import 'features/updates/presentation/widgets/update_sheet.dart';
+import 'features/updates/presentation/widgets/update_screen.dart';
 import 'features/widget/widget_sync.dart';
 
 class DayflowerApp extends ConsumerStatefulWidget {
@@ -242,8 +242,9 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     );
 
     // A newly published build interrupts wherever the user happens to be.
-    // The sheet hangs off the router's navigator, not this context: this
-    // widget sits *above* MaterialApp, so there is no Navigator beneath it.
+    // This listener no longer shows anything — it exists for the
+    // notification, which is the half that only makes sense at the moment
+    // the news arrives.
     ref.listen<UpdateStage>(
       updateControllerProvider.select((state) => state.stage),
       (previous, stage) {
@@ -260,13 +261,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
           UpdateAlerts.announce(release, foreground: _foreground);
         }
 
-        final navigatorContext =
-            router.routerDelegate.navigatorKey.currentContext;
-        if (navigatorContext == null) return;
-        showUpdateSheet(
-          navigatorContext,
-          mandatory: ref.read(updateControllerProvider).mandatory,
-        );
+        // 🔴 The sheet used to be raised here, on the router's navigator.
+        // It flashed for a frame at launch and vanished: a modal pushed
+        // that way is a *pageless* route bound to the page on top at the
+        // time — the splash — and the gate redirect that replaced splash
+        // with home took the sheet down with it. UpdateGate sits above the
+        // Navigator now and needs nothing raised; it appears because the
+        // state says so. See its class doc.
       },
     );
 
@@ -279,7 +280,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // them the app ignores the frame and keeps rendering at the real window
       // size — the picker would appear to do nothing.
       locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
+      // ⚠️ UpdateGate goes *inside* DevicePreview's frame, not around it, or
+      // the updater would paint over the device chrome in the preview
+      // instead of inside the phone.
+      builder: (context, child) =>
+          DevicePreview.appBuilder(context, UpdateGate(child: child!)),
+      // The back button, for a layer that has no route to intercept it.
+      backButtonDispatcher: _UpdateBackButtonDispatcher(ref),
     );
   }
 
@@ -401,5 +408,34 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       partnerName: _partnerName,
       pulseSent: pulseSent,
     );
+  }
+}
+
+/// Lets the update layer answer the back button before the router does.
+///
+/// ⚠️ **The Router's dispatcher is the only hook that works here.** The
+/// updater covers the whole screen from *above* the Router — see the class
+/// doc on `UpdateGate` for why it has to — which leaves it with no route of
+/// its own. `PopScope` needs a route; `BackButtonListener` needs a `Router`
+/// ancestor and throws without one. Both are below this layer, not above it.
+///
+/// Without this, pressing back on a full-screen updater would quietly pop
+/// the screen hidden behind it, or leave the app on the last route.
+class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
+  _UpdateBackButtonDispatcher(this._ref);
+
+  final WidgetRef _ref;
+
+  @override
+  Future<bool> invokeCallback(Future<bool> defaultValue) async {
+    final state = _ref.read(updateControllerProvider);
+    if (updateIsShowing(state, _ref.read(updateDismissedProvider))) {
+      // Swallowed either way — the router must not act on a press aimed at
+      // a screen it cannot see. A required update simply has no way past it;
+      // mid-download there is no half of a download worth going back to.
+      if (!state.mandatory && !state.busy) dismissUpdate(_ref);
+      return true;
+    }
+    return super.invokeCallback(defaultValue);
   }
 }

@@ -1577,3 +1577,55 @@ noticeably more saturated than `appicon.png`. Android shows the adaptive icon
 (the cutout) and iOS the legacy one (appicon), so the two platforms differ
 slightly. Both are used as delivered rather than recoloured to match — which
 of the two is the brand red is not a call to make silently.
+
+## 🔴 The updater flashed for one frame and vanished (2026-09-05)
+
+Reported from the phone: the update prompt appeared for about a millisecond
+on launch and was gone before it could be read, let alone tapped. So every
+OTA build since had to be sideloaded.
+
+⚠️ **A modal raised on the router's navigator is a *pageless* route, and
+Flutter binds a pageless route to whichever page was on top when it was
+pushed.** The check fires from a post-frame callback at launch, so that page
+was the **splash**. A second later the gate redirect swapped splash for home
+— and removing a page removes every pageless route attached to it. Nothing
+was wrong with the sheet. It was tied to a page with a one-second lifespan.
+
+⚠️ **Every dialog raised during launch has this waiting for it.** The fix is
+not a delay, which would only narrow the window: the updater is a full-screen
+layer in `MaterialApp.router`'s `builder` now, *above* the `Navigator`, where
+the routing stack cannot take it away — redirect, replace or pop, it is not
+in there to be removed.
+
+Redesigned to match the reference the user supplied: full-bleed violet, a
+painted concentric orb, the headline stacked over three lines, a white pill
+primary and a quiet "Not Now". Every stage the sheet had is still there —
+downloading with progress, ready, failed with its reason, and mandatory with
+no way out.
+
+### 🔴 The first version of the layer crashed
+
+It used `BackButtonListener`, which looks for a `Router` ancestor and throws
+when there is none — and **being above the Router is the entire point**.
+`PopScope` fails the same way for the same reason: both want a route, and
+this deliberately has none.
+
+The Router's own `backButtonDispatcher` is the supported hook, so
+`_UpdateBackButtonDispatcher` in app.dart answers back before go_router does.
+Without it, back on a full-screen updater would quietly pop the screen hidden
+behind it.
+
+⚠️ That crash was found by **rendering the widget in a test**, not by the
+analyzer — it compiles perfectly. `test/update_screen_test.dart` now builds
+every stage and asserts the absence of a throw, which is the only thing that
+catches this class of mistake.
+
+- Dismissal moved from widget state to `updateDismissedProvider` because the
+  back button is handled outside the gate and the two must not disagree about
+  whether anything is on screen.
+- `updateIsShowing` is shared by the gate and the dispatcher for the same
+  reason.
+
+⚠️ **Seeing this fix needs two builds.** A phone on build N runs build N's
+updater, so the build that *carries* the new screen is still announced by the
+old one. It takes the build after it before the new screen is what appears.

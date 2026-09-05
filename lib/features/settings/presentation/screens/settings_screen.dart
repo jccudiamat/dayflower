@@ -24,7 +24,7 @@ import '../../../heartbeat/data/pulse_alert_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../updates/data/update_repository.dart';
-import '../../../updates/presentation/widgets/update_sheet.dart';
+import '../../../updates/presentation/widgets/update_screen.dart';
 import '../../../widget/widget_mode_provider.dart';
 import '../../../widget/widget_sync.dart';
 
@@ -43,9 +43,8 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Settings'),
         leading: IconButton(
-          onPressed: () => context.canPop()
-              ? context.pop()
-              : context.go(Routes.home),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go(Routes.home),
           icon: const Icon(CupertinoIcons.chevron_back, color: AppColors.muted),
         ),
       ),
@@ -364,8 +363,7 @@ class SettingsScreen extends ConsumerWidget {
           left: 20,
           right: 20,
           top: AppSpace.md,
-          bottom:
-              MediaQuery.of(sheetContext).viewInsets.bottom + AppSpace.md,
+          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + AppSpace.md,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -427,7 +425,6 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpace.md),
@@ -733,15 +730,16 @@ class _CheckForUpdatesRow extends ConsumerWidget {
     final messenger = ScaffoldMessenger.of(context);
 
     // A build already found — or already downloaded and waiting to install —
-    // needs the sheet back, not another manifest fetch. `check` deliberately
-    // refuses to run over a downloaded APK, so without this the row would
-    // look tappable and do nothing.
+    // needs the updater back on screen, not another manifest fetch. `check`
+    // deliberately refuses to run over a downloaded APK, so without this the
+    // row would look tappable and do nothing.
     final current = ref.read(updateControllerProvider);
     if (current.release != null &&
         (current.stage == UpdateStage.available ||
             current.stage == UpdateStage.ready ||
             current.stage == UpdateStage.failed)) {
-      return showUpdateSheet(context, mandatory: current.mandatory);
+      ref.read(updateDismissedProvider.notifier).state = null;
+      return;
     }
 
     await ref.read(updateControllerProvider.notifier).check(manual: true);
