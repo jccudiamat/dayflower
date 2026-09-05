@@ -1739,3 +1739,65 @@ FCM needs four things, the first of which is not mine to make:
    partner's tokens and posts to FCM with a service-account key from Vault.
 
 3 and 4 are mine and can be written the moment 1 exists.
+
+## The call screen: a header, a floating window, and a tile that drags (2026-09-05)
+
+**Firebase deferred by the user — the FCM note from the previous section
+still stands unchanged.**
+
+### Picture-in-picture, in Kotlin
+
+⚠️ **There is no Flutter API for PiP and no plugin here doing it.** It is an
+Activity capability — `enterPictureInPictureMode` is a method on Activity,
+`onUserLeaveHint` is an Activity callback — so it lives in `MainActivity.kt`,
+about forty lines. Deliberately *not* a new pub dependency: the last
+dependency reached for to get a platform feature (`firebase_messaging`) would
+have broken the entire Android build.
+
+- ⚠️ **`callActive` is load-bearing.** `onUserLeaveHint` fires on every exit
+  from the app, so without a flag saying a call is up, pressing Home on the
+  home screen would shrink Dayflower into a floating window. Only Dart knows,
+  so Dart pushes it.
+- ⚠️ **A PiP window takes no touches.** Android routes taps to "expand" and
+  hands the app nothing, so `_PipView` is video and nothing else — controls
+  rendered in there would be an unreadable wall of buttons that cannot be
+  pressed. Tapping restores full screen, which is the maximise.
+- `pipModeProvider` is pushed from `onPictureInPictureModeChanged`, never
+  inferred from lifecycle. PiP is not "paused" — the app keeps rendering,
+  which is the entire point, and treating it as backgrounded stops the video.
+- API 26+ and only where `FEATURE_PICTURE_IN_PICTURE` is present; everywhere
+  else every call is a no-op returning false.
+
+### 🔴 Back used to hang up
+
+The back gesture ended the call. That was the safe reading once — leaving the
+screen mid-call would strand somebody in a call they could not see or end —
+but it made back the most destructive control on the screen, and destructive
+*by accident*. It minimises now.
+
+⚠️ Only where PiP is actually available. Without a floating window to leave
+the call in, popping would recreate exactly the invisible-call problem the
+old behaviour was guarding against, so on those devices back still does
+nothing.
+
+### 🔴 The self-view was still not draggable
+
+The previous fix set `HitTestBehavior.opaque` on the tile's GestureDetector,
+which should have been enough and was not. ⚠️ **The tile's whole face is a
+LiveKit renderer, and a platform view consumes the touch before it reaches an
+ancestor.** The only draggable pixel was the eye button — because that is a
+real GestureDetector sitting *on top* of the video. The fix is a transparent
+drag layer in the same place: above the renderer, not around it.
+
+Also 112×158 → 150×210. Third size for this tile; this is the one where a
+glance tells you whether you are in shot.
+
+### Header and connecting
+
+Back, their name, then the clock, as a column in the top-left. The name is
+there because a video call fills the screen with a face and nothing else —
+whose call it was, the screen never actually said.
+
+"Connecting…" moved from the timer pill in the corner to the middle of the
+screen. A corner is where you put what can be ignored, and while connecting
+it is the only thing happening.

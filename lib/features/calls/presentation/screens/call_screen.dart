@@ -12,6 +12,7 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
+import '../../data/call_pip.dart';
 import '../../data/call_usage.dart';
 import '../../domain/call.dart';
 import '../../domain/call_notifier.dart';
@@ -48,13 +49,29 @@ class CallScreen extends ConsumerWidget {
       return const Scaffold(backgroundColor: AppColors.darkCanvas);
     }
 
+    // In the floating window: video and nothing else. A PiP window is a few
+    // hundred pixels wide and takes no touches at all, so controls rendered
+    // into it are an unreadable wall of buttons nobody can press.
+    if (ref.watch(pipModeProvider)) {
+      return _PipView(session: session, partner: partner);
+    }
+
     return PopScope(
-      // A call is not dismissed by a back gesture. Leaving the screen while
-      // the media is up would put the user in a call they cannot see and
-      // cannot end — the only way out is End, which hangs up properly.
+      // 🔴 Back used to **hang up**. It was the safe reading once — leaving
+      // the screen mid-call would strand the user in a call they could not
+      // see or end — but it made the back gesture the most destructive
+      // control on the screen, and destructive by accident.
+      //
+      // It minimises now. The call keeps running in the floating window,
+      // which is both where it can still be seen and how it gets back.
       canPop: session.status.isTerminal,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) ref.read(callNotifierProvider.notifier).hangUp();
+        if (didPop) return;
+        // ⚠️ Only when the system will actually take it. Without PiP there
+        // is no floating window to leave the call in, and popping anyway
+        // would recreate exactly the invisible-call problem this used to
+        // guard against — so on those devices back still does nothing.
+        CallPip.enter();
       },
       child: Scaffold(
         backgroundColor: AppColors.darkCanvas,
@@ -188,6 +205,14 @@ class _LiveView extends ConsumerWidget {
           ),
         _ReactionOverlay(reactions: session.reactions),
         if (session.isVideo) _SelfView(session: session),
+
+        // ⚠️ Centred, not in the header. "Connecting…" used to sit in the
+        // timer's pill in the top corner, which is where a *clock* belongs
+        // — but this is the only thing happening on the screen at the time,
+        // and the corner is where you put what can be ignored.
+        if (session.isVideo && elapsed == null)
+          const Center(child: _Connecting()),
+
         SafeArea(
           child: Column(
             children: [
@@ -197,9 +222,7 @@ class _LiveView extends ConsumerWidget {
                 // a free-floating layer now — see _SelfView — because a
                 // tile you can move is a tile that can get out of the way
                 // of their face, and one pinned into a Row cannot.
-                child: Row(
-                  children: [_Timer(elapsed: elapsed)],
-                ),
+                child: _CallHeader(name: name, elapsed: elapsed),
               ),
               const Spacer(),
 
@@ -494,6 +517,139 @@ class _PartnerClock extends ConsumerWidget {
   }
 }
 
+/// Back, their name, and the clock — a column in the top-left corner.
+///
+/// The name is here because a video call fills the screen with a face and
+/// nothing else: on a glance at a locked-then-unlocked phone, whose call
+/// this is was the one thing the screen never said.
+class _CallHeader extends StatelessWidget {
+  const _CallHeader({required this.name, required this.elapsed});
+
+  final String name;
+  final Duration? elapsed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ⚠️ Minimise, not close. It looks like a back button because
+            // that is the gesture it answers — and leaving a call by going
+            // back should put it in the floating window, never end it.
+            Semantics(
+              button: true,
+              label: 'Minimise the call',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: CallPip.enter,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.darkCanvas.withValues(alpha: .5),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.chevron_back,
+                    size: 20,
+                    color: AppColors.onDark,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              name,
+              style: AppText.title(AppColors.onDark).copyWith(
+                shadows: const [
+                  Shadow(color: Color(0x99000000), blurRadius: 6),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            // No clock until media is up: one sitting at 00:00 reads as a
+            // call that connected and went silent. The connecting state has
+            // the middle of the screen instead.
+            if (elapsed != null) _Timer(elapsed: elapsed),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+/// "Connecting…", in the middle, where the only thing happening goes.
+class _Connecting extends StatelessWidget {
+  const _Connecting();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.darkCanvas.withValues(alpha: .62),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: AppColors.onDark.withValues(alpha: .1)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.onDark,
+            ),
+          ),
+          const SizedBox(width: AppSpace.xs),
+          Text('Connecting…', style: AppText.body(AppColors.onDark)),
+        ],
+      ),
+    );
+  }
+}
+
+/// The call as a floating window.
+///
+/// ⚠️ Video and nothing else. A PiP window is a few hundred pixels wide and
+/// **takes no touches** — Android routes taps to "expand" and gives the app
+/// nothing — so every control rendered here would be an unreadable button
+/// that cannot be pressed. Tapping the window restores the full screen,
+/// which is the maximise the floating window needs.
+class _PipView extends StatelessWidget {
+  const _PipView({required this.session, required this.partner});
+
+  final CallSession session;
+  final UserProfile? partner;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: AppColors.darkCanvas,
+      child: session.isVideo
+          ? RemoteVideo(session: session)
+          : Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  UserAvatar(partner, size: 64),
+                  const SizedBox(height: AppSpace.xs),
+                  // The clock is the whole reason a voice call is worth
+                  // floating rather than just being a notification.
+                  _Timer(elapsed: session.elapsed),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
 class _Timer extends StatelessWidget {
   const _Timer({required this.elapsed});
 
@@ -540,7 +696,10 @@ class _SelfView extends StatefulWidget {
 }
 
 class _SelfViewState extends State<_SelfView> {
-  static const _size = Size(112, 158);
+  // ⚠️ Sized so you can actually read your own framing. It has grown twice
+  // — 74×104, then 112×158 — and this is the size at which a glance tells
+  // you whether you are in shot.
+  static const _size = Size(150, 210);
   static const _hiddenSize = Size(48, 48);
   static const _margin = 14.0;
 
@@ -551,6 +710,21 @@ class _SelfViewState extends State<_SelfView> {
   bool _hidden = false;
 
   Size get _currentSize => _hidden ? _hiddenSize : _size;
+
+  void _drag(DragUpdateDetails details) {
+    final bounds = MediaQuery.sizeOf(context);
+    setState(() {
+      _position = _clamp(
+        (_position ?? _defaultPosition(bounds)) + details.delta,
+        bounds,
+      );
+    });
+  }
+
+  Offset _defaultPosition(Size bounds) => Offset(
+        bounds.width - _size.width - _margin,
+        MediaQuery.paddingOf(context).top + _margin,
+      );
 
   /// Keeps the tile fully on screen — after a drag, after hiding (which
   /// changes its size), and after a rotation.
@@ -565,12 +739,7 @@ class _SelfViewState extends State<_SelfView> {
   @override
   Widget build(BuildContext context) {
     final bounds = MediaQuery.sizeOf(context);
-    final position = _clamp(
-      _position ??
-          Offset(bounds.width - _size.width - _margin,
-              MediaQuery.paddingOf(context).top + _margin),
-      bounds,
-    );
+    final position = _clamp(_position ?? _defaultPosition(bounds), bounds);
 
     return Positioned(
       left: position.dx,
@@ -584,9 +753,7 @@ class _SelfViewState extends State<_SelfView> {
         // target, which is what makes it feel like an object rather than a
         // control with a handle.
         behavior: HitTestBehavior.opaque,
-        onPanUpdate: (details) => setState(() {
-          _position = _clamp((_position ?? position) + details.delta, bounds);
-        }),
+        onPanUpdate: _drag,
         onTap: _hidden ? () => setState(() => _hidden = false) : null,
         child: _hidden ? _restoreButton() : _tile(),
       ),
@@ -600,6 +767,20 @@ class _SelfViewState extends State<_SelfView> {
           session: widget.session,
           width: _size.width,
           height: _size.height,
+        ),
+
+        // 🔴 **The drag layer, and it has to be above the video.** The
+        // outer GestureDetector is `HitTestBehavior.opaque`, which should
+        // have been enough — but the tile's whole face is a LiveKit
+        // renderer, and a platform view consumes the touch before it ever
+        // reaches an ancestor. So the only draggable pixel was the eye
+        // button, which is a real GestureDetector sitting *on top* of the
+        // video. This is that, for the rest of the tile.
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onPanUpdate: _drag,
+          ),
         ),
         // Top-left, away from the thumb that just dragged it in from the
         // right, and small enough not to cover your own face.

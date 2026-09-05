@@ -23,6 +23,8 @@ import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
+import 'features/calls/domain/call_notifier.dart';
+import 'features/calls/data/call_pip.dart';
 import 'features/calls/data/call_repository.dart';
 import 'features/calls/domain/call.dart';
 import 'features/updates/data/update_alerts.dart';
@@ -67,6 +69,8 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // Resume is when a new build is most likely to be waiting: the phone was
     // put down while the APK was being published on the desktop.
     WidgetsBinding.instance.addObserver(this);
+    // Native tells us when the floating window opens and closes.
+    wirePipMode(ref);
     _wireWidgetLaunches();
     _wireAlarmTaps();
     _wireNotificationRoutes();
@@ -248,6 +252,16 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       myOpenRemindersProvider,
       (_, mine) => ReminderScheduler.sync(mine),
     );
+
+    // ⚠️ Tells the Activity whether it may shrink into the floating window
+    // on Home/recents. `onUserLeaveHint` fires on every exit from the app,
+    // so without this leaving the home screen would float a call that is
+    // not happening. Only Dart knows one is live.
+    ref.listen<CallSession?>(callNotifierProvider, (_, session) {
+      CallPip.setCallActive(
+        session != null && !session.status.isTerminal,
+      );
+    });
 
     // 🔴 An incoming call used to raise **nothing**. The ring lived entirely
     // inside the app — the provider fires, the shell pushes the call screen
