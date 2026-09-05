@@ -115,9 +115,8 @@ class FlowerMessage {
       DateTime.now().difference(sentAt) < staleCallAfter;
 
   /// How long the call lasted, or has been running. Null if not a call.
-  Duration? get callDuration => !isCall
-      ? null
-      : (callEndedAt ?? DateTime.now()).difference(sentAt);
+  Duration? get callDuration =>
+      !isCall ? null : (callEndedAt ?? DateTime.now()).difference(sentAt);
 
   /// How long this has left on the recipient's home screen.
   ///
@@ -480,9 +479,7 @@ final sentFlowerTodayProvider = Provider.autoDispose<bool>((ref) {
 final unreadMessageCountProvider = Provider.autoDispose<int>((ref) {
   final userId = ref.watch(currentUserIdProvider);
   final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
-  return messages
-      .where((m) => m.senderId != userId && !m.isSeen)
-      .length;
+  return messages.where((m) => m.senderId != userId && !m.isSeen).length;
 });
 
 /// A signed URL for one day photo, minted once and kept.

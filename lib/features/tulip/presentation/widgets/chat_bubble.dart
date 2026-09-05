@@ -171,82 +171,124 @@ class ChatBubble extends StatelessWidget {
   }
 
   // ── Flower message ────────────────────────────────
+  /// A flower arrives as a Polaroid.
+  ///
+  /// ⚠️ The frame is the *message*, not decoration. A flower here is a thing
+  /// somebody chose and sent, and a square picture with its name written
+  /// under it is what that has looked like since long before phones. Even
+  /// margin at the top and sides, a deep one at the foot, and the name
+  /// sitting in that foot the way it would be written on the card.
+  ///
+  /// ⚠️ White whoever sent it. The bubble around it is pink for yours and
+  /// grey for theirs; a Polaroid that changed colour with the sender would
+  /// stop reading as a photograph.
   Widget _buildFlower(BuildContext context) {
     final flower = message.flower!;
+    final note = message.note;
+    final hasNote = note != null && note.isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // The artwork is the message, so it runs edge to edge of the bubble
-        // rather than sitting as a thumbnail beside text.
-        GestureDetector(
-          onTap: () => showMediaViewer(
-            context,
-            title: flower.name,
-            subtitle: flower.meaning,
-            asset: flower.asset,
-            fileName: 'dayflower-${flower.id}.jpg',
-          ),
-          child: AspectRatio(
-            aspectRatio: 1,
-            child: Image.asset(
-              flower.asset,
-              fit: BoxFit.cover,
-              semanticLabel: flower.name,
-              errorBuilder: (_, __, ___) => Container(
-                color: flower.color.withValues(alpha: .14),
-                alignment: Alignment.center,
-                child: Text(
-                  flower.emoji,
-                  style: const TextStyle(fontSize: 56),
+    return Padding(
+      padding: const EdgeInsets.all(10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.border),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 10,
+              offset: Offset(0, 3),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.fromLTRB(9, 9, 9, 7),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            GestureDetector(
+              onTap: () => showMediaViewer(
+                context,
+                title: flower.name,
+                subtitle: flower.meaning,
+                asset: flower.asset,
+                fileName: 'dayflower-${flower.id}.jpg',
+              ),
+              child: AspectRatio(
+                aspectRatio: 1,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: Image.asset(
+                    flower.asset,
+                    fit: BoxFit.cover,
+                    semanticLabel: flower.name,
+                    errorBuilder: (_, __, ___) => Container(
+                      color: flower.color.withValues(alpha: .14),
+                      alignment: Alignment.center,
+                      child: Text(
+                        flower.emoji,
+                        style: const TextStyle(fontSize: 56),
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                flower.name,
-                style: AppText.subtitle().copyWith(fontSize: 15),
-              ),
-              Text(flower.meaning, style: AppText.caption()),
-              if (message.note != null && message.note!.isNotEmpty) ...[
-                const SizedBox(height: 6),
-                Text(
-                  '“${message.note}”',
-                  style: AppText.note().copyWith(fontSize: 14.5),
-                ),
-              ],
-              if (message.toWidget) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      CupertinoIcons.device_phone_portrait,
-                      size: 13,
-                      color: AppColors.secondary,
-                    ),
-                    const SizedBox(width: 4),
+
+            // The caption band, roomy even with nothing written in it — a
+            // Polaroid with a thin foot is just a photo.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(2, 10, 2, 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Lora italic — the app's one handwriting-adjacent face,
+                  // kept for what a person wrote or chose.
+                  Text(
+                    flower.name,
+                    style: AppText.note(AppColors.ink)
+                        .copyWith(fontSize: 16, height: 1.2),
+                  ),
+                  Text(flower.meaning, style: AppText.caption()),
+                  if (hasNote) ...[
+                    const SizedBox(height: 6),
                     Text(
-                      isMine ? 'On their home screen' : 'On your home screen',
-                      style: AppText.caption(AppColors.secondary),
+                      '\u201c$note\u201d',
+                      style: AppText.note().copyWith(fontSize: 14.5),
                     ),
                   ],
-                ),
-              ],
-              const SizedBox(height: 2),
-              _MetaRow(message: message, isMine: isMine, time: _time),
-            ],
-          ),
+                  if (message.toWidget) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          CupertinoIcons.device_phone_portrait,
+                          size: 13,
+                          color: AppColors.secondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Flexible(
+                          child: Text(
+                            isMine
+                                ? 'On their home screen'
+                                : 'On your home screen',
+                            style: AppText.caption(AppColors.secondary),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 2),
+                  _MetaRow(message: message, isMine: isMine, time: _time),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

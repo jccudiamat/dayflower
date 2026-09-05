@@ -277,7 +277,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             // list[i + 1] is the *older* neighbour, so a mismatch here means
             // this message opens a new day.
             final older = i + 1 < list.length ? list[i + 1] : null;
-            final startsDay = older == null || !_sameDay(older.sentAt, message.sentAt);
+            final startsDay =
+                older == null || !_sameDay(older.sentAt, message.sentAt);
 
             return Column(
               children: [
@@ -512,15 +513,14 @@ class _ChatHeader extends ConsumerWidget {
           // used to drop you into a viewfinder. The chat is a top-level tab
           // in its own right, so its way out is the same as the camera's ×.
           IconButton(
-            onPressed: () => context.canPop()
-                ? context.pop()
-                : context.go(Routes.home),
+            onPressed: () =>
+                context.canPop() ? context.pop() : context.go(Routes.home),
             tooltip: 'Back',
             iconSize: 20,
             padding: const EdgeInsets.only(right: AppSpace.xs),
             constraints: const BoxConstraints(),
-            icon: const Icon(CupertinoIcons.chevron_back,
-                color: AppColors.muted),
+            icon:
+                const Icon(CupertinoIcons.chevron_back, color: AppColors.muted),
           ),
           UserAvatar(partner, size: 40),
           const SizedBox(width: AppSpace.xs),

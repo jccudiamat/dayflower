@@ -1851,3 +1851,61 @@ the tab bar showing underneath it reads as a panel rather than the picture.
 in the thread opens it full-screen with its name and meaning. ⚠️ The save
 button could not be — it is an Android method channel, and web has no
 implementation, which is exactly the path that returns false.
+
+## 🔴 One-way audio, and it only ever bit the caller (2026-09-05)
+
+Reported: "when I initiate the call the receiving end hears me but I can't
+hear them. When they initiate it's fine."
+
+⚠️ **Nothing in this app was setting the audio route at all.** The route was
+left to whatever the Android audio session happened to pick — and what it
+picks depends on whether there was already a remote track when the session
+started. **Whoever dials connects to an empty room**, so the session is set
+up with nothing to play and the partner's audio, arriving seconds later, went
+somewhere the caller could not hear it. Whoever answers joins a room that
+already has audio in it. That is the whole asymmetry: not the tokens, which
+come from the same `livekit_token` RPC for both sides, and not the room.
+
+Two lines, in `livekit_call_transport.dart`:
+
+- `_routeAudio()` after connect — speaker for video, earpiece for voice, the
+  way every phone behaves. A headset still wins; `force` is deliberately off.
+- ⚠️ **and again on `TrackSubscribedEvent` for an audio track.** That is the
+  moment the caller's session actually gains something to play, and
+  re-asserting there is what makes dialling and answering behave the same.
+
+🔴 **Hypothesis, not a confirmed diagnosis.** A two-device call cannot be
+reproduced here. The mechanism fits the symptom exactly and the fix is
+correct regardless — an app that never sets its audio route is relying on
+luck — but if it survives this, the next thing to check is whether the
+caller *sees* them, which would separate routing from subscription.
+
+## Chat and flowers (2026-09-05)
+
+- **Save says so on the button.** A snackbar over a full-screen picture
+  covers the picture and leaves nothing behind — come back a minute later and
+  there is no way to tell whether you already have it. Success is now
+  "✓ Saved" on the button itself, and the button disables, because tapping
+  again writes a second copy. ⚠️ Failure still interrupts: a button that
+  simply does not change is not an error message.
+- 🔴 **Flowers no longer go to the home screen by default.** `_toWidget` was
+  `true`, so unless you noticed the toggle every flower replaced the last one
+  on their home screen — sending two in a row quietly threw the first away.
+  Sending a flower is a message; parking one on somebody's home screen for a
+  day is a second, deliberate act, and the toggle is still there for it.
+- **Flowers are Polaroids.** Even margin at the top and sides, a deep one at
+  the foot, the name in that foot in Lora italic — the app's one
+  handwriting-adjacent face, kept for what a person wrote or chose. ⚠️ White
+  whoever sent it: the bubble around it is pink for yours and grey for
+  theirs, and a Polaroid that changed colour with the sender would stop
+  reading as a photograph.
+
+### Still open from this round
+
+- **My Days: a limit of 7**, a warning before the oldest is dropped, and a
+  swipeable viewer ending on "share your day". Not started.
+- **Scrolling all the days on the home-screen widget.** ⚠️ Possible, and not
+  small: RemoteViews collections need a `RemoteViewsService` plus a
+  `RemoteViewsFactory` and a `StackView` in the layout, and the day photos
+  would have to be cached as a *set* rather than the single file
+  `_cachePhoto` writes today.

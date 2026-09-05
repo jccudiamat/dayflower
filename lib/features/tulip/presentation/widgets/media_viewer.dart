@@ -69,6 +69,12 @@ class MediaViewer extends ConsumerStatefulWidget {
 class _MediaViewerState extends ConsumerState<MediaViewer> {
   bool _saving = false;
 
+  /// ⚠️ The button says so itself rather than a toast saying it for it. A
+  /// snackbar over a full-screen picture covers the picture, and it leaves
+  /// nothing behind — come back to the same photo a minute later and there
+  /// is no way to tell whether you already have it.
+  bool _saved = false;
+
   Future<Uint8List> _bytes() async {
     final path = widget.imagePath;
     if (path != null) {
@@ -88,18 +94,18 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
       ok = false;
     }
     if (!mounted) return;
-    setState(() => _saving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? 'Saved to your gallery 🌷'
-              // ⚠️ Says it did not happen. The old app-folder save reported
-              // success for a file no gallery would ever list.
-              : "Couldn't save that picture.",
-        ),
-      ),
-    );
+    setState(() {
+      _saving = false;
+      _saved = ok;
+    });
+    // Only failure still interrupts. Success is on the button; a failure
+    // has to say *something*, or the button simply not changing is the
+    // whole error message.
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Couldn't save that picture.")),
+      );
+    }
   }
 
   @override
@@ -110,8 +116,8 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpace.xs, AppSpace.xs,
-                  AppSpace.sm, AppSpace.xs),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpace.xs, AppSpace.xs, AppSpace.sm, AppSpace.xs),
               child: Row(
                 children: [
                   IconButton(
@@ -131,18 +137,10 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
                       ],
                     ),
                   ),
-                  IconButton(
-                    onPressed: _saving ? null : _save,
-                    tooltip: 'Save to your gallery',
-                    icon: _saving
-                        ? const SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Icon(CupertinoIcons.arrow_down_to_line,
-                            color: Colors.white, size: 22),
+                  _SaveButton(
+                    saving: _saving,
+                    saved: _saved,
+                    onTap: _save,
                   ),
                 ],
               ),
@@ -184,6 +182,55 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
           ),
         );
       },
+    );
+  }
+}
+
+/// Save, saving, saved — one control that reports its own outcome.
+class _SaveButton extends StatelessWidget {
+  const _SaveButton({
+    required this.saving,
+    required this.saved,
+    required this.onTap,
+  });
+
+  final bool saving;
+  final bool saved;
+  final Future<void> Function() onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    if (saving) {
+      return const Padding(
+        padding: EdgeInsets.all(14),
+        child: SizedBox(
+          width: 18,
+          height: 18,
+          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+        ),
+      );
+    }
+
+    return TextButton.icon(
+      // Tapping again would write a second copy. Once it is in the gallery
+      // the button has nothing left to offer.
+      onPressed: saved ? null : onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: Colors.white,
+        disabledForegroundColor: AppColors.success,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      icon: Icon(
+        saved
+            ? CupertinoIcons.checkmark_alt
+            : CupertinoIcons.arrow_down_to_line,
+        size: 19,
+      ),
+      label: Text(
+        saved ? 'Saved' : 'Save',
+        style: AppText.body(saved ? AppColors.success : Colors.white)
+            .copyWith(fontWeight: FontWeight.w600),
+      ),
     );
   }
 }

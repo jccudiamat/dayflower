@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:livekit_client/livekit_client.dart' as lk;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -145,6 +146,20 @@ class LiveKitCallTransport implements CallTransport {
           // Not ours, or not valid. Silence is the right response.
         }
       })
+      ..on<lk.TrackSubscribedEvent>((event) {
+        // 🔴 **The fix for one-way audio, and it only ever bit the caller.**
+        //
+        // Whoever dials connects to an *empty* room, so Android sets up the
+        // audio session with nothing to play. The route is decided at that
+        // moment and the partner's audio, arriving seconds later, was left
+        // going somewhere the caller could not hear. Whoever answers joins a
+        // room that already has audio in it, which is why answering always
+        // worked and dialling never did.
+        //
+        // Re-asserting the route the moment their track actually lands is
+        // what makes the two roles the same.
+        if (event.track is lk.AudioTrack) _routeAudio();
+      })
       ..on<lk.ActiveSpeakersChangedEvent>((event) {
         // Local audio is in this list too; the ripple is about *them*.
         final speaking =
@@ -158,12 +173,35 @@ class LiveKitCallTransport implements CallTransport {
       if (_isVideo) {
         await room0.localParticipant?.setCameraEnabled(true);
       }
+      await _routeAudio();
     } on lk.MediaConnectException catch (_) {
       // Signalling worked and media did not — the shape a carrier-level
       // block takes, and the reason this failure is worth its own branch.
       _events.add(const CallFailed(CallFailure.unreachable));
     } catch (error) {
       _events.add(CallFailed(_readFailure(error)));
+    }
+  }
+
+  /// Sends the call's audio where the phone is being held.
+  ///
+  /// ⚠️ **Nothing was setting this at all**, which left the route to
+  /// whatever the audio session happened to pick — and what it picks depends
+  /// on whether there was already a remote track when the session started.
+  /// That is the entire difference between dialling and answering.
+  ///
+  /// Speaker for video, because the phone is in front of your face and not
+  /// against your ear; earpiece for voice, which is what every phone call
+  /// does. A headset still wins either way — `force` is deliberately not
+  /// set, so plugging in headphones does the obvious thing.
+  Future<void> _routeAudio() async {
+    try {
+      await lk.AudioManager.instance.setSpeakerOutputPreferred(_isVideo);
+    } catch (e) {
+      // Unsupported on desktop and web, and not worth a failed call
+      // anywhere. The call is still up; it is only pointed at the wrong
+      // speaker.
+      debugPrint('call audio routing failed: $e');
     }
   }
 

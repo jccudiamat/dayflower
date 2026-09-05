@@ -517,9 +517,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                       const Spacer(),
                       _TargetPill(
                         target: ref.watch(dayPhotoTargetProvider),
-                        onChanged: (t) => ref
-                            .read(dayPhotoTargetProvider.notifier)
-                            .state = t,
+                        onChanged: (t) =>
+                            ref.read(dayPhotoTargetProvider.notifier).state = t,
                       ),
                     ],
                   ),

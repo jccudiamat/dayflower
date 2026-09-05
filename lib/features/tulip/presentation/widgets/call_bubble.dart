@@ -157,8 +157,7 @@ class CallBubble extends ConsumerWidget {
     // both would turn a one-line record into a billing statement.
     // Null covers both "not worth mentioning yet" and "this bucket is
     // uncapped" — neither should put a figure in the thread.
-    final left =
-        usage == null || !usage.shouldWarn ? null : usage.left(mode);
+    final left = usage == null || !usage.shouldWarn ? null : usage.left(mode);
 
     return Align(
       alignment: Alignment.center,
