@@ -8,6 +8,7 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'app.dart';
 import 'core/dev/dev_login.dart';
 import 'core/services/app_notifications.dart';
+import 'core/widgets/crash_screen.dart';
 import 'core/services/partner_alerts.dart';
 import 'core/services/pulse_alerts.dart';
 import 'features/heartbeat/data/heartbeat_nudge.dart';
@@ -72,6 +73,11 @@ Future<void> main() async {
 
   // Debug-only shortcut past the login screen. No-op in release builds.
   await maybeDevAutoLogin();
+
+  // ⚠️ Before runApp, so it is in place for a failure during the very first
+  // build. Turns Flutter's release grey box into something that names the
+  // exception — see CrashScreen for why that box cost an evening.
+  CrashScreen.install();
 
   runApp(
     // Device frames for checking layout across phone sizes — iPhone SE up to

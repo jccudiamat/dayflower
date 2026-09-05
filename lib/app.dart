@@ -53,6 +53,11 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   /// the "exactly once per launch" obvious to whoever reads it next.
   bool _askedForNotifications = false;
 
+  /// ⚠️ Built once, not per build. `Router` add/removes its callback every
+  /// time this changes identity, and a new one each frame is churn with a
+  /// window where the back button belongs to nobody.
+  late final _backDispatcher = _UpdateBackButtonDispatcher(ref);
+
   @override
   void initState() {
     super.initState();
@@ -275,7 +280,26 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       title: 'Dayflower',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      routerConfig: router,
+      // 🔴 **Spelled out rather than `routerConfig: router`, and it has to
+      // be.** `MaterialApp.router` asserts that `routerConfig` is the *only*
+      // router argument — passing `backButtonDispatcher` beside it trips
+      // "If the routerConfig is provided, all the other router delegates
+      // must not be provided" and the whole app renders as Flutter's error
+      // box: red in debug, a **flat grey rectangle** in release, which is
+      // what it looked like on the phone.
+      //
+      // ⚠️ And the release build did not even fail loudly — assertions are
+      // compiled out — so the dispatcher was simply dropped and the back
+      // button never reached the updater at all. Silently wrong is the
+      // reason this is written out longhand.
+      //
+      // GoRouter cannot take the dispatcher either: it hardcodes its own
+      // `RootBackButtonDispatcher` in the constructor and the field is
+      // final.
+      routerDelegate: router.routerDelegate,
+      routeInformationParser: router.routeInformationParser,
+      routeInformationProvider: router.routeInformationProvider,
+      backButtonDispatcher: _backDispatcher,
       // Both are no-ops once DevicePreview is disabled (release), but without
       // them the app ignores the frame and keeps rendering at the real window
       // size — the picker would appear to do nothing.
@@ -284,9 +308,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // the updater would paint over the device chrome in the preview
       // instead of inside the phone.
       builder: (context, child) =>
-          DevicePreview.appBuilder(context, UpdateGate(child: child!)),
-      // The back button, for a layer that has no route to intercept it.
-      backButtonDispatcher: _UpdateBackButtonDispatcher(ref),
+          DevicePreview.appBuilder(context, UpdateGate(child: child)),
     );
   }
 

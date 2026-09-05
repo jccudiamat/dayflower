@@ -1629,3 +1629,65 @@ catches this class of mistake.
 ⚠️ **Seeing this fix needs two builds.** A phone on build N runs build N's
 updater, so the build that *carries* the new screen is still announced by the
 old one. It takes the build after it before the new screen is what appears.
+
+## 🔴 The grey screen, the overflowing OTP row, and the square widget (2026-09-05)
+
+### The grey screen is Flutter's error box, not a hang
+
+⚠️ **`#B5B5B5` is `RenderErrorBox`.** Flutter replaces a widget that throws
+during build with `ErrorWidget`: red with the message in debug, and in release
+a **flat grey rectangle** — `0xF0C0C0C0` over black composites to exactly
+181,181,181. Sampling the screenshot gave 181 on every pixel. Near the top of
+the tree it fills the phone, and it looks exactly like a freeze. It is not
+one; it is an uncaught exception with its text removed.
+
+**`CrashScreen` (core/widgets/crash_screen.dart) now replaces it** and names
+the exception. Hiding internals is the right default for a public app; this
+one has two users, and a screenshot that says what broke is worth more than
+one that cannot be told from a hang. ⚠️ It depends on no ancestor — no Theme,
+no MediaQuery, no Scaffold — and brings its own `Directionality`, because
+whatever is above it may be the thing that just died.
+
+### 🔴 Two ways the top of the tree could throw, both mine, both from build 33
+
+1. **`backButtonDispatcher` beside `routerConfig`.** `MaterialApp.router`
+   asserts they are mutually exclusive — "if the routerConfig is provided, all
+   the other router delegates must not be provided". This crashed **every
+   debug run**, reproduced instantly in the web preview. ⚠️ In release the
+   assertion is compiled out, so it did not crash there — it silently **threw
+   the dispatcher away**, and the back button never reached the updater at
+   all. Now spelled out longhand as `routerDelegate` / `routeInformationParser`
+   / `routeInformationProvider` + the dispatcher, which is the only form that
+   legally takes one. GoRouter cannot carry it either: it hardcodes its own
+   `RootBackButtonDispatcher` and the field is final.
+
+2. **A `ref.listen` writing to a provider from inside `UpdateGate.build`.** A
+   listener registered during build fires *during that build* when the value
+   already changed, and writing another provider there throws "Tried to modify
+   a provider while the widget tree was building" — at the top of the tree,
+   which is the full-screen grey. Removed, and it was redundant anyway: a
+   dismissal is stored as a build *number*, so a newer build never matches it,
+   and Settings clears it directly for the only other case.
+
+⚠️ **Which of these the phone actually hit is not proven.** (1) cannot fire in
+release; (2) can. The evidence is that both are real, both are at the top of
+the tree, and both arrived in build 33 — which is when the grey started.
+CrashScreen exists so the next one does not need this much inference.
+
+### The OTP row overflowed its card
+
+Six boxes at a fixed 46 wide with 5 of margin each side is 336px. Inside the
+reset-password card there are about 239. ⚠️ A release build does not draw the
+yellow overflow stripes — it just clips — so the sixth box was simply *gone*
+and the field looked broken rather than too big. Sized from `LayoutBuilder`
+now, clamped to the old 46 so nothing grows on a wide screen.
+
+### The widget's photo was still square
+
+⚠️ **`roundCorners` was drawing corners that `centerCrop` then cropped off.**
+The bitmap is cut to the widget's *reported* size; the moment the real aspect
+differs at all, the ImageView trims the edges — and the edges are where the
+rounding lives. `setViewOutlinePreferredRadius` on the root (API 31+) clips
+the card and every child of it, so nothing inside can have a sharp corner
+whatever the bitmap looks like. The bitmap rounding stays as the pre-31
+fallback. Radius 28 → 34dp.

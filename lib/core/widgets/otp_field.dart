@@ -13,9 +13,9 @@ class OtpField extends StatefulWidget {
     this.dark = false,
   });
 
-  final int              length;
-  final bool             autoFocus;
-  final bool             dark;
+  final int length;
+  final bool autoFocus;
+  final bool dark;
   final ValueChanged<String> onCompleted;
   final ValueChanged<String>? onChanged;
 
@@ -25,15 +25,14 @@ class OtpField extends StatefulWidget {
 
 class _OtpFieldState extends State<OtpField> {
   late final List<TextEditingController> _controllers;
-  late final List<FocusNode>             _focusNodes;
-  String get _current =>
-      _controllers.map((c) => c.text).join();
+  late final List<FocusNode> _focusNodes;
+  String get _current => _controllers.map((c) => c.text).join();
 
   @override
   void initState() {
     super.initState();
     _controllers = List.generate(widget.length, (_) => TextEditingController());
-    _focusNodes  = List.generate(widget.length, (i) => FocusNode());
+    _focusNodes = List.generate(widget.length, (i) => FocusNode());
     if (widget.autoFocus) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _focusNodes.first.requestFocus();
@@ -44,7 +43,7 @@ class _OtpFieldState extends State<OtpField> {
   @override
   void dispose() {
     for (final c in _controllers) c.dispose();
-    for (final f in _focusNodes)  f.dispose();
+    for (final f in _focusNodes) f.dispose();
     super.dispose();
   }
 
@@ -91,73 +90,99 @@ class _OtpFieldState extends State<OtpField> {
     }
   }
 
+  /// The box, at its most comfortable. Boxes shrink from here when the
+  /// space will not take six of them; they never grow past it, because a
+  /// wide screen should not turn a PIN row into six billboards.
+  static const _maxBox = 46.0;
+  static const _gap = 10.0;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: List.generate(widget.length, (i) {
-        final filled = _controllers[i].text.isNotEmpty;
-        return Container(
-          width: 46,
-          height: 56,
-          margin: const EdgeInsets.symmetric(horizontal: 5),
-          child: TextFormField(
-            controller: _controllers[i],
-            focusNode:  _focusNodes[i],
-            keyboardType:   TextInputType.number,
-            textAlign:      TextAlign.center,
-            maxLength:      2, // allow 2 so we can detect new char
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: GoogleFonts.quicksand(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: widget.dark ? AppColors.onDark : AppColors.ink,
-            ),
-            decoration: InputDecoration(
-              counterText: '',
-              filled: true,
-              fillColor: widget.dark
-                  ? AppColors.darkSurface
-                  : AppColors.surfaceSubtle,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: filled
-                      ? AppColors.secondary
-                      : (widget.dark
-                          ? AppColors.darkBorder
-                          : Colors.transparent),
+    // 🔴 **Sized from the space it is actually given.** These were a fixed
+    // 46 wide with 5 of margin either side — 336px for six of them — which
+    // is fine full-bleed and overflows the moment the row is inside a card.
+    // On the reset-password screen it ran the sixth box off the edge, and
+    // an overflow in release does not draw the yellow stripes: it just
+    // silently clips, so the field looked broken rather than too big.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final available = constraints.maxWidth;
+        final box = available.isFinite
+            ? (((available - _gap * (widget.length - 1)) / widget.length)
+                .clamp(30.0, _maxBox))
+            : _maxBox;
+        // Keeps the boxes' proportions as they shrink rather than leaving
+        // tall thin slots.
+        final height = box * (56 / _maxBox);
+
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(widget.length, (i) {
+            final filled = _controllers[i].text.isNotEmpty;
+            return Container(
+              width: box,
+              height: height,
+              margin: EdgeInsets.only(right: i == widget.length - 1 ? 0 : _gap),
+              child: TextFormField(
+                controller: _controllers[i],
+                focusNode: _focusNodes[i],
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                maxLength: 2, // allow 2 so we can detect new char
+                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                style: GoogleFonts.quicksand(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: widget.dark ? AppColors.onDark : AppColors.ink,
                 ),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(
-                  color: filled
-                      ? AppColors.secondary
-                      : (widget.dark
-                          ? AppColors.darkBorder
-                          : Colors.transparent),
+                decoration: InputDecoration(
+                  counterText: '',
+                  filled: true,
+                  fillColor: widget.dark
+                      ? AppColors.darkSurface
+                      : AppColors.surfaceSubtle,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: filled
+                          ? AppColors.secondary
+                          : (widget.dark
+                              ? AppColors.darkBorder
+                              : Colors.transparent),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: filled
+                          ? AppColors.secondary
+                          : (widget.dark
+                              ? AppColors.darkBorder
+                              : Colors.transparent),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                      color: AppColors.secondary,
+                      width: 1.5,
+                    ),
+                  ),
                 ),
+                onChanged: (val) => _onType(i, val),
+                // Handle paste
+                onTap: () async {
+                  final data = await Clipboard.getData('text/plain');
+                  if (data?.text != null &&
+                      data!.text!.length >= widget.length) {
+                    _onPaste(data.text!);
+                  }
+                },
               ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(
-                  color: AppColors.secondary,
-                  width: 1.5,
-                ),
-              ),
-            ),
-            onChanged: (val) => _onType(i, val),
-            // Handle paste
-            onTap: () async {
-              final data = await Clipboard.getData('text/plain');
-              if (data?.text != null && data!.text!.length >= widget.length) {
-                _onPaste(data.text!);
-              }
-            },
-          ),
+            );
+          }),
         );
-      }),
+      },
     );
   }
 }

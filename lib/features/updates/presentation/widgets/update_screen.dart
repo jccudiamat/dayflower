@@ -29,7 +29,11 @@ import '../../data/update_repository.dart';
 class UpdateGate extends ConsumerStatefulWidget {
   const UpdateGate({super.key, required this.child});
 
-  final Widget child;
+  /// ⚠️ Nullable because `MaterialApp`'s builder types it that way. It was
+  /// `child!` at the call site, which turns a null into a crash that renders
+  /// as a full-screen grey box in release — the same failure mode this
+  /// screen was written to fix.
+  final Widget? child;
 
   @override
   ConsumerState<UpdateGate> createState() => _UpdateGateState();
@@ -38,26 +42,26 @@ class UpdateGate extends ConsumerStatefulWidget {
 class _UpdateGateState extends ConsumerState<UpdateGate> {
   @override
   Widget build(BuildContext context) {
-    // A fresh check that lands on `available` un-dismisses. Safe because a
-    // background check already refuses to report a skipped build at all — so
-    // arriving here means either a new build or a manual check, and both of
-    // those are somebody asking to see it.
-    ref.listen<UpdateStage>(
-      updateControllerProvider.select((s) => s.stage),
-      (previous, stage) {
-        if (stage == UpdateStage.available &&
-            previous != UpdateStage.available) {
-          ref.read(updateDismissedProvider.notifier).state = null;
-        }
-      },
-    );
-
+    // 🔴 **There was a `ref.listen` here that cleared the dismissal when a
+    // check landed on `available`, and it was both redundant and dangerous.**
+    //
+    // Dangerous: a `ref.listen` registered during build fires *during that
+    // build* if the value already changed, and writing to another provider
+    // from inside it throws "Tried to modify a provider while the widget
+    // tree was building". This widget is the top of the tree, so that throw
+    // renders as a full-screen error box — grey, in release, with no text on
+    // it at all.
+    //
+    // Redundant: a dismissal is stored as a build *number*, so a newer build
+    // never matches it and interrupts on its own (see updateIsShowing), and
+    // the only other case — asking again for a build already waved off — is
+    // Settings, which clears it directly.
     final state = ref.watch(updateControllerProvider);
     final dismissed = ref.watch(updateDismissedProvider);
 
     return Stack(
       children: [
-        widget.child,
+        if (widget.child != null) widget.child!,
         if (updateIsShowing(state, dismissed))
           // Takes every tap, so the app underneath cannot be driven blind
           // through a screen that is covering it.

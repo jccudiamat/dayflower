@@ -12,7 +12,9 @@ import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
 import java.io.File
@@ -171,6 +173,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 ),
             )
 
+            roundTheWholeCard(views)
             renderReactions(context, views, photo != null)
         }
 
@@ -230,8 +233,32 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             R.id.widget_react_haha to "haha",
         )
 
+        /**
+         * Rounds the card and everything in it, the system's way.
+         *
+         * WARNING: this is what actually rounds the photo. The bitmap is cut
+         * with rounded corners too (see roundCorners), but the ImageView is
+         * centerCrop - so the moment the widget's real aspect differs at all
+         * from the size the launcher reported, the crop trims off the very
+         * corners that were just drawn and the card looks square again.
+         * That is exactly what happened on the phone.
+         *
+         * setViewOutlinePreferredRadius clips the root and every child of
+         * it, so nothing inside can have a sharp corner regardless of what
+         * the bitmap looks like. API 31+ only, which is why the bitmap
+         * rounding stays as the fallback rather than being replaced.
+         */
+        fun roundTheWholeCard(views: RemoteViews) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+            views.setViewOutlinePreferredRadius(
+                R.id.widget_root,
+                CORNER_DP,
+                TypedValue.COMPLEX_UNIT_DIP,
+            )
+        }
+
         /** Matches @drawable/widget_background's corner radius. */
-        private const val CORNER_DP = 28f
+        private const val CORNER_DP = 34f
 
         /**
          * Cuts the photo to the widget's own shape, with rounded corners.
