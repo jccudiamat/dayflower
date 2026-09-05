@@ -361,7 +361,8 @@ class _RipplePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _RipplePainter oldDelegate) => oldDelegate.t != t;
+  bool shouldRepaint(covariant _RipplePainter oldDelegate) =>
+      oldDelegate.t != t;
 }
 
 class _PrimaryButton extends StatelessWidget {
@@ -378,33 +379,41 @@ class _PrimaryButton extends StatelessWidget {
     // the app has. The first version used a white rounded rect because the
     // reference image did — and it was the only ElevatedButton in the
     // entire codebase.
-    return switch (state.stage) {
-      UpdateStage.downloading => AppCtaButton(
-          label: state.progress == null
-              ? 'Downloading…'
-              : 'Downloading ${(state.progress! * 100).round()}%',
-          // Null disables it, which is also what greys the gradient.
-          onPressed: null,
-        ),
-      UpdateStage.ready => AppCtaButton(
-          label: 'Install now',
-          icon: CupertinoIcons.checkmark_seal,
-          onPressed: controller.install,
-        ),
-      UpdateStage.failed => AppCtaButton(
-          label: 'Try again',
-          icon: CupertinoIcons.arrow_clockwise,
-          onPressed: () {
-            controller.reset();
-            controller.download();
-          },
-        ),
-      _ => AppCtaButton(
-          label: 'Update now',
-          icon: CupertinoIcons.arrow_down_circle,
-          onPressed: controller.download,
-        ),
-    };
+    // ⚠️ Stretched, because the Column around it is `crossAxisAlignment:
+    // start` — everything else on this screen is left-aligned text, and a
+    // CTA that hugged its label sat short and left while "Not now" stayed
+    // centred under it. AppCtaButton's inner Row is MainAxisSize.min and
+    // centred, so giving it the width is all it needs.
+    return SizedBox(
+      width: double.infinity,
+      child: switch (state.stage) {
+        UpdateStage.downloading => AppCtaButton(
+            label: state.progress == null
+                ? 'Downloading…'
+                : 'Downloading ${(state.progress! * 100).round()}%',
+            // Null disables it, which is also what greys the gradient.
+            onPressed: null,
+          ),
+        UpdateStage.ready => AppCtaButton(
+            label: 'Install now',
+            icon: CupertinoIcons.checkmark_seal,
+            onPressed: controller.install,
+          ),
+        UpdateStage.failed => AppCtaButton(
+            label: 'Try again',
+            icon: CupertinoIcons.arrow_clockwise,
+            onPressed: () {
+              controller.reset();
+              controller.download();
+            },
+          ),
+        _ => AppCtaButton(
+            label: 'Update now',
+            icon: CupertinoIcons.arrow_down_circle,
+            onPressed: controller.download,
+          ),
+      },
+    );
   }
 }
 
