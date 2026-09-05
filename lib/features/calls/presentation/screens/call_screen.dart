@@ -199,7 +199,11 @@ class _LiveView extends ConsumerWidget {
             child: SizedBox.expand(),
           ),
         _ReactionOverlay(reactions: session.reactions),
-        if (session.isVideo) _SelfView(session: session),
+        if (session.isVideo)
+          _SelfView(
+            session: session,
+            onSwitchCamera: notifier.switchCamera,
+          ),
 
         // ⚠️ Centred, not in the header. "Connecting…" used to sit in the
         // timer's pill in the top corner, which is where a *clock* belongs
@@ -708,9 +712,10 @@ class _Timer extends StatelessWidget {
 /// state**. Where you park your own thumbnail is not something the other
 /// side, the notifier, or a reconnect should ever know or reset.
 class _SelfView extends StatefulWidget {
-  const _SelfView({required this.session});
+  const _SelfView({required this.session, required this.onSwitchCamera});
 
   final CallSession session;
+  final VoidCallback onSwitchCamera;
 
   @override
   State<_SelfView> createState() => _SelfViewState();
@@ -833,6 +838,27 @@ class _SelfViewState extends State<_SelfView> {
             ),
           ),
         ),
+
+        // Turn the camera around, in the corner of your own picture — the
+        // same place a camera app puts it, and the picture it affects.
+        //
+        // ⚠️ Opposite corner from the eye. Two small circles side by side on
+        // a tile this size would be one target to a thumb, and the two do
+        // very different things: one hides the view, the other changes what
+        // is being sent.
+        Positioned(
+          right: 4,
+          top: 4,
+          child: _TileButton(
+            // Only while there is a picture to turn around. With the camera
+            // off there is nothing to flip and the button would be a
+            // control over a black rectangle.
+            enabled: widget.session.cameraEnabled,
+            onTap: widget.onSwitchCamera,
+            label: 'Switch camera',
+            icon: CupertinoIcons.camera_rotate_fill,
+          ),
+        ),
       ],
     );
   }
@@ -856,6 +882,46 @@ class _SelfViewState extends State<_SelfView> {
           CupertinoIcons.eye_fill,
           size: 20,
           color: AppColors.onDark,
+        ),
+      ),
+    );
+  }
+}
+
+/// A corner control on the self-view tile.
+class _TileButton extends StatelessWidget {
+  const _TileButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: Container(
+          width: 26,
+          height: 26,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: AppColors.darkCanvas.withValues(alpha: enabled ? .6 : .3),
+          ),
+          alignment: Alignment.center,
+          child: Icon(
+            icon,
+            size: 14,
+            color: AppColors.onDark.withValues(alpha: enabled ? 1 : .4),
+          ),
         ),
       ),
     );

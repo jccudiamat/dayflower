@@ -174,6 +174,7 @@ class CallSession {
     this.failure,
     this.micEnabled = true,
     this.cameraEnabled = true,
+    this.cameraFront = true,
     this.partnerSpeaking = false,
     this.reactions = const [],
   });
@@ -203,6 +204,13 @@ class CallSession {
   /// Meaningless on a voice call, where it is forced false and stays there.
   final bool cameraEnabled;
 
+  /// Which lens is live. ⚠️ Session state, not the transport's: a reconnect
+  /// rebuilds the room, and a transport holding this would quietly put you
+  /// back on the front camera after you had turned it around.
+  ///
+  /// Front by default — a video call is a call about faces.
+  final bool cameraFront;
+
   /// Drives the ripple on the voice screen. False on video, where you can
   /// see them and a breathing ring would be noise.
   final bool partnerSpeaking;
@@ -225,6 +233,7 @@ class CallSession {
     CallFailure? failure,
     bool? micEnabled,
     bool? cameraEnabled,
+    bool? cameraFront,
     bool? partnerSpeaking,
     List<CallReaction>? reactions,
   }) {
@@ -242,6 +251,7 @@ class CallSession {
           : (failure ?? this.failure),
       micEnabled: micEnabled ?? this.micEnabled,
       cameraEnabled: cameraEnabled ?? this.cameraEnabled,
+      cameraFront: cameraFront ?? this.cameraFront,
       partnerSpeaking: partnerSpeaking ?? this.partnerSpeaking,
       reactions: reactions ?? this.reactions,
     );

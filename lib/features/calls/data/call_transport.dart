@@ -85,6 +85,14 @@ abstract class CallTransport {
   /// the transport must not assume the screen is the only caller.
   Future<void> setCameraEnabled(bool enabled);
 
+  /// Turns the camera around.
+  ///
+  /// ⚠️ Takes the side to face rather than "the other one" — the transport
+  /// does not get to hold that state. Which camera is live is the session's,
+  /// so a reconnect that rebuilds the room cannot silently put you back on
+  /// the front lens after you turned around.
+  Future<void> setCameraFront(bool front);
+
   /// Throws a flower to the other side.
   ///
   /// Deliberately not a chat message: it belongs to the call, expires with
@@ -127,6 +135,9 @@ class UnconfiguredCallTransport implements CallTransport {
 
   @override
   Future<void> setCameraEnabled(bool enabled) async {}
+
+  @override
+  Future<void> setCameraFront(bool front) async {}
 
   @override
   Future<void> sendReaction(String emoji) async {}

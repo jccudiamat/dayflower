@@ -242,6 +242,29 @@ class LiveKitCallTransport implements CallTransport {
   }
 
   @override
+  Future<void> setCameraFront(bool front) async {
+    // ⚠️ `setCameraPosition` restarts the published track underneath — the
+    // same track, renegotiated on the other lens — so the far side sees a
+    // brief still rather than a participant leaving and rejoining. Doing
+    // this by unpublishing and republishing would show up over there as the
+    // video dropping out.
+    final track = _room?.localParticipant?.videoTrackPublications
+        .map((pub) => pub.track)
+        .whereType<lk.LocalVideoTrack>()
+        .firstOrNull;
+    if (track == null) return;
+    try {
+      await track.setCameraPosition(
+        front ? lk.CameraPosition.front : lk.CameraPosition.back,
+      );
+    } catch (e) {
+      // A phone with one camera, or a lens already in use. Staying on the
+      // current one is the right failure — the call does not stop for it.
+      debugPrint('camera flip failed: $e');
+    }
+  }
+
+  @override
   Future<void> sendReaction(String emoji) async {
     final local = _room?.localParticipant;
     if (local == null) return;

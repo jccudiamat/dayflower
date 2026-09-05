@@ -117,7 +117,14 @@ class LocalVideo extends ConsumerWidget {
                       // track is not — see § Selfies stopped coming out
                       // mirrored in PROGRESS.md for the same distinction on
                       // the camera.
-                      mirrorMode: lk.VideoViewMirrorMode.mirror,
+                      //
+                      // ⚠️ **Front camera only.** A mirror is what you expect
+                      // of your own face; pointing the back camera at a room
+                      // and seeing it reversed is just wrong, and every
+                      // camera app on the phone agrees.
+                      mirrorMode: session.cameraFront
+                          ? lk.VideoViewMirrorMode.mirror
+                          : lk.VideoViewMirrorMode.off,
                     );
                   },
                 ),

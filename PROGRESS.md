@@ -2049,3 +2049,34 @@ The thread snapshot needed real rows: two were seeded, captured, and deleted,
 zero leftover confirmed both times. `flutter_test` blocks HTTP, so goldens can
 never load Quicksand — anything rendered there is block text, and the web
 preview is the only place the app's own typography appears.
+
+## A camera flip on the self-view (2026-09-06)
+
+Where a camera app puts it: the corner of your own picture, on the picture it
+affects.
+
+- ⚠️ **Opposite corner from the eye.** Two 26pt circles side by side on a
+  150-wide tile are one target to a thumb, and they do very different things
+  — one hides the view, the other changes what is being sent.
+- ⚠️ **Which lens is live is session state, not the transport's.** A
+  reconnect rebuilds the room; a transport holding this would quietly put you
+  back on the front camera after you had turned it around. So the transport
+  takes *the side to face*, never "the other one".
+- ⚠️ `setCameraPosition` **restarts the published track** rather than
+  republishing it, so the far side sees a brief still instead of a
+  participant dropping out and returning.
+- The state flips first and the transport follows: restarting a track takes a
+  beat on a real phone, and a flip button that does nothing for half a second
+  gets pressed twice.
+- Disabled while the camera is off — there is nothing to turn around, and the
+  control would be sitting over a black rectangle.
+
+### 🔴 The mirror had to follow it
+
+`LocalVideo` mirrored the self-view unconditionally. That is right for a
+face — it is what a mirror does, and what every video app shows — and wrong
+the instant the back camera is live: pointing it at a room and seeing the
+room reversed is simply incorrect. Mirroring is now front-camera only.
+
+⚠️ Local preview only, either way. The *outgoing* track is never mirrored —
+same distinction as § Selfies stopped coming out mirrored.

@@ -347,6 +347,19 @@ class CallNotifier extends StateNotifier<CallSession?> {
     }
   }
 
+  /// Turns the camera around.
+  ///
+  /// ⚠️ The state flips first and the transport follows. `setCameraPosition`
+  /// restarts the published track, which takes a beat on a real phone — and
+  /// a flip button that does nothing for half a second gets pressed twice.
+  Future<void> switchCamera() async {
+    final session = state;
+    if (session == null || !session.isVideo || !session.cameraEnabled) return;
+    final front = !session.cameraFront;
+    state = session.copyWith(cameraFront: front);
+    await _transport.setCameraFront(front);
+  }
+
   /// Declines without answering. Ends the call for both — a two-person app
   /// has no third party for the caller to keep waiting on.
   Future<void> decline() => hangUp();
