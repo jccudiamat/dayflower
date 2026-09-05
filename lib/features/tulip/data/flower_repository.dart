@@ -326,6 +326,22 @@ class FlowerRepository {
   ///
   /// The bucket is private, so there is no permanent URL to cache — every
   /// render needs a fresh signature.
+  /// Takes one of my own day photos off the widget.
+  ///
+  /// ⚠️ Through the `retire_day_photo` definer function (migration 0028),
+  /// not an update. 0004 lets only the *recipient* update a message —
+  /// deliberately, because a sent message is not a draft — and widening that
+  /// so a sender could touch their own rows would hand them the note, the
+  /// flower and the timestamp too, since RLS grants a row and not a column.
+  ///
+  /// The message stays in the thread. Only the home-screen claim is dropped.
+  Future<void> retireDayPhoto(String messageId) async {
+    await _client.rpc<void>(
+      'retire_day_photo',
+      params: {'p_message_id': messageId},
+    );
+  }
+
   Future<String> signedPhotoUrl(String path,
       {Duration ttl = const Duration(hours: 1)}) {
     return _client.storage
@@ -450,15 +466,33 @@ final partnerDayPhotoProvider = Provider.autoDispose<FlowerMessage?>((ref) {
   return null;
 });
 
-/// My own current day photo. Drives whether the story bar offers "Your day"
-/// as an add button or as a live ring.
-final myDayPhotoProvider = Provider.autoDispose<FlowerMessage?>((ref) {
+/// How many days can be live at once.
+///
+/// ⚠️ Seven, and the eighth pushes the oldest off rather than being refused.
+/// A hard "you have too many days" would be the app telling somebody they
+/// have shared too much of their life with their partner.
+const int maxLiveDays = 7;
+
+/// Every day photo of mine still inside its 24 hours, newest first.
+///
+/// ⚠️ Each one keeps **its own** clock. They are separate messages with
+/// separate `sentAt`s, so the fifth expires five posts after the first and
+/// nothing here has to schedule anything — [FlowerMessage.isFreshForWidget]
+/// answers per row.
+final myDayPhotosProvider = Provider.autoDispose<List<FlowerMessage>>((ref) {
   final userId = ref.watch(currentUserIdProvider);
   final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
-  for (final m in messages) {
-    if (m.senderId == userId && m.isPhoto && m.isFreshForWidget) return m;
-  }
-  return null;
+  return [
+    for (final m in messages)
+      if (m.senderId == userId && m.isPhoto && m.isFreshForWidget) m,
+  ];
+});
+
+/// My newest live day. Drives whether the story bar offers "Your day" as an
+/// add button or as a live ring.
+final myDayPhotoProvider = Provider.autoDispose<FlowerMessage?>((ref) {
+  final mine = ref.watch(myDayPhotosProvider);
+  return mine.isEmpty ? null : mine.first;
 });
 
 /// Whether I've sent a flower today (local day). Only drives copy now that

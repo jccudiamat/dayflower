@@ -1909,3 +1909,51 @@ caller *sees* them, which would separate routing from subscription.
   `RemoteViewsFactory` and a `StackView` in the layout, and the day photos
   would have to be cached as a *set* rather than the single file
   `_cachePhoto` writes today.
+
+## My Days: seven of them, each on its own clock (2026-09-05)
+
+**Migration 0028 — applied and verified** (`prosecdef` true, `authenticated`
+only, `anon` not granted).
+
+⚠️ **`retire_day_photo` is a definer function, not a policy.** 0004's only
+update policy is `flowers_update_recipient`: the *recipient* may mark a
+message seen, and a sender may not update their own rows at all — deliberate,
+because a sent message is not a draft. Widening that so a sender could touch
+their own row would hand them the note, the flower and the timestamp too,
+since **RLS grants a row, not a column**, and the way back would be another
+lock trigger like `pairs_lock_identity`. One function that flips one boolean
+is narrower than either. Same shape as `end_call` in 0025.
+
+⚠️ **Retiring is not deleting.** The oldest day comes off the *widget* and
+stays in the conversation exactly where it was. The photo is a message first
+and a home-screen decoration second; the eighth post must not be able to
+destroy the first.
+
+- **Seven live, and the eighth is allowed** — it just costs the oldest its
+  place, and that is worth a dialog rather than doing it quietly. A hard
+  refusal would be the app telling somebody they have shared too much of
+  their life with their partner.
+- ⚠️ **Each day keeps its own clock, for free.** They are separate rows with
+  separate `sentAt`s, so `isFreshForWidget` answers per message and nothing
+  schedules anything — the fifth expires five posts after the first.
+- ⚠️ A failed retire **refuses the send**. Posting anyway would leave eight
+  live days and a limit that means nothing.
+- `MyDaysViewer` pages through them and ends on **share your day**, which is
+  how every story rail works and saves the add button from living somewhere
+  else as well. `DayPhotoViewer` gained an `embedded` flag: nesting a
+  Scaffold per page paints a second background over the pager, and a close
+  button on every page would sit in the same place as the pager's own and
+  mean something different.
+- Only *my* days page. There is never more than one of theirs live.
+
+### Flowers, corrected
+
+- **The dictionary meaning is gone from the bubble.** The sender can write
+  their own line and usually does; a stock definition printed under
+  somebody's message is the app talking over them.
+- **A note is plain text**, not the Lora italic used for quotes. It is a
+  message somebody typed, and the quoting face made it read as something the
+  app had decided to italicise on their behalf.
+- 🔴 **The Polaroid no longer sits inside a speech bubble.** It is already a
+  card with its own frame, border and shadow — a card inside a card, two
+  borders, two backgrounds, and a tinted margin around a white photograph.

@@ -333,8 +333,65 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Future<void> _sendPending() async {
     final bytes = _pending;
     if (bytes == null || _busy) return;
+
+    // Seven live days is the ceiling. The eighth is allowed — it just costs
+    // the oldest one its place on the home screen, and that is worth asking
+    // about rather than doing quietly.
+    if (_target.toWidget && !await _makeRoomForDay()) return;
+
     await _handleShot(bytes, target: _target);
     if (mounted) setState(() => _pending = null);
+  }
+
+  /// Clears a slot if all seven are taken. False means the user backed out.
+  ///
+  /// ⚠️ Retiring is not deleting. The oldest day comes **off the widget** and
+  /// stays in the conversation exactly where it was — the photo is a message
+  /// first and a home-screen decoration second, and the eighth post should
+  /// not be able to destroy the first.
+  Future<bool> _makeRoomForDay() async {
+    final mine = ref.read(myDayPhotosProvider);
+    if (mine.length < maxLiveDays) return true;
+
+    final oldest = mine.last;
+    final left = oldest.widgetTimeLeft;
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('That makes eight'),
+            content: Text(
+              'You can have $maxLiveDays days up at once. Posting this one '
+              'takes your oldest off the home screen'
+              '${left == null ? '' : ' — it had '
+                  '${left.inHours >= 1 ? '${left.inHours} h' : '${left.inMinutes} m'} left'}'
+              '.\n\nIt stays in your conversation either way.',
+              style: AppText.body(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Post it'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!confirmed) return false;
+
+    try {
+      await ref.read(flowerRepositoryProvider).retireDayPhoto(oldest.id);
+      return true;
+    } catch (e) {
+      // ⚠️ Refuses rather than posting anyway. Sending on a failed retire
+      // would leave eight live days and a limit that means nothing.
+      debugPrint('retire day failed: $e');
+      if (mounted) _toast("Couldn't make room. Try again?");
+      return false;
+    }
   }
 
   /// One entry point for every source, so the camera, the gallery and a
@@ -839,11 +896,161 @@ class _GlassButton extends StatelessWidget {
 }
 
 /// Full-bleed viewer, opened from a day chip.
+/// All of my live days, swipeable, ending on the camera.
+///
+/// ⚠️ The last page is **"share your day"**, not another photo. Reaching the
+/// end of your own days and finding the way to add one there is how every
+/// story rail works, and it means the add button does not have to live
+/// somewhere else as well.
+///
+/// Each page keeps its own countdown because each day is its own message
+/// with its own `sentAt` — see [myDayPhotosProvider].
+class MyDaysViewer extends ConsumerStatefulWidget {
+  const MyDaysViewer({super.key, this.initialIndex = 0});
+
+  final int initialIndex;
+
+  @override
+  ConsumerState<MyDaysViewer> createState() => _MyDaysViewerState();
+}
+
+class _MyDaysViewerState extends ConsumerState<MyDaysViewer> {
+  late final PageController _pages =
+      PageController(initialPage: widget.initialIndex);
+  int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _index = widget.initialIndex;
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = ref.watch(myDayPhotosProvider);
+
+    // Every day gone while this was open — expired, or retired by an eighth
+    // post. Nothing left to page through, so the camera is the whole screen.
+    final count = days.length + 1;
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _pages,
+            itemCount: count,
+            onPageChanged: (i) => setState(() => _index = i),
+            itemBuilder: (context, i) => i == days.length
+                ? const _AddDayPage()
+                : DayPhotoViewer(
+                    message: days[i],
+                    who: 'Your day',
+                    embedded: true,
+                  ),
+          ),
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 14,
+            child: _PageDots(count: count, index: _index),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The last page: a way back to the camera.
+class _AddDayPage extends StatelessWidget {
+  const _AddDayPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () {
+              Navigator.of(context).pop();
+              context.push(Routes.flowers);
+            },
+            child: Container(
+              width: 88,
+              height: 88,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: AppGradients.cta,
+              ),
+              child: const Icon(CupertinoIcons.camera_fill,
+                  color: Colors.white, size: 34),
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          Text('Share your day', style: AppText.hero(Colors.white)),
+          const SizedBox(height: AppSpace.xxs),
+          Text(
+            'Up to $maxLiveDays at a time',
+            style: AppText.caption(AppColors.onDarkMuted),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One dot per page, so the rail says how many there are.
+class _PageDots extends StatelessWidget {
+  const _PageDots({required this.count, required this.index});
+
+  final int count;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (var i = 0; i < count; i++)
+          AnimatedContainer(
+            duration: AppMotion.micro,
+            margin: const EdgeInsets.symmetric(horizontal: 3),
+            width: i == index ? 18 : 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: i == index ? .95 : .4),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class DayPhotoViewer extends ConsumerStatefulWidget {
-  const DayPhotoViewer({super.key, required this.message, required this.who});
+  const DayPhotoViewer({
+    super.key,
+    required this.message,
+    required this.who,
+    this.embedded = false,
+  });
 
   final FlowerMessage message;
   final String who;
+
+  /// True when this is one page of [MyDaysViewer] rather than a route of its
+  /// own. ⚠️ Drops its own Scaffold and close button — nesting a Scaffold per
+  /// page paints a second background over the pager, and a close button on
+  /// every page would sit in a different place from the one that actually
+  /// closes it.
+  final bool embedded;
 
   @override
   ConsumerState<DayPhotoViewer> createState() => _DayPhotoViewerState();
@@ -875,79 +1082,99 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
     // story for the same reason: there is nobody on the other end of it.
     final isMine = message.senderId == ref.watch(currentUserIdProvider);
 
+    if (widget.embedded) return _body(context, message, leftLabel, isMine);
+
     return Scaffold(
       backgroundColor: Colors.black,
       // The bar has to ride the keyboard, and `resizeToAvoidBottomInset`
       // alone would squash the photo instead of moving the bar.
       resizeToAvoidBottomInset: false,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpace.sm),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(widget.who, style: AppText.subtitle(Colors.white)),
-                        Text(leftLabel,
-                            style: AppText.caption(AppColors.onDarkMuted)),
-                      ],
-                    ),
+      body: _body(context, message, leftLabel, isMine),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    FlowerMessage message,
+    String leftLabel,
+    bool isMine,
+  ) {
+    return SafeArea(
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(AppSpace.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.who, style: AppText.subtitle(Colors.white)),
+                      // ⚠️ Each day's own clock. They are separate messages
+                      // with separate timestamps, so paging from one to the
+                      // next changes this line — the fifth expires five
+                      // posts after the first.
+                      Text(leftLabel,
+                          style: AppText.caption(AppColors.onDarkMuted)),
+                    ],
                   ),
+                ),
+                // One close button, owned by the pager. A per-page one would
+                // sit in the same place and mean something different.
+                if (!widget.embedded)
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
                     icon: const Icon(CupertinoIcons.xmark,
                         color: Colors.white, size: 20),
                   ),
-                ],
-              ),
+              ],
             ),
-            Expanded(
-              child: FutureBuilder<String>(
-                future: ref
-                    .read(flowerRepositoryProvider)
-                    .signedPhotoUrl(message.imagePath!),
-                builder: (context, snap) {
-                  if (!snap.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    );
-                  }
-                  return InteractiveViewer(
-                    child: Center(
-                      child: Image.network(snap.data!, fit: BoxFit.contain),
-                    ),
+          ),
+          Expanded(
+            child: FutureBuilder<String>(
+              future: ref
+                  .read(flowerRepositoryProvider)
+                  .signedPhotoUrl(message.imagePath!),
+              builder: (context, snap) {
+                if (!snap.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
                   );
-                },
+                }
+                return InteractiveViewer(
+                  child: Center(
+                    child: Image.network(snap.data!, fit: BoxFit.contain),
+                  ),
+                );
+              },
+            ),
+          ),
+          if (message.note != null && message.note!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpace.md, vertical: AppSpace.xs),
+              child:
+                  Text('“${message.note}”', style: AppText.note(Colors.white)),
+            ),
+          if (!isMine)
+            Padding(
+              // Lifted by the keyboard when there is one, so the field
+              // being typed into is never behind it.
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: _ReplyBar(
+                controller: _reply,
+                focus: _focus,
+                busy: _sending,
+                onSend: _sendText,
+                onReact: _sendReaction,
               ),
             ),
-            if (message.note != null && message.note!.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.md, vertical: AppSpace.xs),
-                child: Text('“${message.note}”',
-                    style: AppText.note(Colors.white)),
-              ),
-            if (!isMine)
-              Padding(
-                // Lifted by the keyboard when there is one, so the field
-                // being typed into is never behind it.
-                padding: EdgeInsets.only(
-                  bottom: MediaQuery.viewInsetsOf(context).bottom,
-                ),
-                child: _ReplyBar(
-                  controller: _reply,
-                  focus: _focus,
-                  busy: _sending,
-                  onSend: _sendText,
-                  onReact: _sendReaction,
-                ),
-              ),
-          ],
-        ),
+          // Room for the pager's dots.
+          if (widget.embedded) const SizedBox(height: 28),
+        ],
       ),
     );
   }
