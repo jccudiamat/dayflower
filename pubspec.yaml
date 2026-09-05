@@ -1,7 +1,7 @@
 name: dayflower
 description: Connecting hearts, one kiss at a time.
 publish_to: none
-version: 1.0.0+29
+version: 1.0.0+31
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
@@ -90,18 +90,31 @@ flutter:
     - assets/fonts/
     - .env
 
-# App launcher icon. Regenerate after changing logo.png with:
+# App launcher icon. Sources live in assets/icon/, which is deliberately NOT
+# in the `assets:` list above — they are build-time inputs and would
+# otherwise ship ~4 MB of build-time PNG inside every APK. The two files in
+# assets/icon/src/ are the brand masters as delivered; everything beside them
+# is derived. Rebuild with:
+#   python tool/make_icons.py
 #   dart run flutter_launcher_icons
-# logo.png is already a full-bleed squircle, so it doubles as the legacy
-# icon. For Android adaptive icons the launcher mask crops the foreground,
-# so it's inset and sat on the same peach as the artwork (AppColors.iconBg)
-# — the seam is invisible and the tulip stays inside the safe zone.
+#
+# ⚠️ The foreground already carries its own margin, so the inset here is 0.
+# The mark sits at 47% of the 108dp canvas — which is 71% of the inner 72dp
+# the launcher actually shows, matching how the supplied artwork composes
+# itself. Sizing against the full 108dp instead puts it at 96% of the visible
+# window and the mask shaves its edges. The canvas is not the icon.
+#
+# The background is the artwork's own peach gradient rather than a flat
+# colour, sampled from it, so the adaptive icon and the legacy one are the
+# same picture. The monochrome layer is the silhouette, for Android 13+
+# themed icons.
 flutter_launcher_icons:
-  image_path: "assets/images/logo.png"
+  image_path: "assets/icon/src/appicon.png"
   android: true
   min_sdk_android: 21
-  adaptive_icon_background: "#F9EBE4"
-  adaptive_icon_foreground: "assets/images/logo.png"
-  adaptive_icon_foreground_inset: 18
+  adaptive_icon_background: "assets/icon/background.png"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  adaptive_icon_foreground_inset: 0
+  adaptive_icon_monochrome: "assets/icon/monochrome.png"
   ios: true
   remove_alpha_ios: true

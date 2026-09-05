@@ -1534,3 +1534,46 @@ needs a running app, so a launch crash is not remotely fixable. Removing the
 widget from the home screen stops `onUpdate` from ever running, which both
 confirms the diagnosis and gets the app open far enough to take an update.
 Worth remembering before shipping anything else that touches this path.
+
+## The launcher icon, from the new brand artwork (2026-09-05)
+
+**Not shipped — held.**
+
+Three files were supplied as `dayflower.appicon` / `.iconsmall` /
+`.nobackground` — all PNGs, 1254², just without the extension. The mark is
+two overlapping petals with a heart nested behind them. `.iconsmall` is an
+alternate composition at 54% and is currently unused.
+
+⚠️ **They are brand art, not icon assets, and the difference is the whole
+job.** The cutout fills 91% of its canvas; dropped straight into an adaptive
+foreground, every launcher mask would shave its edges — differently on
+different phones.
+
+- 🔴 **The canvas is not the icon.** A 108dp adaptive canvas shows at most its
+  inner 72dp; the outer 18dp a side is for masking and parallax. Sizing the
+  mark against the full 108 put it at **96% of the visible window**, touching
+  the mask edge — caught by rendering it through circle and squircle masks
+  before wiring anything up, not by reading the spec.
+- The size is **derived, not chosen**: `appicon.png` composes the mark at 71%
+  of its square, so the icon mark is 71% of the inner 72dp — **47% of the
+  canvas**. `MARK_FRACTION` in `tool/make_icons.py` says so in one line.
+- The background is the artwork's **own peach gradient, sampled** from the
+  supplied file rather than a flat colour picked to be close. The old flat
+  `#F9EBE4` is gone from `colors.xml`; ⚠️ a `@color` of the same name left
+  beside the new `@drawable` would still resolve for anything asking for the
+  colour, and be a different peach, silently.
+- A **monochrome layer** is generated for Android 13+ themed icons — the
+  silhouette at the same geometry as the foreground, or the themed icon would
+  sit at a different size from the normal one.
+- `assets/icon/src/` holds the two masters **in the repo**. The generator read
+  `~/Downloads` first, which works exactly until that folder is cleared.
+  ⚠️ `assets/icon/` is deliberately **not** in pubspec's `assets:` list — it
+  is build-time input, and listing it would ship ~4 MB of unused PNG in every
+  APK. `assets/images/logo.png` (the welcome screen's, and bundled) is
+  regenerated at 512² for the same reason.
+
+⚠️ **The two supplied files are not the same red.** `cutout.png` is
+noticeably more saturated than `appicon.png`. Android shows the adaptive icon
+(the cutout) and iOS the legacy one (appicon), so the two platforms differ
+slightly. Both are used as delivered rather than recoloured to match — which
+of the two is the brand red is not a call to make silently.
