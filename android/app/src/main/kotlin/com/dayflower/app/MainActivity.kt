@@ -99,6 +99,26 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
+     * A back press that would close Dayflower, while a call is up.
+     *
+     * WARNING: this is only ever reached when Flutter has nothing left to
+     * pop. Routes are handled on the Dart side first - the call screen's own
+     * back returns to the conversation and never gets here - so by the time
+     * the Activity is asked, the next step really is leaving the app. That
+     * is the moment the call should become a floating window instead of
+     * disappearing, and it is what "the back button pressed twice" means in
+     * practice: once to leave the call screen, again to leave the app.
+     *
+     * onUserLeaveHint does NOT cover this. It fires for Home and recents;
+     * a back press finishes the activity without it.
+     */
+    @Suppress("DEPRECATION", "MissingSuperCall")
+    override fun onBackPressed() {
+        if (callActive && enterPip()) return
+        super.onBackPressed()
+    }
+
+    /**
      * Tells Dart to draw the compact layout.
      *
      * WARNING: a PiP window is a few hundred pixels wide and takes no

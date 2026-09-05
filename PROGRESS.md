@@ -1957,3 +1957,37 @@ destroy the first.
 - 🔴 **The Polaroid no longer sits inside a speech bubble.** It is already a
   card with its own frame, border and shadow — a card inside a card, two
   borders, two backgrounds, and a tinted margin around a white photograph.
+
+## 🔴 Back went out of the app instead of back (2026-09-06)
+
+The call screen's back button entered picture-in-picture — and PiP is a
+floating window **over the launcher**, so pressing back *inside* the app put
+you outside it. Third time this button has been wrong: it hung up, then it
+left the app, and now it goes back.
+
+⚠️ **The two gestures are different and were being served by one answer.**
+Back is "I want the rest of the app"; Home is "I want the rest of the phone".
+Only the second is a floating window.
+
+- Back pops to the conversation, and `_CallMiniBar` keeps the call one tap
+  away. ⚠️ It lives **in the shell**, and the call screen is a top-level route
+  *outside* the shell — so it is on every tab and never over the call itself,
+  expressed by where it sits rather than by asking what route is on top.
+- ⚠️ `canPop` is checked before popping. Arriving from a call notification
+  leaves nothing underneath, and popping an empty stack closes the app: the
+  same bug wearing a different hat.
+- **Home and recents** still float it, through `onUserLeaveHint`.
+- **A back press that would close Dayflower** floats it too, via
+  `onBackPressed` in MainActivity. ⚠️ That override is only ever reached when
+  Flutter has nothing left to pop — routes are handled Dart-side first — so
+  by then the next step really is leaving. That is what "back pressed twice"
+  is: once out of the call screen, again out of the app. `onUserLeaveHint`
+  does **not** cover it; a back press finishes the activity without it.
+
+### The name lines up with the chevron now
+
+The circle is 38 wide around a 20 icon, so centring left the glyph eleven
+points inside the column while the name below started at the column edge —
+box-aligned and visibly not. ⚠️ **Measured, not guessed**: the header was
+rendered to a PNG and the left edge of the glyph and of the name were read
+off in pixels. -9 still left 3px; -11 puts them within 1.

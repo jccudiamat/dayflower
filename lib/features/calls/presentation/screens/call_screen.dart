@@ -56,23 +56,18 @@ class CallScreen extends ConsumerWidget {
       return _PipView(session: session, partner: partner);
     }
 
+    // 🔴 **Back leaves the screen; it does not leave the app.**
+    //
+    // It has been wrong twice. First it *hung up* — the most destructive
+    // control on the screen, and destructive by accident. Then it entered
+    // picture-in-picture, which is a floating window over the *launcher*:
+    // pressing back inside the app put you outside it.
+    //
+    // Now it pops, and `_CallMiniBar` in the shell keeps the call one tap
+    // away. The floating window is for leaving the app — Home, recents, or
+    // a back that would close Dayflower — and MainActivity owns those.
     return PopScope(
-      // 🔴 Back used to **hang up**. It was the safe reading once — leaving
-      // the screen mid-call would strand the user in a call they could not
-      // see or end — but it made the back gesture the most destructive
-      // control on the screen, and destructive by accident.
-      //
-      // It minimises now. The call keeps running in the floating window,
-      // which is both where it can still be seen and how it gets back.
-      canPop: session.status.isTerminal,
-      onPopInvokedWithResult: (didPop, _) {
-        if (didPop) return;
-        // ⚠️ Only when the system will actually take it. Without PiP there
-        // is no floating window to leave the call in, and popping anyway
-        // would recreate exactly the invisible-call problem this used to
-        // guard against — so on those devices back still does nothing.
-        CallPip.enter();
-      },
+      canPop: true,
       child: Scaffold(
         backgroundColor: AppColors.darkCanvas,
         body: switch (session.status) {
@@ -517,6 +512,19 @@ class _PartnerClock extends ConsumerWidget {
   }
 }
 
+/// Leaves the call screen without leaving the call.
+///
+/// ⚠️ `canPop` covers the deep-link case: arriving here from a call
+/// notification leaves nothing underneath, and popping an empty stack would
+/// close the app — the same bug in a different disguise.
+void _leave(BuildContext context) {
+  if (context.canPop()) {
+    context.pop();
+  } else {
+    context.go(Routes.chat);
+  }
+}
+
 /// Back, their name, and the clock — a column in the top-left corner.
 ///
 /// The name is here because a video call fills the screen with a face and
@@ -545,19 +553,27 @@ class _CallHeader extends StatelessWidget {
               label: 'Minimise the call',
               child: GestureDetector(
                 behavior: HitTestBehavior.opaque,
-                onTap: CallPip.enter,
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: AppColors.darkCanvas.withValues(alpha: .5),
-                  ),
-                  child: const Icon(
-                    CupertinoIcons.chevron_back,
-                    size: 20,
-                    color: AppColors.onDark,
+                onTap: () => _leave(context),
+                // ⚠️ Pulled left by the glyph's own inset. The circle is
+                // 38 wide around a 20 icon, so centring it left the chevron
+                // eleven points inside the column while the name below started
+                // at the edge — box-aligned, visibly not. Measured, not
+                // guessed: see the header render in the scratchpad.
+                child: Transform.translate(
+                  offset: const Offset(-11, 0),
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppColors.darkCanvas.withValues(alpha: .5),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.chevron_back,
+                      size: 20,
+                      color: AppColors.onDark,
+                    ),
                   ),
                 ),
               ),

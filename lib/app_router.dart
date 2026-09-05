@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/providers/supabase_provider.dart';
@@ -10,6 +11,7 @@ import 'features/activities/presentation/screens/activities_screen.dart';
 import 'features/activity/presentation/screens/activity_feed_screen.dart';
 import 'features/booth/presentation/screens/booth_screen.dart';
 import 'features/calls/data/call_repository.dart';
+import 'features/calls/domain/call.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/presentation/screens/call_screen.dart';
 import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
@@ -273,8 +275,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: Routes.activityFeed,
               builder: (_, __) => const ActivityFeedScreen()),
           GoRoute(
-              path: Routes.flowers,
-              builder: (_, __) => const MessagesScreen()),
+              path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
           GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
           GoRoute(
               path: Routes.events, builder: (_, __) => const EventsScreen()),
@@ -301,8 +302,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               final now = DateTime.now();
               final year =
                   int.tryParse(state.pathParameters['year'] ?? '') ?? now.year;
-              final month =
-                  int.tryParse(state.pathParameters['month'] ?? '') ?? now.month;
+              final month = int.tryParse(state.pathParameters['month'] ?? '') ??
+                  now.month;
               return ChapterDetailScreen(
                 year: year,
                 month: month.clamp(1, 12),
@@ -402,7 +403,88 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (mounted) context.push(Routes.call);
     });
 
-    return Scaffold(body: widget.child);
+    // ⚠️ In the shell, not above the router. The call screen is a top-level
+    // route *outside* this shell, so a bar here is on every tab and never on
+    // the call itself — which is the whole condition, expressed by where it
+    // lives rather than by asking what route is on top.
+    final call = ref.watch(callNotifierProvider);
+    final live = call != null && !call.status.isTerminal;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          widget.child,
+          if (live)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(child: _CallMiniBar(session: call)),
+            ),
+        ],
+      ),
+    );
   }
 }
 
+/// The call, while you are somewhere else in the app.
+///
+/// 🔴 **This is what the back button needed to exist.** Leaving the call
+/// screen used to mean picture-in-picture, which puts the app in a floating
+/// window *over the launcher* — so going "back" to the conversation left the
+/// app entirely. Back belongs inside the app; the floating window belongs to
+/// Home and to leaving.
+class _CallMiniBar extends ConsumerWidget {
+  const _CallMiniBar({required this.session});
+
+  final CallSession session;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final elapsed = session.elapsed;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 78),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          onTap: () => context.push(Routes.call),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            decoration: BoxDecoration(
+              gradient: AppGradients.cta,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              boxShadow: AppElevation.glow,
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  session.isVideo
+                      ? CupertinoIcons.video_camera_solid
+                      : CupertinoIcons.phone_fill,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: AppSpace.xs),
+                Expanded(
+                  child: Text(
+                    elapsed == null
+                        ? 'Connecting…'
+                        : 'On a call · ${formatCallDuration(elapsed)}',
+                    style: AppText.body(Colors.white)
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                Text(
+                  'Tap to return',
+                  style: AppText.caption(Colors.white.withValues(alpha: .85)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
