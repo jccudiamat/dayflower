@@ -22,6 +22,9 @@ import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
 import 'features/tulip/data/flower_repository.dart';
+import 'features/calls/data/call_alerts.dart';
+import 'features/calls/data/call_repository.dart';
+import 'features/calls/domain/call.dart';
 import 'features/updates/data/update_alerts.dart';
 import 'features/updates/data/update_repository.dart';
 import 'features/updates/presentation/widgets/update_screen.dart';
@@ -245,6 +248,29 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       myOpenRemindersProvider,
       (_, mine) => ReminderScheduler.sync(mine),
     );
+
+    // 🔴 An incoming call used to raise **nothing**. The ring lived entirely
+    // inside the app — the provider fires, the shell pushes the call screen
+    // — which with Dayflower in the background is a screen nobody is looking
+    // at. Calls went unanswered with the phone in a pocket and no sign they
+    // had rung.
+    //
+    // ⚠️ Still only reaches a phone whose app is alive; see CallAlerts.
+    ref.listen<FlowerMessage?>(incomingCallProvider, (previous, next) {
+      if (next == null) {
+        // Answered, declined, or gave up — all of them arrive here as the
+        // provider going null, and the notification is `ongoing`, so
+        // nothing else would ever take it off the lock screen.
+        CallAlerts.stop();
+        return;
+      }
+      CallAlerts.ring(
+        callId: next.id,
+        callerName: _partnerName,
+        isVideo: next.call == CallMode.video,
+        foreground: _foreground,
+      );
+    });
 
     // A newly published build interrupts wherever the user happens to be.
     // This listener no longer shows anything — it exists for the

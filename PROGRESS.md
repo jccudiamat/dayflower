@@ -1691,3 +1691,51 @@ rounding lives. `setViewOutlinePreferredRadius` on the root (API 31+) clips
 the card and every child of it, so nothing inside can have a sharp corner
 whatever the bitmap looks like. The bitmap rounding stays as the pre-31
 fallback. Radius 28 → 34dp.
+
+## Incoming calls now ring the phone — and the FCM gap, stated plainly (2026-09-05)
+
+### 🔴 Calls raised no notification at all
+
+The ring lived entirely inside the app: `incomingCallProvider` fires and the
+shell pushes the call screen. With Dayflower in the background that is a
+screen nobody is looking at, so **a call in a pocket went unanswered with no
+sign it had ever rung.** Chats at least had `PartnerAlerts`; calls had
+nothing.
+
+`CallAlerts` raises a real incoming-call notification: `category: call`,
+`Importance.max`, and **`fullScreenIntent`** — so on a locked phone the app's
+own ring screen takes over the display, Answer and Decline on it, which is
+what the reference screenshot is. Unlocked, Android shows a heads-up strip
+and tapping it opens the same screen.
+
+- ⚠️ Cleared by `stop()` on *every* exit from ringing, not just decline. The
+  notification is `ongoing`, so nothing else will ever take it off the lock
+  screen — a call answered on the other device would otherwise ring here
+  forever. Answered, declined and timed-out all arrive as the provider going
+  null, which is the one place that cancels.
+- Suppressed in the foreground: the call screen is already up with the same
+  two buttons on it.
+- ⚠️ `incoming_calls_v1` — Android freezes a channel's importance and sound at
+  creation, so changing either means bumping the suffix.
+
+### 🔴 What this still does NOT do, and why
+
+⚠️ **It does not reach a phone whose app has been swiped away.** Every alert
+in this app — messages, hearts, activity, updates, and now calls — is a
+**local** notification: the row arrives over the Supabase realtime socket and
+the receiving device raises it. That needs the process alive and the socket
+connected. Backgrounded a few minutes ago: works. Force-stopped, or deep
+enough into Doze: nothing, and nothing will until the app is next opened.
+
+**Do not describe delivery as guaranteed.** Closing the gap needs FCM, and
+FCM needs four things, the first of which is not mine to make:
+
+1. A Firebase project and its **`google-services.json`** in `android/app/`.
+2. `firebase_messaging` in pubspec. ⚠️ **Adding it without the JSON fails the
+   Android build outright**, which would take the OTA publisher down with it —
+   the credentials have to land first.
+3. A `device_tokens` table (user, token, platform, updated_at) with RLS.
+4. An edge function on insert into `flower_messages` that looks up the
+   partner's tokens and posts to FCM with a service-account key from Vault.
+
+3 and 4 are mine and can be written the moment 1 exists.
