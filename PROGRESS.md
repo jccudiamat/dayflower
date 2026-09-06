@@ -2226,3 +2226,24 @@ answer, because there is nowhere else for it to be.
 **`CrashScreen` paid for itself here.** The previous version of this failure
 was a featureless grey rectangle that cost an evening of pixel forensics;
 this one announced itself by name.
+
+## 🔴 The day-photo widget was rounded twice (2026-09-06)
+
+Its corners came out visibly rounder than the heartbeat widget beside it,
+even though both sit on the same 34dp `widget_background`.
+
+⚠️ **Two different mechanisms were rounding it, and they do not agree.**
+`setViewOutlinePreferredRadius` clips the *view*, exactly. `roundCorners`
+bakes a radius into the *bitmap* — and the bitmap is smaller than the widget,
+capped to the source's own size and to `TARGET_PX`. The ImageView scales it
+up to fill, and **the baked radius scales with it**: 34dp cut into a
+540-wide bitmap shown in a 1080-wide widget arrives as 68dp. Twice as round
+as the card behind it.
+
+The bitmap mask now runs **only below API 31**, where the outline clip does
+not exist and it is the only thing there is. Above that the view rounds
+itself and the bitmap is left square underneath, where nothing can see it.
+
+⚠️ Worth keeping in mind generally: a radius baked into a bitmap is in the
+bitmap's own pixels, and survives every scale the view puts it through. A
+radius on a view is in the view's. Mixing them silently multiplies.

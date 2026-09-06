@@ -236,8 +236,10 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         /**
          * Rounds the card and everything in it, the system's way.
          *
-         * WARNING: this is what actually rounds the photo. The bitmap is cut
-         * with rounded corners too (see roundCorners), but the ImageView is
+         * WARNING: this is the ONLY thing that rounds the photo on API 31+.
+         * roundCorners bakes a radius into the bitmap as well, but only
+         * below 31 - doing both made the corners twice as round as the card,
+         * because a radius cut into a bitmap scales when the ImageView is
          * centerCrop - so the moment the widget's real aspect differs at all
          * from the size the launcher reported, the crop trims off the very
          * corners that were just drawn and the card looks square again.
@@ -326,19 +328,36 @@ class TodaysTulipWidget : HomeWidgetProvider() {
 
                 val out = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888)
                 val canvas = Canvas(out)
-                val radius = CORNER_DP * density
                 val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-                // Draw the rounded shape, then paint the photo only where it
-                // already is. A mask rather than a clipPath because
-                // clipPath is not antialiased and leaves stepped corners.
-                paint.color = 0xFF000000.toInt()
-                canvas.drawRoundRect(
-                    RectF(0f, 0f, outW.toFloat(), outH.toFloat()),
-                    radius,
-                    radius,
-                    paint,
-                )
-                paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+
+                // 🔴 **Only where nothing else can round it.** The corners
+                // were being cut twice - here and by the outline clip - and
+                // the two do not agree, because this radius is baked into
+                // the *bitmap* while the clip is applied to the *view*.
+                //
+                // The bitmap is smaller than the widget: capped to the
+                // source's own size and to TARGET_PX. So the ImageView
+                // scales it up, and the baked radius scales with it. A 34dp
+                // corner cut into a 540-wide bitmap shown in a 1080-wide
+                // widget lands at 68dp - twice as round as the card behind
+                // it, and twice as round as the heartbeat widget beside it.
+                //
+                // Above API 31 the outline clip is exact and the view does
+                // it right; below, this is the only thing there is.
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+                    val radius = CORNER_DP * density
+                    // A mask rather than a clipPath: clipPath is not
+                    // antialiased and leaves stepped corners.
+                    paint.color = 0xFF000000.toInt()
+                    canvas.drawRoundRect(
+                        RectF(0f, 0f, outW.toFloat(), outH.toFloat()),
+                        radius,
+                        radius,
+                        paint,
+                    )
+                    paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+                }
+
                 canvas.drawBitmap(src, srcRect, Rect(0, 0, outW, outH), paint)
                 out
             } catch (e: Throwable) {
