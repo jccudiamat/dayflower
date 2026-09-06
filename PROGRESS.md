@@ -35,6 +35,83 @@
 | — | In-app updater | ✅ **Live — builds 2–6 shipped OTA.** `dart run tool/publish_update.dart` from the desktop; the phone offers the build on its next launch or resume, downloads it, and hands it to Android's installer. Android only. Needs migration **0014** and one manual "Install unknown apps" grant on the phone. |
 | — | Settings screen | 🔶 Rebuilt 2026-07-26 against real data (profile edits, timezone, invite code, disconnect, sign out). **Not yet exercised by the user** — and Disconnect needs migration 0008 first. |
 
+## Push notifications (2026-09-06) — half built
+
+🔴 **Nothing social in this app notifies with the app closed.** Not calls,
+not messages, not flowers, not day photos. `PartnerAlerts.messages()` and
+`.activity()` are driven from `app.dart` off the app's *own* realtime
+subscription, so they need the process alive and the socket connected.
+Reminder alarms are the sole exception, and only because the OS schedules
+them locally rather than anything arriving over the network.
+
+So push is not a calling feature — it is the missing half of every social
+feature, and one path switches them all on.
+
+**FCM, not a wrapper.** Free at any volume with no subscriber tier, and
+calls need raw payload control (full-screen intents now, PushKit later) that
+a platform abstracts away. OneSignal's free tier stops at 10,000 subscribers
+— the shape of open-ended cost this project just spent a day getting out of.
+
+⚠️ **This is where everything-in-Postgres runs out.** FCM v1 wants an OAuth
+token from an **RS256**-signed service-account JWT, and `pgjwt` (0.2.0, what
+Supabase ships) does **HS256 only** — verified against the live DB. Unlike
+the LiveKit tokens in 0026, this one cannot be signed in the database, so
+there is an edge function. It is the smallest possible piece of server.
+
+### What is done
+
+- **0028 applied**: `device_tokens` (+ RLS, own-rows-only) and an
+  `after insert` trigger on `flower_messages` that `pg_net`s the function.
+  Verified: with no Vault secrets set the trigger returns cleanly and the
+  insert still succeeds — **a half-configured push must never break sending
+  a message**.
+- `supabase/functions/push/index.ts` — RS256 signing, cached OAuth token,
+  data-only FCM messages, dead-token reaping.
+- `push_repository.dart` (register/unregister) and `push_message.dart`
+  (payload parsing), with 6 tests.
+
+⚠️ **Data-only messages, no `notification` block.** A `notification` payload
+is drawn by the system and never reaches the app while it is backgrounded,
+which would make a full-screen ring impossible. Data-only hands every message
+to the Dart background handler, which chooses between ringing and a banner.
+
+⚠️ **Heartbeats deliberately do not push.** Measured 2026-09-06: 316
+heartbeat rows against 124 messages for one pair — the highest-volume table
+in the app. A push per tap would be the loudest thing in the app and the main
+driver of edge-function invocations (Pro includes 2M/month). A heart is meant
+to be found, not to interrupt.
+
+### 🔴 What is left, and needs a Firebase project
+
+`firebase_core` / `firebase_messaging` are **deliberately not in pubspec
+yet** — the google-services Gradle plugin fails the build without
+`google-services.json`, and leaving the repo unbuildable to save one step is
+not a trade worth making.
+
+1. Firebase project → Android app `com.dayflower.app` →
+   `google-services.json` into `android/app/`.
+2. Service account key (Project settings → Service accounts).
+3. In the SQL editor, so the values stay out of git and out of transcripts:
+   ```sql
+   select vault.create_secret(
+     'https://<ref>.supabase.co/functions/v1/push', 'push_url');
+   select vault.create_secret('<long random string>', 'push_secret');
+   ```
+4. `npx supabase functions deploy push --no-verify-jwt`, then
+   `npx supabase secrets set PUSH_SECRET=... FCM_SERVICE_ACCOUNT='<json>'`
+5. Add the two Flutter packages, register the token on sign-in, and wire the
+   background handler to `CallAlerts` / `PartnerAlerts` via `PushMessage`.
+
+### ⚠️ Two things push still cannot do
+
+- **Force-stopped apps receive nothing** until manually reopened. Android
+  policy, no workaround, applies to WhatsApp too.
+- **Aggressive OEM battery managers** (Xiaomi, Oppo, Vivo, Huawei, Samsung)
+  kill background delivery beyond stock Doze. Call apps on those handsets
+  need the user to whitelist them — an onboarding step, not a code fix.
+
+**Do not describe call delivery as guaranteed.**
+
 ## Cost exposure — what is unbounded (2026-09-06)
 
 Modelled at **1,000 pairs**. The call feature is now capped
