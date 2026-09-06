@@ -3,7 +3,11 @@
 > **Purpose:** read this first when resuming work in a new session. It captures everything not obvious from the code: what's done, what's verified, dashboard-side config, test accounts, and how we work. Update it at every feature completion or significant decision.
 > Companion docs: [mvp.md](mvp.md) (feature checklists) · [design.md](design.md) (design system rules) · [overview.md](overview.md) (original full vision).
 
-**Last updated:** 2026-08-31 (Reminders ring like an alarm clock. 🔴 **0010 WAS already run** — this doc said otherwise and was wrong again — so the table exists WITHOUT the new `alarm` column and every insert fails with PGRST204. 0010 is now idempotent-but-preserving; re-run it. Also unrun: 0008, 0013 (day_photos), 0014 (app_builds), 0015 (avatars) — all confirmed missing against the live DB.)
+**Last updated:** 2026-09-06 (Firebase project **dayflower-ce2b6** registered for push — Android app created and `android/app/google-services.json` in place, so step 1 of § Push notifications is closed. Steps 2–5 still open: service-account key, Vault secrets, function deploy, Flutter wiring.)
+
+**Previously:** 2026-09-04 (Calls built — voice and video, on LiveKit. Migrations **0025 and 0026 applied**. 🔴 Nothing connects until the LiveKit API key/secret are in Supabase Vault and `LIVEKIT_URL` is in `.env` — the two steps are in § Calls → Switching calling on. ✅ WebRTC verified reachable from Dubai on mobile data, 2026-09-04.)
+
+**Previously:** 2026-08-31 (Reminders ring like an alarm clock. 🔴 **0010 WAS already run** — this doc said otherwise and was wrong again — so the table exists WITHOUT the new `alarm` column and every insert fails with PGRST204. 0010 is now idempotent-but-preserving; re-run it. Also unrun: 0008, 0013 (day_photos), 0014 (app_builds), 0015 (avatars) — all confirmed missing against the live DB.)
 
 ---
 
@@ -23,6 +27,7 @@
 | 8 | Finances (Activities) | 🔶 **v2 schema live 2026-08-31.** Was: Accounts (bank/cash/e-wallet/savings/investment) + a ledger of income/expense/transfer, in three scopes: Ours · Mine · theirs (read-only). Balances are always derived, never stored. Needs migration **0011**. |
 | 9 | Chapters (Activities) | 🔶 **Built 2026-08-29, never run.** A year = 12 chapters. Goals at the start of a month, moments as they happen, a written review at the end. Needs migration **0012**. |
 | — | Story replies + widget face | 🔶 **Built 2026-09-04.** Reply bar on the story viewer and the home-screen widget, tulip react, `reply_to` (migration **0023**). The partner's photo renders on the widget, circle cut in Dart. |
+| — | Calls (voice + video) | 🔶 **Built 2026-09-04. LiveKit wired; needs credentials.** A call is a row in `flower_messages` (migration **0025**), so the invitation rides the realtime stream the chat already has. Ring / in-call / failure screens and a Join bubble, all verified against real rows. Tokens are signed in Postgres by `livekit_token()` (migration **0026**); a usage meter counts the month's minutes (**0027**). All three applied. 🔴 **Nothing connects until the LiveKit secrets are in Vault and `LIVEKIT_URL` is in `.env`** — see § Calls. |
 | — | Shared mood | 🔶 **Built 2026-09-04.** The mood card reaches the other phone at last (migration **0024**) and the chat header shows it in place of the flower count. Stale past 24h. |
 | — | Finance: Wallet, Goals, Insights | 🔶 **Rebuilt 2026-09-03.** Wallet carousel, spend card with sparkline, Goals as progress rings, and an Insights page whose card exports as one shareable PNG. Per-amount currency on all five sheets. Migration **0022 applied**. Recurring, Budgets and Investments unchanged. |
 | — | Us / Together page | 🔶 **Built 2026-09-03.** The pair pill on Home opens it; Settings is the gear in its corner. Shared stats via the `couple_stats` RPC, a start date that derives the monthsary and anniversary onto Dates, and a **static** premium card (no billing exists). Migration **0021 applied**. Verified running 2026-09-03: real RPC numbers (13 flowers, 6 streak, 263 hearts), the distance row, and the premium card. |
@@ -31,6 +36,147 @@
 | — | Notifications | 🔶 **Built 2026-09-03, phone-untestable here.** Messages, day photos and activity raise local notifications; heartbeats keep `PulseAlerts`. ⚠️ **Local, not push** — only fires while the process is alive. A swiped-away app hears nothing until it is next opened. See § Notifications — how far they actually reach. |
 | — | In-app updater | ✅ **Live — builds 2–6 shipped OTA.** `dart run tool/publish_update.dart` from the desktop; the phone offers the build on its next launch or resume, downloads it, and hands it to Android's installer. Android only. Needs migration **0014** and one manual "Install unknown apps" grant on the phone. |
 | — | Settings screen | 🔶 Rebuilt 2026-07-26 against real data (profile edits, timezone, invite code, disconnect, sign out). **Not yet exercised by the user** — and Disconnect needs migration 0008 first. |
+
+## Push notifications (2026-09-06) — half built
+
+🔴 **Nothing social in this app notifies with the app closed.** Not calls,
+not messages, not flowers, not day photos. `PartnerAlerts.messages()` and
+`.activity()` are driven from `app.dart` off the app's *own* realtime
+subscription, so they need the process alive and the socket connected.
+Reminder alarms are the sole exception, and only because the OS schedules
+them locally rather than anything arriving over the network.
+
+So push is not a calling feature — it is the missing half of every social
+feature, and one path switches them all on.
+
+**FCM, not a wrapper.** Free at any volume with no subscriber tier, and
+calls need raw payload control (full-screen intents now, PushKit later) that
+a platform abstracts away. OneSignal's free tier stops at 10,000 subscribers
+— the shape of open-ended cost this project just spent a day getting out of.
+
+⚠️ **This is where everything-in-Postgres runs out.** FCM v1 wants an OAuth
+token from an **RS256**-signed service-account JWT, and `pgjwt` (0.2.0, what
+Supabase ships) does **HS256 only** — verified against the live DB. Unlike
+the LiveKit tokens in 0026, this one cannot be signed in the database, so
+there is an edge function. It is the smallest possible piece of server.
+
+### What is done
+
+- **0028 applied**: `device_tokens` (+ RLS, own-rows-only) and an
+  `after insert` trigger on `flower_messages` that `pg_net`s the function.
+  Verified: with no Vault secrets set the trigger returns cleanly and the
+  insert still succeeds — **a half-configured push must never break sending
+  a message**.
+- `supabase/functions/push/index.ts` — RS256 signing, cached OAuth token,
+  data-only FCM messages, dead-token reaping.
+- `push_repository.dart` (register/unregister) and `push_message.dart`
+  (payload parsing), with 6 tests.
+
+⚠️ **Data-only messages, no `notification` block.** A `notification` payload
+is drawn by the system and never reaches the app while it is backgrounded,
+which would make a full-screen ring impossible. Data-only hands every message
+to the Dart background handler, which chooses between ringing and a banner.
+
+⚠️ **Heartbeats deliberately do not push.** Measured 2026-09-06: 316
+heartbeat rows against 124 messages for one pair — the highest-volume table
+in the app. A push per tap would be the loudest thing in the app and the main
+driver of edge-function invocations (Pro includes 2M/month). A heart is meant
+to be found, not to interrupt.
+
+### 🔴 What is left, and needs a Firebase project
+
+`firebase_core` / `firebase_messaging` are **deliberately not in pubspec
+yet** — the google-services Gradle plugin fails the build without
+`google-services.json`, and leaving the repo unbuildable to save one step is
+not a trade worth making.
+
+1. ~~Firebase project → Android app `com.dayflower.app` →
+   `google-services.json` into `android/app/`.~~ ✅ **Done 2026-09-06.**
+   Project **`dayflower-ce2b6`** (number 724605256655), Android app
+   `1:724605256655:android:56057ac8a2e79d1bea08ba`, config committed at
+   `android/app/google-services.json`. It is a client config, not a secret —
+   the key is scoped by package name, so it is *not* gitignored.
+2. 🔴 Service account key (Project settings → Service accounts → Generate
+   new private key). Console only — `firebase-tools` has no command for it
+   and `gcloud` is not installed on this machine. This one **is** a secret:
+   it goes straight into `supabase secrets set`, never into the repo.
+3. In the SQL editor, so the values stay out of git and out of transcripts:
+   ```sql
+   select vault.create_secret(
+     'https://<ref>.supabase.co/functions/v1/push', 'push_url');
+   select vault.create_secret('<long random string>', 'push_secret');
+   ```
+4. `npx supabase functions deploy push --no-verify-jwt`, then
+   `npx supabase secrets set PUSH_SECRET=... FCM_SERVICE_ACCOUNT='<json>'`
+5. Add the two Flutter packages, register the token on sign-in, and wire the
+   background handler to `CallAlerts` / `PartnerAlerts` via `PushMessage`.
+
+### ⚠️ Two things push still cannot do
+
+- **Force-stopped apps receive nothing** until manually reopened. Android
+  policy, no workaround, applies to WhatsApp too.
+- **Aggressive OEM battery managers** (Xiaomi, Oppo, Vivo, Huawei, Samsung)
+  kill background delivery beyond stock Doze. Call apps on those handsets
+  need the user to whitelist them — an onboarding step, not a code fix.
+
+**Do not describe call delivery as guaranteed.**
+
+## Cost exposure — what is unbounded (2026-09-06)
+
+Modelled at **1,000 pairs**. The call feature is now capped
+(`CALL_TOTAL_MINUTES`); nothing else is. Measured against the live DB with
+one test pair, so the per-pair figures are real, not guessed.
+
+Three shapes of cost, and **only the first responds to a rate limit**:
+
+### 1. Metered per use — a quota works
+
+| | Now | At 1,000 pairs | Bounded? |
+|---|---|---|---|
+| LiveKit call minutes | — | ~$1,344/mo at 45 min/day/pair | ✅ `CALL_TOTAL_MINUTES` |
+
+Marginal cost of one heavy (2 hr/day) pair is **$4.65/mo**. Capped at 1,500
+min/mo it is **$1.94**. That gap is the whole argument for the cap: on a $5
+Pro price, uncapped leaves 7% margin and capped leaves 61%.
+
+### 2. Accumulating forever — needs retention, not throttling
+
+| | Now | At 1,000 pairs | Bounded? |
+|---|---|---|---|
+| `day_photos` | 7.3 MB | ~18 GB/mo, never shrinks | ❌ by design |
+| `flower_messages` | 124 rows/pair | fine — human-paced | ❌ but self-limiting |
+
+⚠️ Day photos are kept forever **deliberately** — see `flower_repository.dart`:
+the 24h expiry is a widget rule, not a data one. So this is a cost being
+chosen, not an oversight. Worth re-deciding at scale, not before.
+
+### 3. Multiplied by user count, driven by *us* — no user-facing limit helps
+
+🔴 **`app-builds` is the worst offender in the project today: 1,388 MB across
+44 APKs**, against 7.3 MB of actual user content. 190×. Nothing ever deletes
+an old build, and every one was put there by a dev loop, not a user.
+
+Worse at scale: the APK is ~40 MB, so **one release is 40 GB of egress at
+1,000 users** — a sixth of a Supabase Pro bandwidth allowance per release.
+Four builds were shipped in a single afternoon on 2026-09-05; that would have
+been 160 GB, two thirds of the monthly allowance, from iteration speed alone.
+
+Fixes, in order of value: prune to the last 2–3 builds; move APK hosting to
+somewhere with cheap egress; slow the release cadence once there are real
+users on the other end.
+
+### 4. Unbounded writes, cheap individually
+
+`heartbeats` is already **316 rows for one pair — 2.5× `flower_messages`**,
+the highest-volume table in the app. A tap is a row, taps are free, and
+nothing bounds them. Not urgent at current row sizes; it is the same
+unbounded-write shape and the one to watch next.
+
+### Also worth knowing
+
+- **Resend** has a daily send cap. Auth is email-OTP, so hitting it does not
+  degrade gracefully — it blocks sign-ups outright during a growth spike.
+- **FCM push is free at any volume**, so ringing adds no per-message cost.
 
 ## How to run
 
@@ -67,6 +213,325 @@ Why Dayflower: it keeps the floral identity (the flower catalog and artwork are 
 🔴 **Still says Twolip: the artwork.** `assets/images/logo.png` is a squircle whose wordmark reads "2lip", and every launcher icon is generated from it. `AppColors.wordmark` / `wordNum` exist only to match that lettering. Until the logo is redrawn, the app icon on a phone home screen still says the old name. After replacing it: `dart run flutter_launcher_icons`.
 
 ⚠️ A **backup of the whole repo before the rename** is at `scratchpad/backup-pre-rename/` (370 files). This project has **no version control** — if the rename needs undoing, that copy is the only way back.
+
+## Calls (2026-09-04)
+
+Voice and video, built as far as they can go without choosing a media
+provider. The header's phone and camera icons have shown a "coming soon"
+snackbar since the thread was built; they now open a real call screen.
+
+**A call is a message, not a table** — see the header of `0025_calls.sql` for
+the full argument. Short version: nothing in this app can ring a
+backgrounded phone (§ Notifications), so the reliable way to say "let's
+talk" is a row in the conversation, which arrives over the realtime stream
+the chat is already subscribed to, counts toward the unread badge, and is
+still there an hour later. Three columns on `flower_messages`: `call_mode`
+('voice' | 'video'), `call_room`, `call_ended_at`.
+
+⚠️ **The 0013 content check had to be relaxed.** A call row carries no
+flower, no photo and no text, so every insert would have failed with 23514.
+0025 replaces the constraint.
+
+⚠️ **Hanging up needs the `end_call` RPC.** 0001's update policy is
+recipient-only — deliberately, since updates are what mark a message seen —
+so the *caller* cannot write to their own row. A definer function writes the
+one column instead of widening the policy and losing the read-receipt
+guarantee.
+
+**Room names are deterministic**: `dayflower-v1-<pairId>`, derived on both
+phones from data both already have. No handshake, no link to paste. This is
+the thing consumer Google Meet cannot do (nicknamed meetings are Workspace
+only), and it is why a Join bubble from twenty minutes ago still works.
+
+### The media provider: LiveKit
+
+`livekit_client` (2026-09-04). Chosen over Daily because its Flutter client
+runs on **web**, so calls stay testable in `flutter run -d web-server`;
+Daily's Flutter SDK is mobile-only, which would have meant a full APK on two
+phones in two countries for every call test.
+
+⚠️ It pulls `flutter_webrtc`, a heavy native plugin. See § Android builds:
+adding any plugin here can leave a stale Kotlin cache that fails with a
+misleading "cannot find symbol". Clean before believing the next Android
+build error.
+
+**Tokens are signed in Postgres, not in an Edge Function.** A LiveKit token
+is a plain HS256 JWT; `pgjwt` signs it inside `livekit_token()` (migration
+0026), which keeps the whole project on one deployment path — the SQL editor
+and `tool/run_sql.dart` — instead of adding a `supabase functions deploy`
+step for forty lines of signing. The API secret lives in **Supabase Vault**,
+readable only by postgres, so a definer function can reach it and nothing
+the app can call ever can.
+
+The security model is one check: the room name embeds a pair id
+(`dayflower-v1-<pairId>`), and `livekit_token()` refuses to sign for a pair
+you are not in. Without it any signed-in user could derive any couple's room
+name and walk into their call.
+
+**Only `call_video.dart` imports LiveKit above the data layer.** A video
+frame is a texture, not a fact, so it cannot travel as a `CallEvent` the way
+connection state does — that one file reaches into
+`LiveKitCallTransport.room` and nothing else does.
+
+### 🔴 Switching calling on
+
+Nothing connects until both of these are done, once:
+
+1. **LiveKit Cloud project** (free tier) → Settings → Keys. In the Supabase
+   SQL editor — *not* through `run_sql.dart`, so the secret stays out of the
+   shell history and out of any transcript:
+
+   ```sql
+   select vault.create_secret('<API_SECRET>', 'livekit_api_secret');
+   select vault.create_secret('<API_KEY>',    'livekit_api_key');
+   ```
+
+2. **`.env`** gets the project's WebSocket URL (not a secret):
+
+   ```
+   LIVEKIT_URL=wss://<project>.livekit.cloud
+   ```
+
+Until then `callServerUrl` is null, the app uses `UnconfiguredCallTransport`,
+and every call lands on "Calling isn't switched on yet". A build *with* the
+URL but *without* the Vault secrets gets the same message from the server
+side — `livekit_token()` raises `calling not configured`, which the transport
+maps back to the same failure.
+
+To rotate: `select vault.update_secret(id, '<new>')`. The function reads by
+name, so nothing in the code changes.
+
+### 🔴 livekit_client blew the APK past the 50 MB OTA ceiling (2026-09-05)
+
+`flutter build apk --release --target-platform android-arm64` produced
+**62.2 MB**, over the limit `tool/publish_update.dart` has to live under, so
+the build could not be published at all.
+
+Cause: `--target-platform` trims the Flutter engine and the Dart snapshot but
+does nothing to a **plugin's prebuilt JNI**. livekit_client's
+`libjingle_peerconnection_so.so` shipped three times:
+
+| ABI | native libs |
+|---|---|
+| arm64-v8a | 33.7 MB |
+| x86_64 | 15.5 MB |
+| armeabi-v7a | 6.6 MB |
+
+⚠️ **`defaultConfig.ndk.abiFilters` does not fix this.** It was tried first
+and looked right — a diagnostic confirmed it read `android-arm64 ->
+[arm64-v8a]`, and the APK was genuinely repackaged (checked the timestamp) —
+and it still contained all three architectures. The Flutter Gradle plugin
+sets `abiFilters` itself and wins.
+
+What works is excluding at **packaging** time, in `android.packaging`:
+
+```kotlin
+jniLibs { excludes += setOf("lib/x86_64/**", "lib/armeabi-v7a/**", ...) }
+```
+
+Now **39.9 MB, arm64 only**. The exclusion list is derived from Flutter's own
+`target-platform` property rather than hardcoded, so
+`publish_update.dart --abi armeabi-v7a` still yields a working 32-bit APK
+instead of one with no matching native libs, and a plain build with no
+`--target-platform` still packages everything.
+
+### ⚠️ Stop the dev server before `flutter pub get` / `clean`
+
+On Windows a running `flutter run -d web-server` holds
+`linux/flutter/ephemeral/.plugin_symlinks` (and the `windows/` twin) open, so
+`flutter clean` and `flutter pub get` fail with *"Flutter failed to delete a
+directory … cannot access the file or directory"* and a misleading
+*"ensure the SDK is installed in a location with read/write permissions"*.
+The permissions are fine; the directory is simply in use.
+
+Worse in a chained PowerShell command: the failure surfaces as a
+`NativeCommandError` that aborts everything after it, so the build never runs
+and the log looks like a clean failure rather than a skipped step.
+
+Stop the preview first, then `Remove-Item -Recurse -Force
+linux/flutter/ephemeral` if it lingers.
+
+### 🔴 livekit_client breaks the debug web preview (2026-09-05)
+
+**`flutter run -d web-server` no longer boots the app.** Not slowly — at
+all. Chased properly before blaming the code:
+
+- all **1781 DDC module scripts return 200** — nothing is missing
+- **no JS errors**, no unhandled rejections
+- `<body>` holds only a `<script>`; Flutter never attaches its view
+- survives a server restart, a wiped browser profile, and 7 minutes of waiting
+- `flutter analyze` clean
+
+So `main()` never runs. `livekit_client` roughly doubled the module count and
+pulls `dwds/src/injected/client.js` into a state where the entrypoint waits
+forever — the tool's own warning is a clue: *"the web-server device requires
+the Dart Debug Chrome extension for debugging."*
+
+✅ **The app is fine.** `flutter build web` compiles, and the release bundle
+served statically attaches in **~0 s** and renders the welcome screen with
+LiveKit compiled in. This is a **debug-harness failure, not an app failure**.
+
+⚠️ **This partly undercuts why LiveKit was chosen over Daily.** The argument
+was that its Flutter client runs on web, keeping calls testable in
+`flutter run -d web-server`. Web *does* work — in release. The debug loop,
+which is the one that matters day to day, is what broke. Worth knowing
+before treating "LiveKit keeps the web loop" as settled.
+
+**Not yet tried**, in rough order of promise:
+
+1. `flutter run -d chrome` instead of `-d web-server` — the Chrome device
+   wires the debug connection itself rather than waiting for an extension.
+   Launches a visible browser, so the preview pane cannot host it.
+2. A profile-mode dev server (`--profile`): boots via dart2js and is fast,
+   but `kDebugMode` is false, so **dev auto-login stops working** and there
+   is no way to reach a signed-in state without typing a password.
+3. Testing on the phone, which does not use DDC at all — and is the real
+   target anyway.
+
+### The usage meter (2026-09-04)
+
+The free tier runs out, and a call that fails at day 21 with no warning is
+worse than a visible limit. Modelled on how Claude Code shows its own usage:
+silent, then a warning, then a hard stop with a stated reset.
+
+| Used | What happens |
+|---|---|
+| < 70% | Nothing, anywhere |
+| 70% | A ring appears on the **Us** page |
+| 90% | The ended-call line in the thread starts carrying the remainder |
+| 100% | `CallFailure.quotaExhausted`, with the reset date |
+
+**Us, not the chat.** The allowance is shared — one media account, both of
+you drawing on it — so it is a "we" number, and Us is where those live. On
+the chat header it would sit beside their mood, turning "how are they
+feeling" into "how much talking is left".
+
+**After a call, never before one.** The only in-thread mention rides the
+*ended*-call line. A meter visible while deciding whether to ring your
+partner would make you hesitate to do the thing the app exists for.
+
+**The app counts its own minutes** (`call_usage`, migration 0027) rather
+than proxying the provider's dashboard — every call is already a row with
+`sent_at` and `call_ended_at`. Runs a few percent light; fine for "video
+tonight or voice?", not for billing.
+
+#### ⚠️ Two ceilings, one pool
+
+`CALL_TOTAL_MINUTES` is a **shared** pool that voice and video both spend;
+`CALL_VIDEO_MINUTES` is a further cap on video alone from the data
+allowance. The first cut of this modelled them as two independent budgets
+and overstated the remainder by up to double — the exact surprise the
+feature exists to prevent. A test now pins it.
+
+Both are whole-call minutes, not the provider's participant-minutes: halve
+theirs, since every call here has two people. LiveKit's free tier is roughly
+`CALL_TOTAL_MINUTES=2500` and `CALL_VIDEO_MINUTES=2000`.
+
+**Unset or 0 means unlimited**, and that is the load-bearing case —
+self-hosting has no quota, so the ring must vanish rather than read 0%. 🔴
+`int.tryParse('') ?? 0` makes an unset `.env` parse as a zero allowance, and
+an early `isMetered => allowance != null` therefore had every self-hosted
+build refusing to place calls. Both traps are covered in
+`test/call_usage_test.dart`.
+
+Refusal is **per mode**: with the data cap spent but minutes to spare, voice
+still works. Blocking it would be refusing the cheap thing because the
+expensive one ran out.
+
+### ✅ Credentials live and the token path proven (2026-09-05)
+
+LiveKit project `dayflower-test`, host
+`wss://dayflower-y6qop60s.livekit.cloud`, key and secret in Vault.
+
+⚠️ **The project name is not the host.** `dayflower-test.livekit.cloud`
+answers `200 OK` at the HTTP level like any `*.livekit.cloud` name, so the
+only way to tell them apart is to validate a token:
+
+```
+/rtc/validate  dayflower-y6qop60s -> 200 success
+/rtc/validate  dayflower-test     -> 401 invalid API key for domain
+```
+
+Verified working with the real secrets: Vault read → `pgjwt` signing →
+pair-membership check → LiveKit accepting the token → a second participant
+(the primary account, headless Chrome with fake devices) connecting to the
+pair's room and publishing audio and video.
+
+**Not yet verified:** the Flutter app's own call connecting and rendering
+video. One run got as far as minting a token, reaching LiveKit and failing
+only on the microphone — correctly classified as `noPermission` — before the
+debug web preview stopped booting entirely (see below).
+
+### ✅ WebRTC reaches the UAE — tested 2026-09-04
+
+`network-test.daily.co` run on the Dubai phone, ~21:58 local, on **mobile
+data** (4G/VoLTE):
+
+| Check | Result |
+|---|---|
+| WebRTC Connections | passed |
+| Websocket Regions | passed |
+| Daily Call Quality | good |
+
+This settles the question the whole feature was hedged against. The UAE
+block on VoIP is **per-app, not protocol-level** — Etisalat and du block
+named consumer apps (WhatsApp, FaceTime, Skype) by domain, and a custom
+WebRTC app on its own infrastructure is not on that list. Media came up
+fine, unassisted.
+
+⚠️ **What it does not prove**, and each of these is still open:
+
+- **It tested Daily's servers, not LiveKit's.** Different hostnames, IPs and
+  TURN endpoints. Strong evidence that WebRTC as such is fine; not proof
+  that `livekit.cloud` is reachable. LiveKit's own tester
+  (`livekit.com/connection-test`) needs a URL and a room token, so it can
+  only be run once the project exists — make it the first thing done after
+  the Vault secrets land.
+- **It was ~30 seconds.** The reported pattern for Zoom and Skype in the UAE
+  is being cut off after 3–4 hours, so a short pass says nothing about
+  whether a call survives an evening. One long real call is still owed.
+- **One carrier, mobile data only.** Wi-Fi and the other of e&/du are
+  untested, and enforcement differs between them.
+
+Unchanged by this: a custom calling app is unlicensed VoIP under TDRA rules
+regardless of whether it connects. Irrelevant for two people calling each
+other privately; a real constraint if Dayflower is ever published to UAE
+users.
+
+Also unchanged: voice (~40 kbps) will outlive video (several hundred kbps)
+on any degrading path, which is why the two modes are one session with a
+flag rather than two features.
+
+### What was verified, 2026-09-04
+
+Against real rows in the web preview, signed in as the test partner:
+
+- A call row inserted by the partner arrives over realtime and renders as a
+  **Join bubble**; the header icons turn pink and re-label to "Join the call".
+- `AppShell` pushes the **ring screen** on top of wherever you are —
+  partner's name, their local time from `ClocksCard`'s data, Answer/Not now.
+- Answering reaches the **failure screen**, which correctly hides "Try
+  again" for `notConfigured` (retrying could only fail identically).
+- Ending the call collapses the bubble to a centred **history line**,
+  "Video call · 4 min 12 sec".
+- `test/call_test.dart` — 10 tests, all passing.
+
+**Not verified, and not verifiable here:** the in-call screen. It needs a
+connected transport, so there is no honest way to screenshot it yet. The
+timer, mute/camera controls and the speaking ripple are code-only.
+
+⚠️ The ring only reaches an app that is **open**. A swiped-away app hears
+nothing until it is next opened, at which point the Join bubble is what
+delivers the call. FCM push is what would close that gap and is upstream of
+everything else here.
+
+### Permissions added
+
+`RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `FOREGROUND_SERVICE`,
+`FOREGROUND_SERVICE_MICROPHONE` (Android 14+ requires the typed variant for
+a service holding the mic while backgrounded), and
+`NSMicrophoneUsageDescription` on iOS. The foreground service itself belongs
+to whichever transport ships.
 
 ## Device preview (2026-08-01)
 
@@ -345,7 +810,7 @@ The Flowers tab is a messaging thread. Flowers and text share **one table and on
 - **A row is a flower OR text.** `flower_type` is nullable; `note` doubles as the caption of a flower and the body of a text message. `FlowerMessage.isText` / `.flower` are the accessors — `FlowerCatalog.byId(message.flowerType)` no longer compiles. The DB check `flower_messages_has_content` guarantees a row is never blank.
 - **`to_widget` is the sender's choice**, ticked by default in the send sheet. The recipient's app resolves `widgetFlowerProvider` (newest incoming flower carrying the flag) and pushes *that* to the home-screen widget; unticked flowers stay in the thread and never reach it. Sending another ticked flower replaces what's on their screen.
 - **Two different "latest" providers, don't merge them:** `latestReceivedFlowerProvider` (any incoming flower) feeds the in-app Home card; `widgetFlowerProvider` (ticked only) feeds the OS widget. The Home card deliberately shows flowers the sender chose *not* to pin — it mirrors the conversation, the widget honours the choice.
-- **Copy moved off "today"** in all three places that mirror each other: the Home card, `@string/widget_label`, and `widget_description` now say **"A FLOWER FOR YOU"**. ⚠️ `website/app/page.tsx` still says "Today's Flower" — the site was left alone, so those are now out of sync. Fix if the site is touched.
+- **Copy moved off "today"** in all three places that mirror each other: the Home card, `@string/widget_label`, and `widget_description` now say **"A FLOWER FOR YOU"**. ~~⚠️ `website/app/page.tsx` still says "Today's Flower"~~ — resolved 2026-09-05: the site was rebuilt and no longer shows that card at all.
 - **Read receipts are thread-wide.** `markThreadSeen(pairId, userId)` fires whenever the tab is open with anything unread, so opening the chat marks everything. The Home card still calls the single-message `markSeen` — a partner who only glances at Home would otherwise never send a "Seen". Both are safe because the recipient-only RLS update policy from 0004 rejects marking your own messages.
 - **Keyboard/drawer choreography** is the fiddly part of `flowers_screen.dart`. The catalog is an inline panel (not a modal sheet — a sheet would cover the thread you're picking for), sized to the *remembered* keyboard height captured in `didChangeDependencies` so swapping between keyboard and drawer doesn't make the conversation jump. The bottom nav is hidden whenever the keyboard or drawer is up, which is why the bottom safe-area inset is applied manually in that one case.
 - **The chat header carries reserved call + video-call buttons** (`_HeaderAction` in `flowers_screen.dart`), added 2026-08-01. There is no calling backend at all — no WebRTC, no Agora/Twilio in pubspec — so both fire the same "coming soon" snackbar as the composer's photo icons. Wiring them up is a whole feature, not a TODO.
@@ -1001,10 +1466,27 @@ Messages, day photos and activity now raise a notification on the receiving phon
 
 ## Landing site (website/)
 
-- Next.js 16 (App Router, Tailwind v4) landing + waitlist site in `website/`. Run: `npm run dev` inside `website/` (or preview config "next site", port 3001).
-- **Rebuilt 2026-07-28 to mirror [overview.md](overview.md) v3.0 end to end.** 12 sections: hero (Nest mock) · concept + 5 UX principles · flower language · 6 core features · 7-screen app tour · 10 booth templates · day-in-the-life + onboarding · post-MVP nice-to-haves · pricing · 31-item future-builds roadmap in 9 groups · competitive table · final CTA.
-- **All copy lives in [app/lib/content.ts](website/app/lib/content.ts)** — re-sync that one file when overview.md changes; `page.tsx` is just layout. Shared primitives (SectionLabel, TwoToneHeading, Card, Tag, TickList) in `app/components/ui.tsx`.
-- The flower list mirrors `lib/features/tulip/domain/flower_catalog.dart` (7 varieties + meanings) — keep them in sync rather than inventing site-only flowers.
+- Next.js 16 (App Router, Tailwind v4) landing + waitlist site in `website/`. Run: `npm run dev` inside `website/`, or preview config **`dayflower-site`** (port 3210 — 3000/8080 collide with other servers on this machine).
+- **Domain: `mydayflower.com`, bought 2026-09-05 at Cloudflare Registrar** (ns `wally`/`wesley.ns.cloudflare.com`, expires 2027-09-05). Chosen over `dayflower.com`, which is real but listed at **$90,000** by a domain broker, and over `.co`/`.love`, whose renewals are 2–3× a `.com`. **Not deployed yet** — no Vercel project exists (no `.vercel/`), awaiting the user's go-ahead. When deploying: Root Directory must be **`website`** (repo root is the Flutter app), and `SUPABASE_URL` + `SUPABASE_ANON_KEY` must be set in the Vercel project or the waitlist route answers 503. Point DNS at Vercel **DNS-only (grey cloud)** — proxying puts two CDNs in series and breaks TLS issuance.
+- The privacy and terms pages advertised `hello@dayflower.app`, a domain nobody owns. Fixed to `hello@mydayflower.com` on 2026-09-06 — **that mailbox does not exist yet**; set up Cloudflare Email Routing before launch or the contact address in the published policy bounces.
+- 🔴 **Cut back to a waitlist page on 2026-09-06 — do not re-expand it.** The 2026-09-05 rebuild below was accurate but was, in effect, a build spec: five screen mocks, 24 feature bullets, the flower meanings and the roadmap. Anyone could have rebuilt the app from the page source. The page is now hero → three vague lines → an uncaptioned artwork band → waitlist → footer, and nothing else.
+  - ⚠️ **Trimming what renders is not enough — everything `page.tsx` imports ships in the JS bundle whether it is displayed or not.** The first pass still had all 35 flower meanings readable in the chunk because `blooms` was imported for its ids. `content.ts` is now cut to three vibe lines and a list of filenames; there is a warning in its header. Re-check with a grep over `.next/static` + `.next/server` after any change (`.next/dev` is the dev cache and always has everything — ignore it).
+  - The mocks are **parked, not deleted**: `app/components/Snapshots.tsx` plus `app/components/snapshots.parked.css`, neither imported anywhere. Kept for Play Store shots / a press kit / a post-launch tour, where showing the UI is the point and the audience is already ours. They will drift from the real screens — verify before reuse.
+  - Flower names, meanings and screen names must not go back on the public site. The meanings are original writing and the single easiest asset to lift.
+- **Hero rebuilt 2026-09-06 (same day, after the trim):** the headline's noun rotates — "One **flower** a day" → heartbeat · photo · note · reminder · call — and the static bloom became the app's polaroid, tilted, stacked and throwable.
+  - ⚠️ **The rotating words re-add a little disclosure on purpose.** They name features, which cuts against everything above; the user asked for it because a moving word converts better than a static one. They are plain nouns anyone would guess from "an app for two people" — no screen names, no mechanics. Keep them that way.
+  - `PolaroidStack.tsx` copies the app's Classic Polaroid **by measurement, not by eye** (booth_screen.dart § `_PolaroidFrame`): #FFFEF8 paper, **4px** card radius, **2px** slot radius, the two-layer shadow, caption #3A2A20 at 0.3 letter-spacing. The app's duo template splits the slot in two; the site uses one slot, because a bloom is one picture.
+  - Two bugs worth remembering, both invisible on a desktop mouse: the top card advanced on `pointerup` only, so **keyboard users could not advance it** (Enter/Space fires `click` with no pointer events — `e.detail === 0` is what separates the two); and the rotator's width was measured on a grid item *inside* the very box being sized, so it could only ever shrink and "photo" rendered as "phot" — `width: max-content` on the word breaks the loop.
+  - The h1 carries `min-h-[5em] sm:min-h-[2.5em]`. Without it a long word rewraps the headline on a phone and the form below it jumps every 2.4s. Verified stable by sampling the form's `top` across several word changes.
+- **Brand mark is on the site.** `assets/images/mark.png` (transparent cutout) → `website/public/mark.png` for the nav and footer; `assets/images/logo.png` (peach square) → `website/app/icon.png` + `apple-icon.png`, and the old `app/favicon.ico` was deleted so Next generates the tags from those. ⚠️ **PROGRESS's old "the artwork still says 2lip" warning was stale** — commit 2550d7f replaced it; the mark is the coral tulip now.
+- **The 2026-09-05 rebuild (now superseded) replaced the 2026-07-28 overview.md mirror.** That version was 12 sections long and promised the *vision*: a 31-item roadmap, a pricing table for a Premium tier that has no billing behind it, a competitive matrix, and a 7-flower catalog three months out of date. It now reads as a sneak peek — hero (a real flower message) · 5-screen snapshot rail · 3 pillars · 6 shipped features · the bloom grid · 3-step setup + an honest "still on the way" row · CTA.
+- ⚠️ **`overview.md` is no longer the source for the site.** Copy now comes from § Feature status in this file and from the screens themselves. If a feature isn't built, it goes in `later` (the "still on the way" chips), never in `features`.
+- **The snapshots are recreations, not captures.** `app/components/Snapshots.tsx` rebuilds five screens (Flowers · Home · Calling · Us · Activities) in HTML against the same tokens the app uses, inside a CSS phone frame. Chosen over real screenshots because the Flutter web build takes minutes to paint, automated taps on its canvas are unreliable (see § How to run), and a capture would carry a test account's data. **They will drift** — when a screen changes materially, change the mock or drop it. Fidelity notes baked in: bubbles are `blush`/`blushMid`, not the gradient; the chat has no bottom nav (composer instead) while Us and Activities do, matching `AppBottomNav` in each screen.
+- **The real flower artwork is now on the site.** `assets/images/flowers/*.webp` → `website/public/flowers/` (35 files, 1.7 MB, minus `lavender_fields.webp` which has no catalog entry). Re-copy when the catalog gains artwork.
+- **All copy lives in [app/lib/content.ts](website/app/lib/content.ts)** — `page.tsx` is layout only. Shared primitives (SectionLabel, TwoToneHeading, Card, Tag, TickList) in `app/components/ui.tsx`.
+- The bloom list mirrors `lib/features/tulip/domain/flower_catalog.dart` — **35 pickable** (12 flowers + 23 scenes); the two `retired: true` entries are deliberately absent. Keep them in sync rather than inventing site-only flowers.
+- `globals.css` tokens were re-synced with `lib/core/theme/app_colors.dart` on 2026-09-05 — body/muted/border/darkBorder/onDark had all drifted a shade or two, and `blush`, `blushMid`, `brandDark` and the hero gradient were missing.
+- Next 16 note: **`priority` on `next/image` is deprecated in favour of `preload`** (docs § image.md, v16.0.0 row). The hero bloom uses `preload`.
 - Design follows design.md v3 tokens: Quicksand + Lora italic (notes only), one pink→purple gradient for primary, midnight-plum darks, pills/18-radius cards, flat. **overview.md's own § Design Philosophy is stale** (still lists the pre-v3 rose/cream palette and Georgia) — design.md wins.
 - `next lint --dir` was removed in Next 16; lint with `npx eslint app`. Bundled docs live in `website/node_modules/next/dist/docs/` (per website/AGENTS.md, read before writing Next code).
 - Waitlist: form → `/api/waitlist` route → Supabase REST insert into `public.waitlist` using anon key from `website/.env.local`. Duplicate emails (409) are treated as success. ✅ **Migration 0007 run + verified end-to-end 2026-07-28**: UI submit → row persisted (proved by forcing a `23505` conflict on re-insert, since reads are blocked), case-insensitive dedupe works, invalid address → 400, success card renders.
@@ -1207,3 +1689,821 @@ needs a running app, so a launch crash is not remotely fixable. Removing the
 widget from the home screen stops `onUpdate` from ever running, which both
 confirms the diagnosis and gets the app open far enough to take an update.
 Worth remembering before shipping anything else that touches this path.
+
+## The launcher icon, from the new brand artwork (2026-09-05)
+
+**Not shipped — held.**
+
+Three files were supplied as `dayflower.appicon` / `.iconsmall` /
+`.nobackground` — all PNGs, 1254², just without the extension. The mark is
+two overlapping petals with a heart nested behind them. `.iconsmall` is an
+alternate composition at 54% and is currently unused.
+
+⚠️ **They are brand art, not icon assets, and the difference is the whole
+job.** The cutout fills 91% of its canvas; dropped straight into an adaptive
+foreground, every launcher mask would shave its edges — differently on
+different phones.
+
+- 🔴 **The canvas is not the icon.** A 108dp adaptive canvas shows at most its
+  inner 72dp; the outer 18dp a side is for masking and parallax. Sizing the
+  mark against the full 108 put it at **96% of the visible window**, touching
+  the mask edge — caught by rendering it through circle and squircle masks
+  before wiring anything up, not by reading the spec.
+- The size is **derived, not chosen**: `appicon.png` composes the mark at 71%
+  of its square, so the icon mark is 71% of the inner 72dp — **47% of the
+  canvas**. `MARK_FRACTION` in `tool/make_icons.py` says so in one line.
+- The background is the artwork's **own peach gradient, sampled** from the
+  supplied file rather than a flat colour picked to be close. The old flat
+  `#F9EBE4` is gone from `colors.xml`; ⚠️ a `@color` of the same name left
+  beside the new `@drawable` would still resolve for anything asking for the
+  colour, and be a different peach, silently.
+- A **monochrome layer** is generated for Android 13+ themed icons — the
+  silhouette at the same geometry as the foreground, or the themed icon would
+  sit at a different size from the normal one.
+- `assets/icon/src/` holds the two masters **in the repo**. The generator read
+  `~/Downloads` first, which works exactly until that folder is cleared.
+  ⚠️ `assets/icon/` is deliberately **not** in pubspec's `assets:` list — it
+  is build-time input, and listing it would ship ~4 MB of unused PNG in every
+  APK. `assets/images/logo.png` (the welcome screen's, and bundled) is
+  regenerated at 512² for the same reason.
+
+⚠️ **The two supplied files are not the same red.** `cutout.png` is
+noticeably more saturated than `appicon.png`. Android shows the adaptive icon
+(the cutout) and iOS the legacy one (appicon), so the two platforms differ
+slightly. Both are used as delivered rather than recoloured to match — which
+of the two is the brand red is not a call to make silently.
+
+## 🔴 The updater flashed for one frame and vanished (2026-09-05)
+
+Reported from the phone: the update prompt appeared for about a millisecond
+on launch and was gone before it could be read, let alone tapped. So every
+OTA build since had to be sideloaded.
+
+⚠️ **A modal raised on the router's navigator is a *pageless* route, and
+Flutter binds a pageless route to whichever page was on top when it was
+pushed.** The check fires from a post-frame callback at launch, so that page
+was the **splash**. A second later the gate redirect swapped splash for home
+— and removing a page removes every pageless route attached to it. Nothing
+was wrong with the sheet. It was tied to a page with a one-second lifespan.
+
+⚠️ **Every dialog raised during launch has this waiting for it.** The fix is
+not a delay, which would only narrow the window: the updater is a full-screen
+layer in `MaterialApp.router`'s `builder` now, *above* the `Navigator`, where
+the routing stack cannot take it away — redirect, replace or pop, it is not
+in there to be removed.
+
+Redesigned to match the reference the user supplied: full-bleed violet, a
+painted concentric orb, the headline stacked over three lines, a white pill
+primary and a quiet "Not Now". Every stage the sheet had is still there —
+downloading with progress, ready, failed with its reason, and mandatory with
+no way out.
+
+### 🔴 The first version of the layer crashed
+
+It used `BackButtonListener`, which looks for a `Router` ancestor and throws
+when there is none — and **being above the Router is the entire point**.
+`PopScope` fails the same way for the same reason: both want a route, and
+this deliberately has none.
+
+The Router's own `backButtonDispatcher` is the supported hook, so
+`_UpdateBackButtonDispatcher` in app.dart answers back before go_router does.
+Without it, back on a full-screen updater would quietly pop the screen hidden
+behind it.
+
+⚠️ That crash was found by **rendering the widget in a test**, not by the
+analyzer — it compiles perfectly. `test/update_screen_test.dart` now builds
+every stage and asserts the absence of a throw, which is the only thing that
+catches this class of mistake.
+
+- Dismissal moved from widget state to `updateDismissedProvider` because the
+  back button is handled outside the gate and the two must not disagree about
+  whether anything is on screen.
+- `updateIsShowing` is shared by the gate and the dispatcher for the same
+  reason.
+
+⚠️ **Seeing this fix needs two builds.** A phone on build N runs build N's
+updater, so the build that *carries* the new screen is still announced by the
+old one. It takes the build after it before the new screen is what appears.
+
+## 🔴 The grey screen, the overflowing OTP row, and the square widget (2026-09-05)
+
+### The grey screen is Flutter's error box, not a hang
+
+⚠️ **`#B5B5B5` is `RenderErrorBox`.** Flutter replaces a widget that throws
+during build with `ErrorWidget`: red with the message in debug, and in release
+a **flat grey rectangle** — `0xF0C0C0C0` over black composites to exactly
+181,181,181. Sampling the screenshot gave 181 on every pixel. Near the top of
+the tree it fills the phone, and it looks exactly like a freeze. It is not
+one; it is an uncaught exception with its text removed.
+
+**`CrashScreen` (core/widgets/crash_screen.dart) now replaces it** and names
+the exception. Hiding internals is the right default for a public app; this
+one has two users, and a screenshot that says what broke is worth more than
+one that cannot be told from a hang. ⚠️ It depends on no ancestor — no Theme,
+no MediaQuery, no Scaffold — and brings its own `Directionality`, because
+whatever is above it may be the thing that just died.
+
+### 🔴 Two ways the top of the tree could throw, both mine, both from build 33
+
+1. **`backButtonDispatcher` beside `routerConfig`.** `MaterialApp.router`
+   asserts they are mutually exclusive — "if the routerConfig is provided, all
+   the other router delegates must not be provided". This crashed **every
+   debug run**, reproduced instantly in the web preview. ⚠️ In release the
+   assertion is compiled out, so it did not crash there — it silently **threw
+   the dispatcher away**, and the back button never reached the updater at
+   all. Now spelled out longhand as `routerDelegate` / `routeInformationParser`
+   / `routeInformationProvider` + the dispatcher, which is the only form that
+   legally takes one. GoRouter cannot carry it either: it hardcodes its own
+   `RootBackButtonDispatcher` and the field is final.
+
+2. **A `ref.listen` writing to a provider from inside `UpdateGate.build`.** A
+   listener registered during build fires *during that build* when the value
+   already changed, and writing another provider there throws "Tried to modify
+   a provider while the widget tree was building" — at the top of the tree,
+   which is the full-screen grey. Removed, and it was redundant anyway: a
+   dismissal is stored as a build *number*, so a newer build never matches it,
+   and Settings clears it directly for the only other case.
+
+⚠️ **Which of these the phone actually hit is not proven.** (1) cannot fire in
+release; (2) can. The evidence is that both are real, both are at the top of
+the tree, and both arrived in build 33 — which is when the grey started.
+CrashScreen exists so the next one does not need this much inference.
+
+### The OTP row overflowed its card
+
+Six boxes at a fixed 46 wide with 5 of margin each side is 336px. Inside the
+reset-password card there are about 239. ⚠️ A release build does not draw the
+yellow overflow stripes — it just clips — so the sixth box was simply *gone*
+and the field looked broken rather than too big. Sized from `LayoutBuilder`
+now, clamped to the old 46 so nothing grows on a wide screen.
+
+### The widget's photo was still square
+
+⚠️ **`roundCorners` was drawing corners that `centerCrop` then cropped off.**
+The bitmap is cut to the widget's *reported* size; the moment the real aspect
+differs at all, the ImageView trims the edges — and the edges are where the
+rounding lives. `setViewOutlinePreferredRadius` on the root (API 31+) clips
+the card and every child of it, so nothing inside can have a sharp corner
+whatever the bitmap looks like. The bitmap rounding stays as the pre-31
+fallback. Radius 28 → 34dp.
+
+## Incoming calls now ring the phone — and the FCM gap, stated plainly (2026-09-05)
+
+### 🔴 Calls raised no notification at all
+
+The ring lived entirely inside the app: `incomingCallProvider` fires and the
+shell pushes the call screen. With Dayflower in the background that is a
+screen nobody is looking at, so **a call in a pocket went unanswered with no
+sign it had ever rung.** Chats at least had `PartnerAlerts`; calls had
+nothing.
+
+`CallAlerts` raises a real incoming-call notification: `category: call`,
+`Importance.max`, and **`fullScreenIntent`** — so on a locked phone the app's
+own ring screen takes over the display, Answer and Decline on it, which is
+what the reference screenshot is. Unlocked, Android shows a heads-up strip
+and tapping it opens the same screen.
+
+- ⚠️ Cleared by `stop()` on *every* exit from ringing, not just decline. The
+  notification is `ongoing`, so nothing else will ever take it off the lock
+  screen — a call answered on the other device would otherwise ring here
+  forever. Answered, declined and timed-out all arrive as the provider going
+  null, which is the one place that cancels.
+- Suppressed in the foreground: the call screen is already up with the same
+  two buttons on it.
+- ⚠️ `incoming_calls_v1` — Android freezes a channel's importance and sound at
+  creation, so changing either means bumping the suffix.
+
+### 🔴 What this still does NOT do, and why
+
+⚠️ **It does not reach a phone whose app has been swiped away.** Every alert
+in this app — messages, hearts, activity, updates, and now calls — is a
+**local** notification: the row arrives over the Supabase realtime socket and
+the receiving device raises it. That needs the process alive and the socket
+connected. Backgrounded a few minutes ago: works. Force-stopped, or deep
+enough into Doze: nothing, and nothing will until the app is next opened.
+
+**Do not describe delivery as guaranteed.** Closing the gap needs FCM, and
+FCM needs four things, the first of which is not mine to make:
+
+1. A Firebase project and its **`google-services.json`** in `android/app/`.
+2. `firebase_messaging` in pubspec. ⚠️ **Adding it without the JSON fails the
+   Android build outright**, which would take the OTA publisher down with it —
+   the credentials have to land first.
+3. A `device_tokens` table (user, token, platform, updated_at) with RLS.
+4. An edge function on insert into `flower_messages` that looks up the
+   partner's tokens and posts to FCM with a service-account key from Vault.
+
+3 and 4 are mine and can be written the moment 1 exists.
+
+## The call screen: a header, a floating window, and a tile that drags (2026-09-05)
+
+**Firebase deferred by the user — the FCM note from the previous section
+still stands unchanged.**
+
+### Picture-in-picture, in Kotlin
+
+⚠️ **There is no Flutter API for PiP and no plugin here doing it.** It is an
+Activity capability — `enterPictureInPictureMode` is a method on Activity,
+`onUserLeaveHint` is an Activity callback — so it lives in `MainActivity.kt`,
+about forty lines. Deliberately *not* a new pub dependency: the last
+dependency reached for to get a platform feature (`firebase_messaging`) would
+have broken the entire Android build.
+
+- ⚠️ **`callActive` is load-bearing.** `onUserLeaveHint` fires on every exit
+  from the app, so without a flag saying a call is up, pressing Home on the
+  home screen would shrink Dayflower into a floating window. Only Dart knows,
+  so Dart pushes it.
+- ⚠️ **A PiP window takes no touches.** Android routes taps to "expand" and
+  hands the app nothing, so `_PipView` is video and nothing else — controls
+  rendered in there would be an unreadable wall of buttons that cannot be
+  pressed. Tapping restores full screen, which is the maximise.
+- `pipModeProvider` is pushed from `onPictureInPictureModeChanged`, never
+  inferred from lifecycle. PiP is not "paused" — the app keeps rendering,
+  which is the entire point, and treating it as backgrounded stops the video.
+- API 26+ and only where `FEATURE_PICTURE_IN_PICTURE` is present; everywhere
+  else every call is a no-op returning false.
+
+### 🔴 Back used to hang up
+
+The back gesture ended the call. That was the safe reading once — leaving the
+screen mid-call would strand somebody in a call they could not see or end —
+but it made back the most destructive control on the screen, and destructive
+*by accident*. It minimises now.
+
+⚠️ Only where PiP is actually available. Without a floating window to leave
+the call in, popping would recreate exactly the invisible-call problem the
+old behaviour was guarding against, so on those devices back still does
+nothing.
+
+### 🔴 The self-view was still not draggable
+
+The previous fix set `HitTestBehavior.opaque` on the tile's GestureDetector,
+which should have been enough and was not. ⚠️ **The tile's whole face is a
+LiveKit renderer, and a platform view consumes the touch before it reaches an
+ancestor.** The only draggable pixel was the eye button — because that is a
+real GestureDetector sitting *on top* of the video. The fix is a transparent
+drag layer in the same place: above the renderer, not around it.
+
+Also 112×158 → 150×210. Third size for this tile; this is the one where a
+glance tells you whether you are in shot.
+
+### Header and connecting
+
+Back, their name, then the clock, as a column in the top-left. The name is
+there because a video call fills the screen with a face and nothing else —
+whose call it was, the screen never actually said.
+
+"Connecting…" moved from the timer pill in the corner to the middle of the
+screen. A corner is where you put what can be ignored, and while connecting
+it is the only thing happening.
+
+## The chat: a media viewer, a working camera button, one fewer icon (2026-09-05)
+
+### The paperclip is gone
+
+It said "Uploading photos is coming soon" and had since the composer was
+written. Photos have worked for weeks. It went rather than getting wired up
+because the camera screen it would have duplicated **already has a gallery
+picker in it** — two doors to one room, one of them locked.
+
+### The camera button opens the camera
+
+⚠️ **And sets the destination first.** The camera defaults to the home-screen
+widget, which is right when you walk there yourself and wrong when you arrived
+from the thread — a photo taken from the conversation should land in the
+conversation, and finding out otherwise costs a send.
+
+`_target` is lifted out of `_ShareYourDayBarState` into `dayPhotoTargetProvider`
+so the caller can say. Widget stays the default for everyone else.
+
+### 🔴 A "Save" that saves where nothing looks
+
+`share_your_day.dart` could already write a photo to disk — into
+`getExternalStorageDirectory()/Saved`, which no gallery app has ever listed.
+Its toast is careful to say "the app folder" rather than "Photos", which is
+honest, and still a save nobody can find.
+
+`MediaSaver.kt` publishes through **MediaStore**, into Pictures/Dayflower.
+⚠️ On API 29+ that needs **no permission at all** — the app owns the row it
+inserts — which is why this is thirty lines of Kotlin rather than a plugin
+plus `WRITE_EXTERNAL_STORAGE`.
+
+- ⚠️ `IS_PENDING` while the bytes are written. Without it a media scan landing
+  mid-write publishes a half-decoded image, permanently.
+- Pre-29 returns **false** rather than falling back to the invisible folder.
+  Dart shows "couldn't save"; nothing claims a success it did not have.
+
+### The viewer
+
+One viewer for day photos and flowers, because from the reader's side they
+are the same thing: a picture somebody sent. A day photo signs a URL, a
+flower is a bundled asset, and only the byte fetch cares which.
+`InteractiveViewer` for pinch and pan — a picture you cannot zoom is still a
+thumbnail. Opened on the **root** navigator so it covers the bottom nav; with
+the tab bar showing underneath it reads as a panel rather than the picture.
+
+**Verified in the web preview** end to end: tapping the Wildflower Haze card
+in the thread opens it full-screen with its name and meaning. ⚠️ The save
+button could not be — it is an Android method channel, and web has no
+implementation, which is exactly the path that returns false.
+
+## 🔴 One-way audio, and it only ever bit the caller (2026-09-05)
+
+Reported: "when I initiate the call the receiving end hears me but I can't
+hear them. When they initiate it's fine."
+
+⚠️ **Nothing in this app was setting the audio route at all.** The route was
+left to whatever the Android audio session happened to pick — and what it
+picks depends on whether there was already a remote track when the session
+started. **Whoever dials connects to an empty room**, so the session is set
+up with nothing to play and the partner's audio, arriving seconds later, went
+somewhere the caller could not hear it. Whoever answers joins a room that
+already has audio in it. That is the whole asymmetry: not the tokens, which
+come from the same `livekit_token` RPC for both sides, and not the room.
+
+Two lines, in `livekit_call_transport.dart`:
+
+- `_routeAudio()` after connect — speaker for video, earpiece for voice, the
+  way every phone behaves. A headset still wins; `force` is deliberately off.
+- ⚠️ **and again on `TrackSubscribedEvent` for an audio track.** That is the
+  moment the caller's session actually gains something to play, and
+  re-asserting there is what makes dialling and answering behave the same.
+
+🔴 **Hypothesis, not a confirmed diagnosis.** A two-device call cannot be
+reproduced here. The mechanism fits the symptom exactly and the fix is
+correct regardless — an app that never sets its audio route is relying on
+luck — but if it survives this, the next thing to check is whether the
+caller *sees* them, which would separate routing from subscription.
+
+## Chat and flowers (2026-09-05)
+
+- **Save says so on the button.** A snackbar over a full-screen picture
+  covers the picture and leaves nothing behind — come back a minute later and
+  there is no way to tell whether you already have it. Success is now
+  "✓ Saved" on the button itself, and the button disables, because tapping
+  again writes a second copy. ⚠️ Failure still interrupts: a button that
+  simply does not change is not an error message.
+- 🔴 **Flowers no longer go to the home screen by default.** `_toWidget` was
+  `true`, so unless you noticed the toggle every flower replaced the last one
+  on their home screen — sending two in a row quietly threw the first away.
+  Sending a flower is a message; parking one on somebody's home screen for a
+  day is a second, deliberate act, and the toggle is still there for it.
+- **Flowers are Polaroids.** Even margin at the top and sides, a deep one at
+  the foot, the name in that foot in Lora italic — the app's one
+  handwriting-adjacent face, kept for what a person wrote or chose. ⚠️ White
+  whoever sent it: the bubble around it is pink for yours and grey for
+  theirs, and a Polaroid that changed colour with the sender would stop
+  reading as a photograph.
+
+### Still open from this round
+
+- **My Days: a limit of 7**, a warning before the oldest is dropped, and a
+  swipeable viewer ending on "share your day". Not started.
+- **Scrolling all the days on the home-screen widget.** ⚠️ Possible, and not
+  small: RemoteViews collections need a `RemoteViewsService` plus a
+  `RemoteViewsFactory` and a `StackView` in the layout, and the day photos
+  would have to be cached as a *set* rather than the single file
+  `_cachePhoto` writes today.
+
+## My Days: seven of them, each on its own clock (2026-09-05)
+
+**Migration 0028 — applied and verified** (`prosecdef` true, `authenticated`
+only, `anon` not granted).
+
+⚠️ **`retire_day_photo` is a definer function, not a policy.** 0004's only
+update policy is `flowers_update_recipient`: the *recipient* may mark a
+message seen, and a sender may not update their own rows at all — deliberate,
+because a sent message is not a draft. Widening that so a sender could touch
+their own row would hand them the note, the flower and the timestamp too,
+since **RLS grants a row, not a column**, and the way back would be another
+lock trigger like `pairs_lock_identity`. One function that flips one boolean
+is narrower than either. Same shape as `end_call` in 0025.
+
+⚠️ **Retiring is not deleting.** The oldest day comes off the *widget* and
+stays in the conversation exactly where it was. The photo is a message first
+and a home-screen decoration second; the eighth post must not be able to
+destroy the first.
+
+- **Seven live, and the eighth is allowed** — it just costs the oldest its
+  place, and that is worth a dialog rather than doing it quietly. A hard
+  refusal would be the app telling somebody they have shared too much of
+  their life with their partner.
+- ⚠️ **Each day keeps its own clock, for free.** They are separate rows with
+  separate `sentAt`s, so `isFreshForWidget` answers per message and nothing
+  schedules anything — the fifth expires five posts after the first.
+- ⚠️ A failed retire **refuses the send**. Posting anyway would leave eight
+  live days and a limit that means nothing.
+- `MyDaysViewer` pages through them and ends on **share your day**, which is
+  how every story rail works and saves the add button from living somewhere
+  else as well. `DayPhotoViewer` gained an `embedded` flag: nesting a
+  Scaffold per page paints a second background over the pager, and a close
+  button on every page would sit in the same place as the pager's own and
+  mean something different.
+- Only *my* days page. There is never more than one of theirs live.
+
+### Flowers, corrected
+
+- **The dictionary meaning is gone from the bubble.** The sender can write
+  their own line and usually does; a stock definition printed under
+  somebody's message is the app talking over them.
+- **A note is plain text**, not the Lora italic used for quotes. It is a
+  message somebody typed, and the quoting face made it read as something the
+  app had decided to italicise on their behalf.
+- 🔴 **The Polaroid no longer sits inside a speech bubble.** It is already a
+  card with its own frame, border and shadow — a card inside a card, two
+  borders, two backgrounds, and a tinted margin around a white photograph.
+
+## 🔴 Back went out of the app instead of back (2026-09-06)
+
+The call screen's back button entered picture-in-picture — and PiP is a
+floating window **over the launcher**, so pressing back *inside* the app put
+you outside it. Third time this button has been wrong: it hung up, then it
+left the app, and now it goes back.
+
+⚠️ **The two gestures are different and were being served by one answer.**
+Back is "I want the rest of the app"; Home is "I want the rest of the phone".
+Only the second is a floating window.
+
+- Back pops to the conversation, and `_CallMiniBar` keeps the call one tap
+  away. ⚠️ It lives **in the shell**, and the call screen is a top-level route
+  *outside* the shell — so it is on every tab and never over the call itself,
+  expressed by where it sits rather than by asking what route is on top.
+- ⚠️ `canPop` is checked before popping. Arriving from a call notification
+  leaves nothing underneath, and popping an empty stack closes the app: the
+  same bug wearing a different hat.
+- **Home and recents** still float it, through `onUserLeaveHint`.
+- **A back press that would close Dayflower** floats it too, via
+  `onBackPressed` in MainActivity. ⚠️ That override is only ever reached when
+  Flutter has nothing left to pop — routes are handled Dart-side first — so
+  by then the next step really is leaving. That is what "back pressed twice"
+  is: once out of the call screen, again out of the app. `onUserLeaveHint`
+  does **not** cover it; a back press finishes the activity without it.
+
+### The name lines up with the chevron now
+
+The circle is 38 wide around a 20 icon, so centring left the glyph eleven
+points inside the column while the name below started at the column edge —
+box-aligned and visibly not. ⚠️ **Measured, not guessed**: the header was
+rendered to a PNG and the left edge of the glyph and of the name were read
+off in pixels. -9 still left 3px; -11 puts them within 1.
+
+## Calls that ring out, and a header on one row (2026-09-06)
+
+**Migration 0029 — applied and verified** (`prosecdef` true, `authenticated`
+only).
+
+### 🔴 Sixty seconds of ringing would have been reported as a conversation
+
+`end_call` stamps `now()`, which is right for a call that happened and wrong
+for one that did not. The row has no `answered_at` to tell them apart, so
+`miss_call` writes the one timestamp that cannot be mistaken for a duration:
+**the call's own start**.
+
+⚠️ A call whose end equals its beginning lasted no time at all — the literal
+truth about one nobody answered, and a value the answered path cannot
+produce, because media has to negotiate before the timer even starts. A new
+column would say it more loudly and would also mean migrating a table two
+features already read; this says it exactly.
+
+⚠️ **The convention spans a SQL function and a Dart getter**, which is the
+shape of agreement that rots silently. `test/missed_call_test.dart` pins it,
+including clock skew: an end *before* the start still reads as missed, because
+a negative duration is not a shorter call.
+
+- ⚠️ **Only the caller arms the timer.** The receiver's phone is the one
+  ringing; it has no business deciding the caller has waited long enough, and
+  both sides racing to close one row would be two writes for one event.
+- ⚠️ Armed after the insert, not at the tap — there is nothing to mark missed
+  until the row exists.
+- Sixty seconds, matching `timeoutAfter` on the incoming-call notification,
+  with a test asserting they stay equal. Drift means a ring outliving its
+  call, or the reverse.
+- `miss_call` never overwrites a real ending: answer in the last second and
+  the answer wins.
+
+### 🔴 The name was on the wrong row, not at the wrong offset
+
+The header stacked the name *under* the back button. Last round measured the
+chevron's optical inset to the pixel and moved it eleven points — careful
+work aimed at the wrong problem, because nothing horizontal fixes something
+on the wrong line. It is one row now: `[<] Wifey`, with the clock beneath the
+name.
+
+⚠️ Worth remembering as a habit: the fix was measured before the layout was
+questioned.
+
+### Snapshots without a real call
+
+The outgoing screen was rendered from a **scratch entrypoint** that overrides
+`callNotifierProvider` with a fabricated session — a subclass can set `state`
+in its own constructor, so no production seam was needed. Deleted after, with
+its launch config. ⚠️ The alternative was placing a real call, which rings a
+real phone at 1am.
+
+The thread snapshot needed real rows: two were seeded, captured, and deleted,
+zero leftover confirmed both times. `flutter_test` blocks HTTP, so goldens can
+never load Quicksand — anything rendered there is block text, and the web
+preview is the only place the app's own typography appears.
+
+## A camera flip on the self-view (2026-09-06)
+
+Where a camera app puts it: the corner of your own picture, on the picture it
+affects.
+
+- ⚠️ **Opposite corner from the eye.** Two 26pt circles side by side on a
+  150-wide tile are one target to a thumb, and they do very different things
+  — one hides the view, the other changes what is being sent.
+- ⚠️ **Which lens is live is session state, not the transport's.** A
+  reconnect rebuilds the room; a transport holding this would quietly put you
+  back on the front camera after you had turned it around. So the transport
+  takes *the side to face*, never "the other one".
+- ⚠️ `setCameraPosition` **restarts the published track** rather than
+  republishing it, so the far side sees a brief still instead of a
+  participant dropping out and returning.
+- The state flips first and the transport follows: restarting a track takes a
+  beat on a real phone, and a flip button that does nothing for half a second
+  gets pressed twice.
+- Disabled while the camera is off — there is nothing to turn around, and the
+  control would be sitting over a black rectangle.
+
+### 🔴 The mirror had to follow it
+
+`LocalVideo` mirrored the self-view unconditionally. That is right for a
+face — it is what a mirror does, and what every video app shows — and wrong
+the instant the back camera is live: pointing it at a room and seeing the
+room reversed is simply incorrect. Mirroring is now front-camera only.
+
+⚠️ Local preview only, either way. The *outgoing* track is never mirrored —
+same distinction as § Selfies stopped coming out mirrored.
+
+## The call, minimised inside the app (2026-09-06)
+
+### 🔴 A bar that describes a call is not a minimised call
+
+Back produced a pill reading "On a call · 0:42". That is a *notification
+about* something happening, not the thing itself — press back during a video
+call and you got a sentence about it. Closing something and leaving a
+receipt.
+
+It is the same window picture-in-picture gives the launcher, drawn inside the
+app: their face, still moving, in the corner. Tap to go back to it, drag to
+move it — a window parked over what you are reading is a window in the way,
+the same reason the self-view moves.
+
+⚠️ Clamped clear of the tab bar. A floating window over the nav covers the
+tab you are reaching for.
+
+### 🔴 The clock was making the back button float
+
+The header was `[button, Column(name, clock)]`, and a Row centres its
+children against the tallest — so the chevron sat at the midpoint *between*
+the two lines and the three of them read as competing for one row.
+
+Now a Column: the button and the name on one row, the clock on the next,
+indented past the button so it starts exactly where the name does. ⚠️ The
+button aligns to the name and nothing else.
+
+### Tapping the picture hides the controls
+
+What every video call does — the thing you are looking at is the other
+person, and a row of buttons across their face is the app in the way. Header
+slides up, controls slide down, both fade.
+
+- ⚠️ **`IgnorePointer` while hidden.** A faded-out row still takes taps, so
+  End would have stayed live under a thumb after being asked to leave.
+  Invisible and tappable is the worst of both.
+- ⚠️ The tap layer sits **below** the self-view and the controls in the
+  stack, so it only catches what they missed — dragging your own tile or
+  reaching for Mute must not also toggle the chrome.
+
+## 🔴 "Dayflower hit a snag" in the floating window (2026-09-06)
+
+Pressing Home during a call floated the call correctly and then filled the
+window with the crash screen. ⚠️ **`num.clamp` throws when the upper bound is
+below the lower one** — a real `ArgumentError`, in release as well as debug,
+not an assertion.
+
+Every draggable tile in this app clamps itself with a bound computed from the
+window:
+
+```dart
+value.dx.clamp(margin, bounds.width - size.width - margin)
+```
+
+Fine on a phone. **Picture-in-picture hands the same widget tree a window a
+couple of hundred points wide**, and the arithmetic inverts — the self-view
+is 150 wide inside a 150-wide window, and the minimised call reserves 96
+points for a tab bar that leaves 7. Both threw, at the top of the tree, which
+is why the whole window went to `CrashScreen`.
+
+`clampToBox` in `core/util/clamp_offset.dart` pins to the lower bound instead:
+a tile pressed against the edge of a window too small for it is the right
+answer, because there is nowhere else for it to be.
+
+- ⚠️ **The lesson lives in one file** rather than twice, because it is one
+  mistake made in two places and the next draggable thing will make it again.
+- The margin now counts on the bottom edge too. It was subtracted from the
+  top and not the bottom, so a tile dragged to the foot sat flush against
+  whatever the inset was reserving.
+- ⚠️ The minimised call no longer renders **inside** PiP. The window already
+  *is* the call; a second little call window drawn in it is a mirror facing a
+  mirror.
+
+**`CrashScreen` paid for itself here.** The previous version of this failure
+was a featureless grey rectangle that cost an evening of pixel forensics;
+this one announced itself by name.
+
+## 🔴 The day-photo widget was rounded twice (2026-09-06)
+
+Its corners came out visibly rounder than the heartbeat widget beside it,
+even though both sit on the same 34dp `widget_background`.
+
+⚠️ **Two different mechanisms were rounding it, and they do not agree.**
+`setViewOutlinePreferredRadius` clips the *view*, exactly. `roundCorners`
+bakes a radius into the *bitmap* — and the bitmap is smaller than the widget,
+capped to the source's own size and to `TARGET_PX`. The ImageView scales it
+up to fill, and **the baked radius scales with it**: 34dp cut into a
+540-wide bitmap shown in a 1080-wide widget arrives as 68dp. Twice as round
+as the card behind it.
+
+The bitmap mask now runs **only below API 31**, where the outline clip does
+not exist and it is the only thing there is. Above that the view rounds
+itself and the bitmap is left square underneath, where nothing can see it.
+
+⚠️ Worth keeping in mind generally: a radius baked into a bitmap is in the
+bitmap's own pixels, and survives every scale the view puts it through. A
+radius on a view is in the view's. Mixing them silently multiplies.
+
+## 🔴 Picture-in-picture floated the conversation, not the call (2026-09-06)
+
+Reported precisely: minimise the call inside the app, walk to the chat, press
+Home — and the floating window contained *the whole app*, scaled down.
+
+⚠️ **A PiP window renders whatever activity is showing.** Deciding what goes
+in it from inside `CallScreen` therefore only ever worked while `CallScreen`
+was the route on top — and **a minimised call is by definition one you have
+walked away from.** The branch was in exactly the place that cannot see the
+case it was written for.
+
+`CallPipGate` sits above the router, outside `UpdateGate`, and replaces the
+entire app with the call while the window is up. What is on the navigation
+stack underneath stops mattering.
+
+- ⚠️ Outermost of the two gates: in a window a few hundred points wide a call
+  is the only thing worth showing, updater included.
+- Falls through to the app when there is no live call. Android can put an
+  activity in PiP for reasons of its own, and a floating window of nothing is
+  worse than the app itself.
+- `CallPipView` reads the partner profile itself now, rather than being handed
+  one by the route that no longer builds it.
+
+⚠️ The in-app card is a different thing from the floating window and always
+was: the card lives in `AppShell`, so it follows you across every tab and
+sub-route, and the window is what the *launcher* gets. Same call, two homes.
+
+## Deleting, and replies that finally show what they answer (2026-09-06)
+
+**Migration 0030 — applied and verified** (`prosecdef` true, `authenticated`
+only).
+
+### 🔴 `reply_to` has existed since 0023 and nothing ever displayed it
+
+The widget's tulip, the story viewer's reactions and every typed reply all
+recorded what they were answering. The thread then drew them as loose
+messages — so a 🌷 arriving three hours after the photo it was about read as
+an unexplained flower, **which is the exact thing the column was added to
+prevent**. The data was right for weeks; the screen never said so.
+
+`MessageQuote` renders it, above the reply, in the bubble and again in the
+composer strip while one is being written.
+
+- ⚠️ Resolved from the **thread already in memory**, not fetched. The quote
+  only ever appears beside the reply, so the thread is loaded — one request
+  per quoted bubble would be a request per row on a busy day.
+- ⚠️ Null is two different things that read the same: scrolled out of the
+  loaded window, or deleted since. Both say "message unavailable", which is
+  true of each.
+- The reply strip carries its own ✕. A reply you cannot cancel is a mode you
+  are stuck in, and the only other way out would be sending something.
+- ⚠️ On a failed send the reply target is **restored** along with the text,
+  or the retry would send a bare message where a reply was meant.
+
+### Deleting
+
+`delete_message` — sender only, definer function, hard delete.
+
+⚠️ **A hard delete, not a tombstone.** "This message was deleted" is right in
+a group, where the gap would confuse people reading around it. Here there are
+two of you and they were present for it; a permanent grey stub saying
+something used to be here is a worse artefact than the gap.
+
+- ⚠️ **Replies survive it.** `reply_to` is `on delete set null` and never
+  cascade (0023) — taking your photo back must not take their words with it.
+  The quote degrades rather than the reply vanishing.
+- The storage object goes too, best effort. The row is the record; the file
+  is bytes, and orphaned bytes in a private bucket cost money and tell no
+  story. A failed cleanup is not reported — the delete already happened.
+- ⚠️ Deleting a day is **not** retiring one. Retiring (the seven-day limit)
+  takes a photo off the widget and keeps the message; deleting takes the
+  message back. The viewer's dialog says so.
+- Long-press for the menu rather than an arrow on every bubble: a control on
+  every row of a screen made of somebody's words is the app in the way, and
+  the gesture is one every messaging app has already taught.
+- ⚠️ Deleting drops the message from `_pending` too. One sent this session
+  and deleted before the stream echoed it would otherwise stay on screen —
+  the row is gone, so no echo is coming to remove it.
+
+## The reunion countdown, and the cycle calendar out (2026-09-06)
+
+Copied from a card the user supplied, artwork included.
+
+⚠️ **The illustration is cut out of that reference image** by
+`tool/make_reunion.py`, with an **alpha ramp on its left edge**. The artwork
+sits on the card's own pink with no hard boundary, so a plain crop would show
+a seam wherever the card's gradient and the one baked into the JPEG disagreed
+— which is at every width except the one it was drawn at. Fading it instead
+means the card owns the gradient and the artwork only owns the couple.
+
+⚠️ The crop starts **below the date line and inside the rounded corners**. A
+crop from the card's top edge brings "Tokyo · May 12, 2025" and a corner arc
+with it, and the app draws both of those itself — the reference's own text
+would have sat under the real one.
+
+- ⚠️ **The numbers are held to the left 58%.** Text laid out at its natural
+  width walked straight under the couple; on a narrow phone the seconds ended
+  up on his suitcase. A *fraction*, not a fixed width, because the
+  illustration is anchored to the right edge so its encroachment scales.
+- Both number rows `scaleDown` rather than wrap or clip: a reunion a year out
+  is three digits, and a seconds counter that dropped to a second line would
+  move the whole card once a second.
+- The illustration is `fitHeight` and right-aligned rather than stretched.
+  Scaling it to the card would shrink the couple on a small phone, which is
+  where the card has least room to say anything at all.
+- ⚠️ `now` is passed in rather than read from the clock, so every countdown on
+  the screen ticks off the same second.
+
+### 🔴 The cycle calendar is deleted, not commented out
+
+~450 lines: card, calendar, phase banner, stats, support copy, and the
+constants they derived from. Left dormant it is dead code the analyzer flags
+forever, which either sits as warnings or gets buried under `ignore` comments
+that hide real ones later.
+
+⚠️ **Git has it exactly as it was** — `git show <this commit>^:lib/features/
+dates/presentation/screens/events_screen.dart`. Restoring it is a paste, not
+a rebuild, and it still derives everything from one anchor date.
+
+## Firebase, wired up (2026-09-06)
+
+The schema, the sender and the parsing already existed — migration 0028 (now
+**0031**), `supabase/functions/push/index.ts`, `PushMessage`, from a session
+running in parallel. What was missing was everything between them and the
+phone.
+
+- **`firebase_core` + `firebase_messaging`**, and the
+  `com.google.gms.google-services` Gradle plugin. ⚠️ With the plugin applied
+  and `google-services.json` absent the Android build **fails outright**,
+  which would take the OTA publisher with it — the file had to land first,
+  and it has. Build verified before anything else was written.
+- `PushService` — token on sign-in, refresh, and the three arrival states.
+- ⚠️ **Registration is on sign-in, not launch.** A token written before there
+  is a session has nobody to attach to; `register` correctly does nothing,
+  and the phone would then stay silent until a reinstall rotated the token.
+- ⚠️ **`forget` runs *before* `signOut`.** Deleting the row needs the session
+  that owns it — `device_tokens` is RLS'd to `auth.uid()` — so dropping it
+  afterwards leaves the token behind, still delivering one person's messages
+  to a phone somebody else may sign into next.
+- ⚠️ **Only calls interrupt in the foreground.** Everything else is already
+  on screen; the realtime stream put it in the thread the user is looking at.
+- ⚠️ `PartnerAlerts.pushed` uses the **existing** message channel and skips
+  the watermark. A second channel would show in Android's settings as a
+  separate switch for the same thing, and the watermark would suppress the
+  push outright, because realtime has usually moved the mark past it already.
+- Taps go through `AppNotifications.pendingRoute`, the mechanism every other
+  notification already uses — it survives a tap that opens the app from dead,
+  which is exactly when there is no router to navigate yet.
+
+### Housekeeping
+
+- 🔴 **Two migrations were both numbered 0028**, from two sessions running at
+  once. Renumbered to 0031; both were applied and neither conflicts, but a
+  duplicate number makes "what ran, in what order" a guess.
+- `google-services.json` is now **gitignored**. Not a secret in the
+  cryptographic sense — it ships inside every APK — but this repo is public,
+  and publishing a project's sender id invites other builds to point at it.
+  ⚠️ **A fresh clone cannot build without downloading its own.**
+
+### 🔴 Still not sending
+
+The trigger is live and deliberately inert: `notify_push` reads `push_url`
+and `push_secret` from Vault and returns early when they are missing, so an
+insert never fails because push is half configured. Both are absent, and
+`device_tokens` has **0 rows**.
+
+What remains is yours, because it involves minting secrets:
+
+1. `select vault.create_secret('https://<ref>.supabase.co/functions/v1/push', 'push_url');`
+2. `select vault.create_secret('<long random string>', 'push_secret');`
+3. The same string as `PUSH_SECRET` in the function's env.
+4. Deploy `supabase/functions/push`, and give it the Firebase service-account
+   credentials it signs with.

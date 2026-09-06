@@ -1,14 +1,22 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/providers/supabase_provider.dart';
 import 'core/theme/app_colors.dart';
+import 'features/calls/data/call_pip.dart';
+import 'core/util/clamp_offset.dart';
 import 'core/theme/design_tokens.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/welcome_screen.dart';
 import 'features/activities/presentation/screens/activities_screen.dart';
 import 'features/activity/presentation/screens/activity_feed_screen.dart';
 import 'features/booth/presentation/screens/booth_screen.dart';
+import 'features/calls/data/call_repository.dart';
+import 'features/calls/domain/call.dart';
+import 'features/calls/domain/call_notifier.dart';
+import 'features/calls/presentation/screens/call_screen.dart';
+import 'features/calls/presentation/widgets/call_video.dart';
 import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
 import 'features/chapters/presentation/screens/chapters_screen.dart';
 import 'features/dates/presentation/screens/events_screen.dart';
@@ -22,6 +30,7 @@ import 'features/pairing/presentation/screens/pairing_screen.dart';
 import 'features/reminders/presentation/screens/alarm_screen.dart';
 import 'features/reminders/presentation/screens/reminders_screen.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
+import 'features/tulip/data/flower_repository.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
@@ -92,6 +101,16 @@ class Routes {
   /// the bottom nav under it would offer a third.
   static const alarm = '/alarm/:id';
   static String alarmFor(String reminderId) => '/alarm/$reminderId';
+
+  /// A call in progress. **Top-level, outside the app shell**, for the same
+  /// reason as the alarm: a call is not a tab you can wander away from, and
+  /// drawing the bottom nav under it would offer four ways out of a screen
+  /// that has exactly one — End.
+  ///
+  /// Carries no id. The call lives in `callNotifierProvider`, so the route
+  /// is a door onto whatever call this phone is in; a path parameter would
+  /// let a stale deep link open a screen for a call that ended yesterday.
+  static const call = '/call';
 }
 
 /// Whether an async gate input is safe to act on.
@@ -246,6 +265,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             AlarmScreen(reminderId: state.pathParameters['id'] ?? ''),
       ),
+      GoRoute(
+        path: Routes.call,
+        builder: (_, __) => const CallScreen(),
+      ),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
@@ -255,8 +278,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: Routes.activityFeed,
               builder: (_, __) => const ActivityFeedScreen()),
           GoRoute(
-              path: Routes.flowers,
-              builder: (_, __) => const MessagesScreen()),
+              path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
           GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
           GoRoute(
               path: Routes.events, builder: (_, __) => const EventsScreen()),
@@ -283,8 +305,8 @@ final routerProvider = Provider<GoRouter>((ref) {
               final now = DateTime.now();
               final year =
                   int.tryParse(state.pathParameters['year'] ?? '') ?? now.year;
-              final month =
-                  int.tryParse(state.pathParameters['month'] ?? '') ?? now.month;
+              final month = int.tryParse(state.pathParameters['month'] ?? '') ??
+                  now.month;
               return ChapterDetailScreen(
                 year: year,
                 month: month.clamp(1, 12),
@@ -340,10 +362,179 @@ class SplashScreen extends ConsumerWidget {
 }
 
 // ── Shell ──────────────────────────────────────
-class AppShell extends StatelessWidget {
+/// Everything inside the app, plus the one thing that can interrupt it.
+///
+/// The shell watches for a call your partner has started and puts the
+/// ringing screen on top of wherever you are. It lives here rather than in
+/// the chat because a call does not only arrive while you are looking at the
+/// conversation — that is the whole reason it is worth interrupting for.
+///
+/// ⚠️ **This is not a ringtone, and it only reaches an app that is open.**
+/// Local notifications cannot wake a backgrounded process (PROGRESS.md §
+/// Notifications), so a swiped-away app hears nothing until it is next
+/// opened — at which point the Join bubble in the thread is what delivers
+/// the call. Push is what would close that gap; until then this is the
+/// in-app half of it.
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.child});
   final Widget child;
+
   @override
-  Widget build(BuildContext ctx) => Scaffold(body: child);
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
+class _AppShellState extends ConsumerState<AppShell> {
+  /// The call we have already shown a screen for. Without it, every rebuild
+  /// while the call is live would push another ringing screen onto the
+  /// stack — the notifier's own guard stops a second *session*, but not a
+  /// second route.
+  String? _ringingFor;
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen<FlowerMessage?>(incomingCallProvider, (previous, next) {
+      if (next == null) {
+        _ringingFor = null;
+        return;
+      }
+      if (_ringingFor == next.id) return;
+      _ringingFor = next.id;
+
+      ref.read(callNotifierProvider.notifier).ring(next);
+      // Guarded because the stream can deliver while the app is settling a
+      // route change of its own.
+      if (mounted) context.push(Routes.call);
+    });
+
+    // ⚠️ In the shell, not above the router. The call screen is a top-level
+    // route *outside* this shell, so a bar here is on every tab and never on
+    // the call itself — which is the whole condition, expressed by where it
+    // lives rather than by asking what route is on top.
+    final call = ref.watch(callNotifierProvider);
+    final live = call != null && !call.status.isTerminal;
+
+    return Scaffold(
+      body: Stack(
+        children: [
+          widget.child,
+          // ⚠️ Not inside the floating window. In picture-in-picture the
+          // window *is* the call, and a second little call window drawn
+          // inside it is a mirror facing a mirror.
+          if (live && !ref.watch(pipModeProvider)) _CallMiniBar(session: call),
+        ],
+      ),
+    );
+  }
+}
+
+/// The call, still playing, while you are somewhere else in the app.
+///
+/// 🔴 **It shows the call — it does not describe it.** The first version was
+/// a pill reading "On a call · 0:42", which is a notification about something
+/// that is happening rather than the thing itself. Pressing back during a
+/// video call and getting a sentence about it is not minimising the call, it
+/// is closing it and leaving a receipt.
+///
+/// The same window the launcher gets from picture-in-picture, drawn inside
+/// the app: their face, still moving, in the corner. Tap to go back to it.
+class _CallMiniBar extends ConsumerStatefulWidget {
+  const _CallMiniBar({required this.session});
+
+  final CallSession session;
+
+  @override
+  ConsumerState<_CallMiniBar> createState() => _CallMiniBarState();
+}
+
+class _CallMiniBarState extends ConsumerState<_CallMiniBar> {
+  static const _size = Size(116, 164);
+  static const _margin = 12.0;
+
+  /// ⚠️ Bottom **right**, and low enough to clear the tab bar. The left is
+  /// where the app's own back affordances live, and a window sitting over
+  /// the nav would cover the tab you were trying to reach.
+  Offset? _position;
+
+  Offset _clamp(Offset value, Size bounds) => clampToBox(
+        value: value,
+        box: bounds,
+        tile: _size,
+        margin: _margin,
+        // Clear of the tab bar.
+        bottomInset: 96,
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final bounds = MediaQuery.sizeOf(context);
+    final position = _clamp(
+      _position ??
+          Offset(bounds.width - _size.width - _margin,
+              bounds.height - _size.height - 96),
+      bounds,
+    );
+
+    return Positioned(
+      left: position.dx,
+      top: position.dy,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => context.push(Routes.call),
+        // Movable, for the same reason the self-view is: a window parked
+        // over the thing you are reading is a window in the way.
+        onPanUpdate: (details) => setState(() {
+          _position = _clamp((_position ?? position) + details.delta, bounds);
+        }),
+        child: Container(
+          width: _size.width,
+          height: _size.height,
+          decoration: BoxDecoration(
+            color: AppColors.darkCanvas,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.onDark.withValues(alpha: .14)),
+            boxShadow: AppElevation.glow,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (session.isVideo)
+                  RemoteVideo(session: session)
+                else
+                  const DecoratedBox(
+                    decoration: BoxDecoration(gradient: AppGradients.hero),
+                    child: Center(
+                      child: Icon(CupertinoIcons.phone_fill,
+                          color: AppColors.onDark, size: 28),
+                    ),
+                  ),
+                // The clock, on a scrim so it survives a bright frame.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    color: AppColors.darkCanvas.withValues(alpha: .55),
+                    alignment: Alignment.center,
+                    child: Text(
+                      session.elapsed == null
+                          ? 'Connecting…'
+                          : formatCallDuration(session.elapsed!),
+                      style: AppText.caption(AppColors.onDark).copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

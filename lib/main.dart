@@ -8,6 +8,9 @@ import 'package:timezone/data/latest.dart' as tzdata;
 import 'app.dart';
 import 'core/dev/dev_login.dart';
 import 'core/services/app_notifications.dart';
+import 'core/widgets/crash_screen.dart';
+import 'features/calls/data/call_alerts.dart';
+import 'features/push/data/push_service.dart';
 import 'core/services/partner_alerts.dart';
 import 'core/services/pulse_alerts.dart';
 import 'features/heartbeat/data/heartbeat_nudge.dart';
@@ -66,12 +69,28 @@ Future<void> main() async {
   // is also what lets either be retuned from Settings without the other.
   await PartnerAlerts.init();
 
+  // ⚠️ Push is what makes any of the alerts above reach a phone whose app
+  // is closed. Everything else here is raised by this device off its own
+  // realtime socket, which needs the process alive. Failure is not fatal:
+  // the app works exactly as it did, just silently when shut.
+  await PushService.init();
+
+  // The one channel allowed to take over the screen. Everything else here
+  // is deliberately quiet; a call expires if it is not seen while it is
+  // happening.
+  await CallAlerts.init();
+
   // And one more for a published build, at low importance. An update is
   // never urgent enough to interrupt anything.
   await UpdateAlerts.init();
 
   // Debug-only shortcut past the login screen. No-op in release builds.
   await maybeDevAutoLogin();
+
+  // ⚠️ Before runApp, so it is in place for a failure during the very first
+  // build. Turns Flutter's release grey box into something that names the
+  // exception — see CrashScreen for why that box cost an evening.
+  CrashScreen.install();
 
   runApp(
     // Device frames for checking layout across phone sizes — iPhone SE up to

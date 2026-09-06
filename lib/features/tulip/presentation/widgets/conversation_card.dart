@@ -9,6 +9,7 @@ import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../calls/domain/call.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
 
@@ -70,6 +71,11 @@ class _Row extends StatelessWidget {
     final String body;
     if (m.isPhoto) {
       body = '📷 Photo$caption';
+    } else if (m.isCall) {
+      // Before the branch existed a call fell through to the `else` and read
+      // as "🌷 A flower", which is the wrong message about the wrong event.
+      final kind = m.call == CallMode.video ? 'Video call' : 'Voice call';
+      body = m.isLiveCall ? '📞 $kind · now' : '📞 $kind';
     } else if (m.isText) {
       body = m.note ?? '';
     } else {

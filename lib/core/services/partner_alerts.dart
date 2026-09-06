@@ -142,6 +142,46 @@ class PartnerAlerts {
         importance: Importance.defaultImportance,
       );
 
+  /// One notification, straight through, for something that arrived by push.
+  ///
+  /// ⚠️ **Deliberately bypasses the watermark.** [messages] and [activity]
+  /// are fed the whole thread and use a stored mark to work out what is new;
+  /// a push already *is* the news — it was sent because a row was inserted —
+  /// and running it through the mark would suppress it, because the realtime
+  /// stream has usually moved the mark past it already.
+  ///
+  /// ⚠️ Same channel as [messages], not a new one. A second channel would
+  /// appear in Android's settings as a separate switch for the same thing,
+  /// and somebody muting "Messages" would still be woken by "Push".
+  static Future<void> pushed({
+    required String title,
+    required String body,
+    required String route,
+  }) async {
+    if (!supported) return;
+    await init();
+    try {
+      await _plugin.show(
+        id: _messageNotificationId,
+        title: title,
+        body: body,
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _messageChannelId,
+            'Messages',
+            importance: Importance.high,
+            priority: Priority.high,
+            category: AndroidNotificationCategory.message,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        payload: AppNotifications.payloadForRoute(route),
+      );
+    } catch (e) {
+      debugPrint('push notification failed: $e');
+    }
+  }
+
   static Future<void> _note({
     required String markKey,
     required String channelId,

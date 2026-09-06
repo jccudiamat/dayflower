@@ -37,9 +37,7 @@ class _FlowerCatalogPanelState extends State<FlowerCatalogPanel> {
   Widget build(BuildContext context) {
     final flowers = _category == null
         ? FlowerCatalog.pickable
-        : FlowerCatalog.pickable
-            .where((f) => f.category == _category)
-            .toList();
+        : FlowerCatalog.pickable.where((f) => f.category == _category).toList();
 
     return Container(
       height: widget.height,
@@ -254,7 +252,13 @@ class _FlowerSendSheetState extends State<_FlowerSendSheet> {
   /// Defaults on: the home-screen widget is the whole point of the app, so
   /// the common case shouldn't cost a tap. Untick for a flower that's just
   /// part of the conversation.
-  bool _toWidget = true;
+  /// ⚠️ Off by default now. A flower used to go straight to their home
+  /// screen unless you noticed the toggle and turned it off — so every
+  /// flower replaced the last one there, and sending two in a row quietly
+  /// threw the first away. Sending a flower is a message; putting one on
+  /// somebody's home screen for a day is a second, deliberate act, and the
+  /// toggle is still right there for it.
+  bool _toWidget = false;
 
   @override
   void dispose() {
@@ -336,9 +340,8 @@ class _FlowerSendSheetState extends State<_FlowerSendSheet> {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: _toWidget
-                        ? AppColors.blush
-                        : AppColors.surfaceSubtle,
+                    color:
+                        _toWidget ? AppColors.blush : AppColors.surfaceSubtle,
                     borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
                   child: Row(

@@ -1,7 +1,7 @@
 name: dayflower
 description: Connecting hearts, one kiss at a time.
 publish_to: none
-version: 1.0.0+27
+version: 1.0.0+50
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
@@ -31,6 +31,13 @@ dependencies:
 
   # ── Notifications & haptics ───────────────────
   flutter_local_notifications: ^21.0.0
+
+  # ── Push ─────────────────────────────────────
+  # ⚠️ These two need android/app/google-services.json to exist, or the
+  # Android build fails outright — see PROGRESS.md § Push. The file is not
+  # in git; a fresh clone has to add it before building.
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
   vibration: ^3.1.8
 
   # ── Home screen widget ────────────────────────
@@ -60,6 +67,18 @@ dependencies:
   # Kotlin build cache that fails with a misleading "cannot find symbol".
   share_plus: ^13.3.0
 
+  # ── Calls (see lib/features/calls/) ───────────────
+  # Carries voice and video. Chosen over Daily because its Flutter client
+  # runs on **web**, which keeps calls testable in `flutter run -d
+  # web-server` — Daily's Flutter SDK is mobile-only, so every call test
+  # would mean a full APK on two phones in two countries.
+  #
+  # ⚠️ Pulls flutter_webrtc, which is a heavy native plugin. See PROGRESS.md
+  # § Android builds: adding ANY plugin here can leave a stale Kotlin cache
+  # that fails with a misleading "cannot find symbol". If the next Android
+  # build breaks, clean before believing the error.
+  livekit_client: ^2.11.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -78,18 +97,31 @@ flutter:
     - assets/fonts/
     - .env
 
-# App launcher icon. Regenerate after changing logo.png with:
+# App launcher icon. Sources live in assets/icon/, which is deliberately NOT
+# in the `assets:` list above — they are build-time inputs and would
+# otherwise ship ~4 MB of build-time PNG inside every APK. The two files in
+# assets/icon/src/ are the brand masters as delivered; everything beside them
+# is derived. Rebuild with:
+#   python tool/make_icons.py
 #   dart run flutter_launcher_icons
-# logo.png is already a full-bleed squircle, so it doubles as the legacy
-# icon. For Android adaptive icons the launcher mask crops the foreground,
-# so it's inset and sat on the same peach as the artwork (AppColors.iconBg)
-# — the seam is invisible and the tulip stays inside the safe zone.
+#
+# ⚠️ The foreground already carries its own margin, so the inset here is 0.
+# The mark sits at 47% of the 108dp canvas — which is 71% of the inner 72dp
+# the launcher actually shows, matching how the supplied artwork composes
+# itself. Sizing against the full 108dp instead puts it at 96% of the visible
+# window and the mask shaves its edges. The canvas is not the icon.
+#
+# The background is the artwork's own peach gradient rather than a flat
+# colour, sampled from it, so the adaptive icon and the legacy one are the
+# same picture. The monochrome layer is the silhouette, for Android 13+
+# themed icons.
 flutter_launcher_icons:
-  image_path: "assets/images/logo.png"
+  image_path: "assets/icon/src/appicon.png"
   android: true
   min_sdk_android: 21
-  adaptive_icon_background: "#F9EBE4"
-  adaptive_icon_foreground: "assets/images/logo.png"
-  adaptive_icon_foreground_inset: 18
+  adaptive_icon_background: "assets/icon/background.png"
+  adaptive_icon_foreground: "assets/icon/foreground.png"
+  adaptive_icon_foreground_inset: 0
+  adaptive_icon_monochrome: "assets/icon/monochrome.png"
   ios: true
   remove_alpha_ios: true

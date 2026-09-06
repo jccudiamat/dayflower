@@ -18,17 +18,14 @@
 /// with one option pretending to be a picker.
 library;
 
-import 'dart:math' as math;
-
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/progress_ring.dart';
 import '../../data/finance_models.dart';
-
-
 
 const _symbols = kCurrencySymbols;
 
@@ -499,7 +496,7 @@ class _GoalCard extends StatelessWidget {
             padding: const EdgeInsets.all(AppSpace.sm),
             child: Row(
               children: [
-                _ProgressRing(fraction: fraction, reached: reached),
+                GoalRing(fraction: fraction, reached: reached),
                 const SizedBox(width: AppSpace.sm),
                 Expanded(
                   child: Column(
@@ -563,72 +560,3 @@ class _GoalCard extends StatelessWidget {
   }
 }
 
-/// The percentage ring from the reference.
-class _ProgressRing extends StatelessWidget {
-  const _ProgressRing({required this.fraction, required this.reached});
-
-  final double fraction;
-  final bool reached;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 62,
-      height: 62,
-      child: CustomPaint(
-        painter: _RingPainter(fraction: fraction, reached: reached),
-        child: Center(
-          child: Text(
-            reached ? '✓' : '${(fraction * 100).toStringAsFixed(1)}%',
-            style: AppText.label(Colors.white).copyWith(
-              fontSize: reached ? 20 : 12.5,
-              letterSpacing: 0,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RingPainter extends CustomPainter {
-  const _RingPainter({required this.fraction, required this.reached});
-
-  final double fraction;
-  final bool reached;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final centre = size.center(Offset.zero);
-    final radius = size.width / 2 - 3;
-
-    canvas.drawCircle(
-      centre,
-      radius,
-      Paint()
-        ..color = Colors.white.withValues(alpha: .14)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4,
-    );
-
-    if (fraction <= 0) return;
-
-    canvas.drawArc(
-      Rect.fromCircle(center: centre, radius: radius),
-      -math.pi / 2, // from twelve o'clock, the way a dial is read
-      2 * math.pi * fraction,
-      false,
-      Paint()
-        ..color = reached ? AppColors.success : AppColors.brandLight
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 4
-        // Rounded, so a 2% ring is still a visible mark rather than a
-        // hairline nobody can see.
-        ..strokeCap = StrokeCap.round,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RingPainter old) =>
-      old.fraction != fraction || old.reached != reached;
-}

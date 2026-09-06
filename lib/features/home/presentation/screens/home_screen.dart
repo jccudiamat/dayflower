@@ -820,9 +820,18 @@ class _DayArchState extends ConsumerState<_DayArch>
   }
 
   void _open(FlowerMessage message, String who) {
+    // ⚠️ My own days open as the **pager**, theirs as the single photo.
+    // There is only ever one of theirs live at a time; mine can be seven,
+    // and opening the newest with no way to reach the other six would hide
+    // them behind a card that looks like one photo.
+    final mine = ref.read(myDayPhotosProvider);
+    final index = mine.indexWhere((m) => m.id == message.id);
+
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => DayPhotoViewer(message: message, who: who),
+        builder: (_) => index >= 0
+            ? MyDaysViewer(initialIndex: index)
+            : DayPhotoViewer(message: message, who: who),
       ),
     );
   }

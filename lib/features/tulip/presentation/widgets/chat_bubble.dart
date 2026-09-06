@@ -6,6 +6,9 @@ import 'package:intl/intl.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/flower_repository.dart';
+import 'media_viewer.dart';
+import 'message_quote.dart';
+import 'call_bubble.dart';
 
 /// One message in the thread — a flower or a line of text.
 ///
@@ -17,7 +20,15 @@ class ChatBubble extends StatelessWidget {
     super.key,
     required this.message,
     required this.isMine,
+    this.onReply,
+    this.onDelete,
   });
+
+  /// Null where a thread has no composer to reply into.
+  final VoidCallback? onReply;
+
+  /// Null on their messages. See _showActions.
+  final VoidCallback? onDelete;
 
   final FlowerMessage message;
   final bool isMine;
@@ -26,6 +37,13 @@ class ChatBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A call is neither a flower nor words, and it doesn't take the mine/
+    // theirs bubble treatment: a live one is an invitation with its own
+    // card, a finished one is a centred line of history. See CallBubble.
+    if (message.isCall) {
+      return CallBubble(message: message, isMine: isMine);
+    }
+
     const radius = Radius.circular(AppRadius.lg);
     final shape = BorderRadius.only(
       topLeft: radius,
@@ -35,27 +53,106 @@ class ChatBubble extends StatelessWidget {
       bottomRight: isMine ? const Radius.circular(4) : radius,
     );
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.76,
-        ),
-        decoration: BoxDecoration(
-          color: isMine ? AppColors.blush : AppColors.surface,
-          borderRadius: shape,
-          border: Border.all(
-            color: isMine ? AppColors.blushMid : AppColors.border,
+    // ⚠️ A flower gets **no bubble**. The Polaroid is already a card with
+    // its own frame, border and shadow, and putting it inside the speech
+    // bubble drew a card inside a card — two borders, two backgrounds, and
+    // a tinted margin around a white photograph.
+    if (message.flower != null) {
+      return _pressable(
+          context,
+          Align(
+            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width * 0.66,
+              ),
+              child: _buildFlower(context),
+            ),
+          ));
+    }
+
+    return _pressable(
+        context,
+        Align(
+          alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.76,
+            ),
+            decoration: BoxDecoration(
+              color: isMine ? AppColors.blush : AppColors.surface,
+              borderRadius: shape,
+              border: Border.all(
+                color: isMine ? AppColors.blushMid : AppColors.border,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: shape,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // What this is answering, above what it says.
+                  if (message.replyTo != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                      child:
+                          MessageQuote(replyTo: message.replyTo, onDark: false),
+                    ),
+                  message.isPhoto ? _buildPhoto(context) : _buildText(),
+                ],
+              ),
+            ),
           ),
-        ),
-        child: ClipRRect(
-          borderRadius: shape,
-          child: message.isPhoto
-              ? _buildPhoto(context)
-              : message.isText
-                  ? _buildText()
-                  : _buildFlower(),
+        ));
+  }
+
+  /// Long-press for the two things you can do to a message.
+  ///
+  /// ⚠️ Long-press, not a visible affordance. A reply arrow on every bubble
+  /// is a control on a screen whose whole content is somebody's words, and
+  /// the gesture is the one every messaging app has already taught.
+  Widget _pressable(BuildContext context, Widget child) {
+    if (onReply == null && onDelete == null) return child;
+    return GestureDetector(
+      onLongPress: () => _showActions(context),
+      child: child,
+    );
+  }
+
+  void _showActions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onReply != null)
+              ListTile(
+                leading: const Icon(CupertinoIcons.reply, size: 20),
+                title: Text('Reply', style: AppText.body(AppColors.ink)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  onReply!();
+                },
+              ),
+            // ⚠️ Yours only. Deleting a message is taking back something you
+            // said; nobody gets to take back what somebody else said.
+            if (onDelete != null)
+              ListTile(
+                leading: const Icon(CupertinoIcons.delete,
+                    size: 20, color: AppColors.danger),
+                title: Text('Delete', style: AppText.body(AppColors.danger)),
+                subtitle: Text('Removes it for both of you',
+                    style: AppText.caption()),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  onDelete!();
+                },
+              ),
+          ],
         ),
       ),
     );
@@ -89,36 +186,48 @@ class ChatBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 320),
-            child: FutureBuilder<String>(
-              future: ref
-                  .read(flowerRepositoryProvider)
-                  .signedPhotoUrl(message.imagePath!),
-              builder: (context, snap) {
-                if (!snap.hasData) {
-                  return const SizedBox(
-                    height: 180,
-                    child: Center(
-                      child: SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+          GestureDetector(
+            // Tapping a picture opens it. Obvious enough that its absence
+            // read as the thumbnail being all there was.
+            onTap: () => showMediaViewer(
+              context,
+              title: isMine ? 'Your day' : 'Their day',
+              subtitle: message.note,
+              imagePath: message.imagePath,
+              fileName: 'dayflower-day-${message.id}.jpg',
+            ),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 320),
+              child: FutureBuilder<String>(
+                future: ref
+                    .read(flowerRepositoryProvider)
+                    .signedPhotoUrl(message.imagePath!),
+                builder: (context, snap) {
+                  if (!snap.hasData) {
+                    return const SizedBox(
+                      height: 180,
+                      child: Center(
+                        child: SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
+                    );
+                  }
+                  return Image.network(
+                    snap.data!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Container(
+                      height: 160,
+                      color: AppColors.surfaceSubtle,
+                      alignment: Alignment.center,
+                      child:
+                          Text("Photo unavailable", style: AppText.caption()),
                     ),
                   );
-                }
-                return Image.network(
-                  snap.data!,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 160,
-                    color: AppColors.surfaceSubtle,
-                    alignment: Alignment.center,
-                    child: Text("Photo unavailable", style: AppText.caption()),
-                  ),
-                );
-              },
+                },
+              ),
             ),
           ),
           Padding(
@@ -128,7 +237,9 @@ class ChatBubble extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  expired ? 'Your day · expired' : 'Your day · on the home screen',
+                  expired
+                      ? 'Your day · expired'
+                      : 'Your day · on the home screen',
                   style: AppText.label(
                       expired ? AppColors.muted : AppColors.secondary),
                 ),
@@ -148,73 +259,125 @@ class ChatBubble extends StatelessWidget {
   }
 
   // ── Flower message ────────────────────────────────
-  Widget _buildFlower() {
+  /// A flower arrives as a Polaroid.
+  ///
+  /// ⚠️ The frame is the *message*, not decoration. A flower here is a thing
+  /// somebody chose and sent, and a square picture with its name written
+  /// under it is what that has looked like since long before phones. Even
+  /// margin at the top and sides, a deep one at the foot, and the name
+  /// sitting in that foot the way it would be written on the card.
+  ///
+  /// ⚠️ White whoever sent it. The bubble around it is pink for yours and
+  /// grey for theirs; a Polaroid that changed colour with the sender would
+  /// stop reading as a photograph.
+  Widget _buildFlower(BuildContext context) {
     final flower = message.flower!;
+    final note = message.note;
+    final hasNote = note != null && note.isNotEmpty;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // The artwork is the message, so it runs edge to edge of the bubble
-        // rather than sitting as a thumbnail beside text.
-        AspectRatio(
-          aspectRatio: 1,
-          child: Image.asset(
-            flower.asset,
-            fit: BoxFit.cover,
-            semanticLabel: flower.name,
-            errorBuilder: (_, __, ___) => Container(
-              color: flower.color.withValues(alpha: .14),
-              alignment: Alignment.center,
-              child: Text(
-                flower.emoji,
-                style: const TextStyle(fontSize: 56),
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x14000000),
+            blurRadius: 10,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(9, 9, 9, 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: () => showMediaViewer(
+              context,
+              title: flower.name,
+              subtitle: flower.meaning,
+              asset: flower.asset,
+              fileName: 'dayflower-${flower.id}.jpg',
+            ),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: Image.asset(
+                  flower.asset,
+                  fit: BoxFit.cover,
+                  semanticLabel: flower.name,
+                  errorBuilder: (_, __, ___) => Container(
+                    color: flower.color.withValues(alpha: .14),
+                    alignment: Alignment.center,
+                    child: Text(
+                      flower.emoji,
+                      style: const TextStyle(fontSize: 56),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                flower.name,
-                style: AppText.subtitle().copyWith(fontSize: 15),
-              ),
-              Text(flower.meaning, style: AppText.caption()),
-              if (message.note != null && message.note!.isNotEmpty) ...[
-                const SizedBox(height: 6),
+
+          // The caption band, roomy even with nothing written in it — a
+          // Polaroid with a thin foot is just a photo.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(2, 10, 2, 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Lora italic — the app's one handwriting-adjacent face,
+                // kept for what a person wrote or chose.
                 Text(
-                  '“${message.note}”',
-                  style: AppText.note().copyWith(fontSize: 14.5),
+                  flower.name,
+                  style: AppText.note(AppColors.ink)
+                      .copyWith(fontSize: 16, height: 1.2),
                 ),
+                // ⚠️ The flower's dictionary meaning used to sit here.
+                // It went because the sender can write their own line and
+                // usually does — and a stock definition printed under
+                // somebody's message is the app talking over them.
+                if (hasNote) ...[
+                  const SizedBox(height: 4),
+                  // Plain text, not the Lora italic the app uses for
+                  // quotes. This is a message somebody typed, and setting
+                  // it in the quoting face made it read as something the
+                  // app had decided to italicise on their behalf.
+                  Text(note, style: AppText.body(AppColors.ink)),
+                ],
+                if (message.toWidget) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        CupertinoIcons.device_phone_portrait,
+                        size: 13,
+                        color: AppColors.secondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          isMine
+                              ? 'On their home screen'
+                              : 'On your home screen',
+                          style: AppText.caption(AppColors.secondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 2),
+                _MetaRow(message: message, isMine: isMine, time: _time),
               ],
-              if (message.toWidget) ...[
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(
-                      CupertinoIcons.device_phone_portrait,
-                      size: 13,
-                      color: AppColors.secondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      isMine ? 'On their home screen' : 'On your home screen',
-                      style: AppText.caption(AppColors.secondary),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 2),
-              _MetaRow(message: message, isMine: isMine, time: _time),
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

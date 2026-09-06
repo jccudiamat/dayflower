@@ -56,6 +56,9 @@ website/.env.local
 # Node / Next.js (website/)
 node_modules/
 website/.next/
+# Running `next build` from the repo root instead of website/ drops a
+# stray .next/ here (trace files only). Ignore it rather than committing it.
+/.next/
 website/tsconfig.tsbuildinfo
 
 # Raw artwork originals — processed into assets/images/flowers/
@@ -76,3 +79,11 @@ ios/Flutter/flutter_export_environment.sh
 # has held live bearer tokens. Machine-local by convention; never commit it.
 .claude/settings.local.json
 .claude/launch.json
+
+# Firebase client config. Not a secret in the cryptographic sense — it ships
+# inside every APK and is readable by anyone who unzips one — but this repo is
+# public, and publishing a project's sender id and API key invites other
+# people's builds to point at your Firebase project. The build FAILS without
+# it, so a fresh clone must download its own from the Firebase console.
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist

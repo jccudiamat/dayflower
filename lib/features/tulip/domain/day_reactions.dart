@@ -30,8 +30,7 @@ class DayReaction {
 
   static const heart = DayReaction(id: 'heart', emoji: '❤️', label: 'Love');
   static const like = DayReaction(id: 'like', emoji: '👍', label: 'Like');
-  static const flower =
-      DayReaction(id: 'flower', emoji: '🌷', label: 'Flower');
+  static const flower = DayReaction(id: 'flower', emoji: '🌷', label: 'Flower');
   static const sad = DayReaction(id: 'sad', emoji: '😢', label: 'Sad');
   static const haha = DayReaction(id: 'haha', emoji: '😂', label: 'Haha');
 

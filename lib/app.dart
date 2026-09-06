@@ -22,9 +22,17 @@ import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
 import 'features/tulip/data/flower_repository.dart';
+import 'features/calls/data/call_alerts.dart';
+import 'features/calls/domain/call_notifier.dart';
+import 'features/calls/data/call_pip.dart';
+import 'features/push/data/push_repository.dart';
+import 'features/push/data/push_service.dart';
+import 'features/calls/presentation/screens/call_screen.dart';
+import 'features/calls/data/call_repository.dart';
+import 'features/calls/domain/call.dart';
 import 'features/updates/data/update_alerts.dart';
 import 'features/updates/data/update_repository.dart';
-import 'features/updates/presentation/widgets/update_sheet.dart';
+import 'features/updates/presentation/widgets/update_screen.dart';
 import 'features/widget/widget_sync.dart';
 
 class DayflowerApp extends ConsumerStatefulWidget {
@@ -53,12 +61,19 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   /// the "exactly once per launch" obvious to whoever reads it next.
   bool _askedForNotifications = false;
 
+  /// ⚠️ Built once, not per build. `Router` add/removes its callback every
+  /// time this changes identity, and a new one each frame is churn with a
+  /// window where the back button belongs to nobody.
+  late final _backDispatcher = _UpdateBackButtonDispatcher(ref);
+
   @override
   void initState() {
     super.initState();
     // Resume is when a new build is most likely to be waiting: the phone was
     // put down while the APK was being published on the desktop.
     WidgetsBinding.instance.addObserver(this);
+    // Native tells us when the floating window opens and closes.
+    wirePipMode(ref);
     _wireWidgetLaunches();
     _wireAlarmTaps();
     _wireNotificationRoutes();
@@ -241,9 +256,53 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       (_, mine) => ReminderScheduler.sync(mine),
     );
 
+    // ⚠️ Registered on sign-in, not at launch. A token written before there
+    // is a session has nobody to attach to — PushRepository.register
+    // correctly does nothing — and the phone would then stay silent until
+    // the next reinstall rotated the token.
+    ref.listen<String?>(currentUserIdProvider, (previous, userId) {
+      if (userId != null && userId != previous) {
+        PushService.registerFor(ref.read(pushRepositoryProvider));
+      }
+    });
+
+    // ⚠️ Tells the Activity whether it may shrink into the floating window
+    // on Home/recents. `onUserLeaveHint` fires on every exit from the app,
+    // so without this leaving the home screen would float a call that is
+    // not happening. Only Dart knows one is live.
+    ref.listen<CallSession?>(callNotifierProvider, (_, session) {
+      CallPip.setCallActive(
+        session != null && !session.status.isTerminal,
+      );
+    });
+
+    // 🔴 An incoming call used to raise **nothing**. The ring lived entirely
+    // inside the app — the provider fires, the shell pushes the call screen
+    // — which with Dayflower in the background is a screen nobody is looking
+    // at. Calls went unanswered with the phone in a pocket and no sign they
+    // had rung.
+    //
+    // ⚠️ Still only reaches a phone whose app is alive; see CallAlerts.
+    ref.listen<FlowerMessage?>(incomingCallProvider, (previous, next) {
+      if (next == null) {
+        // Answered, declined, or gave up — all of them arrive here as the
+        // provider going null, and the notification is `ongoing`, so
+        // nothing else would ever take it off the lock screen.
+        CallAlerts.stop();
+        return;
+      }
+      CallAlerts.ring(
+        callId: next.id,
+        callerName: _partnerName,
+        isVideo: next.call == CallMode.video,
+        foreground: _foreground,
+      );
+    });
+
     // A newly published build interrupts wherever the user happens to be.
-    // The sheet hangs off the router's navigator, not this context: this
-    // widget sits *above* MaterialApp, so there is no Navigator beneath it.
+    // This listener no longer shows anything — it exists for the
+    // notification, which is the half that only makes sense at the moment
+    // the news arrives.
     ref.listen<UpdateStage>(
       updateControllerProvider.select((state) => state.stage),
       (previous, stage) {
@@ -260,13 +319,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
           UpdateAlerts.announce(release, foreground: _foreground);
         }
 
-        final navigatorContext =
-            router.routerDelegate.navigatorKey.currentContext;
-        if (navigatorContext == null) return;
-        showUpdateSheet(
-          navigatorContext,
-          mandatory: ref.read(updateControllerProvider).mandatory,
-        );
+        // 🔴 The sheet used to be raised here, on the router's navigator.
+        // It flashed for a frame at launch and vanished: a modal pushed
+        // that way is a *pageless* route bound to the page on top at the
+        // time — the splash — and the gate redirect that replaced splash
+        // with home took the sheet down with it. UpdateGate sits above the
+        // Navigator now and needs nothing raised; it appears because the
+        // state says so. See its class doc.
       },
     );
 
@@ -274,12 +333,41 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       title: 'Dayflower',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      routerConfig: router,
+      // 🔴 **Spelled out rather than `routerConfig: router`, and it has to
+      // be.** `MaterialApp.router` asserts that `routerConfig` is the *only*
+      // router argument — passing `backButtonDispatcher` beside it trips
+      // "If the routerConfig is provided, all the other router delegates
+      // must not be provided" and the whole app renders as Flutter's error
+      // box: red in debug, a **flat grey rectangle** in release, which is
+      // what it looked like on the phone.
+      //
+      // ⚠️ And the release build did not even fail loudly — assertions are
+      // compiled out — so the dispatcher was simply dropped and the back
+      // button never reached the updater at all. Silently wrong is the
+      // reason this is written out longhand.
+      //
+      // GoRouter cannot take the dispatcher either: it hardcodes its own
+      // `RootBackButtonDispatcher` in the constructor and the field is
+      // final.
+      routerDelegate: router.routerDelegate,
+      routeInformationParser: router.routeInformationParser,
+      routeInformationProvider: router.routeInformationProvider,
+      backButtonDispatcher: _backDispatcher,
       // Both are no-ops once DevicePreview is disabled (release), but without
       // them the app ignores the frame and keeps rendering at the real window
       // size — the picker would appear to do nothing.
       locale: DevicePreview.locale(context),
-      builder: DevicePreview.appBuilder,
+      // ⚠️ UpdateGate goes *inside* DevicePreview's frame, not around it, or
+      // the updater would paint over the device chrome in the preview
+      // instead of inside the phone.
+      // ⚠️ CallPipGate outermost. In the floating window it replaces
+      // everything — the app, the updater, all of it — because the window is
+      // a few hundred points wide and a call is the only thing worth putting
+      // in one.
+      builder: (context, child) => DevicePreview.appBuilder(
+        context,
+        CallPipGate(child: UpdateGate(child: child)),
+      ),
     );
   }
 
@@ -401,5 +489,34 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       partnerName: _partnerName,
       pulseSent: pulseSent,
     );
+  }
+}
+
+/// Lets the update layer answer the back button before the router does.
+///
+/// ⚠️ **The Router's dispatcher is the only hook that works here.** The
+/// updater covers the whole screen from *above* the Router — see the class
+/// doc on `UpdateGate` for why it has to — which leaves it with no route of
+/// its own. `PopScope` needs a route; `BackButtonListener` needs a `Router`
+/// ancestor and throws without one. Both are below this layer, not above it.
+///
+/// Without this, pressing back on a full-screen updater would quietly pop
+/// the screen hidden behind it, or leave the app on the last route.
+class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
+  _UpdateBackButtonDispatcher(this._ref);
+
+  final WidgetRef _ref;
+
+  @override
+  Future<bool> invokeCallback(Future<bool> defaultValue) async {
+    final state = _ref.read(updateControllerProvider);
+    if (updateIsShowing(state, _ref.read(updateDismissedProvider))) {
+      // Swallowed either way — the router must not act on a press aimed at
+      // a screen it cannot see. A required update simply has no way past it;
+      // mid-download there is no half of a download worth going back to.
+      if (!state.mandatory && !state.busy) dismissUpdate(_ref);
+      return true;
+    }
+    return super.invokeCallback(defaultValue);
   }
 }

@@ -8,12 +8,17 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../calls/data/call_repository.dart';
+import '../../../calls/domain/call.dart';
+import '../../../calls/domain/call_notifier.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../home/data/mood_prefs.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/message_quote.dart';
+import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
 
 /// The Flowers tab — the couple's conversation.
@@ -40,6 +45,14 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   bool _panelOpen = false;
   bool _sending = false;
   bool _marking = false;
+
+  /// The message being replied to, held while the reply is typed.
+  ///
+  /// ⚠️ The whole message rather than its id: the strip above the field has
+  /// to show *what* is being answered, and looking it back up out of the
+  /// thread to draw two lines of preview would be a lookup for something we
+  /// already had in hand when it was tapped.
+  FlowerMessage? _replyingTo;
 
   /// Messages this session has successfully written to the database but that
   /// the live stream has not echoed back yet.
@@ -115,6 +128,27 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     }
   }
 
+  void _startReply(FlowerMessage message) {
+    setState(() => _replyingTo = message);
+    _focus.requestFocus();
+  }
+
+  Future<void> _deleteMessage(FlowerMessage message) async {
+    // ⚠️ Dropped from the pending list too. A message sent this session and
+    // then deleted before the stream echoed it would otherwise stay on
+    // screen — the row is gone, so no echo is ever coming to remove it.
+    setState(() => _pending.removeWhere((m) => m.id == message.id));
+    try {
+      await ref.read(flowerRepositoryProvider).deleteMessage(message.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't delete that. Try again?")),
+        );
+      }
+    }
+  }
+
   Future<void> _sendText() async {
     final text = _composer.text.trim();
     if (text.isEmpty || _sending) return;
@@ -125,18 +159,28 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     // Cleared up front so the field empties on tap like every other chat;
     // restored below if the send actually fails.
+    // ⚠️ Both cleared up front, so the field empties and the reply strip
+    // closes on tap like every other chat. Restored below if the send
+    // actually fails — including what it was answering, or the retry would
+    // send a bare message where a reply was meant.
+    final replyTo = _replyingTo;
     _composer.clear();
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _replyingTo = null;
+    });
     try {
       final sent = await ref.read(flowerRepositoryProvider).sendText(
             pairId: pair.id,
             senderId: userId,
             text: text,
+            replyTo: replyTo?.id,
           );
       if (mounted) setState(() => _pending.add(sent));
     } catch (_) {
       if (mounted) {
         _composer.text = text;
+        setState(() => _replyingTo = replyTo);
         _showError("Couldn't send that. Try again?");
       }
     } finally {
@@ -226,8 +270,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         child: Column(
           children: [
             _ChatHeader(
-              onVoiceCall: () => _comingSoon('Voice calls'),
-              onVideoCall: () => _comingSoon('Video calls'),
+              onVoiceCall: () => _startCall(CallMode.voice),
+              onVideoCall: () => _startCall(CallMode.video),
             ),
             Expanded(child: _buildThread()),
             _buildComposer(),
@@ -273,7 +317,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             // list[i + 1] is the *older* neighbour, so a mismatch here means
             // this message opens a new day.
             final older = i + 1 < list.length ? list[i + 1] : null;
-            final startsDay = older == null || !_sameDay(older.sentAt, message.sentAt);
+            final startsDay =
+                older == null || !_sameDay(older.sentAt, message.sentAt);
 
             return Column(
               children: [
@@ -281,6 +326,13 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                 ChatBubble(
                   message: message,
                   isMine: message.senderId == userId,
+                  onReply: () => _startReply(message),
+                  // ⚠️ Yours only. Deleting is taking back something you
+                  // said, and nobody gets to take back what somebody else
+                  // said.
+                  onDelete: message.senderId == userId
+                      ? () => _deleteMessage(message)
+                      : null,
                 ),
               ],
             );
@@ -314,101 +366,157 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            // A Material rather than a decorated Container so the icons
-            // sitting inside it splash onto the pill itself — ink looks for
-            // the nearest Material, and on a plain Container that's the
-            // Scaffold underneath, where the ripple is hidden.
-            child: Material(
-              color: AppColors.surfaceSubtle,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              clipBehavior: Clip.antiAlias,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 44),
-                child: Row(
-                  // Icons hold the bottom line as the field grows to five
-                  // lines, instead of drifting to the vertical middle.
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Mirrors the trailing gap below — without it the leading
-                    // icon hugs the pill's left curve while the camera icon
-                    // has 4px of air on the right.
-                    const SizedBox(width: 4),
-                    // The catalog opener. Becomes a keyboard glyph while the
-                    // drawer is up, so one button always toggles back to the
-                    // other input.
-                    _ComposerIcon(
-                      icon: _panelOpen
-                          ? CupertinoIcons.keyboard
-                          : Icons.local_florist_rounded,
-                      color: _panelOpen ? AppColors.muted : AppColors.brand,
-                      tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
-                      onTap: _togglePanel,
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _composer,
-                        focusNode: _focus,
-                        minLines: 1,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
-                        textInputAction: TextInputAction.newline,
-                        keyboardType: TextInputType.multiline,
-                        style: AppText.body(AppColors.ink),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 4),
-                          hintText: 'Message',
-                          hintStyle: AppText.body(AppColors.muted),
+          // What is being answered, above the field it is answered in.
+          if (_replyingTo != null) _replyStrip(_replyingTo!),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                // A Material rather than a decorated Container so the icons
+                // sitting inside it splash onto the pill itself — ink looks for
+                // the nearest Material, and on a plain Container that's the
+                // Scaffold underneath, where the ripple is hidden.
+                child: Material(
+                  color: AppColors.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  clipBehavior: Clip.antiAlias,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Row(
+                      // Icons hold the bottom line as the field grows to five
+                      // lines, instead of drifting to the vertical middle.
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Mirrors the trailing gap below — without it the leading
+                        // icon hugs the pill's left curve while the camera icon
+                        // has 4px of air on the right.
+                        const SizedBox(width: 4),
+                        // The catalog opener. Becomes a keyboard glyph while the
+                        // drawer is up, so one button always toggles back to the
+                        // other input.
+                        _ComposerIcon(
+                          icon: _panelOpen
+                              ? CupertinoIcons.keyboard
+                              : Icons.local_florist_rounded,
+                          color: _panelOpen ? AppColors.muted : AppColors.brand,
+                          tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
+                          onTap: _togglePanel,
                         ),
-                        // Rebuilds the send button as the field fills.
-                        onChanged: (_) => setState(() {}),
-                      ),
+                        Expanded(
+                          child: TextField(
+                            controller: _composer,
+                            focusNode: _focus,
+                            minLines: 1,
+                            maxLines: 5,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.newline,
+                            keyboardType: TextInputType.multiline,
+                            style: AppText.body(AppColors.ink),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 12, horizontal: 4),
+                              hintText: 'Message',
+                              hintStyle: AppText.body(AppColors.muted),
+                            ),
+                            // Rebuilds the send button as the field fills.
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        // The paperclip is gone. It never did anything, and
+                        // the camera screen it would have duplicated already
+                        // has a gallery picker of its own — two doors to one
+                        // room, one of them locked.
+                        _ComposerIcon(
+                          icon: CupertinoIcons.camera,
+                          tooltip: 'Send a photo',
+                          onTap: _openCamera,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                     ),
-                    _ComposerIcon(
-                      icon: CupertinoIcons.paperclip,
-                      tooltip: 'Upload a photo',
-                      onTap: () => _comingSoon('Uploading photos'),
-                    ),
-                    _ComposerIcon(
-                      icon: CupertinoIcons.camera,
-                      tooltip: 'Take a photo',
-                      onTap: () => _comingSoon('Taking photos'),
-                    ),
-                    const SizedBox(width: 4),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          _SendButton(
-            enabled: canSend && _composer.text.trim().isNotEmpty,
-            loading: _sending,
-            onTap: _sendText,
+              const SizedBox(width: 6),
+              _SendButton(
+                enabled: canSend && _composer.text.trim().isNotEmpty,
+                loading: _sending,
+                onTap: _sendText,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  /// Photo messages need a Supabase Storage bucket and a message kind that
-  /// don't exist yet, so the two icons announce themselves rather than
-  /// opening a picker that could never deliver anything. Same pattern the
-  /// login screen uses for the reserved OAuth buttons.
-  void _comingSoon(String what) {
-    _focus.unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$what is coming soon.')),
+  /// The "replying to" strip.
+  ///
+  /// ⚠️ Carries its own way out. A reply you cannot cancel is a mode you are
+  /// stuck in, and the only other exit would be sending something.
+  Widget _replyStrip(FlowerMessage message) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(child: MessageQuote(replyTo: message.id, onDark: false)),
+          const SizedBox(width: 4),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _replyingTo = null),
+            child: const Padding(
+              padding: EdgeInsets.all(6),
+              child:
+                  Icon(CupertinoIcons.xmark, size: 15, color: AppColors.muted),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  /// Opens the camera, pointed at this conversation.
+  ///
+  /// ⚠️ The destination is set *before* navigating. The camera defaults to
+  /// the home-screen widget, which is right when you go there yourself and
+  /// wrong when you arrived from the thread — a photo taken from here should
+  /// land where you were, and finding out otherwise costs a send.
+  void _openCamera() {
+    _focus.unfocus();
+    ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.chat;
+    context.push(Routes.flowers);
+  }
+
+  /// Starts a call, or joins the one already running.
+  ///
+  /// Joining wins over starting whenever a live call is in the thread —
+  /// otherwise tapping the header during a call would open a second room
+  /// beside the one your partner is sitting in, which is the worst possible
+  /// outcome of a button labelled "call".
+  ///
+  /// Navigation happens before the call connects, deliberately: dialling,
+  /// connecting and failing are all states the call screen draws, and
+  /// holding the user on the thread until the media is up would make a
+  /// failed call look like a button that does nothing.
+  void _startCall(CallMode mode) {
+    _focus.unfocus();
+    final notifier = ref.read(callNotifierProvider.notifier);
+    final live = ref.read(liveCallProvider);
+
+    if (live != null) {
+      notifier.join(live);
+    } else {
+      notifier.place(mode);
+    }
+    context.push(Routes.call);
   }
 }
 
@@ -451,9 +559,14 @@ class _ComposerIcon extends StatelessWidget {
 class _ChatHeader extends ConsumerWidget {
   const _ChatHeader({required this.onVoiceCall, required this.onVideoCall});
 
-  /// Both reserved: there is no calling backend (no WebRTC, no Agora/Twilio
-  /// in pubspec), so these announce themselves rather than opening a call
-  /// that could never connect — same pattern as the composer's photo icons.
+  /// Start a call, or join the one already running — see `_startCall`.
+  ///
+  /// The media provider is still behind [CallTransport] and unconfigured, so
+  /// on today's build these reach the call screen and land on its "not
+  /// switched on yet" state. That is deliberate rather than a stub: the row
+  /// in the thread is written either way, so the partner gets a real
+  /// invitation even on a build (or a network) where the audio never comes
+  /// up. See the header of migration 0025.
   final VoidCallback onVoiceCall, onVideoCall;
 
   @override
@@ -464,6 +577,7 @@ class _ChatHeader extends ConsumerWidget {
         ref.watch(partnerProfileProvider).valueOrNull;
     final name = partner?.petName ?? partner?.displayName ?? '…';
     final mood = ref.watch(partnerMoodProvider);
+    final live = ref.watch(liveCallProvider);
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
@@ -478,15 +592,14 @@ class _ChatHeader extends ConsumerWidget {
           // used to drop you into a viewfinder. The chat is a top-level tab
           // in its own right, so its way out is the same as the camera's ×.
           IconButton(
-            onPressed: () => context.canPop()
-                ? context.pop()
-                : context.go(Routes.home),
+            onPressed: () =>
+                context.canPop() ? context.pop() : context.go(Routes.home),
             tooltip: 'Back',
             iconSize: 20,
             padding: const EdgeInsets.only(right: AppSpace.xs),
             constraints: const BoxConstraints(),
-            icon: const Icon(CupertinoIcons.chevron_back,
-                color: AppColors.muted),
+            icon:
+                const Icon(CupertinoIcons.chevron_back, color: AppColors.muted),
           ),
           UserAvatar(partner, size: 40),
           const SizedBox(width: AppSpace.xs),
@@ -512,14 +625,19 @@ class _ChatHeader extends ConsumerWidget {
               ],
             ),
           ),
+          // A live call re-labels both icons and tints them: during a call
+          // these are the way back into it, and offering "Voice call" while
+          // one is already running invites a second empty room.
           _HeaderAction(
             icon: CupertinoIcons.phone,
-            tooltip: 'Voice call',
+            tooltip: live == null ? 'Voice call' : 'Join the call',
+            color: live == null ? null : AppColors.brand,
             onTap: onVoiceCall,
           ),
           _HeaderAction(
             icon: CupertinoIcons.video_camera,
-            tooltip: 'Video call',
+            tooltip: live == null ? 'Video call' : 'Join the call',
+            color: live == null ? null : AppColors.brand,
             onTap: onVideoCall,
           ),
         ],
@@ -533,11 +651,17 @@ class _HeaderAction extends StatelessWidget {
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.color,
   });
 
   final IconData icon;
   final String tooltip;
   final VoidCallback onTap;
+
+  /// Purple unless told otherwise. Overridden to pink only while a call is
+  /// live, which is the one moment these icons mean something different
+  /// from what they usually mean.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -547,7 +671,7 @@ class _HeaderAction extends StatelessWidget {
       iconSize: 22,
       padding: const EdgeInsets.all(8),
       constraints: const BoxConstraints(),
-      icon: Icon(icon, color: AppColors.secondary),
+      icon: Icon(icon, color: color ?? AppColors.secondary),
     );
   }
 }
