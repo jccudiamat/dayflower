@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 import '../../../../app_router.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/util/clamp_offset.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -826,13 +827,15 @@ class _SelfViewState extends State<_SelfView> {
 
   /// Keeps the tile fully on screen — after a drag, after hiding (which
   /// changes its size), and after a rotation.
-  Offset _clamp(Offset value, Size bounds) {
-    final safeTop = MediaQuery.paddingOf(context).top + _margin;
-    return Offset(
-      value.dx.clamp(_margin, bounds.width - _currentSize.width - _margin),
-      value.dy.clamp(safeTop, bounds.height - _currentSize.height - 120),
-    );
-  }
+  Offset _clamp(Offset value, Size bounds) => clampToBox(
+        value: value,
+        box: bounds,
+        tile: _currentSize,
+        margin: _margin,
+        topInset: MediaQuery.paddingOf(context).top,
+        // Clear of the controls along the bottom.
+        bottomInset: 120,
+      );
 
   @override
   Widget build(BuildContext context) {

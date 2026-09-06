@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'core/providers/supabase_provider.dart';
 import 'core/theme/app_colors.dart';
+import 'features/calls/data/call_pip.dart';
+import 'core/util/clamp_offset.dart';
 import 'core/theme/design_tokens.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/welcome_screen.dart';
@@ -415,7 +417,10 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: Stack(
         children: [
           widget.child,
-          if (live) _CallMiniBar(session: call),
+          // ⚠️ Not inside the floating window. In picture-in-picture the
+          // window *is* the call, and a second little call window drawn
+          // inside it is a mirror facing a mirror.
+          if (live && !ref.watch(pipModeProvider)) _CallMiniBar(session: call),
         ],
       ),
     );
@@ -450,9 +455,13 @@ class _CallMiniBarState extends ConsumerState<_CallMiniBar> {
   /// the nav would cover the tab you were trying to reach.
   Offset? _position;
 
-  Offset _clamp(Offset value, Size bounds) => Offset(
-        value.dx.clamp(_margin, bounds.width - _size.width - _margin),
-        value.dy.clamp(_margin, bounds.height - _size.height - 96),
+  Offset _clamp(Offset value, Size bounds) => clampToBox(
+        value: value,
+        box: bounds,
+        tile: _size,
+        margin: _margin,
+        // Clear of the tab bar.
+        bottomInset: 96,
       );
 
   @override

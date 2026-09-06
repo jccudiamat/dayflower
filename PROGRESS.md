@@ -35,6 +35,63 @@
 | — | In-app updater | ✅ **Live — builds 2–6 shipped OTA.** `dart run tool/publish_update.dart` from the desktop; the phone offers the build on its next launch or resume, downloads it, and hands it to Android's installer. Android only. Needs migration **0014** and one manual "Install unknown apps" grant on the phone. |
 | — | Settings screen | 🔶 Rebuilt 2026-07-26 against real data (profile edits, timezone, invite code, disconnect, sign out). **Not yet exercised by the user** — and Disconnect needs migration 0008 first. |
 
+## Cost exposure — what is unbounded (2026-09-06)
+
+Modelled at **1,000 pairs**. The call feature is now capped
+(`CALL_TOTAL_MINUTES`); nothing else is. Measured against the live DB with
+one test pair, so the per-pair figures are real, not guessed.
+
+Three shapes of cost, and **only the first responds to a rate limit**:
+
+### 1. Metered per use — a quota works
+
+| | Now | At 1,000 pairs | Bounded? |
+|---|---|---|---|
+| LiveKit call minutes | — | ~$1,344/mo at 45 min/day/pair | ✅ `CALL_TOTAL_MINUTES` |
+
+Marginal cost of one heavy (2 hr/day) pair is **$4.65/mo**. Capped at 1,500
+min/mo it is **$1.94**. That gap is the whole argument for the cap: on a $5
+Pro price, uncapped leaves 7% margin and capped leaves 61%.
+
+### 2. Accumulating forever — needs retention, not throttling
+
+| | Now | At 1,000 pairs | Bounded? |
+|---|---|---|---|
+| `day_photos` | 7.3 MB | ~18 GB/mo, never shrinks | ❌ by design |
+| `flower_messages` | 124 rows/pair | fine — human-paced | ❌ but self-limiting |
+
+⚠️ Day photos are kept forever **deliberately** — see `flower_repository.dart`:
+the 24h expiry is a widget rule, not a data one. So this is a cost being
+chosen, not an oversight. Worth re-deciding at scale, not before.
+
+### 3. Multiplied by user count, driven by *us* — no user-facing limit helps
+
+🔴 **`app-builds` is the worst offender in the project today: 1,388 MB across
+44 APKs**, against 7.3 MB of actual user content. 190×. Nothing ever deletes
+an old build, and every one was put there by a dev loop, not a user.
+
+Worse at scale: the APK is ~40 MB, so **one release is 40 GB of egress at
+1,000 users** — a sixth of a Supabase Pro bandwidth allowance per release.
+Four builds were shipped in a single afternoon on 2026-09-05; that would have
+been 160 GB, two thirds of the monthly allowance, from iteration speed alone.
+
+Fixes, in order of value: prune to the last 2–3 builds; move APK hosting to
+somewhere with cheap egress; slow the release cadence once there are real
+users on the other end.
+
+### 4. Unbounded writes, cheap individually
+
+`heartbeats` is already **316 rows for one pair — 2.5× `flower_messages`**,
+the highest-volume table in the app. A tap is a row, taps are free, and
+nothing bounds them. Not urgent at current row sizes; it is the same
+unbounded-write shape and the one to watch next.
+
+### Also worth knowing
+
+- **Resend** has a daily send cap. Auth is email-OTP, so hitting it does not
+  degrade gracefully — it blocks sign-ups outright during a growth spike.
+- **FCM push is free at any volume**, so ringing adds no per-message cost.
+
 ## How to run
 
 - Dev server: `preview_start` with name `flutter web` (config in `.claude/launch.json`) → `flutter run -d web-server --web-port 8770`. **Hot reload doesn't apply Dart changes** — restart the server after edits. ⚠️ Port was 8765, changed to **8770** on 2026-08-01: Windows had reserved 8765 in an excluded port range, so the bind failed outright.
@@ -1324,7 +1381,19 @@ Messages, day photos and activity now raise a notification on the receiving phon
 ## Landing site (website/)
 
 - Next.js 16 (App Router, Tailwind v4) landing + waitlist site in `website/`. Run: `npm run dev` inside `website/`, or preview config **`dayflower-site`** (port 3210 — 3000/8080 collide with other servers on this machine).
-- **Rebuilt 2026-09-05 around what actually ships, replacing the 2026-07-28 overview.md mirror.** That version was 12 sections long and promised the *vision*: a 31-item roadmap, a pricing table for a Premium tier that has no billing behind it, a competitive matrix, and a 7-flower catalog three months out of date. It now reads as a sneak peek — hero (a real flower message) · 5-screen snapshot rail · 3 pillars · 6 shipped features · the bloom grid · 3-step setup + an honest "still on the way" row · CTA.
+- **Domain: `mydayflower.com`, bought 2026-09-05 at Cloudflare Registrar** (ns `wally`/`wesley.ns.cloudflare.com`, expires 2027-09-05). Chosen over `dayflower.com`, which is real but listed at **$90,000** by a domain broker, and over `.co`/`.love`, whose renewals are 2–3× a `.com`. **Not deployed yet** — no Vercel project exists (no `.vercel/`), awaiting the user's go-ahead. When deploying: Root Directory must be **`website`** (repo root is the Flutter app), and `SUPABASE_URL` + `SUPABASE_ANON_KEY` must be set in the Vercel project or the waitlist route answers 503. Point DNS at Vercel **DNS-only (grey cloud)** — proxying puts two CDNs in series and breaks TLS issuance.
+- The privacy and terms pages advertised `hello@dayflower.app`, a domain nobody owns. Fixed to `hello@mydayflower.com` on 2026-09-06 — **that mailbox does not exist yet**; set up Cloudflare Email Routing before launch or the contact address in the published policy bounces.
+- 🔴 **Cut back to a waitlist page on 2026-09-06 — do not re-expand it.** The 2026-09-05 rebuild below was accurate but was, in effect, a build spec: five screen mocks, 24 feature bullets, the flower meanings and the roadmap. Anyone could have rebuilt the app from the page source. The page is now hero → three vague lines → an uncaptioned artwork band → waitlist → footer, and nothing else.
+  - ⚠️ **Trimming what renders is not enough — everything `page.tsx` imports ships in the JS bundle whether it is displayed or not.** The first pass still had all 35 flower meanings readable in the chunk because `blooms` was imported for its ids. `content.ts` is now cut to three vibe lines and a list of filenames; there is a warning in its header. Re-check with a grep over `.next/static` + `.next/server` after any change (`.next/dev` is the dev cache and always has everything — ignore it).
+  - The mocks are **parked, not deleted**: `app/components/Snapshots.tsx` plus `app/components/snapshots.parked.css`, neither imported anywhere. Kept for Play Store shots / a press kit / a post-launch tour, where showing the UI is the point and the audience is already ours. They will drift from the real screens — verify before reuse.
+  - Flower names, meanings and screen names must not go back on the public site. The meanings are original writing and the single easiest asset to lift.
+- **Hero rebuilt 2026-09-06 (same day, after the trim):** the headline's noun rotates — "One **flower** a day" → heartbeat · photo · note · reminder · call — and the static bloom became the app's polaroid, tilted, stacked and throwable.
+  - ⚠️ **The rotating words re-add a little disclosure on purpose.** They name features, which cuts against everything above; the user asked for it because a moving word converts better than a static one. They are plain nouns anyone would guess from "an app for two people" — no screen names, no mechanics. Keep them that way.
+  - `PolaroidStack.tsx` copies the app's Classic Polaroid **by measurement, not by eye** (booth_screen.dart § `_PolaroidFrame`): #FFFEF8 paper, **4px** card radius, **2px** slot radius, the two-layer shadow, caption #3A2A20 at 0.3 letter-spacing. The app's duo template splits the slot in two; the site uses one slot, because a bloom is one picture.
+  - Two bugs worth remembering, both invisible on a desktop mouse: the top card advanced on `pointerup` only, so **keyboard users could not advance it** (Enter/Space fires `click` with no pointer events — `e.detail === 0` is what separates the two); and the rotator's width was measured on a grid item *inside* the very box being sized, so it could only ever shrink and "photo" rendered as "phot" — `width: max-content` on the word breaks the loop.
+  - The h1 carries `min-h-[5em] sm:min-h-[2.5em]`. Without it a long word rewraps the headline on a phone and the form below it jumps every 2.4s. Verified stable by sampling the form's `top` across several word changes.
+- **Brand mark is on the site.** `assets/images/mark.png` (transparent cutout) → `website/public/mark.png` for the nav and footer; `assets/images/logo.png` (peach square) → `website/app/icon.png` + `apple-icon.png`, and the old `app/favicon.ico` was deleted so Next generates the tags from those. ⚠️ **PROGRESS's old "the artwork still says 2lip" warning was stale** — commit 2550d7f replaced it; the mark is the coral tulip now.
+- **The 2026-09-05 rebuild (now superseded) replaced the 2026-07-28 overview.md mirror.** That version was 12 sections long and promised the *vision*: a 31-item roadmap, a pricing table for a Premium tier that has no billing behind it, a competitive matrix, and a 7-flower catalog three months out of date. It now reads as a sneak peek — hero (a real flower message) · 5-screen snapshot rail · 3 pillars · 6 shipped features · the bloom grid · 3-step setup + an honest "still on the way" row · CTA.
 - ⚠️ **`overview.md` is no longer the source for the site.** Copy now comes from § Feature status in this file and from the screens themselves. If a feature isn't built, it goes in `later` (the "still on the way" chips), never in `features`.
 - **The snapshots are recreations, not captures.** `app/components/Snapshots.tsx` rebuilds five screens (Flowers · Home · Calling · Us · Activities) in HTML against the same tokens the app uses, inside a CSS phone frame. Chosen over real screenshots because the Flutter web build takes minutes to paint, automated taps on its canvas are unreliable (see § How to run), and a capture would carry a test account's data. **They will drift** — when a screen changes materially, change the mock or drop it. Fidelity notes baked in: bubbles are `blush`/`blushMid`, not the gradient; the chat has no bottom nav (composer instead) while Us and Activities do, matching `AppBottomNav` in each screen.
 - **The real flower artwork is now on the site.** `assets/images/flowers/*.webp` → `website/public/flowers/` (35 files, 1.7 MB, minus `lavender_fields.webp` which has no catalog entry). Re-copy when the catalog gains artwork.
@@ -2120,3 +2189,40 @@ slides up, controls slide down, both fade.
 - ⚠️ The tap layer sits **below** the self-view and the controls in the
   stack, so it only catches what they missed — dragging your own tile or
   reaching for Mute must not also toggle the chrome.
+
+## 🔴 "Dayflower hit a snag" in the floating window (2026-09-06)
+
+Pressing Home during a call floated the call correctly and then filled the
+window with the crash screen. ⚠️ **`num.clamp` throws when the upper bound is
+below the lower one** — a real `ArgumentError`, in release as well as debug,
+not an assertion.
+
+Every draggable tile in this app clamps itself with a bound computed from the
+window:
+
+```dart
+value.dx.clamp(margin, bounds.width - size.width - margin)
+```
+
+Fine on a phone. **Picture-in-picture hands the same widget tree a window a
+couple of hundred points wide**, and the arithmetic inverts — the self-view
+is 150 wide inside a 150-wide window, and the minimised call reserves 96
+points for a tab bar that leaves 7. Both threw, at the top of the tree, which
+is why the whole window went to `CrashScreen`.
+
+`clampToBox` in `core/util/clamp_offset.dart` pins to the lower bound instead:
+a tile pressed against the edge of a window too small for it is the right
+answer, because there is nowhere else for it to be.
+
+- ⚠️ **The lesson lives in one file** rather than twice, because it is one
+  mistake made in two places and the next draggable thing will make it again.
+- The margin now counts on the bottom edge too. It was subtracted from the
+  top and not the bottom, so a tile dragged to the foot sat flush against
+  whatever the inset was reserving.
+- ⚠️ The minimised call no longer renders **inside** PiP. The window already
+  *is* the call; a second little call window drawn in it is a mirror facing a
+  mirror.
+
+**`CrashScreen` paid for itself here.** The previous version of this failure
+was a featureless grey rectangle that cost an evening of pixel forensics;
+this one announced itself by name.
