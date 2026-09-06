@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../widgets/reunion_card.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../home/presentation/widgets/clocks_card.dart';
 import '../../../pairing/data/pair_repository.dart';
@@ -156,70 +157,6 @@ _Countdown _countdownTo(DateTime target, DateTime now) {
 // anchor date, so the calendar, the stats and the tips can never
 // disagree with each other the way hardcoded values did.
 
-enum _Phase { period, fertile, ovulation, pms }
-
-class _PhaseInfo {
-  const _PhaseInfo({
-    required this.color,
-    required this.label,
-    required this.icon,
-    required this.tip,
-  });
-  final Color color;
-  final String label;
-  final IconData icon;
-  final String tip;
-}
-
-const Map<_Phase, _PhaseInfo> _phaseData = {
-  _Phase.period: _PhaseInfo(
-      color: AppColors.period,
-      label: 'Period',
-      icon: CupertinoIcons.heart_fill,
-      tip: 'Warm hugs, snacks, a heating pad.'),
-  _Phase.fertile: _PhaseInfo(
-      color: AppColors.fertile,
-      label: 'Fertile',
-      icon: CupertinoIcons.sparkles,
-      tip: 'High energy — great mood likely.'),
-  _Phase.ovulation: _PhaseInfo(
-      color: AppColors.ovulation,
-      label: 'Ovulation',
-      icon: CupertinoIcons.sun_max_fill,
-      tip: 'She may feel her best today.'),
-  _Phase.pms: _PhaseInfo(
-      color: AppColors.pms,
-      label: 'PMS',
-      icon: CupertinoIcons.moon_fill,
-      tip: 'Extra patience goes a long way.'),
-};
-
-const _cycleLength = 28;
-const _periodLength = 5;
-
-/// Mock anchor: the current period started 15 days ago.
-final _cycleAnchor =
-    _startOfDay(DateTime.now()).subtract(const Duration(days: 15));
-
-/// 1-based day within the cycle.
-int _cycleDay(DateTime d) {
-  final delta = _startOfDay(d).difference(_cycleAnchor).inDays;
-  return (delta % _cycleLength + _cycleLength) % _cycleLength + 1;
-}
-
-_Phase? _phaseOn(DateTime d) {
-  final day = _cycleDay(d);
-  if (day <= _periodLength) return _Phase.period;
-  if (day == 14) return _Phase.ovulation;
-  if (day >= 12 && day <= 16) return _Phase.fertile;
-  if (day >= 23) return _Phase.pms;
-  return null;
-}
-
-// ═══════════════════════════════════════════════════
-//   EVENTS SCREEN — one page, no tabs
-// ═══════════════════════════════════════════════════
-
 class EventsScreen extends ConsumerStatefulWidget {
   const EventsScreen({super.key});
 
@@ -231,16 +168,17 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   Timer? _timer;
   DateTime _now = DateTime.now();
 
-  // Cycle section
-  bool _cycleOpen = false;
-  String _cycleRole = 'me';
-  DateTime? _selDay;
-  bool _shared = true;
+  // ⚠️ The cycle calendar lived here and is out at the user's request. It
+  // was ~450 lines of card, calendar, phase banner and stats, all derived
+  // from one anchor date — deleted rather than left dormant, because dead
+  // code either sits as analyzer warnings forever or gets buried under
+  // `ignore` comments that hide real ones later. Git has it exactly as it
+  // was; see the commit that removed it.
 
-  // Names still drive the cycle section's copy. The clocks that used to live
-  // here moved to the top of Home — that pair was a mock duplicate of the
-  // real ClocksCard, which reads actual profile timezones.
-  static const String _myName = 'Bunny';
+  // _myName went with the cycle section, which was the only thing that
+  // named both of you. The clocks that used to live here moved to the top of
+  // Home — that pair was a mock duplicate of the real ClocksCard, which
+  // reads actual profile timezones.
   static const String _partnerName = 'Sunshine';
 
   // Mock seed data, anchored relative to today so the countdown is always
@@ -268,8 +206,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   static const int _anniversaryId = -2;
 
   List<_Event> get _derived {
-    final start =
-        ref.watch(currentPairProvider).valueOrNull?.togetherSince;
+    final start = ref.watch(currentPairProvider).valueOrNull?.togetherSince;
     // Nothing is invented before the couple has said when they started.
     if (start == null) return const [];
 
@@ -289,8 +226,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
         id: _anniversaryId,
         kind: _EventKind.anniversary,
         emoji: _kindStyles[_EventKind.anniversary]!.emoji,
-        title:
-            '${anniversaryNumber(start, anniversary)} Year Anniversary',
+        title: '${anniversaryNumber(start, anniversary)} Year Anniversary',
         date: _iso(anniversary),
       ),
     ];
@@ -397,6 +333,14 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   Widget build(BuildContext context) {
     final next = _next;
     final alsoComing = _upcoming.skip(1).toList();
+
+    // The soonest reunion still ahead. Nullable because a couple who are not
+    // apart do not have one, and the card is simply absent rather than
+    // counting down to nothing.
+    final nextReunion = _upcoming
+        .where((e) => e.kind == _EventKind.reunion)
+        .cast<_Event?>()
+        .firstWhere((e) => true, orElse: () => null);
     final passed = _passed;
 
     return Scaffold(
@@ -441,25 +385,28 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                     ),
                     const SizedBox(height: AppSpace.sm),
 
-                    // ── 2. Cycle ──
-                    _CycleCard(
-                      open: _cycleOpen,
-                      onToggle: () =>
-                          setState(() => _cycleOpen = !_cycleOpen),
-                      now: _now,
-                      role: _cycleRole,
-                      onRoleChanged: (r) => setState(() => _cycleRole = r),
-                      selDay: _selDay,
-                      onDaySelected: (d) => setState(() =>
-                          _selDay = _selDay != null && _startOfDay(_selDay!) == d
-                              ? null
-                              : d),
-                      shared: _shared,
-                      onSharedChanged: (v) => setState(() => _shared = v),
-                      myName: _myName,
-                      partnerName: _partnerName,
-                    ),
-                    const SizedBox(height: AppSpace.md),
+                    // ── 2. The next time you are in the same place ──
+                    //
+                    // ⚠️ This slot held the cycle calendar, which is out for
+                    // now at the user's request — the code is still here and
+                    // still derives from one anchor date, so putting it back
+                    // is uncommenting a widget rather than rebuilding it.
+                    //
+                    // A reunion already appears in the list below like any
+                    // other event. It gets a card of its own because a
+                    // countdown to seeing somebody is not the same kind of
+                    // fact as a birthday: it is the one on the screen that is
+                    // *moving*.
+                    if (nextReunion != null) ...[
+                      ReunionCard(
+                        title: nextReunion.title,
+                        place: nextReunion.location,
+                        when: DateTime.parse(nextReunion.date),
+                        now: _now,
+                        onTap: () => _openEventSheet(nextReunion),
+                      ),
+                      const SizedBox(height: AppSpace.md),
+                    ],
 
                     // ── 3. Everything else on the calendar ──
                     if (alsoComing.isNotEmpty) ...[
@@ -632,7 +579,8 @@ class _NextUpCard extends StatelessWidget {
               _TimeTile(value: '${countdown.days}', label: 'DAYS'),
               const SizedBox(width: AppSpace.xs),
               _TimeTile(
-                  value: countdown.hrs.toString().padLeft(2, '0'), label: 'HRS'),
+                  value: countdown.hrs.toString().padLeft(2, '0'),
+                  label: 'HRS'),
               const SizedBox(width: AppSpace.xs),
               _TimeTile(
                   value: countdown.mins.toString().padLeft(2, '0'),
@@ -654,11 +602,12 @@ class _NextUpCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.sm),
               border: Border(
                 left: BorderSide(
-                    color: AppColors.brandLight.withValues(alpha: .4), width: 2),
+                    color: AppColors.brandLight.withValues(alpha: .4),
+                    width: 2),
               ),
             ),
-            child: Text('“${e.note}”',
-                style: AppText.note(AppColors.onDarkMuted)),
+            child:
+                Text('“${e.note}”', style: AppText.note(AppColors.onDarkMuted)),
           ),
         ],
         const SizedBox(height: AppSpace.sm),
@@ -704,480 +653,6 @@ class _TimeTile extends StatelessWidget {
 
 // ═══════════════════════════════════════════════════
 //   2. CYCLE — collapsible
-// ═══════════════════════════════════════════════════
-
-class _CycleCard extends StatelessWidget {
-  const _CycleCard({
-    required this.open,
-    required this.onToggle,
-    required this.now,
-    required this.role,
-    required this.onRoleChanged,
-    required this.selDay,
-    required this.onDaySelected,
-    required this.shared,
-    required this.onSharedChanged,
-    required this.myName,
-    required this.partnerName,
-  });
-
-  final bool open;
-  final VoidCallback onToggle;
-  final DateTime now;
-  final String role, myName, partnerName;
-  final ValueChanged<String> onRoleChanged;
-  final DateTime? selDay;
-  final ValueChanged<DateTime> onDaySelected;
-  final bool shared;
-  final ValueChanged<bool> onSharedChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final today = _startOfDay(now);
-    final phase = _phaseOn(today);
-    final day = _cycleDay(today);
-    final toNextPeriod = _cycleLength - day + 1;
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // ── Header (always visible) ──
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onToggle,
-            child: Row(
-              children: [
-                const _SectionLabel(label: 'Cycle'),
-                const Spacer(),
-                if (phase != null)
-                  _Tag(
-                      label: _phaseData[phase]!.label,
-                      color: _phaseData[phase]!.color),
-                const SizedBox(width: AppSpace.xs),
-                AnimatedRotation(
-                  turns: open ? 0.5 : 0,
-                  duration: AppMotion.micro,
-                  child: const Icon(CupertinoIcons.chevron_down,
-                      size: 16, color: AppColors.muted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpace.sm),
-
-          // ── Summary (always visible) ──
-          if (phase != null) ...[
-            _PhaseBanner(phase: phase, role: role, partnerName: partnerName),
-            const SizedBox(height: AppSpace.sm),
-          ],
-          Row(
-            children: [
-              Expanded(
-                  child: _StatCard(
-                      value: '$toNextPeriod days',
-                      label: 'Next period',
-                      color: AppColors.period)),
-              const SizedBox(width: AppSpace.xs),
-              Expanded(
-                  child: _StatCard(
-                      value: 'Day $day',
-                      label: 'Cycle day',
-                      color: AppColors.brand)),
-              const SizedBox(width: AppSpace.xs),
-              const Expanded(
-                  child: _StatCard(
-                      value: '$_cycleLength days',
-                      label: 'Avg cycle',
-                      color: AppColors.pms)),
-            ],
-          ),
-
-          // ── Detail (expanded only) ──
-          AnimatedCrossFade(
-            duration: AppMotion.standard,
-            sizeCurve: AppMotion.easeOut,
-            crossFadeState:
-                open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-            firstChild: const SizedBox(width: double.infinity),
-            secondChild: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: AppSpace.sm),
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      _RoleChip(
-                          label: '$partnerName (Her)',
-                          selected: role == 'her',
-                          onTap: () => onRoleChanged('her')),
-                      _RoleChip(
-                          label: '$myName (Him)',
-                          selected: role == 'me',
-                          onTap: () => onRoleChanged('me')),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpace.sm),
-                _CycleCalendar(
-                  now: now,
-                  selDay: selDay,
-                  onDaySelected: onDaySelected,
-                ),
-                const SizedBox(height: AppSpace.sm),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  crossAxisSpacing: AppSpace.xs,
-                  mainAxisSpacing: AppSpace.xs,
-                  childAspectRatio: 4.6,
-                  children: _phaseData.entries
-                      .map((e) => Row(
-                            children: [
-                              Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: BoxDecoration(
-                                      color: e.value.color,
-                                      borderRadius: BorderRadius.circular(3))),
-                              const SizedBox(width: AppSpace.xs),
-                              Text(e.value.label,
-                                  style: AppText.caption(AppColors.body)),
-                            ],
-                          ))
-                      .toList(),
-                ),
-                if (role == 'me' && phase != null) ...[
-                  const SizedBox(height: AppSpace.sm),
-                  _SupportCard(phase: phase, partnerName: partnerName),
-                ],
-                const SizedBox(height: AppSpace.sm),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Shared with $myName',
-                              style: AppText.body(AppColors.ink)
-                                  .copyWith(fontWeight: FontWeight.w600)),
-                          Text('He can see your cycle',
-                              style: AppText.caption()),
-                        ],
-                      ),
-                    ),
-                    Switch(
-                      value: shared,
-                      onChanged: onSharedChanged,
-                      activeTrackColor: AppColors.brand,
-                      activeThumbColor: Colors.white,
-                      inactiveTrackColor: AppColors.border,
-                      inactiveThumbColor: Colors.white,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CycleCalendar extends StatelessWidget {
-  const _CycleCalendar({
-    required this.now,
-    required this.selDay,
-    required this.onDaySelected,
-  });
-
-  final DateTime now;
-  final DateTime? selDay;
-  final ValueChanged<DateTime> onDaySelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final today = _startOfDay(now);
-    final firstOfMonth = DateTime(now.year, now.month, 1);
-    final daysInMonth = DateTime(now.year, now.month + 1, 0).day;
-    // Sunday-first grid: Mon=1..Sun=7, so Sunday maps to 0.
-    final leading = firstOfMonth.weekday % 7;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(DateFormat('MMMM yyyy').format(now), style: AppText.subtitle()),
-        const SizedBox(height: AppSpace.xs),
-        Row(
-          children: ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-              .map((l) => Expanded(
-                    child: Center(child: Text(l, style: AppText.label())),
-                  ))
-              .toList(),
-        ),
-        const SizedBox(height: 6),
-        LayoutBuilder(builder: (ctx, box) {
-          final cellW = box.maxWidth / 7;
-          return Wrap(
-            children: [
-              ...List.generate(leading, (_) => SizedBox(width: cellW)),
-              ...List.generate(daysInMonth, (i) {
-                final date = DateTime(now.year, now.month, i + 1);
-                return SizedBox(
-                  width: cellW,
-                  child: Padding(
-                    padding: const EdgeInsets.all(1.5),
-                    child: _CalDay(
-                      day: i + 1,
-                      isToday: date == today,
-                      isSelected: selDay != null && _startOfDay(selDay!) == date,
-                      phase: _phaseOn(date),
-                      onTap: () => onDaySelected(date),
-                    ),
-                  ),
-                );
-              }),
-            ],
-          );
-        }),
-      ],
-    );
-  }
-}
-
-class _CalDay extends StatelessWidget {
-  const _CalDay({
-    required this.day,
-    required this.isToday,
-    required this.isSelected,
-    required this.phase,
-    required this.onTap,
-  });
-  final int day;
-  final bool isToday, isSelected;
-  final _Phase? phase;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    Color bg = Colors.transparent;
-    Color fg = AppColors.body;
-    Color border = Colors.transparent;
-
-    if (phase != null) {
-      final c = _phaseData[phase]!.color;
-      bg = c.withValues(alpha: .12);
-      fg = c;
-      border = c.withValues(alpha: .2);
-    }
-
-    if (isToday) {
-      bg = AppColors.brand;
-      fg = Colors.white;
-      border = AppColors.brand;
-    } else if (isSelected) {
-      border = AppColors.brand;
-      fg = AppColors.brand;
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: Container(
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(AppRadius.sm - 2),
-            border: Border.all(color: border, width: isSelected ? 1.5 : 1),
-          ),
-          alignment: Alignment.center,
-          child: Text('$day',
-              style: AppText.caption(fg).copyWith(
-                fontSize: 11,
-                fontWeight:
-                    isToday || isSelected ? FontWeight.w700 : FontWeight.w500,
-              )),
-        ),
-      ),
-    );
-  }
-}
-
-class _PhaseBanner extends StatelessWidget {
-  const _PhaseBanner({
-    required this.phase,
-    required this.role,
-    required this.partnerName,
-  });
-  final _Phase phase;
-  final String role, partnerName;
-
-  @override
-  Widget build(BuildContext context) {
-    final info = _phaseData[phase]!;
-    final tip =
-        role == 'me' ? info.tip : "You're in your ${info.label} phase today.";
-    return Container(
-      padding: const EdgeInsets.all(AppSpace.sm),
-      decoration: BoxDecoration(
-        color: info.color.withValues(alpha: .07),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: info.color.withValues(alpha: .2)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-                color: info.color.withValues(alpha: .15),
-                borderRadius: BorderRadius.circular(AppRadius.sm)),
-            child: Icon(info.icon, color: info.color, size: 20),
-          ),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _Tag(label: 'Today · ${info.label}', color: info.color),
-                const SizedBox(height: AppSpace.xxs),
-                Text(tip, style: AppText.caption(AppColors.body)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _RoleChip extends StatelessWidget {
-  const _RoleChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: AppMotion.micro,
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            color: selected ? AppColors.blush : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-          ),
-          alignment: Alignment.center,
-          child: Text(label,
-              style: AppText.caption(
-                      selected ? AppColors.brand : AppColors.muted)
-                  .copyWith(fontWeight: FontWeight.w700)),
-        ),
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.value,
-    required this.label,
-    required this.color,
-  });
-  final String value, label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-          vertical: AppSpace.xs, horizontal: AppSpace.xs),
-      decoration: BoxDecoration(
-        color: AppColors.background,
-        borderRadius: BorderRadius.circular(AppRadius.sm),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(value,
-                style: AppText.body(color)
-                    .copyWith(fontWeight: FontWeight.w700, height: 1.2)),
-          ),
-          const SizedBox(height: 3),
-          Text(label, textAlign: TextAlign.center, style: AppText.label()),
-        ],
-      ),
-    );
-  }
-}
-
-class _SupportCard extends StatelessWidget {
-  const _SupportCard({required this.phase, required this.partnerName});
-  final _Phase phase;
-  final String partnerName;
-
-  @override
-  Widget build(BuildContext context) {
-    final tips = phase == _Phase.pms || phase == _Phase.period
-        ? [
-            '🧘 She may be more emotional — listen',
-            '❌ Skip debates or heavy topics',
-            '🍵 Virtual tea date?',
-            '💗 A random "I love you" helps',
-          ]
-        : [
-            '🌷 Send an extra heartbeat',
-            "💬 Ask how she's feeling",
-            "😊 She's likely in good spirits",
-          ];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpace.sm),
-      decoration: BoxDecoration(
-        color: AppColors.sage.withValues(alpha: .06),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.sage.withValues(alpha: .22)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('💡 SUPPORT ${partnerName.toUpperCase()} TODAY',
-              style: AppText.label(AppColors.sage)),
-          const SizedBox(height: AppSpace.xs),
-          ...tips.map((tip) => Container(
-                margin: const EdgeInsets.only(bottom: AppSpace.xxs),
-                padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.xs, vertical: 6),
-                decoration: BoxDecoration(
-                    color: AppColors.sage.withValues(alpha: .1),
-                    borderRadius: BorderRadius.circular(AppRadius.sm)),
-                child: Text(tip, style: AppText.caption(AppColors.body)),
-              )),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════
-//   3. EVENT ROWS
 // ═══════════════════════════════════════════════════
 
 class _EventRow extends StatelessWidget {
@@ -1227,8 +702,7 @@ class _EventRow extends StatelessWidget {
             ),
             const SizedBox(width: AppSpace.xs),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                   color: color.withValues(alpha: .15),
                   borderRadius: BorderRadius.circular(AppRadius.pill)),
@@ -1634,8 +1108,7 @@ class _GhostEditBtn extends StatelessWidget {
           children: [
             Icon(CupertinoIcons.pencil, size: 13, color: fg),
             const SizedBox(width: 5),
-            Text('Edit',
-                style: AppText.label(fg).copyWith(letterSpacing: 0)),
+            Text('Edit', style: AppText.label(fg).copyWith(letterSpacing: 0)),
           ],
         ),
       ),
@@ -1651,8 +1124,7 @@ class _FieldLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.xxs),
-      child:
-          Text(label.toUpperCase(), style: AppText.label(AppColors.brand)),
+      child: Text(label.toUpperCase(), style: AppText.label(AppColors.brand)),
     );
   }
 }
@@ -1820,8 +1292,8 @@ class _SheetBtn extends StatelessWidget {
               child: Text(label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppText.body(fg)
-                      .copyWith(fontWeight: FontWeight.w700)),
+                  style:
+                      AppText.body(fg).copyWith(fontWeight: FontWeight.w700)),
             ),
           ],
         ),

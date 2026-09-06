@@ -2403,3 +2403,43 @@ something used to be here is a worse artefact than the gap.
 - ⚠️ Deleting drops the message from `_pending` too. One sent this session
   and deleted before the stream echoed it would otherwise stay on screen —
   the row is gone, so no echo is coming to remove it.
+
+## The reunion countdown, and the cycle calendar out (2026-09-06)
+
+Copied from a card the user supplied, artwork included.
+
+⚠️ **The illustration is cut out of that reference image** by
+`tool/make_reunion.py`, with an **alpha ramp on its left edge**. The artwork
+sits on the card's own pink with no hard boundary, so a plain crop would show
+a seam wherever the card's gradient and the one baked into the JPEG disagreed
+— which is at every width except the one it was drawn at. Fading it instead
+means the card owns the gradient and the artwork only owns the couple.
+
+⚠️ The crop starts **below the date line and inside the rounded corners**. A
+crop from the card's top edge brings "Tokyo · May 12, 2025" and a corner arc
+with it, and the app draws both of those itself — the reference's own text
+would have sat under the real one.
+
+- ⚠️ **The numbers are held to the left 58%.** Text laid out at its natural
+  width walked straight under the couple; on a narrow phone the seconds ended
+  up on his suitcase. A *fraction*, not a fixed width, because the
+  illustration is anchored to the right edge so its encroachment scales.
+- Both number rows `scaleDown` rather than wrap or clip: a reunion a year out
+  is three digits, and a seconds counter that dropped to a second line would
+  move the whole card once a second.
+- The illustration is `fitHeight` and right-aligned rather than stretched.
+  Scaling it to the card would shrink the couple on a small phone, which is
+  where the card has least room to say anything at all.
+- ⚠️ `now` is passed in rather than read from the clock, so every countdown on
+  the screen ticks off the same second.
+
+### 🔴 The cycle calendar is deleted, not commented out
+
+~450 lines: card, calendar, phase banner, stats, support copy, and the
+constants they derived from. Left dormant it is dead code the analyzer flags
+forever, which either sits as warnings or gets buried under `ignore` comments
+that hide real ones later.
+
+⚠️ **Git has it exactly as it was** — `git show <this commit>^:lib/features/
+dates/presentation/screens/events_screen.dart`. Restoring it is a paste, not
+a rebuild, and it still derives everything from one anchor date.
