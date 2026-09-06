@@ -24,6 +24,8 @@ import '../../../heartbeat/data/pulse_alert_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../updates/data/update_repository.dart';
+import '../../../push/data/push_repository.dart';
+import '../../../push/data/push_service.dart';
 import '../../../updates/presentation/widgets/update_screen.dart';
 import '../../../widget/widget_mode_provider.dart';
 import '../../../widget/widget_sync.dart';
@@ -276,6 +278,11 @@ class SettingsScreen extends ConsumerWidget {
     );
     if (!ok) return;
     // Router redirect reacts to the auth stream and returns to Welcome.
+    // ⚠️ **Before** the sign-out, not after. Deleting the row needs the
+    // session that owns it — device_tokens is RLS'd to auth.uid() — so a
+    // token dropped afterwards is a token left behind, still delivering this
+    // person's messages to a phone somebody else may sign into next.
+    await PushService.forget(ref.read(pushRepositoryProvider));
     await ref.read(authRepositoryProvider).signOut();
   }
 

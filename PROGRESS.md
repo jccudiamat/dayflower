@@ -3,7 +3,9 @@
 > **Purpose:** read this first when resuming work in a new session. It captures everything not obvious from the code: what's done, what's verified, dashboard-side config, test accounts, and how we work. Update it at every feature completion or significant decision.
 > Companion docs: [mvp.md](mvp.md) (feature checklists) · [design.md](design.md) (design system rules) · [overview.md](overview.md) (original full vision).
 
-**Last updated:** 2026-09-04 (Calls built — voice and video, on LiveKit. Migrations **0025 and 0026 applied**. 🔴 Nothing connects until the LiveKit API key/secret are in Supabase Vault and `LIVEKIT_URL` is in `.env` — the two steps are in § Calls → Switching calling on. ✅ WebRTC verified reachable from Dubai on mobile data, 2026-09-04.)
+**Last updated:** 2026-09-06 (Firebase project **dayflower-ce2b6** registered for push — Android app created and `android/app/google-services.json` in place, so step 1 of § Push notifications is closed. Steps 2–5 still open: service-account key, Vault secrets, function deploy, Flutter wiring.)
+
+**Previously:** 2026-09-04 (Calls built — voice and video, on LiveKit. Migrations **0025 and 0026 applied**. 🔴 Nothing connects until the LiveKit API key/secret are in Supabase Vault and `LIVEKIT_URL` is in `.env` — the two steps are in § Calls → Switching calling on. ✅ WebRTC verified reachable from Dubai on mobile data, 2026-09-04.)
 
 **Previously:** 2026-08-31 (Reminders ring like an alarm clock. 🔴 **0010 WAS already run** — this doc said otherwise and was wrong again — so the table exists WITHOUT the new `alarm` column and every insert fails with PGRST204. 0010 is now idempotent-but-preserving; re-run it. Also unrun: 0008, 0013 (day_photos), 0014 (app_builds), 0015 (avatars) — all confirmed missing against the live DB.)
 
@@ -88,9 +90,16 @@ yet** — the google-services Gradle plugin fails the build without
 `google-services.json`, and leaving the repo unbuildable to save one step is
 not a trade worth making.
 
-1. Firebase project → Android app `com.dayflower.app` →
-   `google-services.json` into `android/app/`.
-2. Service account key (Project settings → Service accounts).
+1. ~~Firebase project → Android app `com.dayflower.app` →
+   `google-services.json` into `android/app/`.~~ ✅ **Done 2026-09-06.**
+   Project **`dayflower-ce2b6`** (number 724605256655), Android app
+   `1:724605256655:android:56057ac8a2e79d1bea08ba`, config committed at
+   `android/app/google-services.json`. It is a client config, not a secret —
+   the key is scoped by package name, so it is *not* gitignored.
+2. 🔴 Service account key (Project settings → Service accounts → Generate
+   new private key). Console only — `firebase-tools` has no command for it
+   and `gcloud` is not installed on this machine. This one **is** a secret:
+   it goes straight into `supabase secrets set`, never into the repo.
 3. In the SQL editor, so the values stay out of git and out of transcripts:
    ```sql
    select vault.create_secret(
@@ -2443,3 +2452,58 @@ that hide real ones later.
 ⚠️ **Git has it exactly as it was** — `git show <this commit>^:lib/features/
 dates/presentation/screens/events_screen.dart`. Restoring it is a paste, not
 a rebuild, and it still derives everything from one anchor date.
+
+## Firebase, wired up (2026-09-06)
+
+The schema, the sender and the parsing already existed — migration 0028 (now
+**0031**), `supabase/functions/push/index.ts`, `PushMessage`, from a session
+running in parallel. What was missing was everything between them and the
+phone.
+
+- **`firebase_core` + `firebase_messaging`**, and the
+  `com.google.gms.google-services` Gradle plugin. ⚠️ With the plugin applied
+  and `google-services.json` absent the Android build **fails outright**,
+  which would take the OTA publisher with it — the file had to land first,
+  and it has. Build verified before anything else was written.
+- `PushService` — token on sign-in, refresh, and the three arrival states.
+- ⚠️ **Registration is on sign-in, not launch.** A token written before there
+  is a session has nobody to attach to; `register` correctly does nothing,
+  and the phone would then stay silent until a reinstall rotated the token.
+- ⚠️ **`forget` runs *before* `signOut`.** Deleting the row needs the session
+  that owns it — `device_tokens` is RLS'd to `auth.uid()` — so dropping it
+  afterwards leaves the token behind, still delivering one person's messages
+  to a phone somebody else may sign into next.
+- ⚠️ **Only calls interrupt in the foreground.** Everything else is already
+  on screen; the realtime stream put it in the thread the user is looking at.
+- ⚠️ `PartnerAlerts.pushed` uses the **existing** message channel and skips
+  the watermark. A second channel would show in Android's settings as a
+  separate switch for the same thing, and the watermark would suppress the
+  push outright, because realtime has usually moved the mark past it already.
+- Taps go through `AppNotifications.pendingRoute`, the mechanism every other
+  notification already uses — it survives a tap that opens the app from dead,
+  which is exactly when there is no router to navigate yet.
+
+### Housekeeping
+
+- 🔴 **Two migrations were both numbered 0028**, from two sessions running at
+  once. Renumbered to 0031; both were applied and neither conflicts, but a
+  duplicate number makes "what ran, in what order" a guess.
+- `google-services.json` is now **gitignored**. Not a secret in the
+  cryptographic sense — it ships inside every APK — but this repo is public,
+  and publishing a project's sender id invites other builds to point at it.
+  ⚠️ **A fresh clone cannot build without downloading its own.**
+
+### 🔴 Still not sending
+
+The trigger is live and deliberately inert: `notify_push` reads `push_url`
+and `push_secret` from Vault and returns early when they are missing, so an
+insert never fails because push is half configured. Both are absent, and
+`device_tokens` has **0 rows**.
+
+What remains is yours, because it involves minting secrets:
+
+1. `select vault.create_secret('https://<ref>.supabase.co/functions/v1/push', 'push_url');`
+2. `select vault.create_secret('<long random string>', 'push_secret');`
+3. The same string as `PUSH_SECRET` in the function's env.
+4. Deploy `supabase/functions/push`, and give it the Firebase service-account
+   credentials it signs with.

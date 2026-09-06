@@ -10,6 +10,7 @@ import 'core/dev/dev_login.dart';
 import 'core/services/app_notifications.dart';
 import 'core/widgets/crash_screen.dart';
 import 'features/calls/data/call_alerts.dart';
+import 'features/push/data/push_service.dart';
 import 'core/services/partner_alerts.dart';
 import 'core/services/pulse_alerts.dart';
 import 'features/heartbeat/data/heartbeat_nudge.dart';
@@ -67,6 +68,12 @@ Future<void> main() async {
   // channel creation, so that difference has to be two channels — and it
   // is also what lets either be retuned from Settings without the other.
   await PartnerAlerts.init();
+
+  // ⚠️ Push is what makes any of the alerts above reach a phone whose app
+  // is closed. Everything else here is raised by this device off its own
+  // realtime socket, which needs the process alive. Failure is not fatal:
+  // the app works exactly as it did, just silently when shut.
+  await PushService.init();
 
   // The one channel allowed to take over the screen. Everything else here
   // is deliberately quiet; a call expires if it is not seen while it is

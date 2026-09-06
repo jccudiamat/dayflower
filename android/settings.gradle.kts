@@ -21,6 +21,14 @@ plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.11.1" apply false
     id("org.jetbrains.kotlin.android") version "2.2.20" apply false
+    // Reads android/app/google-services.json at build time and generates the
+    // Firebase config the SDK looks for at runtime.
+    //
+    // WARNING: with the plugin applied and that file missing, the Android
+    // build fails outright — which would take the OTA publisher down with
+    // it, and with it the only way a build reaches the phone. The file has
+    // to land before this line does.
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")

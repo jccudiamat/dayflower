@@ -25,6 +25,8 @@ import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/data/call_pip.dart';
+import 'features/push/data/push_repository.dart';
+import 'features/push/data/push_service.dart';
 import 'features/calls/presentation/screens/call_screen.dart';
 import 'features/calls/data/call_repository.dart';
 import 'features/calls/domain/call.dart';
@@ -253,6 +255,16 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       myOpenRemindersProvider,
       (_, mine) => ReminderScheduler.sync(mine),
     );
+
+    // ⚠️ Registered on sign-in, not at launch. A token written before there
+    // is a session has nobody to attach to — PushRepository.register
+    // correctly does nothing — and the phone would then stay silent until
+    // the next reinstall rotated the token.
+    ref.listen<String?>(currentUserIdProvider, (previous, userId) {
+      if (userId != null && userId != previous) {
+        PushService.registerFor(ref.read(pushRepositoryProvider));
+      }
+    });
 
     // ⚠️ Tells the Activity whether it may shrink into the floating window
     // on Home/recents. `onUserLeaveHint` fires on every exit from the app,

@@ -31,6 +31,13 @@ dependencies:
 
   # ── Notifications & haptics ───────────────────
   flutter_local_notifications: ^21.0.0
+
+  # ── Push ─────────────────────────────────────
+  # ⚠️ These two need android/app/google-services.json to exist, or the
+  # Android build fails outright — see PROGRESS.md § Push. The file is not
+  # in git; a fresh clone has to add it before building.
+  firebase_core: ^3.8.0
+  firebase_messaging: ^15.1.5
   vibration: ^3.1.8
 
   # ── Home screen widget ────────────────────────

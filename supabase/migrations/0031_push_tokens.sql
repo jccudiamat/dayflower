@@ -1,4 +1,9 @@
 -- Dayflower — the phone can finally be woken.
+--
+-- ⚠️ Renumbered 0028 → 0031. Two sessions ran in parallel and both took 0028
+-- (the other was 0028_day_photo_limit). Both were applied and neither
+-- conflicts, but a duplicate number makes "what ran, in what order" a guess.
+-- This file is additive and re-runnable, so moving it costs nothing.
 -- Run in the Supabase SQL editor, or: dart run tool/run_sql.dart <this file>
 --
 -- Safe to re-run. Additive only.
