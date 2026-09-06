@@ -25,6 +25,7 @@ import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/data/call_pip.dart';
+import 'features/calls/presentation/screens/call_screen.dart';
 import 'features/calls/data/call_repository.dart';
 import 'features/calls/domain/call.dart';
 import 'features/updates/data/update_alerts.dart';
@@ -347,8 +348,14 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // ⚠️ UpdateGate goes *inside* DevicePreview's frame, not around it, or
       // the updater would paint over the device chrome in the preview
       // instead of inside the phone.
-      builder: (context, child) =>
-          DevicePreview.appBuilder(context, UpdateGate(child: child)),
+      // ⚠️ CallPipGate outermost. In the floating window it replaces
+      // everything — the app, the updater, all of it — because the window is
+      // a few hundred points wide and a call is the only thing worth putting
+      // in one.
+      builder: (context, child) => DevicePreview.appBuilder(
+        context,
+        CallPipGate(child: UpdateGate(child: child)),
+      ),
     );
   }
 

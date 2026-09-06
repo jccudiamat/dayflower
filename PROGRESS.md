@@ -2324,3 +2324,30 @@ itself and the bitmap is left square underneath, where nothing can see it.
 ⚠️ Worth keeping in mind generally: a radius baked into a bitmap is in the
 bitmap's own pixels, and survives every scale the view puts it through. A
 radius on a view is in the view's. Mixing them silently multiplies.
+
+## 🔴 Picture-in-picture floated the conversation, not the call (2026-09-06)
+
+Reported precisely: minimise the call inside the app, walk to the chat, press
+Home — and the floating window contained *the whole app*, scaled down.
+
+⚠️ **A PiP window renders whatever activity is showing.** Deciding what goes
+in it from inside `CallScreen` therefore only ever worked while `CallScreen`
+was the route on top — and **a minimised call is by definition one you have
+walked away from.** The branch was in exactly the place that cannot see the
+case it was written for.
+
+`CallPipGate` sits above the router, outside `UpdateGate`, and replaces the
+entire app with the call while the window is up. What is on the navigation
+stack underneath stops mattering.
+
+- ⚠️ Outermost of the two gates: in a window a few hundred points wide a call
+  is the only thing worth showing, updater included.
+- Falls through to the app when there is no live call. Android can put an
+  activity in PiP for reasons of its own, and a floating window of nothing is
+  worse than the app itself.
+- `CallPipView` reads the partner profile itself now, rather than being handed
+  one by the route that no longer builds it.
+
+⚠️ The in-app card is a different thing from the floating window and always
+was: the card lives in `AppShell`, so it follows you across every tab and
+sub-route, and the window is what the *launcher* gets. Same call, two homes.

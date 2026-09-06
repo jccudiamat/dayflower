@@ -50,12 +50,10 @@ class CallScreen extends ConsumerWidget {
       return const Scaffold(backgroundColor: AppColors.darkCanvas);
     }
 
-    // In the floating window: video and nothing else. A PiP window is a few
-    // hundred pixels wide and takes no touches at all, so controls rendered
-    // into it are an unreadable wall of buttons nobody can press.
-    if (ref.watch(pipModeProvider)) {
-      return _PipView(session: session, partner: partner);
-    }
+    // ⚠️ The floating window is **not** decided here any more — see
+    // CallPipGate. Deciding it from inside this route meant it only worked
+    // while this route was on top, and a minimised call is by definition one
+    // you have walked away from.
 
     // 🔴 **Back leaves the screen; it does not leave the app.**
     //
@@ -720,14 +718,25 @@ class _Connecting extends StatelessWidget {
 /// nothing — so every control rendered here would be an unreadable button
 /// that cannot be pressed. Tapping the window restores the full screen,
 /// which is the maximise the floating window needs.
-class _PipView extends StatelessWidget {
-  const _PipView({required this.session, required this.partner});
+/// The call as the floating window, and **only** the call.
+///
+/// 🔴 It used to be a branch inside [CallScreen], which meant it only drew
+/// the call when the call screen happened to be the route on top. Minimise
+/// the call inside the app, walk to the conversation, then press Home — and
+/// picture-in-picture floated *the conversation*, scaled down. The whole app
+/// in a small window, which is not what minimising a call means.
+///
+/// It is a layer above the router now: see `CallPipGate`. What is on the
+/// stack underneath stops mattering.
+class CallPipView extends ConsumerWidget {
+  const CallPipView({super.key, required this.session});
 
   final CallSession session;
-  final UserProfile? partner;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+        ref.watch(partnerProfileProvider).valueOrNull;
     return ColoredBox(
       color: AppColors.darkCanvas,
       child: session.isVideo
@@ -745,6 +754,28 @@ class _PipView extends StatelessWidget {
               ),
             ),
     );
+  }
+}
+
+/// Replaces the whole app with the call while the floating window is up.
+///
+/// ⚠️ Above the router on purpose. A PiP window renders whatever activity is
+/// showing, so deciding what goes in it from inside a *route* only ever works
+/// while that route is on top — and the entire point of minimising a call is
+/// that you have gone somewhere else.
+class CallPipGate extends ConsumerWidget {
+  const CallPipGate({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!ref.watch(pipModeProvider)) return child;
+    final session = ref.watch(callNotifierProvider);
+    // No call to show. Android can put an activity in PiP for reasons of its
+    // own, and a floating window of nothing is worse than the app itself.
+    if (session == null || session.status.isTerminal) return child;
+    return CallPipView(session: session);
   }
 }
 
