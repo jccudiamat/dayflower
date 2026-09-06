@@ -6,23 +6,31 @@
   --surface: #ffffff;
   --surface-subtle: #efeaf8;
   --ink: #1c1024;
-  --body-color: #574a66;
-  --muted: #8e7fa0;
-  --border: #e7e0f0;
+  --body-color: #564a5e;
+  --muted: #8e8698;
+  --border: #eae5f0;
 
   --dark-canvas: #100a1e;
   --dark-surface: #1d1430;
   --dark-raised: #2a2040;
-  --dark-border: #3b2f58;
-  --on-dark: #f5f1fb;
-  --on-dark-muted: #a99bc4;
+  --dark-border: #332a4a;
+  --on-dark: #f5f2f8;
+  --on-dark-muted: #9c92ac;
 
   --g-pink: #f0709f;
   --g-purple: #906fe8;
   --brand: #ee6fa8;
+  --brand-dark: #d5568f;
   --secondary: #8b72e0;
+  --blush: #fcedf4;
+  --blush-mid: #f6d3e4;
+
+  --hero-top: #171027;
+  --hero-mid: #221838;
+  --hero-bottom: #120c1f;
 
   --gradient-cta: linear-gradient(90deg, var(--g-pink), var(--g-purple));
+  --gradient-hero: linear-gradient(160deg, var(--hero-top), var(--hero-mid) 55%, var(--hero-bottom));
 }
 
 @theme inline {
@@ -40,6 +48,9 @@
   --color-on-dark: var(--on-dark);
   --color-on-dark-muted: var(--on-dark-muted);
   --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-blush: var(--blush);
+  --color-blush-mid: var(--blush-mid);
   --color-secondary-brand: var(--secondary);
   --color-g-pink: var(--g-pink);
   --color-g-purple: var(--g-purple);
@@ -228,21 +239,195 @@ body {
   animation: float-soft 5s ease-in-out infinite;
 }
 
-@keyframes pulse-ring {
-  0% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  100% {
-    transform: scale(1.9);
-    opacity: 0;
+/* ── Bloom tiles ────────────────────────────────────────────────────────── */
+.bloom-tile {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-card);
+  aspect-ratio: 1;
+  background: var(--surface-subtle);
+}
+.bloom-tile img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  transition: transform 500ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+@media (hover: hover) {
+  .bloom-tile:hover img {
+    transform: scale(1.06);
   }
 }
-.pulse-ring::after {
-  content: "";
+
+/* Nothing here is load-bearing, so it all stops when asked to. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Rotating headline word ─────────────────────────────────────────────── */
+/* Every word occupies the same grid cell, so the element is as wide as the
+   longest one and the rest of the line never shifts as they swap. */
+.rotator {
+  display: inline-grid;
+  vertical-align: bottom;
+  /* Clips the outgoing word while the box resizes. The incoming word is
+     delayed past the resize (below) so it is never revealed half-cut. */
+  overflow: hidden;
+  transition: width 260ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.rotator-word {
+  grid-area: 1 / 1;
+  justify-self: start;
+  width: max-content;
+  white-space: nowrap;
+  text-align: left;
+  opacity: 0;
+  transform: translateY(0.22em);
+  /* Leaving: fade straight out, so nothing lingers under the new word. */
+  transition:
+    opacity 200ms cubic-bezier(0.25, 0.1, 0.25, 1),
+    transform 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.rotator-word.is-current {
+  opacity: 1;
+  transform: none;
+  /* Arriving: wait for the box to finish growing, or a longer word appears
+     with its last letters still cut off by the overflow clip. */
+  transition:
+    opacity 260ms cubic-bezier(0.25, 0.1, 0.25, 1) 260ms,
+    transform 260ms cubic-bezier(0.25, 0.1, 0.25, 1) 260ms;
+}
+
+/* ── Polaroid deck ──────────────────────────────────────────────────────────
+   Geometry lifted from the app's Classic Polaroid template
+   (booth_screen.dart § _PolaroidFrame): #FFFEF8 paper, 4px card radius, 2px
+   slot radius, and the same two-layer shadow. */
+.polaroid-stack {
+  --polaroid-w: 300px;
+  width: var(--polaroid-w);
+  margin-inline: auto;
+}
+
+.polaroid-deck {
+  position: relative;
+  width: var(--polaroid-w);
+  /* slot (w − 2×13 padding, square) + padding + caption block */
+  height: 372px;
+  margin-inline: auto;
+}
+
+.polaroid {
   position: absolute;
   inset: 0;
+  display: block;
+  width: var(--polaroid-w);
+  height: fit-content;
+  padding: 13px 13px 0;
+  border: 0;
+  border-radius: 4px;
+  background: #fffef8;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.18),
+    0 1px 4px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  font: inherit;
+  transition: transform 320ms cubic-bezier(0.25, 0.1, 0.25, 1);
+  touch-action: pan-y;
+  user-select: none;
+}
+.polaroid.is-top {
+  cursor: grab;
+}
+.polaroid.is-dragging {
+  cursor: grabbing;
+  transition: none;
+}
+.polaroid:focus-visible {
+  outline: 2px solid var(--g-purple);
+  outline-offset: 4px;
+}
+
+.polaroid-slot {
+  display: block;
+  overflow: hidden;
+  border-radius: 2px;
+  background: #fde8e0;
+  aspect-ratio: 1;
+}
+.polaroid-slot img {
+  display: block;
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.polaroid-caption {
+  display: block;
+  padding: 14px 6px 16px;
+}
+.polaroid-label {
+  display: block;
+  font-size: 15px;
+  line-height: 1.3;
+  letter-spacing: 0.3px;
+  color: #3a2a20;
+}
+.polaroid-date {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: rgba(0, 0, 0, 0.25);
+}
+
+/* The app badges the newest pair the same way. */
+.polaroid-new {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  padding: 5px 13px;
   border-radius: 999px;
-  border: 2px solid var(--g-pink);
-  animation: pulse-ring 1.8s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
+  background: var(--gradient-cta);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  box-shadow: 0 4px 12px rgba(214, 66, 112, 0.35);
+}
+
+.polaroid-dots {
+  display: flex;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 26px;
+}
+.polaroid-dot {
+  width: 7px;
+  height: 7px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dark-border);
+  cursor: pointer;
+  transition: background 200ms ease, width 200ms ease;
+}
+.polaroid-dot.is-on {
+  width: 20px;
+  background: var(--gradient-cta);
+}
+
+@media (max-width: 420px) {
+  .polaroid-stack {
+    --polaroid-w: 264px;
+  }
+  .polaroid-deck {
+    height: 330px;
+  }
 }

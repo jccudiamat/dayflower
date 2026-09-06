@@ -102,7 +102,7 @@ export default function PrivacyPage() {
             Deleting your account removes your profile and cascades to the
             content you sent (flowers, heartbeats, shared reunion). You can
             also ask us to export or erase your data at any time —
-            email <span className="font-semibold">hello@dayflower.app</span>{" "}
+            email <span className="font-semibold">hello@mydayflower.com</span>{" "}
             (placeholder address until the domain goes live).
           </p>
         </section>

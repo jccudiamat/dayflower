@@ -16,7 +16,7 @@ const lora = Lora({
 export const metadata: Metadata = {
   title: "Dayflower — One flower a day, across any distance",
   description:
-    "Dayflower is a private ritual app for long-distance couples. Exchange a daily tulip, send heartbeats, count down to your reunion, and keep each other close — join the waitlist.",
+    "A private app for exactly two people — somewhere to land on each other every day when you can't be in the same room. Join the waitlist.",
 };
 
 export default function RootLayout({

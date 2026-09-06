@@ -110,7 +110,7 @@ export default function TermsPage() {
           <p className="mt-2 text-muted">
             We&apos;ll update these terms as Dayflower grows and note the date at
             the top. Questions:{" "}
-            <span className="font-semibold">hello@dayflower.app</span>{" "}
+            <span className="font-semibold">hello@mydayflower.com</span>{" "}
             (placeholder address until the domain goes live).
           </p>
         </section>
