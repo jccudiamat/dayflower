@@ -1,22 +1,12 @@
 import Image from "next/image";
+import ProductTour from "./components/ProductTour";
 import Link from "next/link";
 import PolaroidStack from "./components/PolaroidStack";
 import RotatingWord from "./components/RotatingWord";
 import WaitlistForm from "./components/WaitlistForm";
-import { Card } from "./components/ui";
-import { headlineWords, lines, polaroids, stripBlooms } from "./lib/content";
+import { headlineWords, polaroids } from "./lib/content";
 
-/**
- * The landing page is a waitlist page and nothing more.
- *
- * It deliberately does **not** show the app's screens, its feature list, the
- * flower meanings, or the roadmap — all of that was on here until 2026-09-06
- * and amounted to a build spec anyone could copy. The job now is to make a
- * stranger want in and hand over an email; anything past that is a leak.
- *
- * The artwork stays because it is the one thing that can't be lifted from a
- * screenshot — but it appears without names or meanings attached.
- */
+/** Landing page grounded in the current Flutter app. */
 export default function Home() {
   return (
     <div className="min-h-screen">
@@ -75,52 +65,38 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Three lines ───────────────────────────────────────────────── */}
-        <section className="mx-auto max-w-5xl px-5 py-20 sm:py-24">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {lines.map((l) => (
-              <Card key={l.title}>
-                <span className="text-2xl" aria-hidden>{l.emoji}</span>
-                <h2 className="mt-3 text-[17px] font-bold">{l.title}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-body">{l.text}</p>
-              </Card>
+        <ProductTour />
+
+        <section className="mx-auto grid max-w-5xl gap-10 px-5 py-20 sm:py-24 md:grid-cols-[0.8fr_1.2fr] md:gap-20" aria-labelledby="questions-title">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-dark">Before you join</p>
+            <h2 id="questions-title" className="mt-5 text-3xl font-bold leading-tight">A few things<br />you might be wondering.</h2>
+          </div>
+          <div className="divide-y divide-border-soft border-y border-border-soft">
+            {[
+              { question: "Who is Dayflower for?", answer: "Couples who want to feel more connected in everyday life. Especially when distance, time zones, or busy schedules keep you apart." },
+              { question: "Can we use it yet?", answer: "Not quite. Dayflower is in private testing. Join the waitlist and we’ll email you when it’s ready to try." },
+              { question: "Is it a social network?", answer: "Dayflower is a space for you and your partner. There’s no public feed or audience to post for." },
+              { question: "What happens when I join the waitlist?", answer: "You’ll receive one launch email at the address you leave. Joining doesn’t create an app account or sign your partner up." },
+            ].map((item) => (
+              <details key={item.question} className="group py-5">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-base font-bold [&::-webkit-details-marker]:hidden">
+                  {item.question}<span aria-hidden className="text-xl font-normal text-brand-dark group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-4 pr-6 text-[15px] leading-relaxed text-body">{item.answer}</p>
+              </details>
             ))}
           </div>
         </section>
 
-        {/* ── Artwork ───────────────────────────────────────────────────────
-            Full-bleed and uncaptioned: the point is that it looks like
-            nothing else, not what any single one of them means. */}
-        <section className="bg-dark-canvas pt-4">
-          <div className="grid grid-cols-3 gap-1 sm:grid-cols-6">
-            {stripBlooms.map((id) => (
-              <div key={id} className="bloom-tile !rounded-none">
-                <Image
-                  src={`/flowers/${id}.webp`}
-                  alt=""
-                  width={512}
-                  height={512}
-                  sizes="(max-width: 640px) 34vw, 17vw"
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Closing CTA ───────────────────────────────────────────────── */}
-        <section className="bg-dark-canvas pb-24 pt-20 text-on-dark">
-          <div className="mx-auto flex max-w-2xl flex-col items-center px-5 text-center">
-            <h2 className="text-3xl font-bold leading-tight sm:text-4xl">
-              Send the first one{" "}
-              <span className="gradient-text">when we open.</span>
-            </h2>
-            <p className="mt-4 max-w-md text-[15px] leading-relaxed text-on-dark-muted">
-              Dayflower is in private testing. Leave an address and we&rsquo;ll
-              write once, on the day it&rsquo;s ready.
-            </p>
-            <div className="mt-8 flex w-full justify-center">
-              <WaitlistForm dark />
-            </div>
+        <section className="bg-dark-canvas px-5 py-20 text-on-dark sm:py-24">
+          <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
+            <Image src="/mark.png" alt="" width={360} height={360} className="mb-6 h-12 w-12" />
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-g-pink">Something to look forward to</p>
+            <h2 className="mt-5 text-3xl font-bold leading-tight sm:text-4xl">A little closer,<br /><span className="gradient-text">even from here.</span></h2>
+            <p className="mt-5 max-w-md text-base leading-relaxed text-on-dark-muted">Be among the first to try Dayflower with your partner. Leave your email and we&rsquo;ll let you know when it&rsquo;s ready.</p>
+            <div className="mt-8 flex w-full justify-center"><WaitlistForm dark /></div>
+            <p className="mt-4 text-xs text-on-dark-muted">One launch email. No newsletter.</p>
           </div>
         </section>
       </main>

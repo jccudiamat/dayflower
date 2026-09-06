@@ -1,23 +1,4 @@
-/**
- * ⚠️ **PARKED — deliberately not rendered anywhere.** Do not re-import this
- * into `page.tsx`.
- *
- * Five screens of the app, rebuilt in HTML against the same tokens the
- * Flutter app uses (design.md → globals.css). It shipped on the landing page
- * for one day and was pulled on 2026-09-06: a competitor could read the
- * layout, the card structure, the mood row, the stat set and the Activities
- * menu straight off it and rebuild the app from the page source. A waitlist
- * page does not need to prove the app exists in that much detail.
- *
- * Kept because it is still the right asset for places where showing the UI
- * is the point and the audience is already ours — Play Store listing shots,
- * a post-launch tour page, a press kit. Expect it to have drifted from the
- * real screens by then; check each one before reusing it.
- *
- * Everything here is decorative — the rail was aria-hidden, with each
- * screen's meaning carried by a caption alongside it.
- */
-
+/** Illustrative screen previews based on Flutter UI, using fictional sample content. */
 import Image from "next/image";
 import type { ReactNode } from "react";
 
@@ -88,7 +69,7 @@ export function ChatSnapshot() {
         <span className="text-[13px] text-muted" aria-hidden>‹</span>
         <Avatar size={34} />
         <div className="min-w-0 flex-1 leading-tight">
-          <p className="text-[13px] font-bold">Sunshine</p>
+          <p className="text-[13px] font-bold">Alex</p>
           <p className="text-[10px] text-muted">😌&nbsp; Feeling calm</p>
         </div>
         <span className="text-[13px] text-muted" aria-hidden>✆</span>
@@ -109,7 +90,7 @@ export function ChatSnapshot() {
           <div className="px-1 pb-0.5 pt-2">
             <p className="text-[11.5px] font-bold leading-tight">Fox in the Tulips</p>
             <p className="note text-[10px] leading-tight text-muted">
-              Something small made me smile
+              A flower for your morning
             </p>
             <p className="note mt-1.5 text-[11.5px] leading-snug">
               &ldquo;He sat there the whole time I was on the phone with you.&rdquo;
@@ -175,7 +156,7 @@ export function HomeSnapshot() {
             <Avatar size={18} emoji="🌷" />
             <Avatar size={18} emoji="🌻" />
           </span>
-          <span className="text-[10px] font-bold">You &amp; Sunshine</span>
+          <span className="text-[10px] font-bold">You &amp; Alex</span>
         </span>
         <span className="text-[12px] text-muted" aria-hidden>◔</span>
       </div>
@@ -186,9 +167,9 @@ export function HomeSnapshot() {
           <div className="min-w-0 flex-1 pb-1">
             <p className="text-[19px] font-bold leading-tight">Good evening,</p>
             <p className="text-[19px] font-bold leading-tight" style={{ color: "#D5568F" }}>
-              Bunny <span className="text-[15px]">🌷</span>
+              Sam <span className="text-[15px]">🌷</span>
             </p>
-            <p className="mt-1.5 text-[10.5px] text-body">Sunshine · Manila · 9:41 PM</p>
+            <p className="mt-1.5 text-[10.5px] text-body">Alex · Manila · 9:41 PM</p>
             <p className="text-[10.5px] text-body">6,780 km apart</p>
           </div>
           <div className="relative h-[128px] w-[88px] shrink-0">
@@ -227,7 +208,7 @@ export function HomeSnapshot() {
           <div className="min-w-0 flex-1">
             <Label>Haptic heartbeat</Label>
             <p className="mt-1 text-[12.5px] font-bold">Tapped 5× today</p>
-            <p className="text-[10px] text-muted">Sunshine felt each one</p>
+            <p className="text-[10px] text-muted">A little hello for Alex</p>
           </div>
           <span
             className="pulse-ring relative grid h-11 w-11 shrink-0 place-items-center rounded-full text-[17px]"
@@ -243,8 +224,8 @@ export function HomeSnapshot() {
           <Label>Today</Label>
           <div className="mt-1.5 space-y-1.5">
             {[
-              ["🌷", "Sunshine sent Fox in the Tulips", "8:12 AM"],
-              ["📸", "Sunshine shared their day", "7:40 AM"],
+              ["🌷", "Alex sent Fox in the Tulips", "8:12 AM"],
+              ["📸", "Alex shared their day", "7:40 AM"],
             ].map(([icon, text, time]) => (
               <div
                 key={text}
@@ -292,7 +273,7 @@ export function CallSnapshot() {
             <span className="pulse-ring absolute inset-0 rounded-full" aria-hidden />
             <Avatar size={92} emoji="🌻" />
           </div>
-          <p className="mt-5 text-[21px] font-bold">Sunshine</p>
+          <p className="mt-5 text-[21px] font-bold">Alex</p>
           <p className="mt-0.5 text-[12px] text-on-dark-muted">is calling you</p>
           <p className="mt-3 text-[10.5px] text-on-dark-muted">Manila · 9:41 PM</p>
         </div>
@@ -353,7 +334,7 @@ export function UsSnapshot() {
               <Avatar size={40} emoji="🌻" />
             </span>
             <div className="leading-tight">
-              <p className="text-[13.5px] font-bold">Bunny &amp; Sunshine</p>
+              <p className="text-[13.5px] font-bold">Sam &amp; Alex</p>
               <p className="text-[10px] text-on-dark-muted">1 year, 3 months together</p>
             </div>
           </div>
@@ -404,8 +385,8 @@ export function UsSnapshot() {
           <Label>Where you are</Label>
           <div className="mt-2 space-y-2">
             {[
-              ["Bunny", "Dubai", "5:41 PM"],
-              ["Sunshine", "Manila", "9:41 PM"],
+              ["Sam", "Dubai", "5:41 PM"],
+              ["Alex", "Manila", "9:41 PM"],
             ].map(([who, city, time]) => (
               <div key={who} className="flex items-center justify-between">
                 <p className="text-[11px] font-semibold">
