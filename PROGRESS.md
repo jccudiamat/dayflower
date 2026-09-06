@@ -2080,3 +2080,43 @@ room reversed is simply incorrect. Mirroring is now front-camera only.
 
 ⚠️ Local preview only, either way. The *outgoing* track is never mirrored —
 same distinction as § Selfies stopped coming out mirrored.
+
+## The call, minimised inside the app (2026-09-06)
+
+### 🔴 A bar that describes a call is not a minimised call
+
+Back produced a pill reading "On a call · 0:42". That is a *notification
+about* something happening, not the thing itself — press back during a video
+call and you got a sentence about it. Closing something and leaving a
+receipt.
+
+It is the same window picture-in-picture gives the launcher, drawn inside the
+app: their face, still moving, in the corner. Tap to go back to it, drag to
+move it — a window parked over what you are reading is a window in the way,
+the same reason the self-view moves.
+
+⚠️ Clamped clear of the tab bar. A floating window over the nav covers the
+tab you are reaching for.
+
+### 🔴 The clock was making the back button float
+
+The header was `[button, Column(name, clock)]`, and a Row centres its
+children against the tallest — so the chevron sat at the midpoint *between*
+the two lines and the three of them read as competing for one row.
+
+Now a Column: the button and the name on one row, the clock on the next,
+indented past the button so it starts exactly where the name does. ⚠️ The
+button aligns to the name and nothing else.
+
+### Tapping the picture hides the controls
+
+What every video call does — the thing you are looking at is the other
+person, and a row of buttons across their face is the app in the way. Header
+slides up, controls slide down, both fade.
+
+- ⚠️ **`IgnorePointer` while hidden.** A faded-out row still takes taps, so
+  End would have stayed live under a thumb after being asked to leave.
+  Invisible and tappable is the worst of both.
+- ⚠️ The tap layer sits **below** the self-view and the controls in the
+  stack, so it only catches what they missed — dragging your own tile or
+  reaching for Mute must not also toggle the chrome.

@@ -173,14 +173,28 @@ class _RingingView extends ConsumerWidget {
 
 /* ── Live ───────────────────────────────────────────── */
 
-class _LiveView extends ConsumerWidget {
+class _LiveView extends ConsumerStatefulWidget {
   const _LiveView({required this.session, required this.partner});
 
   final CallSession session;
   final UserProfile? partner;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_LiveView> createState() => _LiveViewState();
+}
+
+class _LiveViewState extends ConsumerState<_LiveView> {
+  /// Whether the header and the controls are on screen.
+  ///
+  /// ⚠️ Tapping the picture hides them, which is what every video call does
+  /// — the thing you are looking at is the other person, and a row of
+  /// buttons across the bottom of their face is the app in the way.
+  bool _chrome = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final partner = widget.partner;
     final notifier = ref.read(callNotifierProvider.notifier);
     final name = partner?.petName ?? partner?.displayName ?? 'Them';
     final elapsed = session.elapsed;
@@ -198,6 +212,15 @@ class _LiveView extends ConsumerWidget {
             decoration: BoxDecoration(gradient: AppGradients.hero),
             child: SizedBox.expand(),
           ),
+        // ⚠️ Below the self-view and the controls in the stack, so it only
+        // catches taps that missed them — dragging your own tile or
+        // reaching for Mute must not also toggle the chrome.
+        Positioned.fill(
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _chrome = !_chrome),
+          ),
+        ),
         _ReactionOverlay(reactions: session.reactions),
         if (session.isVideo)
           _SelfView(
@@ -215,13 +238,20 @@ class _LiveView extends ConsumerWidget {
         SafeArea(
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
-                // The self-view used to live here, beside the timer. It is
-                // a free-floating layer now — see _SelfView — because a
-                // tile you can move is a tile that can get out of the way
-                // of their face, and one pinned into a Row cannot.
-                child: _CallHeader(name: name, elapsed: elapsed),
+              // Up and out of the way, rather than simply vanishing —
+              // sliding says where it went and how to think about getting
+              // it back.
+              _Chrome(
+                visible: _chrome,
+                offset: const Offset(0, -0.6),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                  // The self-view used to live here, beside the timer. It
+                  // is a free-floating layer now — see _SelfView — because
+                  // a tile you can move is a tile that can get out of the
+                  // way of their face, and one pinned into a Row cannot.
+                  child: _CallHeader(name: name, elapsed: elapsed),
+                ),
               ),
               const Spacer(),
 
@@ -246,57 +276,97 @@ class _LiveView extends ConsumerWidget {
               ],
 
               const Spacer(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 26),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // The one control here that is not about plumbing. First
-                    // in the row so it is the easiest to reach mid-sentence,
-                    // and furthest from End.
-                    _ControlButton(
-                      icon: CupertinoIcons.smiley,
-                      emoji: '🌷',
-                      onTap: () => notifier.sendReaction('🌷'),
-                      tooltip: 'Send a tulip',
-                    ),
-                    const SizedBox(width: 12),
-                    _ControlButton(
-                      icon: session.micEnabled
-                          ? CupertinoIcons.mic_fill
-                          : CupertinoIcons.mic_slash_fill,
-                      // Filled means "off", matching design.md rule 7's
-                      // logic: state is shown by inverting the surface, not
-                      // by striking the icon through.
-                      inverted: !session.micEnabled,
-                      onTap: notifier.toggleMic,
-                      tooltip: session.micEnabled ? 'Mute' : 'Unmute',
-                    ),
-                    if (session.isVideo) ...[
+              _Chrome(
+                visible: _chrome,
+                offset: const Offset(0, 1.2),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 26),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // The one control here that is not about plumbing. First
+                      // in the row so it is the easiest to reach mid-sentence,
+                      // and furthest from End.
+                      _ControlButton(
+                        icon: CupertinoIcons.smiley,
+                        emoji: '🌷',
+                        onTap: () => notifier.sendReaction('🌷'),
+                        tooltip: 'Send a tulip',
+                      ),
                       const SizedBox(width: 12),
                       _ControlButton(
-                        icon: CupertinoIcons.video_camera_solid,
-                        inverted: !session.cameraEnabled,
-                        onTap: notifier.toggleCamera,
-                        tooltip: session.cameraEnabled
-                            ? 'Turn camera off'
-                            : 'Turn camera on',
+                        icon: session.micEnabled
+                            ? CupertinoIcons.mic_fill
+                            : CupertinoIcons.mic_slash_fill,
+                        // Filled means "off", matching design.md rule 7's
+                        // logic: state is shown by inverting the surface, not
+                        // by striking the icon through.
+                        inverted: !session.micEnabled,
+                        onTap: notifier.toggleMic,
+                        tooltip: session.micEnabled ? 'Mute' : 'Unmute',
+                      ),
+                      if (session.isVideo) ...[
+                        const SizedBox(width: 12),
+                        _ControlButton(
+                          icon: CupertinoIcons.video_camera_solid,
+                          inverted: !session.cameraEnabled,
+                          onTap: notifier.toggleCamera,
+                          tooltip: session.cameraEnabled
+                              ? 'Turn camera off'
+                              : 'Turn camera on',
+                        ),
+                      ],
+                      const SizedBox(width: 12),
+                      _ControlButton(
+                        icon: CupertinoIcons.phone_down_fill,
+                        color: AppColors.danger,
+                        onTap: notifier.hangUp,
+                        tooltip: 'End',
                       ),
                     ],
-                    const SizedBox(width: 12),
-                    _ControlButton(
-                      icon: CupertinoIcons.phone_down_fill,
-                      color: AppColors.danger,
-                      onTap: notifier.hangUp,
-                      tooltip: 'End',
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The header and the controls, on their way in or out.
+///
+/// ⚠️ `IgnorePointer` while hidden. A faded-out row of buttons still takes
+/// taps, so without it End would still be sitting under your thumb after you
+/// had asked for it to go away — invisible and live is the worst of both.
+class _Chrome extends StatelessWidget {
+  const _Chrome({
+    required this.visible,
+    required this.offset,
+    required this.child,
+  });
+
+  final bool visible;
+
+  /// Where it goes when hidden, in fractions of its own size. The header
+  /// leaves upward and the controls downward — each off its nearest edge.
+  final Offset offset;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      offset: visible ? Offset.zero : offset,
+      duration: AppMotion.standard,
+      curve: AppMotion.easeOut,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: AppMotion.standard,
+        curve: AppMotion.easeOut,
+        child: IgnorePointer(ignoring: !visible, child: child),
+      ),
     );
   }
 }
@@ -537,53 +607,54 @@ void _leave(BuildContext context) {
 class _CallHeader extends StatelessWidget {
   const _CallHeader({required this.name, required this.elapsed});
 
+  /// Between the button and the name — and the clock's indent, so the clock
+  /// starts exactly where the name does.
+  static const _nameGap = AppSpace.xs;
+
   final String name;
   final Duration? elapsed;
 
   @override
   Widget build(BuildContext context) {
-    // 🔴 **One row, not a column.** The name used to sit *under* the back
-    // button, which put it on its own line with the chevron floating above
-    // it — and no amount of nudging the chevron sideways fixes something
-    // that is on the wrong row. Beside it, the way every conversation
-    // header in this app already reads.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
+    // 🔴 **The clock is on its own line, and the back button ignores it.**
+    //
+    // It was a Row of [button, Column(name, clock)], which centres the
+    // button against *both* lines — so the chevron floated at the midpoint
+    // between the name and the clock and the three of them read as fighting
+    // for one row. The button belongs beside the name and nothing else.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        // ⚠️ Leaves the screen, not the call. See _leave: it pops back to
-        // the conversation and the shell's mini bar keeps the call one tap
-        // away. Picture-in-picture belongs to Home, not to back.
-        Semantics(
-          button: true,
-          label: 'Back to the conversation',
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _leave(context),
-            child: Container(
-              width: 38,
-              height: 38,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: AppColors.darkCanvas.withValues(alpha: .5),
-              ),
-              child: const Icon(
-                CupertinoIcons.chevron_back,
-                size: 20,
-                color: AppColors.onDark,
+        Row(
+          children: [
+            // ⚠️ Leaves the screen, not the call. See _leave: it pops back
+            // to the conversation and the call keeps playing in the corner.
+            Semantics(
+              button: true,
+              label: 'Back to the conversation',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _leave(context),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppColors.darkCanvas.withValues(alpha: .5),
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.chevron_back,
+                    size: 20,
+                    color: AppColors.onDark,
+                  ),
+                ),
               ),
             ),
-          ),
-        ),
-        const SizedBox(width: AppSpace.xs),
-        // Their name, and the clock under it. Both hug the button rather
-        // than starting a second column of their own.
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
+            const SizedBox(width: _nameGap),
+            Expanded(
+              child: Text(
                 name,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -593,16 +664,17 @@ class _CallHeader extends StatelessWidget {
                   ],
                 ),
               ),
-              // No clock until media is up: one sitting at 00:00 reads as a
-              // call that connected and went silent. The connecting state
-              // has the middle of the screen instead.
-              if (elapsed != null) ...[
-                const SizedBox(height: 2),
-                _Timer(elapsed: elapsed),
-              ],
-            ],
-          ),
+            ),
+          ],
         ),
+        // Under the name, indented past the button so the two line up. No
+        // clock until media is up: one sitting at 00:00 reads as a call that
+        // connected and went silent.
+        if (elapsed != null)
+          Padding(
+            padding: const EdgeInsets.only(left: 38 + _nameGap, top: 4),
+            child: _Timer(elapsed: elapsed),
+          ),
       ],
     );
   }

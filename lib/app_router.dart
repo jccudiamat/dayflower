@@ -14,6 +14,7 @@ import 'features/calls/data/call_repository.dart';
 import 'features/calls/domain/call.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/presentation/screens/call_screen.dart';
+import 'features/calls/presentation/widgets/call_video.dart';
 import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
 import 'features/chapters/presentation/screens/chapters_screen.dart';
 import 'features/dates/presentation/screens/events_screen.dart';
@@ -414,71 +415,111 @@ class _AppShellState extends ConsumerState<AppShell> {
       body: Stack(
         children: [
           widget.child,
-          if (live)
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: SafeArea(child: _CallMiniBar(session: call)),
-            ),
+          if (live) _CallMiniBar(session: call),
         ],
       ),
     );
   }
 }
 
-/// The call, while you are somewhere else in the app.
+/// The call, still playing, while you are somewhere else in the app.
 ///
-/// 🔴 **This is what the back button needed to exist.** Leaving the call
-/// screen used to mean picture-in-picture, which puts the app in a floating
-/// window *over the launcher* — so going "back" to the conversation left the
-/// app entirely. Back belongs inside the app; the floating window belongs to
-/// Home and to leaving.
-class _CallMiniBar extends ConsumerWidget {
+/// 🔴 **It shows the call — it does not describe it.** The first version was
+/// a pill reading "On a call · 0:42", which is a notification about something
+/// that is happening rather than the thing itself. Pressing back during a
+/// video call and getting a sentence about it is not minimising the call, it
+/// is closing it and leaving a receipt.
+///
+/// The same window the launcher gets from picture-in-picture, drawn inside
+/// the app: their face, still moving, in the corner. Tap to go back to it.
+class _CallMiniBar extends ConsumerStatefulWidget {
   const _CallMiniBar({required this.session});
 
   final CallSession session;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final elapsed = session.elapsed;
+  ConsumerState<_CallMiniBar> createState() => _CallMiniBarState();
+}
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 78),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          onTap: () => context.push(Routes.call),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: BoxDecoration(
-              gradient: AppGradients.cta,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              boxShadow: AppElevation.glow,
-            ),
-            child: Row(
+class _CallMiniBarState extends ConsumerState<_CallMiniBar> {
+  static const _size = Size(116, 164);
+  static const _margin = 12.0;
+
+  /// ⚠️ Bottom **right**, and low enough to clear the tab bar. The left is
+  /// where the app's own back affordances live, and a window sitting over
+  /// the nav would cover the tab you were trying to reach.
+  Offset? _position;
+
+  Offset _clamp(Offset value, Size bounds) => Offset(
+        value.dx.clamp(_margin, bounds.width - _size.width - _margin),
+        value.dy.clamp(_margin, bounds.height - _size.height - 96),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final session = widget.session;
+    final bounds = MediaQuery.sizeOf(context);
+    final position = _clamp(
+      _position ??
+          Offset(bounds.width - _size.width - _margin,
+              bounds.height - _size.height - 96),
+      bounds,
+    );
+
+    return Positioned(
+      left: position.dx,
+      top: position.dy,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => context.push(Routes.call),
+        // Movable, for the same reason the self-view is: a window parked
+        // over the thing you are reading is a window in the way.
+        onPanUpdate: (details) => setState(() {
+          _position = _clamp((_position ?? position) + details.delta, bounds);
+        }),
+        child: Container(
+          width: _size.width,
+          height: _size.height,
+          decoration: BoxDecoration(
+            color: AppColors.darkCanvas,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border: Border.all(color: AppColors.onDark.withValues(alpha: .14)),
+            boxShadow: AppElevation.glow,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                Icon(
-                  session.isVideo
-                      ? CupertinoIcons.video_camera_solid
-                      : CupertinoIcons.phone_fill,
-                  color: Colors.white,
-                  size: 18,
-                ),
-                const SizedBox(width: AppSpace.xs),
-                Expanded(
-                  child: Text(
-                    elapsed == null
-                        ? 'Connecting…'
-                        : 'On a call · ${formatCallDuration(elapsed)}',
-                    style: AppText.body(Colors.white)
-                        .copyWith(fontWeight: FontWeight.w600),
+                if (session.isVideo)
+                  RemoteVideo(session: session)
+                else
+                  const DecoratedBox(
+                    decoration: BoxDecoration(gradient: AppGradients.hero),
+                    child: Center(
+                      child: Icon(CupertinoIcons.phone_fill,
+                          color: AppColors.onDark, size: 28),
+                    ),
                   ),
-                ),
-                Text(
-                  'Tap to return',
-                  style: AppText.caption(Colors.white.withValues(alpha: .85)),
+                // The clock, on a scrim so it survives a bright frame.
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    color: AppColors.darkCanvas.withValues(alpha: .55),
+                    alignment: Alignment.center,
+                    child: Text(
+                      session.elapsed == null
+                          ? 'Connecting…'
+                          : formatCallDuration(session.elapsed!),
+                      style: AppText.caption(AppColors.onDark).copyWith(
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
