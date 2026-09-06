@@ -17,6 +17,7 @@ import '../../../home/data/mood_prefs.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
 
@@ -44,6 +45,14 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   bool _panelOpen = false;
   bool _sending = false;
   bool _marking = false;
+
+  /// The message being replied to, held while the reply is typed.
+  ///
+  /// ⚠️ The whole message rather than its id: the strip above the field has
+  /// to show *what* is being answered, and looking it back up out of the
+  /// thread to draw two lines of preview would be a lookup for something we
+  /// already had in hand when it was tapped.
+  FlowerMessage? _replyingTo;
 
   /// Messages this session has successfully written to the database but that
   /// the live stream has not echoed back yet.
@@ -119,6 +128,27 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     }
   }
 
+  void _startReply(FlowerMessage message) {
+    setState(() => _replyingTo = message);
+    _focus.requestFocus();
+  }
+
+  Future<void> _deleteMessage(FlowerMessage message) async {
+    // ⚠️ Dropped from the pending list too. A message sent this session and
+    // then deleted before the stream echoed it would otherwise stay on
+    // screen — the row is gone, so no echo is ever coming to remove it.
+    setState(() => _pending.removeWhere((m) => m.id == message.id));
+    try {
+      await ref.read(flowerRepositoryProvider).deleteMessage(message.id);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't delete that. Try again?")),
+        );
+      }
+    }
+  }
+
   Future<void> _sendText() async {
     final text = _composer.text.trim();
     if (text.isEmpty || _sending) return;
@@ -129,18 +159,28 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     // Cleared up front so the field empties on tap like every other chat;
     // restored below if the send actually fails.
+    // ⚠️ Both cleared up front, so the field empties and the reply strip
+    // closes on tap like every other chat. Restored below if the send
+    // actually fails — including what it was answering, or the retry would
+    // send a bare message where a reply was meant.
+    final replyTo = _replyingTo;
     _composer.clear();
-    setState(() => _sending = true);
+    setState(() {
+      _sending = true;
+      _replyingTo = null;
+    });
     try {
       final sent = await ref.read(flowerRepositoryProvider).sendText(
             pairId: pair.id,
             senderId: userId,
             text: text,
+            replyTo: replyTo?.id,
           );
       if (mounted) setState(() => _pending.add(sent));
     } catch (_) {
       if (mounted) {
         _composer.text = text;
+        setState(() => _replyingTo = replyTo);
         _showError("Couldn't send that. Try again?");
       }
     } finally {
@@ -286,6 +326,13 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                 ChatBubble(
                   message: message,
                   isMine: message.senderId == userId,
+                  onReply: () => _startReply(message),
+                  // ⚠️ Yours only. Deleting is taking back something you
+                  // said, and nobody gets to take back what somebody else
+                  // said.
+                  onDelete: message.senderId == userId
+                      ? () => _deleteMessage(message)
+                      : null,
                 ),
               ],
             );
@@ -319,85 +366,117 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            // A Material rather than a decorated Container so the icons
-            // sitting inside it splash onto the pill itself — ink looks for
-            // the nearest Material, and on a plain Container that's the
-            // Scaffold underneath, where the ripple is hidden.
-            child: Material(
-              color: AppColors.surfaceSubtle,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              clipBehavior: Clip.antiAlias,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 44),
-                child: Row(
-                  // Icons hold the bottom line as the field grows to five
-                  // lines, instead of drifting to the vertical middle.
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Mirrors the trailing gap below — without it the leading
-                    // icon hugs the pill's left curve while the camera icon
-                    // has 4px of air on the right.
-                    const SizedBox(width: 4),
-                    // The catalog opener. Becomes a keyboard glyph while the
-                    // drawer is up, so one button always toggles back to the
-                    // other input.
-                    _ComposerIcon(
-                      icon: _panelOpen
-                          ? CupertinoIcons.keyboard
-                          : Icons.local_florist_rounded,
-                      color: _panelOpen ? AppColors.muted : AppColors.brand,
-                      tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
-                      onTap: _togglePanel,
-                    ),
-                    Expanded(
-                      child: TextField(
-                        controller: _composer,
-                        focusNode: _focus,
-                        minLines: 1,
-                        maxLines: 5,
-                        textCapitalization: TextCapitalization.sentences,
-                        textInputAction: TextInputAction.newline,
-                        keyboardType: TextInputType.multiline,
-                        style: AppText.body(AppColors.ink),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(
-                              vertical: 12, horizontal: 4),
-                          hintText: 'Message',
-                          hintStyle: AppText.body(AppColors.muted),
+          // What is being answered, above the field it is answered in.
+          if (_replyingTo != null) _replyStrip(_replyingTo!),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                // A Material rather than a decorated Container so the icons
+                // sitting inside it splash onto the pill itself — ink looks for
+                // the nearest Material, and on a plain Container that's the
+                // Scaffold underneath, where the ripple is hidden.
+                child: Material(
+                  color: AppColors.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  clipBehavior: Clip.antiAlias,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Row(
+                      // Icons hold the bottom line as the field grows to five
+                      // lines, instead of drifting to the vertical middle.
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Mirrors the trailing gap below — without it the leading
+                        // icon hugs the pill's left curve while the camera icon
+                        // has 4px of air on the right.
+                        const SizedBox(width: 4),
+                        // The catalog opener. Becomes a keyboard glyph while the
+                        // drawer is up, so one button always toggles back to the
+                        // other input.
+                        _ComposerIcon(
+                          icon: _panelOpen
+                              ? CupertinoIcons.keyboard
+                              : Icons.local_florist_rounded,
+                          color: _panelOpen ? AppColors.muted : AppColors.brand,
+                          tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
+                          onTap: _togglePanel,
                         ),
-                        // Rebuilds the send button as the field fills.
-                        onChanged: (_) => setState(() {}),
-                      ),
+                        Expanded(
+                          child: TextField(
+                            controller: _composer,
+                            focusNode: _focus,
+                            minLines: 1,
+                            maxLines: 5,
+                            textCapitalization: TextCapitalization.sentences,
+                            textInputAction: TextInputAction.newline,
+                            keyboardType: TextInputType.multiline,
+                            style: AppText.body(AppColors.ink),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              filled: false,
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 12, horizontal: 4),
+                              hintText: 'Message',
+                              hintStyle: AppText.body(AppColors.muted),
+                            ),
+                            // Rebuilds the send button as the field fills.
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        // The paperclip is gone. It never did anything, and
+                        // the camera screen it would have duplicated already
+                        // has a gallery picker of its own — two doors to one
+                        // room, one of them locked.
+                        _ComposerIcon(
+                          icon: CupertinoIcons.camera,
+                          tooltip: 'Send a photo',
+                          onTap: _openCamera,
+                        ),
+                        const SizedBox(width: 4),
+                      ],
                     ),
-                    // The paperclip is gone. It never did anything, and
-                    // the camera screen it would have duplicated already
-                    // has a gallery picker of its own — two doors to one
-                    // room, one of them locked.
-                    _ComposerIcon(
-                      icon: CupertinoIcons.camera,
-                      tooltip: 'Send a photo',
-                      onTap: _openCamera,
-                    ),
-                    const SizedBox(width: 4),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              const SizedBox(width: 6),
+              _SendButton(
+                enabled: canSend && _composer.text.trim().isNotEmpty,
+                loading: _sending,
+                onTap: _sendText,
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          _SendButton(
-            enabled: canSend && _composer.text.trim().isNotEmpty,
-            loading: _sending,
-            onTap: _sendText,
+        ],
+      ),
+    );
+  }
+
+  /// The "replying to" strip.
+  ///
+  /// ⚠️ Carries its own way out. A reply you cannot cancel is a mode you are
+  /// stuck in, and the only other exit would be sending something.
+  Widget _replyStrip(FlowerMessage message) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(child: MessageQuote(replyTo: message.id, onDark: false)),
+          const SizedBox(width: 4),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _replyingTo = null),
+            child: const Padding(
+              padding: EdgeInsets.all(6),
+              child:
+                  Icon(CupertinoIcons.xmark, size: 15, color: AppColors.muted),
+            ),
           ),
         ],
       ),

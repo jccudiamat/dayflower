@@ -1120,6 +1120,16 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                     ],
                   ),
                 ),
+                // ⚠️ Yours only, and it shows in the pager too — unlike
+                // the close button, which the pager owns. Deleting is about
+                // *this* photo, so it belongs on the page showing it.
+                if (isMine)
+                  IconButton(
+                    onPressed: () => _confirmDelete(message),
+                    tooltip: 'Delete this day',
+                    icon: const Icon(CupertinoIcons.delete,
+                        color: Colors.white, size: 19),
+                  ),
                 // One close button, owned by the pager. A per-page one would
                 // sit in the same place and mean something different.
                 if (!widget.embedded)
@@ -1177,6 +1187,55 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
         ],
       ),
     );
+  }
+
+  /// Deletes this day, for both of you.
+  ///
+  /// ⚠️ Confirmed first. This is the one destructive control in the viewer
+  /// and it sits next to a close button — a mis-tap should not be able to
+  /// take a photo away permanently.
+  ///
+  /// ⚠️ It leaves the *thread* as well, not just the home screen. Retiring
+  /// (the seven-day limit) and deleting are different acts: one takes a
+  /// photo off the widget and keeps the message, the other takes the message
+  /// back.
+  Future<void> _confirmDelete(FlowerMessage message) async {
+    final yes = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Delete this day?'),
+            content: Text(
+              'It leaves your conversation as well as the home screen, for '
+              'both of you.',
+              style: AppText.body(),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text('Delete', style: AppText.body(AppColors.danger)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (!yes) return;
+
+    try {
+      await ref.read(flowerRepositoryProvider).deleteMessage(message.id);
+      // The pager drops the page on its own — myDayPhotosProvider is derived
+      // from the thread. A viewer opened on its own has nothing left to show.
+      if (mounted && !widget.embedded) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't delete that. Try again?")),
+        );
+      }
+    }
   }
 
   /// Both replies go into the thread as ordinary messages.

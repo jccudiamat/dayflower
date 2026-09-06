@@ -7,6 +7,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/flower_repository.dart';
 import 'media_viewer.dart';
+import 'message_quote.dart';
 import 'call_bubble.dart';
 
 /// One message in the thread — a flower or a line of text.
@@ -19,7 +20,15 @@ class ChatBubble extends StatelessWidget {
     super.key,
     required this.message,
     required this.isMine,
+    this.onReply,
+    this.onDelete,
   });
+
+  /// Null where a thread has no composer to reply into.
+  final VoidCallback? onReply;
+
+  /// Null on their messages. See _showActions.
+  final VoidCallback? onDelete;
 
   final FlowerMessage message;
   final bool isMine;
@@ -49,35 +58,101 @@ class ChatBubble extends StatelessWidget {
     // bubble drew a card inside a card — two borders, two backgrounds, and
     // a tinted margin around a white photograph.
     if (message.flower != null) {
-      return Align(
-        alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 6),
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.sizeOf(context).width * 0.66,
-          ),
-          child: _buildFlower(context),
-        ),
-      );
+      return _pressable(
+          context,
+          Align(
+            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              constraints: BoxConstraints(
+                maxWidth: MediaQuery.sizeOf(context).width * 0.66,
+              ),
+              child: _buildFlower(context),
+            ),
+          ));
     }
 
-    return Align(
-      alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 6),
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.sizeOf(context).width * 0.76,
-        ),
-        decoration: BoxDecoration(
-          color: isMine ? AppColors.blush : AppColors.surface,
-          borderRadius: shape,
-          border: Border.all(
-            color: isMine ? AppColors.blushMid : AppColors.border,
+    return _pressable(
+        context,
+        Align(
+          alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 6),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width * 0.76,
+            ),
+            decoration: BoxDecoration(
+              color: isMine ? AppColors.blush : AppColors.surface,
+              borderRadius: shape,
+              border: Border.all(
+                color: isMine ? AppColors.blushMid : AppColors.border,
+              ),
+            ),
+            child: ClipRRect(
+              borderRadius: shape,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // What this is answering, above what it says.
+                  if (message.replyTo != null)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                      child:
+                          MessageQuote(replyTo: message.replyTo, onDark: false),
+                    ),
+                  message.isPhoto ? _buildPhoto(context) : _buildText(),
+                ],
+              ),
+            ),
           ),
-        ),
-        child: ClipRRect(
-          borderRadius: shape,
-          child: message.isPhoto ? _buildPhoto(context) : _buildText(),
+        ));
+  }
+
+  /// Long-press for the two things you can do to a message.
+  ///
+  /// ⚠️ Long-press, not a visible affordance. A reply arrow on every bubble
+  /// is a control on a screen whose whole content is somebody's words, and
+  /// the gesture is the one every messaging app has already taught.
+  Widget _pressable(BuildContext context, Widget child) {
+    if (onReply == null && onDelete == null) return child;
+    return GestureDetector(
+      onLongPress: () => _showActions(context),
+      child: child,
+    );
+  }
+
+  void _showActions(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onReply != null)
+              ListTile(
+                leading: const Icon(CupertinoIcons.reply, size: 20),
+                title: Text('Reply', style: AppText.body(AppColors.ink)),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  onReply!();
+                },
+              ),
+            // ⚠️ Yours only. Deleting a message is taking back something you
+            // said; nobody gets to take back what somebody else said.
+            if (onDelete != null)
+              ListTile(
+                leading: const Icon(CupertinoIcons.delete,
+                    size: 20, color: AppColors.danger),
+                title: Text('Delete', style: AppText.body(AppColors.danger)),
+                subtitle: Text('Removes it for both of you',
+                    style: AppText.caption()),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  onDelete!();
+                },
+              ),
+          ],
         ),
       ),
     );

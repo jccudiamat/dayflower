@@ -1,6 +1,6 @@
 import 'dart:math' show Random;
-import 'dart:typed_data' show Uint8List;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -345,6 +345,35 @@ class FlowerRepository {
   /// flower and the timestamp too, since RLS grants a row and not a column.
   ///
   /// The message stays in the thread. Only the home-screen claim is dropped.
+  /// Takes back one of your own messages, for both of you.
+  ///
+  /// ⚠️ A hard delete, not a tombstone. "This message was deleted" is right
+  /// in a group, where the gap would confuse people still reading around it.
+  /// Here there are two of you and they were present for it — a permanent
+  /// grey stub is a worse artefact than the gap.
+  ///
+  /// ⚠️ Replies to it survive: `reply_to` is `on delete set null` and never
+  /// cascade, because taking your photo back must not take their words with
+  /// it. The quote degrades to "message unavailable".
+  ///
+  /// The storage object goes too. The row is the record; the file is bytes,
+  /// and orphaned bytes in a private bucket cost money and tell no story.
+  Future<void> deleteMessage(String messageId) async {
+    final path = await _client.rpc<String?>(
+      'delete_message',
+      params: {'p_message_id': messageId},
+    );
+    if (path == null || path.isEmpty) return;
+    try {
+      await _client.storage.from(dayPhotoBucket).remove([path]);
+    } catch (e) {
+      // Best effort. The message is already gone, which is what was asked
+      // for; a leftover object is a housekeeping problem, not a failure the
+      // user should be told about.
+      debugPrint('photo cleanup failed: $e');
+    }
+  }
+
   Future<void> retireDayPhoto(String messageId) async {
     await _client.rpc<void>(
       'retire_day_photo',
@@ -472,6 +501,27 @@ final partnerDayPhotoProvider = Provider.autoDispose<FlowerMessage?>((ref) {
   final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
   for (final m in messages) {
     if (m.senderId != userId && m.isPhoto && m.isFreshForWidget) return m;
+  }
+  return null;
+});
+
+/// The message a reply is answering, or null.
+///
+/// ⚠️ Resolved from the thread already in memory rather than fetched. The
+/// quote is only ever shown beside the reply, which means the thread is
+/// loaded — and one request per quoted bubble would be a request per row on
+/// a busy day.
+///
+/// Null covers two different things that read the same way: a reply to
+/// something scrolled out of the loaded window, and a reply to something
+/// since deleted (`reply_to` is set null, never cascaded). Both render as
+/// "message unavailable", which is true of each.
+final quotedMessageProvider =
+    Provider.autoDispose.family<FlowerMessage?, String?>((ref, id) {
+  if (id == null || id.isEmpty) return null;
+  final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
+  for (final m in messages) {
+    if (m.id == id) return m;
   }
   return null;
 });

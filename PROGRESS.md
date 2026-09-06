@@ -2351,3 +2351,55 @@ stack underneath stops mattering.
 ⚠️ The in-app card is a different thing from the floating window and always
 was: the card lives in `AppShell`, so it follows you across every tab and
 sub-route, and the window is what the *launcher* gets. Same call, two homes.
+
+## Deleting, and replies that finally show what they answer (2026-09-06)
+
+**Migration 0030 — applied and verified** (`prosecdef` true, `authenticated`
+only).
+
+### 🔴 `reply_to` has existed since 0023 and nothing ever displayed it
+
+The widget's tulip, the story viewer's reactions and every typed reply all
+recorded what they were answering. The thread then drew them as loose
+messages — so a 🌷 arriving three hours after the photo it was about read as
+an unexplained flower, **which is the exact thing the column was added to
+prevent**. The data was right for weeks; the screen never said so.
+
+`MessageQuote` renders it, above the reply, in the bubble and again in the
+composer strip while one is being written.
+
+- ⚠️ Resolved from the **thread already in memory**, not fetched. The quote
+  only ever appears beside the reply, so the thread is loaded — one request
+  per quoted bubble would be a request per row on a busy day.
+- ⚠️ Null is two different things that read the same: scrolled out of the
+  loaded window, or deleted since. Both say "message unavailable", which is
+  true of each.
+- The reply strip carries its own ✕. A reply you cannot cancel is a mode you
+  are stuck in, and the only other way out would be sending something.
+- ⚠️ On a failed send the reply target is **restored** along with the text,
+  or the retry would send a bare message where a reply was meant.
+
+### Deleting
+
+`delete_message` — sender only, definer function, hard delete.
+
+⚠️ **A hard delete, not a tombstone.** "This message was deleted" is right in
+a group, where the gap would confuse people reading around it. Here there are
+two of you and they were present for it; a permanent grey stub saying
+something used to be here is a worse artefact than the gap.
+
+- ⚠️ **Replies survive it.** `reply_to` is `on delete set null` and never
+  cascade (0023) — taking your photo back must not take their words with it.
+  The quote degrades rather than the reply vanishing.
+- The storage object goes too, best effort. The row is the record; the file
+  is bytes, and orphaned bytes in a private bucket cost money and tell no
+  story. A failed cleanup is not reported — the delete already happened.
+- ⚠️ Deleting a day is **not** retiring one. Retiring (the seven-day limit)
+  takes a photo off the widget and keeps the message; deleting takes the
+  message back. The viewer's dialog says so.
+- Long-press for the menu rather than an arrow on every bubble: a control on
+  every row of a screen made of somebody's words is the app in the way, and
+  the gesture is one every messaging app has already taught.
+- ⚠️ Deleting drops the message from `_pending` too. One sent this session
+  and deleted before the stream echoed it would otherwise stay on screen —
+  the row is gone, so no echo is coming to remove it.
