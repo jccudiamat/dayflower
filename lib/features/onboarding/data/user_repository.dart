@@ -153,12 +153,43 @@ class UserRepository {
           {Duration ttl = const Duration(days: 7)}) =>
       _client.storage.from(avatarBucket).createSignedUrl(path, ttl.inSeconds);
 
+  /// Where they are, and the clock that goes with it.
+  ///
+  /// ⚠️ Written as one update, because they are one decision. A city carries
+  /// its own timezone (see [CityResult.timezone]), and letting the two drift
+  /// apart is how you get a clock in Manila next to a distance from Dubai.
+  /// The timezone row in Settings still exists for someone travelling, which
+  /// is the one case where they genuinely differ.
+  Future<void> updatePlace(
+    String userId, {
+    required String city,
+    required double latitude,
+    required double longitude,
+    required String timezone,
+  }) async {
+    await _client.from('users').update({
+      'city': city,
+      'city_lat': latitude,
+      'city_lon': longitude,
+      'timezone': timezone,
+    }).eq('id', userId);
+  }
+
+  /// Sets or clears the birthday. Null clears it — it is optional, and
+  /// something optional has to be removable.
+  Future<void> updateBirthday(String userId, DateTime? birthday) async {
+    await _client.from('users').update({
+      'birthday': birthday == null ? null : isoDate(birthday),
+    }).eq('id', userId);
+  }
+
   Future<UserProfile> createProfile({
     required String userId,
     required String displayName,
     String? petName,
     String timezone = 'UTC',
     String? gender,
+    DateTime? birthday,
   }) async {
     final profile = UserProfile(
       id: userId,
@@ -166,6 +197,9 @@ class UserRepository {
       petName: petName,
       timezone: timezone,
       gender: gender,
+      // Optional at sign-up and optional forever — null here just means it
+      // wasn't given, and Settings can fill it in later.
+      birthday: birthday,
       // Left null on purpose. A null avatar means "never chosen", which is
       // what lets the gender default apply — and lets it change later if the
       // gender does. Writing the default here would freeze it forever.

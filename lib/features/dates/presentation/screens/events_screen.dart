@@ -4,11 +4,16 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app_router.dart';
+import '../../../../core/widgets/ios_back_button.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../widgets/reunion_card.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../home/presentation/widgets/clocks_card.dart';
+import '../../../../core/models/user_profile.dart';
+import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../us/domain/couple_dates.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
@@ -126,6 +131,20 @@ String _daysLabel(DateTime target) {
 
 String _formatDate(DateTime d) => DateFormat('MMMM d, yyyy').format(d);
 
+/// The next time [birthday]'s day of the year comes around, on or after
+/// [from].
+///
+/// ⚠️ 29 February lands on 1 March in a common year, which is what
+/// `DateTime(2027, 2, 29)` normalises to on its own. That is a real choice
+/// and the kinder one: the alternative is a birthday that disappears from
+/// the screen for three years out of four.
+DateTime nextBirthday(DateTime birthday, DateTime from) {
+  final today = _startOfDay(from);
+  final thisYear = DateTime(today.year, birthday.month, birthday.day);
+  if (!thisYear.isBefore(today)) return thisYear;
+  return DateTime(today.year + 1, birthday.month, birthday.day);
+}
+
 class _Countdown {
   const _Countdown({
     required this.days,
@@ -175,11 +194,11 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   // `ignore` comments that hide real ones later. Git has it exactly as it
   // was; see the commit that removed it.
 
-  // _myName went with the cycle section, which was the only thing that
-  // named both of you. The clocks that used to live here moved to the top of
-  // Home — that pair was a mock duplicate of the real ClocksCard, which
-  // reads actual profile timezones.
-  static const String _partnerName = 'Sunshine';
+  // _myName went with the cycle section, and _partnerName ('Sunshine') went
+  // with the mock birthday it titled — birthdays come from the two real
+  // profiles now. The clocks that used to live here moved to the top of
+  // Home; that pair was a mock duplicate of the real ClocksCard, which reads
+  // actual profile timezones.
 
   // Mock seed data, anchored relative to today so the countdown is always
   // live rather than expiring against hardcoded 2026 dates.
@@ -204,32 +223,70 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   /// a real entry without carrying a second flag through the whole screen.
   static const int _monthsaryId = -1;
   static const int _anniversaryId = -2;
+  static const int _myBirthdayId = -3;
+  static const int _partnerBirthdayId = -4;
 
   List<_Event> get _derived {
     final start = ref.watch(currentPairProvider).valueOrNull?.togetherSince;
+    final me = ref.watch(userProfileProvider).valueOrNull;
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+
+    final events = <_Event>[];
+
     // Nothing is invented before the couple has said when they started.
-    if (start == null) return const [];
+    if (start != null) {
+      final now = DateTime.now();
+      final monthsary = nextMonthsary(start, now);
+      final anniversary = nextAnniversary(start, now);
+      events.addAll([
+        _Event(
+          id: _monthsaryId,
+          kind: _EventKind.monthsary,
+          emoji: _kindStyles[_EventKind.monthsary]!.emoji,
+          title: '${monthsBetween(start, monthsary)} Month Monthsary',
+          date: _iso(monthsary),
+        ),
+        _Event(
+          id: _anniversaryId,
+          kind: _EventKind.anniversary,
+          emoji: _kindStyles[_EventKind.anniversary]!.emoji,
+          title: '${anniversaryNumber(start, anniversary)} Year Anniversary',
+          date: _iso(anniversary),
+        ),
+      ]);
+    }
 
-    final now = DateTime.now();
-    final monthsary = nextMonthsary(start, now);
-    final anniversary = nextAnniversary(start, now);
+    // ⚠️ **Derived from the profiles, not stored as entries.** A birthday
+    // given at sign-up appears here on its own, moves to next year the day
+    // after it passes, and follows a correction on the profile without
+    // anything needing to be edited twice. It is also why they cannot be
+    // deleted here: there is no row behind them, only a date on a person.
+    final mine = _birthdayEvent(_myBirthdayId, me, 'Your Birthday');
+    if (mine != null) events.add(mine);
 
-    return [
-      _Event(
-        id: _monthsaryId,
-        kind: _EventKind.monthsary,
-        emoji: _kindStyles[_EventKind.monthsary]!.emoji,
-        title: '${monthsBetween(start, monthsary)} Month Monthsary',
-        date: _iso(monthsary),
-      ),
-      _Event(
-        id: _anniversaryId,
-        kind: _EventKind.anniversary,
-        emoji: _kindStyles[_EventKind.anniversary]!.emoji,
-        title: '${anniversaryNumber(start, anniversary)} Year Anniversary',
-        date: _iso(anniversary),
-      ),
-    ];
+    final theirs = _birthdayEvent(
+      _partnerBirthdayId,
+      partner,
+      "${partner?.petName ?? partner?.displayName ?? 'Their'}'s Birthday",
+    );
+    if (theirs != null) events.add(theirs);
+
+    return events;
+  }
+
+  /// The next time this person's birthday comes around, or null when they
+  /// have not given one — it is optional, and an absent birthday shows as
+  /// nothing at all rather than as a prompt.
+  _Event? _birthdayEvent(int id, UserProfile? profile, String title) {
+    final birthday = profile?.birthday;
+    if (birthday == null) return null;
+    return _Event(
+      id: id,
+      kind: _EventKind.birthday,
+      emoji: _kindStyles[_EventKind.birthday]!.emoji,
+      title: title,
+      date: _iso(nextBirthday(birthday, DateTime.now())),
+    );
   }
 
   @override
@@ -240,13 +297,9 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     // both are derived from the pair's start date now, and keeping the
     // fakes would have shown each of them twice, on two different days.
     _manual = [
-      _Event(
-        id: 1,
-        kind: _EventKind.birthday,
-        emoji: '🎂',
-        title: "$_partnerName's Birthday",
-        date: _iso(today.add(const Duration(days: 21))),
-      ),
+      // ⚠️ The mock "Sunshine's Birthday" that sat here is gone.
+      // Birthdays are derived from the two profiles now, so keeping it
+      // would have shown a made-up name's birthday next to a real one.
       _Event(
         id: 3,
         kind: _EventKind.reunion,
@@ -293,7 +346,10 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     if (event != null && event.id < 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('This comes from your start date — change it on Us.'),
+          content: Text(
+            'This one comes from your profiles — change it in Settings, '
+            'or change your start date on Us.',
+          ),
         ),
       );
       return;
@@ -352,11 +408,22 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
             Padding(
               padding: const EdgeInsets.fromLTRB(
                   AppSpace.sm, AppSpace.sm, AppSpace.sm, 0),
-              child: FeatureScreenHeader(
-                title: 'Events',
-                subtitle: 'Countdowns, milestones and cycle',
-                trailing: _AddButton(onTap: () => _openEventSheet(null)),
-              ),
+              child: Row(children: [
+                IosBackButton(onTap: () {
+                  if (context.canPop()) {
+                    context.pop();
+                  } else {
+                    context.go(Routes.us);
+                  }
+                }),
+                const SizedBox(width: AppSpace.xs),
+                Expanded(
+                    child: FeatureScreenHeader(
+                  title: 'Events',
+                  subtitle: 'Countdowns, milestones & clocks',
+                  trailing: _AddButton(onTap: () => _openEventSheet(null)),
+                )),
+              ]),
             ),
             const SizedBox(height: AppSpace.sm),
             Expanded(
@@ -383,6 +450,18 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                       },
                       onAdd: () => _openEventSheet(null),
                     ),
+                    if (next != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton.icon(
+                          icon: const Icon(CupertinoIcons.gift, size: 18),
+                          label: const Text('Find a gift'),
+                          onPressed: () => context.push(Uri(
+                            path: Routes.gifts,
+                            queryParameters: {'occasion': next.style.label},
+                          ).toString()),
+                        ),
+                      ),
                     const SizedBox(height: AppSpace.sm),
 
                     // ── 2. The next time you are in the same place ──

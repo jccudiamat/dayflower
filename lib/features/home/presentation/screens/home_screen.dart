@@ -546,7 +546,7 @@ class _HomeHeader extends ConsumerWidget {
         ? null
         : tz.TZDateTime.now(safeLocation(partnerZone));
 
-    final distance = distanceLabel(profile?.timezone, partnerZone);
+    final distance = profileDistanceLabel(profile, partner);
 
     // Bottom-aligned against the arch, not top-aligned: the greeting is the
     // heavier block and hanging it from the top left it floating above a
@@ -586,7 +586,10 @@ class _HomeHeader extends ConsumerWidget {
               // it is one thought.
               if (partnerName != null && partnerTime != null)
                 Text(
-                  '$partnerName · ${zoneCity(partnerZone!)} · '
+                  // Their town when they have picked one, the timezone's
+                  // namesake city otherwise — "Manila" for everybody in
+                  // Asia/Manila, which is where this line started.
+                  '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(partnerZone!)} · '
                   '${DateFormat('h:mm a').format(partnerTime)}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

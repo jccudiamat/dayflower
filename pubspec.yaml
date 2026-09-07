@@ -46,6 +46,10 @@ dependencies:
   # ── Utilities ────────────────────────────────
   intl: ^0.20.2
   timezone: ^0.11.0 # IANA database for the dual clocks
+  # City search (lib/core/services/city_search.dart). Pure Dart, so unlike a
+  # geolocation plugin it adds no native code, no permission prompt and no
+  # risk of the stale Kotlin cache described under § Android builds.
+  http: ^1.2.0
   uuid: ^4.3.3
   shared_preferences: ^2.2.3
   connectivity_plus: ^7.1.1

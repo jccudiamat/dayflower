@@ -43,7 +43,8 @@ class AppBottomNav extends ConsumerWidget {
                 label: 'Home',
                 // startsWith, not ==: the activity feed is nested under
                 // Home and the tab has to stay lit inside it.
-                selected: location.startsWith(Routes.home),
+                selected: location.startsWith(Routes.home) ||
+                    location == Routes.events,
                 onTap: () => context.go(Routes.home),
               ),
               _NavItem(
@@ -67,10 +68,10 @@ class AppBottomNav extends ConsumerWidget {
                 onTap: () => context.go(Routes.flowers),
               ),
               _NavItem(
-                icon: CupertinoIcons.calendar,
-                label: 'Events',
-                selected: location == Routes.events,
-                onTap: () => context.go(Routes.events),
+                icon: CupertinoIcons.gift_fill,
+                label: 'Gifts',
+                selected: location == Routes.gifts,
+                onTap: () => context.go(Routes.gifts),
               ),
               _NavItem(
                 icon: CupertinoIcons.square_grid_2x2_fill,

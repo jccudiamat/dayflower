@@ -21,7 +21,11 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
   OnboardingNotifier(this._ref) : super(const OnboardingState());
   final Ref _ref;
 
-  Future<bool> submit({required String name, required String petName}) async {
+  Future<bool> submit({
+    required String name,
+    required String petName,
+    DateTime? birthday,
+  }) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
       state = state.copyWith(errorMessage: 'Enter your name.');
@@ -40,6 +44,9 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
             userId: userId,
             displayName: trimmedName,
             petName: petName.trim().isEmpty ? trimmedName : petName.trim(),
+            // Null when skipped, which is a real answer and not a failure -
+            // Settings can add it later, and Events simply shows nothing.
+            birthday: birthday,
           );
       _ref.invalidate(userProfileProvider);
       state = state.copyWith(isLoading: false);

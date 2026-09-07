@@ -1,17 +1,22 @@
-/// How far apart two people are, derived from the only location either of
-/// them ever gave us: their IANA timezone.
+/// How far apart two people are.
 ///
 /// This is deliberately not GPS. Asking a couples app for location
-/// permission to print one line of text would be a bad trade, and the
-/// timezone is already on the profile because the dual clocks need it.
+/// permission to print one line of text would be a bad trade.
 ///
-/// The cost is precision: a zone is a city, not a person, so "London" means
-/// the middle of London and two people in the same zone are zero miles
-/// apart. For the sentence this feeds — "2,000 miles apart" — that is the
-/// right resolution anyway. Nobody wants it to the metre.
+/// Two sources, in order of preference:
+///
+/// 1. **The city each person picked** (migration 0034), which is a real
+///    place with real coordinates. Use [profileDistanceLabel].
+/// 2. **Their timezone**, the estimate this file was originally built on —
+///    one representative city per IANA zone. A zone is a city, not a person,
+///    so everyone in Asia/Manila is measured from Manila and two people in
+///    the same zone read as zero miles apart. Still the right answer when
+///    one of them has not picked a city yet: approximate beats absent.
 library;
 
 import 'dart:math' as math;
+
+import '../models/user_profile.dart';
 
 /// Approximate coordinates for each zone's namesake city.
 ///
@@ -99,15 +104,21 @@ double? milesBetweenZones(String? a, String? b) {
   final to = _zoneCoordinates[b];
   if (from == null || to == null) return null;
 
-  final lat1 = _radians(from.$1);
-  final lat2 = _radians(to.$1);
-  final dLat = lat2 - lat1;
-  final dLng = _radians(to.$2 - from.$2);
+  return haversineMiles(from.$1, from.$2, to.$1, to.$2);
+}
 
-  // Haversine. The naive flat-earth version is out by hundreds of miles at
-  // the distances this app is for, which is most of them.
+/// Great-circle distance between two points, in miles.
+///
+/// Haversine. The naive flat-earth version is out by hundreds of miles at
+/// the distances this app is for, which is most of them.
+double haversineMiles(double lat1, double lon1, double lat2, double lon2) {
+  final a = _radians(lat1);
+  final b = _radians(lat2);
+  final dLat = b - a;
+  final dLng = _radians(lon2 - lon1);
+
   final h = math.sin(dLat / 2) * math.sin(dLat / 2) +
-      math.cos(lat1) * math.cos(lat2) * math.sin(dLng / 2) * math.sin(dLng / 2);
+      math.cos(a) * math.cos(b) * math.sin(dLng / 2) * math.sin(dLng / 2);
   return 2 * _earthRadiusMiles * math.asin(math.min(1, math.sqrt(h)));
 }
 
@@ -119,9 +130,36 @@ double _radians(double degrees) => degrees * math.pi / 180;
 /// "together" rather than "0 miles apart", which is technically true and
 /// emotionally wrong — this is the one line on the screen that is about the
 /// gap between two people.
-String? distanceLabel(String? myZone, String? partnerZone) {
-  final miles = milesBetweenZones(myZone, partnerZone);
+String? distanceLabel(String? myZone, String? partnerZone) =>
+    _label(milesBetweenZones(myZone, partnerZone));
+
+/// The same line, from the two profiles — which is what every caller should
+/// use.
+///
+/// ⚠️ **Real coordinates when both people have picked a city, the zone
+/// estimate otherwise.** The estimate places everyone at one representative
+/// city per timezone, so two people in Asia/Manila read as "together" no
+/// matter how far apart they are, and someone in Tuguegarao was measured
+/// from Manila — ~300 miles from where they stand. Falling back to it is
+/// still right: half a couple who has set a city and half who has not
+/// deserves an approximate answer rather than none.
+String? profileDistanceLabel(UserProfile? me, UserProfile? partner) {
+  if (me == null || partner == null) return null;
+  if (me.hasPlace && partner.hasPlace) {
+    return _label(
+      haversineMiles(me.cityLat!, me.cityLon!, partner.cityLat!,
+          partner.cityLon!),
+    );
+  }
+  return distanceLabel(me.timezone, partner.timezone);
+}
+
+String? _label(double? miles) {
   if (miles == null) return null;
+  // "Together" rather than "0 miles apart", which is technically true and
+  // emotionally wrong — this is the one line on the screen that is about the
+  // gap between two people. 25 miles is the same town, not the same room,
+  // and the line means the second thing.
   if (miles < 25) return 'Together 💛';
   return '${_grouped(miles.round())} miles apart ✈️';
 }

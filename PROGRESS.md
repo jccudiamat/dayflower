@@ -2654,3 +2654,115 @@ a problem — but a burst of taps *is* the feature.
 - Several arriving in the same realtime batch are still one notification,
   captioned "+2 more". That is one delivery, not a decision to stay quiet.
 
+## The greeting stopped showing furniture (2026-09-07)
+
+The emoji beside your name each morning was a random pick from
+`FlowerCatalog.pickable` — and that catalog is *artwork*. "Bench in Bloom",
+"Fox in the Tulips", "Highland Tulips": entries labelled with whatever emoji
+sits nearest the picture. So the greeting could open with a 🪑, a 🦊 or a 🐢,
+which reads as a glitch rather than a greeting.
+
+`greetingEmojis` is now its own list in `greeting_flower.dart`. Everything on
+it belongs to one of five families and means something warm with no caption:
+hearts, flowers and plants, sky, scenery, warm faces. ⚠️ **No animals, no
+objects, no food, nothing that needs a story.** A test names the specific
+emoji that were showing up and asserts they are gone, so the next person who
+reaches for `FlowerCatalog` here finds out immediately.
+
+The catalog is untouched — 🪑 is right for "Bench in Bloom" on a card that
+also carries the picture. It was only ever wrong on its own.
+
+## A city, not a timezone (2026-09-07)
+
+🔴 **`users.timezone` was doing two jobs and only one of them well.** It
+drives the dual clocks, correctly. It was also driving "4,293 miles apart",
+through a table of one representative city per IANA zone — so everyone in
+Asia/Manila was measured from Manila, putting somebody in Tuguegarao City
+~300 miles from where they actually stand, and two people anywhere in the
+same zone read as "Together".
+
+Migration 0034 adds `city`, `city_lat`, `city_lon`. The zone stays the clock;
+the city is the distance.
+
+- **Picked, not sensed.** `CitySearch` queries Open-Meteo's geocoding
+  endpoint — free, no key, GeoNames behind it — and every result carries its
+  own IANA timezone, so one tap sets the place *and* the clock. ⚠️ The typed
+  query goes to a third party; nothing about the user goes with it, and
+  there is no account, coordinate or identifier attached.
+- **Deliberately not GPS.** A geolocation plugin would have meant native
+  code, a runtime permission prompt and a far more sensitive fact than "I
+  live in Tuguegarao". A city is the resolution this feature needs: it feeds
+  a number in miles and a clock, and neither improves with a street.
+- `profileDistanceLabel` prefers real coordinates and **falls back to the
+  zone estimate** when either person has not picked yet. Approximate beats
+  absent for the half of a couple who has filled it in.
+- The picker debounces at 350ms and sequences its responses, so a slow "Tug"
+  cannot land on top of a fast "Tuguegarao".
+
+## Birthdays, asked once and derived forever (2026-09-07)
+
+Optional at sign-up — a third onboarding step whose button reads **"Skip for
+now"** until a date is picked, so there is no greyed-out CTA and no separate
+skip link. Settable later in Settings either way.
+
+⚠️ **Derived on Events, not stored as an entry.** Same shape as the monthsary
+and the anniversary: one date on a person, and the screen works out the next
+occurrence. It moves to next year the day after it passes and follows a
+correction on the profile without anything being edited twice. Which is also
+why it cannot be deleted there — there is no row behind it.
+
+- `date`, never a timestamp. A birthday is the same calendar day everywhere,
+  and an instant would move it across midnight for exactly the long-distance
+  couples this app is for.
+- 29 February lands on 1 March in a common year. Deliberate: better a day out
+  than gone for three years running.
+- The mock "Sunshine's Birthday" is gone — it would have sat next to a real
+  one under a made-up name.
+
+## The picture is the control (2026-09-07)
+
+The avatar at the top of Settings is tappable now, with a camera badge on its
+bottom-right corner, and the "Your picture" row underneath is gone. That row
+described something already on screen at 66px and cost a tap to reach what
+the picture itself should open. The badge is what makes it look tappable — a
+face on a settings screen reads as decoration otherwise.
+
+## Saving anything no longer throws you out of Settings (2026-09-07)
+
+🔴 **The router was rebuilt on every profile change**, and `routerProvider`'s
+own comment described this as a splash-screen flash worth accepting. It was
+more than a flash: a new `GoRouter` is a new `routerConfig` for
+`MaterialApp.router`, so the Navigator and its history were rebuilt from
+`initialLocation` — you were **returned to Home**. Setting a city and a
+birthday would have done it twice in a row.
+
+The fix is the one that comment prescribed and did not take: **keep the
+watches, hoist the GoRouter.**
+
+- The three `ref.watch` calls stay exactly as they are. ⚠️ Build 19's bug was
+  `ref.listen`, which observes without driving — the chain
+  `authState → currentUserIdProvider → userProfileProvider` went dirty on
+  sign-in and was never recomputed, and the app sat on the splash screen
+  forever. What changed here is only what a change *does*.
+- `_RouterGate` holds the latest snapshot and the router itself, in a
+  provider that watches nothing and so never rebuilds. The redirect closes
+  over the box, not over the values, so a router built on the first pass
+  still reads the tenth pass's data.
+- A rebuild now calls `refresh()` and returns the same instance.
+- ⚠️ **Cold boot verified**, which is the check build 19 skipped: a fresh
+  page load went splash → signed in → paired → Home unaided.
+
+### Verified live
+
+Against the real project, as the test partner's own signed-in session (never
+service_role), then cleared — `select ... where city is not null or birthday
+is not null` returns nothing.
+
+- Searching "Tuguegarao" returned Tuguegarao City / Cagayan Valley,
+  Philippines / Manila, and picking it wrote city, both coordinates and
+  `Asia/Manila` to the row through the app.
+- Settings kept its place through both a city pick and a birthday change.
+- Events listed "Your Birthday · September 13, 2026 · 6 days" under ALSO
+  COMING UP, derived from the profile, with no mock birthday beside it.
+- Tapping the avatar opened the existing "Your picture" sheet.
+

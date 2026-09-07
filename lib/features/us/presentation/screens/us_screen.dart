@@ -71,6 +71,25 @@ class UsScreen extends ConsumerWidget {
                   const SizedBox(height: AppSpace.md),
                   const _StatsRow(),
                   const SizedBox(height: AppSpace.md),
+                  Material(
+                    color: AppColors.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.lg),
+                      side: const BorderSide(color: AppColors.border),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: ListTile(
+                      leading: const Icon(CupertinoIcons.calendar,
+                          color: AppColors.secondary),
+                      title: Text('Events', style: AppText.subtitle()),
+                      subtitle: Text('Your dates, countdowns & clocks',
+                          style: AppText.caption()),
+                      trailing: const Icon(CupertinoIcons.chevron_right,
+                          size: 16, color: AppColors.muted),
+                      onTap: () => context.push(Routes.events),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpace.sm),
                   _TogetherSinceCard(pair: pair),
                   if (pair?.togetherSince != null) ...[
                     const SizedBox(height: AppSpace.sm),
@@ -511,7 +530,7 @@ class _WhereYouAreCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final distance = distanceLabel(me?.timezone, partner?.timezone);
+    final distance = profileDistanceLabel(me, partner);
 
     return _Card(
       child: Column(

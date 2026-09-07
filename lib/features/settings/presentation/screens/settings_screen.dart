@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +19,7 @@ import '../../../../core/widgets/flower_avatar.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../../core/widgets/gradient_button.dart';
+import '../../../../core/widgets/city_picker.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../heartbeat/data/pulse_alert_prefs.dart';
@@ -59,6 +61,7 @@ class SettingsScreen extends ConsumerWidget {
               petName: profile?.petName,
               profile: profile,
               email: email,
+              onTapAvatar: () => _pickAvatar(context, ref, profile),
             ),
             const SizedBox(height: AppSpace.md),
 
@@ -86,16 +89,10 @@ class SettingsScreen extends ConsumerWidget {
                     },
                   ),
                 ),
-                const _Line(),
-                _Row(
-                  title: 'Your picture',
-                  value: profile == null
-                      ? '—'
-                      : profile.hasPhoto
-                          ? 'Photo'
-                          : '${profile.flower.emoji}  ${profile.flower.label}',
-                  onTap: () => _pickAvatar(context, ref, profile),
-                ),
+                // ⚠️ No "Your picture" row. The picture is at the top of
+                // this screen, at 66px, with a camera badge on it — a text
+                // row underneath saying the word "Photo" was describing
+                // something already on screen and better tapped directly.
                 const _Line(),
                 _Row(
                   title: 'Nickname',
@@ -119,7 +116,41 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const _Line(),
                 _Row(
+                  title: 'Birthday',
+                  value: profile?.birthday == null
+                      ? 'Not set'
+                      : DateFormat('MMMM d').format(profile!.birthday!),
+                  onTap: () => _editBirthday(context, ref, profile),
+                ),
+                const _Line(),
+                // Where they are, which is the distance — see migration
+                // 0034 for why this is not the timezone.
+                _Row(
+                  title: 'Where you are',
+                  subtitle: 'Sets the distance between you',
+                  value: profile?.city?.split(',').first.trim() ?? 'Not set',
+                  onTap: () async {
+                    final city = await showCityPicker(context);
+                    if (city == null) return;
+                    final id = ref.read(currentUserIdProvider);
+                    if (id == null) return;
+                    await ref.read(userRepositoryProvider).updatePlace(
+                          id,
+                          city: city.label,
+                          latitude: city.latitude,
+                          longitude: city.longitude,
+                          timezone: city.timezone,
+                        );
+                    ref.invalidate(userProfileProvider);
+                  },
+                ),
+                const _Line(),
+                _Row(
                   title: 'Timezone',
+                  // Picking a city sets this too. It stays its own row for
+                  // the one case where they genuinely differ: someone away
+                  // from home, whose clock has moved and whose city has not.
+                  subtitle: 'For the clocks. Usually set by your city',
                   value: zoneCity(profile?.timezone ?? 'UTC'),
                   onTap: () async {
                     final zone = await showTimezonePicker(context);
@@ -407,12 +438,16 @@ class _ProfileHeader extends StatelessWidget {
     required this.name,
     required this.petName,
     required this.email,
+    required this.onTapAvatar,
     this.profile,
   });
 
   final String name;
   final String? petName;
   final String? email;
+
+  /// Opens the same sheet the old "Your picture" row did.
+  final VoidCallback onTapAvatar;
 
   /// Null only while the profile is still loading, which draws the fallback
   /// flower — the same thing every other surface does while waiting.
@@ -430,16 +465,50 @@ class _ProfileHeader extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(
-              gradient: AppGradients.cta,
-              shape: BoxShape.circle,
+          // ⚠️ The picture is the control now. There is no row underneath
+          // saying "Your picture ›" any more, so the badge is what tells
+          // anyone this can be tapped — a face on a settings screen reads
+          // as decoration otherwise.
+          GestureDetector(
+            onTap: onTapAvatar,
+            behavior: HitTestBehavior.opaque,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: const BoxDecoration(
+                    gradient: AppGradients.cta,
+                    shape: BoxShape.circle,
+                  ),
+                  // The ring is a padded gradient circle *behind* the
+                  // avatar rather than a border on it, so a photo sits
+                  // inside the ring instead of being clipped by it.
+                  child: UserAvatar(profile, size: 66),
+                ),
+                Positioned(
+                  right: -2,
+                  bottom: -2,
+                  child: Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      color: AppColors.brand,
+                      shape: BoxShape.circle,
+                      // Sits half on the photo, so it needs the card's own
+                      // colour behind it to read as a separate object
+                      // rather than a smudge on the edge of a face.
+                      border: Border.all(color: AppColors.surface, width: 2),
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.camera_fill,
+                      size: 13,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            // The ring is a padded gradient circle *behind* the avatar
-            // rather than a border on it, so a photo sits inside the ring
-            // instead of being clipped by it.
-            child: UserAvatar(profile, size: 66),
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
@@ -831,6 +900,35 @@ class _CheckForUpdatesRow extends ConsumerWidget {
 /// because they are the same decision — what stands in for you — and a fork
 /// would make the flower feel like the consolation prize. It isn't: it is
 /// the default, the fallback, and what the home-screen widget draws.
+/// Sets or clears the birthday.
+///
+/// ⚠️ Opens on the last birthday that has already happened, not on today.
+/// A date picker that starts in 2026 makes somebody born in 1998 scroll
+/// through 28 years to answer a question they were told was optional. The
+/// first year offered is 1920, which is a generous outer bound rather than
+/// a guess about anybody.
+Future<void> _editBirthday(
+  BuildContext context,
+  WidgetRef ref,
+  UserProfile? profile,
+) async {
+  final now = DateTime.now();
+  final existing = profile?.birthday;
+  final picked = await showDatePicker(
+    context: context,
+    initialDate: existing ?? DateTime(now.year - 25, now.month, now.day),
+    firstDate: DateTime(1920),
+    lastDate: now,
+    helpText: 'Your birthday',
+  );
+  if (picked == null) return;
+
+  final id = ref.read(currentUserIdProvider);
+  if (id == null) return;
+  await ref.read(userRepositoryProvider).updateBirthday(id, picked);
+  ref.invalidate(userProfileProvider);
+}
+
 Future<void> _pickAvatar(
   BuildContext context,
   WidgetRef ref,

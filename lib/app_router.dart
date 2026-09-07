@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthState;
+
+import 'core/models/pair.dart';
+import 'core/models/user_profile.dart';
 import 'core/providers/supabase_provider.dart';
 import 'core/theme/app_colors.dart';
 import 'features/calls/data/call_pip.dart';
@@ -23,6 +27,7 @@ import 'features/dates/presentation/screens/events_screen.dart';
 import 'features/finance/presentation/screens/finance_screen.dart';
 import 'features/finance/presentation/screens/insights_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
+import 'features/gifts/presentation/screens/gifts_screen.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/onboarding/presentation/screens/onboarding_screen.dart';
 import 'features/pairing/data/pair_repository.dart';
@@ -36,7 +41,7 @@ import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
 
 // ── Route names ──────────────────────────────
-// Tab labels: Home · Flowers · Events · Activities.
+// Tab labels: Home · Flowers · Camera · Gifts · Activities.
 // Feature folders keep their original names (tulip/dates/booth).
 class Routes {
   static const splash = '/';
@@ -70,6 +75,7 @@ class Routes {
   /// hub is a menu of features rather than a log of them.
   static const activityFeed = '/app/home/activity';
   static const events = '/app/events';
+  static const gifts = '/app/gifts';
   static const activities = '/app/activities';
 
   /// Sub-route of the Activities hub — the tab itself is a menu, not the
@@ -194,6 +200,29 @@ String? gateRedirect({
   return null;
 }
 
+/// The router's view of the world, and the router itself.
+///
+/// One instance per container, held by a provider that watches nothing and
+/// therefore never rebuilds — which is the whole point: [routerProvider]
+/// rebuilds freely, and finds the same box and the same [GoRouter] waiting
+/// in it.
+///
+/// ⚠️ Mutable on purpose. The redirect closes over this object and reads
+/// the fields at call time, so a router built on the first pass still sees
+/// the values written on the tenth.
+class _RouterGate {
+  AsyncValue<AuthState> auth = const AsyncValue.loading();
+  AsyncValue<UserProfile?> profile = const AsyncValue.loading();
+  AsyncValue<Pair?> pair = const AsyncValue.loading();
+  GoRouter? router;
+}
+
+final _gateProvider = Provider<_RouterGate>((ref) {
+  final gate = _RouterGate();
+  ref.onDispose(() => gate.router?.dispose());
+  return gate;
+});
+
 /// 🔴 **Do not replace these `ref.watch` calls with `ref.listen`.**
 ///
 /// Build 19 did exactly that — the router was built once and refreshed
@@ -209,22 +238,44 @@ String? gateRedirect({
 /// `authState → currentUserIdProvider → userProfileProvider` went dirty on
 /// sign-in and was never recomputed. Watching is what makes it resolve.
 ///
-/// ⚠️ **The cost, knowingly accepted:** every change to auth, profile or
-/// pair rebuilds this provider and therefore builds a **new `GoRouter`** —
-/// a new `routerConfig` for `MaterialApp.router`, so the Navigator and its
-/// history are rebuilt from `initialLocation`. That is why saving a
-/// nickname flashes the splash screen. A cosmetic flash on an app that
-/// starts beats no flash on an app that doesn't.
+/// ⚠️ **And the `GoRouter` is built once, not per change.** This is the fix
+/// the previous version of this comment described and did not take: the
+/// watches stay exactly as they are — they are what drives the chain — but
+/// what they update is a snapshot the redirect reads, not the router
+/// itself.
 ///
-/// If you fix that flash, keep the watches and hoist only the `GoRouter`
-/// instance so it is built once — and **verify the app still boots from
-/// cold** before shipping it. That is the check build 19 skipped.
+/// Rebuilding the router handed `MaterialApp.router` a new `routerConfig`,
+/// so the Navigator and its whole history were rebuilt from
+/// `initialLocation` on **every** profile change. That is more than the
+/// splash flash it was written off as: saving anything in Settings threw
+/// you out to Home, and setting a city and a birthday threw you out twice.
+///
+/// [_gate] holds the latest snapshot, the router is created on the first
+/// build and kept, and `refresh()` re-runs the redirect against the new
+/// values. The redirect closes over [_gate] rather than over the values, so
+/// the router built in the first pass never reads a stale one.
 final routerProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authStateProvider);
-  final profileAsync = ref.watch(userProfileProvider);
-  final pairAsync = ref.watch(currentPairProvider);
+  final gate = ref.watch(_gateProvider);
 
-  return GoRouter(
+  // 🔴 Still watches, still all three. Build 19's bug was `ref.listen`,
+  // which observes without driving — the chain
+  // `authState → currentUserIdProvider → userProfileProvider` went dirty on
+  // sign-in and was never recomputed, and the app sat on the splash screen
+  // forever. What changed here is only what a change *does*.
+  gate.auth = ref.watch(authStateProvider);
+  gate.profile = ref.watch(userProfileProvider);
+  gate.pair = ref.watch(currentPairProvider);
+
+  final existing = gate.router;
+  if (existing != null) {
+    // A rebuild with the router already made: re-run the redirect against
+    // the snapshot just written, and hand back the same instance so
+    // MaterialApp.router sees no new config and keeps the Navigator.
+    existing.refresh();
+    return existing;
+  }
+
+  return gate.router = GoRouter(
     initialLocation: Routes.splash,
     redirect: (context, state) => gateRedirect(
       location: state.matchedLocation,
@@ -232,12 +283,12 @@ final routerProvider = Provider<GoRouter>((ref) {
       // treating it as unknown is what sent this to the splash on every
       // profile edit. Not plain `hasValue` either — see isGateValueUsable
       // for the null that hides in there.
-      authKnown: authState.hasValue,
-      signedIn: authState.valueOrNull?.session != null,
-      profileKnown: isGateValueUsable(profileAsync),
-      hasProfile: profileAsync.valueOrNull != null,
-      pairKnown: isGateValueUsable(pairAsync),
-      isLinked: pairAsync.valueOrNull?.isLinked == true,
+      authKnown: gate.auth.hasValue,
+      signedIn: gate.auth.valueOrNull?.session != null,
+      profileKnown: isGateValueUsable(gate.profile),
+      hasProfile: gate.profile.valueOrNull != null,
+      pairKnown: isGateValueUsable(gate.pair),
+      isLinked: gate.pair.valueOrNull?.isLinked == true,
     ),
     routes: [
       GoRoute(
@@ -282,6 +333,10 @@ final routerProvider = Provider<GoRouter>((ref) {
           GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
           GoRoute(
               path: Routes.events, builder: (_, __) => const EventsScreen()),
+          GoRoute(
+              path: Routes.gifts,
+              builder: (_, state) =>
+                  GiftsScreen(occasion: state.uri.queryParameters['occasion'])),
           GoRoute(
               path: Routes.activities,
               builder: (_, __) => const ActivitiesScreen()),

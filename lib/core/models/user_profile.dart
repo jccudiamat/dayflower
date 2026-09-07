@@ -11,6 +11,10 @@ class UserProfile {
     this.gender,
     this.mood,
     this.moodAt,
+    this.city,
+    this.cityLat,
+    this.cityLon,
+    this.birthday,
   });
 
   final String id;
@@ -26,6 +30,27 @@ class UserProfile {
   /// photo has been uploaded. Not a URL — the bucket is private, so a
   /// signed one is minted at render time (see `avatarUrlProvider`).
   final String? avatarPath;
+
+  /// Where they are, as a label: "Tuguegarao City, Cagayan Valley,
+  /// Philippines". Null until a city has been picked.
+  ///
+  /// ⚠️ Separate from [timezone] on purpose. The zone is the clock; the city
+  /// is the distance. Everyone in Asia/Manila used to be measured from
+  /// Manila itself, which put someone in Tuguegarao ~300 miles from where
+  /// they actually are — see migration 0034.
+  final String? city;
+
+  final double? cityLat;
+  final double? cityLon;
+
+  /// Optional, and asked for that way. A date, never an instant: a birthday
+  /// is the same calendar day everywhere, and an instant would shift it
+  /// across midnight for exactly the couples this app is for.
+  final DateTime? birthday;
+
+  /// Whether this profile can give a real distance rather than an estimate
+  /// from its timezone.
+  bool get hasPlace => cityLat != null && cityLon != null;
 
   /// Only ever used to choose the default avatar. Never rendered.
   final String? gender;
@@ -84,6 +109,15 @@ class UserProfile {
         moodAt: map['mood_at'] == null
             ? null
             : DateTime.parse(map['mood_at'] as String).toLocal(),
+        // All four absent on rows read before migration 0034.
+        city: map['city'] as String?,
+        cityLat: (map['city_lat'] as num?)?.toDouble(),
+        cityLon: (map['city_lon'] as num?)?.toDouble(),
+        // ⚠️ Parsed, not localised. `date` arrives as "1998-04-12" and
+        // toLocal() on it would land on the 11th west of UTC.
+        birthday: map['birthday'] == null
+            ? null
+            : DateTime.tryParse(map['birthday'] as String),
       );
 
   Map<String, dynamic> toInsertMap() => {
@@ -94,5 +128,14 @@ class UserProfile {
         if (avatar != null) 'avatar': avatar,
         if (avatarPath != null) 'avatar_path': avatarPath,
         if (gender != null) 'gender': gender,
+        if (city != null) 'city': city,
+        if (cityLat != null) 'city_lat': cityLat,
+        if (cityLon != null) 'city_lon': cityLon,
+        if (birthday != null) 'birthday': isoDate(birthday!),
       };
 }
+
+/// A calendar date as Postgres `date` wants it, with no time and no zone.
+String isoDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
