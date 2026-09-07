@@ -105,8 +105,9 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             views: RemoteViews,
             widgetData: SharedPreferences,
         ) {
-            // The flipper, not the ImageView inside it — hiding a child
-            // would leave the flipper itself cycling empty slots.
+            // Both photo views. Hiding a child of the flipper would leave
+            // the flipper itself cycling empty slots.
+            views.setViewVisibility(R.id.widget_photo_still, View.GONE)
             views.setViewVisibility(R.id.widget_flipper, View.GONE)
             views.setViewVisibility(R.id.widget_header, View.GONE)
             views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
@@ -141,10 +142,12 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             val photos = loadDayPhotos(widgetData)
                 .map { roundCorners(context, it, options) }
             if (photos.isNotEmpty()) {
-                renderFlipper(context, views, widgetData, photos)
-                views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
+                // Which of the two photo views is shown is renderPhotos'
+                // decision — it depends on whether anything is rotating.
+                renderPhotos(context, views, widgetData, photos)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
             } else {
+                views.setViewVisibility(R.id.widget_photo_still, View.GONE)
                 views.setViewVisibility(R.id.widget_flipper, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             }
@@ -375,44 +378,65 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         private const val MAX_ROTATION = 5
 
         /**
-         * Fills the flipper and decides whether it moves.
+         * Puts the photos on the card, animated or still.
          *
-         * 🔴 **Every call here has to be remotable, and almost none of
-         * ViewFlipper's are.** `setFlipInterval` is the only method on the
-         * class annotated `@RemotableViewMethod` — `setAutoStart`,
-         * `startFlipping` and `stopFlipping` are all ordinary methods, and
+         * 🔴 **Every call through RemoteViews has to be remotable, and almost
+         * none of ViewFlipper's are.** `setFlipInterval` is the only method
+         * on the class annotated `@RemotableViewMethod` — `setAutoStart`,
+         * `startFlipping` and `stopFlipping` are ordinary methods, and
          * putting one through RemoteViews throws an ActionException the
-         * launcher reports as **"Problem loading widget"**. An earlier
-         * version called `setAutoStart` in both branches, so the widget
-         * failed even with a single photo and nothing to rotate.
+         * launcher reports as **"Problem loading widget"**.
          *
-         * So rotation is expressed structurally rather than by starting and
-         * stopping anything: **off is a flipper with one child.** It has
-         * nowhere to flip to, and `autoStart` in the layout is harmless.
+         * 🔴 Which means **a flipper cannot be told to hold still**, and the
+         * attempt to express that structurally — a flipper with one child —
+         * did not work either: `autoStart` runs it anyway, and `showNext`
+         * with a single child re-shows *that* child, playing the out and in
+         * animations against itself. On the phone that was the widget
+         * blinking every few seconds.
          *
-         * ⚠️ Children are added, not shown and hidden. A flipper cycles
-         * every child it has, GONE included, so hiding the spare slots
-         * would cycle through blank frames.
+         * So the flipper is used only when there is genuinely something to
+         * cycle. One photo, or rotation off, goes to a plain ImageView that
+         * has no animation to run.
+         *
+         * ⚠️ Children are added rather than shown and hidden: a flipper
+         * cycles every child it has, GONE included, so fixed slots would
+         * flip through blank frames.
          */
-        fun renderFlipper(
+        fun renderPhotos(
             context: Context,
             views: RemoteViews,
             widgetData: SharedPreferences,
             photos: List<Bitmap>,
         ) {
-            val seconds = widgetData.getInt("widget_rotate_seconds", 0)
-            val shown = if (seconds > 0) photos.take(MAX_ROTATION) else photos.take(1)
+            if (photos.isEmpty()) {
+                views.setViewVisibility(R.id.widget_photo_still, View.GONE)
+                views.setViewVisibility(R.id.widget_flipper, View.GONE)
+                return
+            }
 
+            val seconds = widgetData.getInt("widget_rotate_seconds", 0)
+            val rotating = seconds > 0 && photos.size > 1
+
+            // Emptied either way. A flipper left holding last sync's bitmaps
+            // is a flipper still holding that memory, and the children would
+            // reappear the moment rotation came back on.
             views.removeAllViews(R.id.widget_flipper)
-            for (bitmap in shown) {
+
+            if (!rotating) {
+                views.setImageViewBitmap(R.id.widget_photo_still, photos.first())
+                views.setViewVisibility(R.id.widget_photo_still, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_flipper, View.GONE)
+                return
+            }
+
+            for (bitmap in photos.take(MAX_ROTATION)) {
                 val item = RemoteViews(context.packageName, R.layout.widget_photo_item)
                 item.setImageViewBitmap(R.id.widget_photo, bitmap)
                 views.addView(R.id.widget_flipper, item)
             }
-
-            if (seconds > 0) {
-                views.setInt(R.id.widget_flipper, "setFlipInterval", seconds * 1000)
-            }
+            views.setInt(R.id.widget_flipper, "setFlipInterval", seconds * 1000)
+            views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_photo_still, View.GONE)
         }
 
         /**

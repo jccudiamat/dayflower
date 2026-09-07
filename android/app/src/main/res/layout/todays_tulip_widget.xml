@@ -31,6 +31,23 @@
          aspect first: it is a straight scale, and a size the launcher
          reported slightly wrong trims a sliver rather than distorting the
          picture. -->
+    <!-- The still photo: one live day, or rotation turned off.
+
+         🔴 **A separate view from the flipper, not the flipper holding one
+         child.** A ViewFlipper with `autoStart` runs whatever it contains,
+         and `showNext` on a single child re-shows *that* child — running
+         the in and out animations against itself. On the phone that read as
+         the widget blinking every few seconds. Start and stop are not
+         remotable, so the flipper cannot be told to hold still; the only
+         way to have it not animate is to not use it. -->
+    <ImageView
+        android:id="@+id/widget_photo_still"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/widget_description"
+        android:visibility="gone" />
+
     <!-- ⚠️ A ViewFlipper, because it is the only thing on the RemoteViews
          supported list that animates **without the app running**. A widget
          cannot hold a timer: `updatePeriodMillis` floors at 30 minutes, and
@@ -45,9 +62,10 @@
          ⚠️ `autoStart` is a layout attribute because `setAutoStart` is NOT
          remotable — calling it through RemoteViews throws and the launcher
          shows "Problem loading widget". `setFlipInterval` is the *only*
-         remotable method on this class; start and stop are not, which is why
-         "off" is expressed as a flipper with a single child rather than a
-         stopped one. -->
+         remotable method on this class; start and stop are not. So this view
+         is used **only when there is genuinely something to cycle** — two or
+         more photos and rotation switched on. Everything else goes to
+         widget_photo_still above, and this stays empty and GONE. -->
     <ViewFlipper
         android:id="@+id/widget_flipper"
         android:layout_width="match_parent"

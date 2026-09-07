@@ -2591,10 +2591,8 @@ Both branches of `renderFlipper` called it, so the widget failed even with a
 single photo and nothing to rotate — which is why the error showed up for a
 user who had never turned rotation on.
 
-- **Rotation off is now a flipper with one child.** Structural, not a stopped
-  animation: a flipper with nowhere to flip to holds still on its own, and
-  `autoStart` in the layout is then harmless. Nothing needs to be called to
-  make it stop.
+- **Rotation off was expressed as a flipper with one child.** ⚠️ That fixed
+  the crash and introduced a blink — see below.
 - Children are added at render time with `removeAllViews` / `addView` (both
   remotable) from `widget_photo_item.xml`, instead of five fixed slots being
   shown and hidden. The count is then exactly the number of photos, so there
@@ -2606,3 +2604,28 @@ user who had never turned rotation on.
 RemoteViews — `setInt`, `setBoolean`, `setString` — has to be verified
 against the platform source before it ships. There is no compile error and no
 warning; the failure lands on the user's home screen as a grey box.
+
+## The widget blinked every few seconds (2026-09-07)
+
+🔴 **A `ViewFlipper` with one child still flips — to itself.** `autoStart`
+runs it regardless of how many children it has, and `showNext` wraps back to
+child 0 and plays `outAnimation` then `inAnimation` on the same view. Every
+five seconds the photo faded out and back in. The fix for *"Problem loading
+widget"* caused this: rotation-off had become a single-child flipper, on the
+assumption that having nowhere to go meant staying put.
+
+**A flipper cannot be told to hold still**, because start and stop are not
+remotable. So the only way to not animate is to not use one:
+
+- `widget_photo_still`, a plain `ImageView`, carries one photo or rotation
+  switched off. No animation exists to run.
+- The flipper is used only when there is genuinely something to cycle —
+  `seconds > 0 && photos.size > 1` — and is emptied and hidden otherwise.
+- Emptied either way, not just hidden: children left behind would reappear
+  the moment rotation was switched back on, showing an old day.
+
+⚠️ **The pattern behind both bugs:** RemoteViews lets you build a widget out
+of views whose behaviour you cannot then control. `ViewFlipper` animates by
+itself, and every lever for stopping it is on the far side of the remotable
+boundary. When a view's default behaviour is wrong for a state, the answer is
+a different view for that state, not a call to correct it.
