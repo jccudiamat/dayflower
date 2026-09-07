@@ -141,7 +141,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             val photos = loadDayPhotos(widgetData)
                 .map { roundCorners(context, it, options) }
             if (photos.isNotEmpty()) {
-                renderFlipper(views, widgetData, photos)
+                renderFlipper(context, views, widgetData, photos)
                 views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
             } else {
@@ -371,58 +371,47 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             }
         }
 
-        /** The flipper's five slots, in order. */
-        private val PHOTO_SLOTS = listOf(
-            R.id.widget_photo,
-            R.id.widget_photo_2,
-            R.id.widget_photo_3,
-            R.id.widget_photo_4,
-            R.id.widget_photo_5,
-        )
+        /** How many photos the widget will cycle through. */
+        private const val MAX_ROTATION = 5
 
         /**
          * Fills the flipper and decides whether it moves.
          *
-         * WARNING: the interval is the user's, and zero means still. A widget
-         * that animates on its own is a widget that draws the eye every few
-         * seconds from across a room, which is welcome for some people and an
-         * irritation for others - so it is a setting, and "not at all" is one
-         * of the answers.
+         * 🔴 **Every call here has to be remotable, and almost none of
+         * ViewFlipper's are.** `setFlipInterval` is the only method on the
+         * class annotated `@RemotableViewMethod` — `setAutoStart`,
+         * `startFlipping` and `stopFlipping` are all ordinary methods, and
+         * putting one through RemoteViews throws an ActionException the
+         * launcher reports as **"Problem loading widget"**. An earlier
+         * version called `setAutoStart` in both branches, so the widget
+         * failed even with a single photo and nothing to rotate.
          *
-         * stopFlipping is called explicitly rather than left implied: a
-         * flipper that was running before the preference changed keeps
-         * running otherwise, and the setting would look broken until the
-         * widget was removed and re-added.
+         * So rotation is expressed structurally rather than by starting and
+         * stopping anything: **off is a flipper with one child.** It has
+         * nowhere to flip to, and `autoStart` in the layout is harmless.
+         *
+         * ⚠️ Children are added, not shown and hidden. A flipper cycles
+         * every child it has, GONE included, so hiding the spare slots
+         * would cycle through blank frames.
          */
         fun renderFlipper(
+            context: Context,
             views: RemoteViews,
             widgetData: SharedPreferences,
             photos: List<Bitmap>,
         ) {
-            PHOTO_SLOTS.forEachIndexed { i, id ->
-                if (i < photos.size) {
-                    views.setImageViewBitmap(id, photos[i])
-                    views.setViewVisibility(id, View.VISIBLE)
-                } else {
-                    // ⚠️ Hidden, not left with a stale bitmap. A flipper
-                    // cycles every child it can see, so a leftover from an
-                    // earlier sync would keep appearing between the current
-                    // photos.
-                    views.setViewVisibility(id, View.GONE)
-                }
+            val seconds = widgetData.getInt("widget_rotate_seconds", 0)
+            val shown = if (seconds > 0) photos.take(MAX_ROTATION) else photos.take(1)
+
+            views.removeAllViews(R.id.widget_flipper)
+            for (bitmap in shown) {
+                val item = RemoteViews(context.packageName, R.layout.widget_photo_item)
+                item.setImageViewBitmap(R.id.widget_photo, bitmap)
+                views.addView(R.id.widget_flipper, item)
             }
 
-            val seconds = widgetData.getInt("widget_rotate_seconds", 0)
-            // One photo has nothing to flip to, and a flipper animating a
-            // single child is a card that fades into itself.
-            if (seconds > 0 && photos.size > 1) {
+            if (seconds > 0) {
                 views.setInt(R.id.widget_flipper, "setFlipInterval", seconds * 1000)
-                views.setDisplayedChild(R.id.widget_flipper, 0)
-                views.setBoolean(R.id.widget_flipper, "setAutoStart", true)
-                views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
-            } else {
-                views.setBoolean(R.id.widget_flipper, "setAutoStart", false)
-                views.setDisplayedChild(R.id.widget_flipper, 0)
             }
         }
 
@@ -444,7 +433,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 // Older data, written before rotation existed.
                 return listOfNotNull(loadDayPhoto(widgetData))
             }
-            return paths.take(PHOTO_SLOTS.size).mapNotNull { decodePhoto(it) }
+            return paths.take(MAX_ROTATION).mapNotNull { decodePhoto(it) }
         }
 
         /**

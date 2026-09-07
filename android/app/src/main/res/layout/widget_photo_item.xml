@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One photo inside the day widget's flipper.
+
+     Added at render time with RemoteViews.addView, one per live day, rather
+     than declared five times in the parent layout.
+
+     ⚠️ That is not a style choice. A ViewFlipper cycles every child it has,
+     including GONE ones — so pre-declaring five slots and hiding the unused
+     ones would flip through blank frames. The number of children has to BE
+     the number of photos. -->
+<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_photo"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:scaleType="centerCrop"
+    android:contentDescription="@string/widget_description" />

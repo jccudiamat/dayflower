@@ -2558,11 +2558,9 @@ few seconds would be throttled and a battery complaint. `ViewFlipper` is on
 the RemoteViews supported list and the **launcher process** animates it, with
 the app dead.
 
-- Five slots. Unused ones are set `GONE`, not left with a stale bitmap — a
-  flipper cycles every child it can see.
-- `setAutoStart(false)` is set explicitly when rotation is off. A flipper
-  already running keeps running otherwise, and the setting would look broken
-  until the widget was removed and re-added.
+- Up to five photos. (⚠️ The first shape of this — five ImageViews in the
+  layout, hidden when unused, `setAutoStart` toggled — broke the widget
+  outright. See *"Problem loading widget"* below.)
 - Off by default, 3s or 5s by choice. A card that moves on its own reads as
   delightful for a week and restless after that.
 - 🔴 **`_cachePhoto` pruned every other cached photo each time it wrote one.**
@@ -2571,3 +2569,40 @@ the app dead.
   sync, knowing the whole set.
 - Their days, not mine, and excluding the one already in the first slot —
   including it would show the newest twice per cycle.
+
+## Build 52 — Gifts navigation (published)
+
+Published Android 1.0.0+52 through the in-app updater. Gifts replaces Events in the bottom bar; Events remains at its existing route, accessible from Us and Home, with clocks, countdowns, reunion cards and editing retained. Home gains a milestone/Gifts card. Gifts is a coming-soon landing page pending retailer inventory and affiliate links. Fixed lazy photo animation initialization on Home disposal.
+
+Verified: four navigation/widget checks pass; changed-file analysis is clean; release APK built successfully; public latest.json identifies build 52; APK returns HTTP 200 and its 42,587,468-byte size matches the local build. Update remains optional.
+
+## "Problem loading widget" (2026-09-07)
+
+🔴 **`setAutoStart` is not remotable, and the launcher reports that as a
+broken widget.** `RemoteViews.setBoolean` names a method by string and the
+launcher reflects it on the inflated view; if the method is not annotated
+`@RemotableViewMethod`, the call throws an `ActionException` on the far side
+and the whole card is replaced by *"Problem loading widget"*. Checked against
+`ViewFlipper.java`: **`setFlipInterval` is the only remotable method on the
+class.** `setAutoStart`, `startFlipping` and `stopFlipping` are ordinary
+methods.
+
+Both branches of `renderFlipper` called it, so the widget failed even with a
+single photo and nothing to rotate — which is why the error showed up for a
+user who had never turned rotation on.
+
+- **Rotation off is now a flipper with one child.** Structural, not a stopped
+  animation: a flipper with nowhere to flip to holds still on its own, and
+  `autoStart` in the layout is then harmless. Nothing needs to be called to
+  make it stop.
+- Children are added at render time with `removeAllViews` / `addView` (both
+  remotable) from `widget_photo_item.xml`, instead of five fixed slots being
+  shown and hidden. The count is then exactly the number of photos, so there
+  are no blank frames to cycle through and no stale bitmap to clear.
+- The interval still goes through `setInt(..., "setFlipInterval", ...)`, the
+  one call that is allowed.
+
+⚠️ **The rule this leaves behind:** anything reached by name through
+RemoteViews — `setInt`, `setBoolean`, `setString` — has to be verified
+against the platform source before it ships. There is no compile error and no
+warning; the failure lands on the user's home screen as a grey box.

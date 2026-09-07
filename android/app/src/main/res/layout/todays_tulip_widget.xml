@@ -31,60 +31,32 @@
          aspect first: it is a straight scale, and a size the launcher
          reported slightly wrong trims a sliver rather than distorting the
          picture. -->
-    <!-- ⚠️ A ViewFlipper, not an ImageView, because it is the only thing on
-         the RemoteViews supported list that can animate **without the app
-         running**. A widget cannot hold a timer: `updatePeriodMillis` floors
-         at 30 minutes and an AlarmManager firing every few seconds would be
-         both throttled and a battery complaint. The launcher process drives
-         a flipper itself.
+    <!-- ⚠️ A ViewFlipper, because it is the only thing on the RemoteViews
+         supported list that animates **without the app running**. A widget
+         cannot hold a timer: `updatePeriodMillis` floors at 30 minutes, and
+         an AlarmManager firing every few seconds would be throttled and a
+         battery complaint. The launcher process drives a flipper itself.
 
-         Five children because five is what a flipper can hold cheaply and
-         well past what one person posts in a day; extras are simply hidden.
-         `setDisplayedChild`, `setFlipInterval`, `startFlipping` and
-         `stopFlipping` are all remotable. -->
+         🔴 **Empty here on purpose.** Its children are added at render time,
+         one per live day — see TodaysTulipWidget.renderFlipper. A flipper
+         cycles every child it has, GONE included, so fixed slots would flip
+         through blank frames.
+
+         ⚠️ `autoStart` is a layout attribute because `setAutoStart` is NOT
+         remotable — calling it through RemoteViews throws and the launcher
+         shows "Problem loading widget". `setFlipInterval` is the *only*
+         remotable method on this class; start and stop are not, which is why
+         "off" is expressed as a flipper with a single child rather than a
+         stopped one. -->
     <ViewFlipper
         android:id="@+id/widget_flipper"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:autoStart="true"
+        android:flipInterval="5000"
         android:inAnimation="@android:anim/fade_in"
         android:outAnimation="@android:anim/fade_out"
-        android:visibility="gone">
-
-        <ImageView
-            android:id="@+id/widget_photo"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/widget_description" />
-
-        <ImageView
-            android:id="@+id/widget_photo_2"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/widget_description" />
-
-        <ImageView
-            android:id="@+id/widget_photo_3"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/widget_description" />
-
-        <ImageView
-            android:id="@+id/widget_photo_4"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/widget_description" />
-
-        <ImageView
-            android:id="@+id/widget_photo_5"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:scaleType="centerCrop"
-            android:contentDescription="@string/widget_description" />
-    </ViewFlipper>
+        android:visibility="gone" />
 
     <!-- No photo: the flower glyph carries the card instead, centred and
          large so the widget still reads as a picture rather than a form. -->
