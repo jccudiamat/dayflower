@@ -1,3 +1,4 @@
+import SiteHeader from "../components/SiteHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Booth from "./Booth";
@@ -19,7 +20,7 @@ const faqs = [
 function AdSpace({ id }: { id: string }) { return <aside id={id} className="ad-reservation" aria-label="Reserved advertising space">ADVERTISEMENT<small>Reserved space</small></aside>; }
 export default function PhotoboothPage() {
   return <>
-    <header className="border-b border-border-soft bg-bg"><nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-5"><Link href="/" className="text-xl font-bold">🌷 Dayflower</Link><Link href="/#waitlist" className="text-sm font-semibold text-brand-dark">Discover the app ↗</Link></nav></header>
+    <SiteHeader photobooth />
     <main className="mx-auto max-w-6xl px-5 py-10">
       <p className="text-sm font-semibold text-brand-dark">DAYFLOWER PHOTO BOOTH</p>
       <h1 className="mt-3 text-3xl font-bold leading-tight sm:text-5xl">Good moments deserve more than a camera roll.</h1>

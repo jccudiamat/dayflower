@@ -1,3 +1,4 @@
+import SiteHeader from "./components/SiteHeader";
 import Image from "next/image";
 import ProductTour from "./components/ProductTour";
 import Link from "next/link";
@@ -11,17 +12,7 @@ export default function Home() {
   return (
     <div className="min-h-screen">
       {/* ── Nav ─────────────────────────────────────────────────────────── */}
-      <header className="sticky top-0 z-50 border-b border-border-soft bg-bg/85 backdrop-blur">
-        <div className="mx-auto flex h-16 max-w-5xl items-center justify-between gap-4 px-5">
-          <a href="#top" className="flex shrink-0 items-center gap-2 text-lg font-bold">
-            <Image src="/mark.png" alt="" width={360} height={360} className="h-7 w-7" />
-            Dayflower
-          </a>
-          <a href="#waitlist" className="gradient-button !h-10 !px-5 text-sm">
-            Join the waitlist
-          </a>
-        </div>
-      </header>
+      <SiteHeader />
 
       <main id="top">
         {/* ── Hero ──────────────────────────────────────────────────────── */}
@@ -50,7 +41,7 @@ export default function Home() {
                 A private app for exactly two people — somewhere to land on
                 each other every day when you can&rsquo;t be in the same room.
               </p>
-              <div className="mt-8" id="waitlist">
+              <div className="mt-8 scroll-mt-36 sm:scroll-mt-24" id="waitlist">
                 <WaitlistForm dark />
                 <p className="mt-3 pl-1 text-xs text-on-dark-muted">
                   Free at launch. One email when it&rsquo;s ready — nothing else.
