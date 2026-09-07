@@ -2629,3 +2629,28 @@ of views whose behaviour you cannot then control. `ViewFlipper` animates by
 itself, and every lever for stopping it is on the far side of the remotable
 boundary. When a view's default behaviour is wrong for a state, the answer is
 a different view for that state, not a call to correct it.
+
+## Heartbeat alerts are one switch again (2026-09-07)
+
+The cadence setting is gone — "Interrupt me", with its ten / thirty / sixty
+minute windows, and the throttle behind it. **Every heartbeat received now
+buzzes, sounds and notifies**, or none of them do.
+
+A heartbeat is one tap that means one thing. Someone who has switched these
+on has said they want to feel it when their partner thinks of them, and
+holding the second one inside ten minutes to a silent notification update was
+answering a question they had already answered. The setting existed because
+the throttle did, and the throttle existed because a burst of taps looked like
+a problem — but a burst of taps *is* the feature.
+
+- `PulseCadence` deleted, along with `pulse_alert_last_ms` and
+  `pulse_alert_pending`. `handleIncoming` no longer takes a cadence.
+- ⚠️ `onlyAlertOnce: false` now, where the whole throttle used to rest on it
+  being true. The notification id is still reused, so a burst rewrites one
+  notification instead of stacking a column — but each rewrite sounds.
+- `PulseAlertSettings` collapsed to a bool: `pulseAlertsEnabledProvider`.
+  A settings object with one field is a settings object waiting to grow
+  another one.
+- Several arriving in the same realtime batch are still one notification,
+  captioned "+2 more". That is one delivery, not a decision to stay quiet.
+

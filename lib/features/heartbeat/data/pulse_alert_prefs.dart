@@ -6,74 +6,53 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/services/pulse_alerts.dart';
 
-@immutable
-class PulseAlertSettings {
-  const PulseAlertSettings({required this.enabled, required this.cadence});
-
-  final bool enabled;
-  final PulseCadence cadence;
-
-  PulseAlertSettings copyWith({bool? enabled, PulseCadence? cadence}) =>
-      PulseAlertSettings(
-        enabled: enabled ?? this.enabled,
-        cadence: cadence ?? this.cadence,
-      );
-}
-
-/// Whether an incoming heartbeat buzzes and sounds, and how often it's allowed
-/// to. Device-local, not synced — each phone decides for itself.
-class PulseAlertPrefs extends StateNotifier<PulseAlertSettings> {
+/// Whether an incoming heartbeat buzzes and sounds. Device-local, not synced —
+/// each phone decides for itself.
+///
+/// ⚠️ A plain bool, and that is the point. This used to be a settings object
+/// carrying a cadence as well: on/off, plus a window of ten, thirty or
+/// sixty minutes inside which further heartbeats updated the notification
+/// silently. Both the window and the choice of window are gone.
+///
+/// A heartbeat is one tap that means one thing. Someone who has switched these
+/// on has said they want to feel it when their partner thinks of them, and
+/// deciding on their behalf that the second one in ten minutes was not worth a
+/// buzz was answering a question they had already answered. The only real
+/// question left is the one this holds: all of them, or none.
+class PulseAlertPrefs extends StateNotifier<bool> {
   PulseAlertPrefs()
-      : super(
-          PulseAlertSettings(
-            // On by default on phones: feeling the pulse is the point of the
-            // feature. Off on web/desktop, where none of it works anyway.
-            enabled: PulseAlerts.supported,
-            cadence: PulseCadence.tenMinutes,
-          ),
-        ) {
+      // On by default on phones: feeling the pulse is the point of the
+      // feature. Off on web/desktop, where none of it works anyway.
+      : super(PulseAlerts.supported) {
     _load();
   }
 
   static const _kEnabled = 'heartbeat_alerts_enabled';
-  static const _kCadence = 'heartbeat_alert_cadence';
 
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      state = state.copyWith(
-        enabled: prefs.getBool(_kEnabled),
-        cadence: PulseCadence.fromName(prefs.getString(_kCadence)),
-      );
+      state = prefs.getBool(_kEnabled) ?? state;
       // Ask for notification permission at most once per launch, and only when
       // alerts are actually on. Declining leaves the vibration working.
-      if (state.enabled) unawaited(PulseAlerts.requestPermission());
+      if (state) unawaited(PulseAlerts.requestPermission());
     } catch (e) {
       debugPrint('pulse alert prefs load failed: $e');
     }
   }
 
   Future<void> setEnabled(bool value) async {
-    state = state.copyWith(enabled: value);
+    state = value;
     if (value) await PulseAlerts.requestPermission();
-    await _write((prefs) => prefs.setBool(_kEnabled, value));
-  }
-
-  Future<void> setCadence(PulseCadence cadence) async {
-    state = state.copyWith(cadence: cadence);
-    await _write((prefs) => prefs.setString(_kCadence, cadence.name));
-  }
-
-  Future<void> _write(Future<void> Function(SharedPreferences) op) async {
     try {
-      await op(await SharedPreferences.getInstance());
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_kEnabled, value);
     } catch (e) {
       debugPrint('pulse alert prefs save failed: $e');
     }
   }
 }
 
-final pulseAlertSettingsProvider =
-    StateNotifierProvider<PulseAlertPrefs, PulseAlertSettings>(
-  (ref) => PulseAlertPrefs(),
-);
+/// True when incoming heartbeats should buzz, sound and notify.
+final pulseAlertsEnabledProvider =
+    StateNotifierProvider<PulseAlertPrefs, bool>((ref) => PulseAlertPrefs());

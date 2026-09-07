@@ -180,28 +180,20 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpace.xs),
             _Card(
               children: [
+                // One switch, and deliberately only one. The row under
+                // here used to pick how long a heartbeat had to wait before
+                // another was allowed to buzz — a window on a gesture that
+                // is already the smallest thing you can send someone.
                 _SwitchRow(
                   title: 'Heartbeat alerts',
                   subtitle: PulseAlerts.supported
-                      ? 'Vibrate and play a heartbeat when they send a pulse'
+                      ? 'Vibrate and play a heartbeat every time they send one'
                       : 'Only available on the Android and iOS app',
-                  value: ref.watch(pulseAlertSettingsProvider).enabled,
+                  value: ref.watch(pulseAlertsEnabledProvider),
                   onChanged: PulseAlerts.supported
                       ? (v) => ref
-                          .read(pulseAlertSettingsProvider.notifier)
+                          .read(pulseAlertsEnabledProvider.notifier)
                           .setEnabled(v)
-                      : null,
-                ),
-                const _Line(),
-                _Row(
-                  title: 'Interrupt me',
-                  subtitle:
-                      'Extra pulses inside this window update the notification '
-                      'quietly instead of buzzing again',
-                  value: ref.watch(pulseAlertSettingsProvider).cadence.label,
-                  onTap: ref.watch(pulseAlertSettingsProvider).enabled &&
-                          PulseAlerts.supported
-                      ? () => _pickCadence(context, ref)
                       : null,
                 ),
               ],
@@ -338,43 +330,6 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(pairRepositoryProvider).disconnect(pairId);
     ref.invalidate(currentPairProvider);
     // Gate chain sends the user back to pairing.
-  }
-
-  Future<void> _pickCadence(BuildContext context, WidgetRef ref) async {
-    final current = ref.read(pulseAlertSettingsProvider).cadence;
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                AppSpace.md,
-                20,
-                AppSpace.xs,
-              ),
-              child: Text('Interrupt me', style: AppText.title()),
-            ),
-            for (final cadence in PulseCadence.values)
-              _Row(
-                title: cadence.label,
-                chevron: false,
-                value: cadence == current ? '✓' : null,
-                onTap: () {
-                  Navigator.of(sheetContext).pop();
-                  ref
-                      .read(pulseAlertSettingsProvider.notifier)
-                      .setCadence(cadence);
-                },
-              ),
-            const SizedBox(height: AppSpace.sm),
-          ],
-        ),
-      ),
-    );
   }
 
   void _showLegalNote(BuildContext context) {

@@ -27,6 +27,7 @@ import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
 import '../../../activity/presentation/widgets/activity_timeline.dart';
+import '../../../gifts/presentation/widgets/gift_occasion_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -71,6 +72,8 @@ class HomeScreen extends ConsumerWidget {
                   _MoodCard(),
                   SizedBox(height: AppSpace.sm),
                   _HeartbeatCard(),
+                  SizedBox(height: AppSpace.md),
+                  GiftOccasionCard(),
                   SizedBox(height: AppSpace.md),
                   // The conversation card used to sit here. It went the same
                   // way the reunion countdown did: the Flowers tab is one
@@ -335,14 +338,12 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       _spawnIncomingRipples();
       _beatCtrl.forward(from: 0);
 
-      final alerts = ref.read(pulseAlertSettingsProvider);
-      if (alerts.enabled) {
-        // Throttling lives in the service — it may decide this one only
-        // updates the existing notification without buzzing.
+      if (ref.read(pulseAlertsEnabledProvider)) {
+        // Every one of them alerts. The service no longer decides that some
+        // are too soon to be worth hearing.
         PulseAlerts.handleIncoming(
           from: partnerName,
           pulses: next.partner - prev.partner,
-          cadence: alerts.cadence,
         );
       } else {
         HapticFeedback.lightImpact();
@@ -659,10 +660,15 @@ class _DayArchState extends ConsumerState<_DayArch>
   /// Animated rather than toggled: without the movement a swipe just looks
   /// like the photo changed, and there is nothing to say the other one is
   /// still there.
-  late final AnimationController _swap = AnimationController(
-    vsync: this,
-    duration: AppMotion.standard,
-  );
+  late final AnimationController _swap;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize while mounted, even when neither person has a day photo.
+    // Otherwise the first access can happen in dispose when leaving Home.
+    _swap = AnimationController(vsync: this, duration: AppMotion.standard);
+  }
 
   /// The back card, relative to the front one.
   static const double _backScale = 0.95;

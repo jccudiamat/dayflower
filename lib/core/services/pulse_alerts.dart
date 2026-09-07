@@ -7,27 +7,6 @@ import 'package:vibration/vibration.dart';
 
 import 'app_notifications.dart';
 
-/// How often an incoming heartbeat is allowed to interrupt the receiver.
-///
-/// A burst of taps is normal — the point is that the *first* one lands and the
-/// rest quietly pile onto the same notification instead of buzzing again.
-enum PulseCadence {
-  everyPulse(Duration.zero, 'Every heartbeat'),
-  tenMinutes(Duration(minutes: 10), 'At most every 10 min'),
-  thirtyMinutes(Duration(minutes: 30), 'At most every 30 min'),
-  hourly(Duration(hours: 1), 'At most once an hour');
-
-  const PulseCadence(this.cooldown, this.label);
-
-  final Duration cooldown;
-  final String label;
-
-  static PulseCadence fromName(String? name) => PulseCadence.values.firstWhere(
-        (c) => c.name == name,
-        orElse: () => PulseCadence.tenMinutes,
-      );
-}
-
 /// Vibration + sound + notification for an incoming heartbeat.
 ///
 /// There is no push backend — this only fires while the app is alive (
@@ -46,8 +25,6 @@ class PulseAlerts {
   static const _channelId = 'heartbeat_pulse_v1';
   static const _notificationId = 4201;
 
-  static const _kLastAlertMs = 'pulse_alert_last_ms';
-  static const _kPendingCount = 'pulse_alert_pending';
   static const _kLastLine = 'pulse_alert_last_line';
 
   /// Written as if it were them talking, because that's what a heartbeat is
@@ -138,40 +115,31 @@ class PulseAlerts {
 
   /// Handles [pulses] heartbeats that just arrived from [from].
   ///
-  /// Inside the cadence cooldown this does **not** buzz or make a sound: it
-  /// silently rewrites the same notification with a running count, so a partner
-  /// tapping twenty times in a row is one interruption, not twenty.
+  /// ⚠️ **Every one of them alerts.** There used to be a cooldown here — a
+  /// second heartbeat inside ten minutes rewrote the notification silently
+  /// with a running count — and a setting to choose the window. It is gone:
+  /// a heartbeat is one tap that means one thing, and a person who has asked
+  /// to feel them has asked to feel all of them. Deciding on their behalf
+  /// that the fourth one in an hour was not worth a buzz was answering a
+  /// question they had already answered.
+  ///
+  /// The single switch in Settings is the whole choice: all of them, or none.
   static Future<void> handleIncoming({
     required String from,
     required int pulses,
-    required PulseCadence cadence,
   }) async {
     if (!supported || pulses <= 0) return;
     await init();
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final last = prefs.getInt(_kLastAlertMs) ?? 0;
-      final quiet = now - last < cadence.cooldown.inMilliseconds;
-
-      if (quiet) {
-        final pending = (prefs.getInt(_kPendingCount) ?? 0) + pulses;
-        await prefs.setInt(_kPendingCount, pending);
-        // Same line as the alert the user actually heard — swapping it now
-        // would look like a second, different message arrived.
-        final line = prefs.getString(_kLastLine) ?? messages.first;
-        await _notify(from: from, line: line, extra: pending, alert: false);
-        return;
-      }
-
       final line = _pickLine(prefs.getString(_kLastLine));
-      await prefs.setInt(_kLastAlertMs, now);
-      await prefs.setInt(_kPendingCount, 0);
       await prefs.setString(_kLastLine, line);
       await Future.wait([
         _vibrate(),
-        _notify(from: from, line: line, extra: 0, alert: true),
+        // More than one when several land in the same realtime batch, which
+        // is a burst of taps rather than a burst of notifications.
+        _notify(from: from, line: line, extra: pulses - 1),
       ]);
     } catch (e) {
       debugPrint('pulse alert failed: $e');
@@ -202,34 +170,32 @@ class PulseAlerts {
     required String from,
     required String line,
     required int extra,
-    required bool alert,
   }) async {
-    final body = extra > 0
-        ? '$line  ·  +$extra more since'
-        : line;
+    final body = extra > 0 ? '$line  ·  +$extra more' : line;
     try {
       await _plugin.show(
         id: _notificationId, // reused, so a burst rewrites one notification
         title: '$from sent you a heartbeat 💗',
         body: body,
-        notificationDetails: NotificationDetails(
+        notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             'Heartbeats',
             channelDescription: "Your partner's pulses.",
             importance: Importance.high,
             priority: Priority.high,
-            sound: const RawResourceAndroidNotificationSound('heartbeat'),
+            sound: RawResourceAndroidNotificationSound('heartbeat'),
             enableVibration: false,
             category: AndroidNotificationCategory.message,
-            // The whole throttle rests on this: an update posted with
-            // onlyAlertOnce refreshes the text without sound or heads-up.
-            onlyAlertOnce: !alert,
-            silent: !alert,
+            // ⚠️ Deliberately not onlyAlertOnce. The id is reused so a
+            // burst rewrites one notification rather than stacking a
+            // column of them — but each rewrite still sounds, because
+            // each one is a heartbeat that was actually sent.
+            onlyAlertOnce: false,
           ),
           // No custom sound on iOS: the file would have to be added to the
           // Runner target in Xcode, which hasn't been done. Default chime.
-          iOS: DarwinNotificationDetails(presentSound: alert),
+          iOS: DarwinNotificationDetails(presentSound: true),
         ),
       );
     } catch (e) {

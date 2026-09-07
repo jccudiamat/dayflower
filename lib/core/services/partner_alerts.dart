@@ -23,8 +23,7 @@ import 'app_notifications.dart';
 /// Do not describe delivery as guaranteed until it is.
 ///
 /// Heartbeats are deliberately not handled here: they already have
-/// `PulseAlerts`, with their own sound, their own vibration waveform and a
-/// cadence throttle none of the rest of this needs.
+/// `PulseAlerts`, with their own sound and their own vibration waveform.
 class PartnerAlerts {
   PartnerAlerts._();
 
