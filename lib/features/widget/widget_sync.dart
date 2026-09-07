@@ -87,6 +87,18 @@ class DayflowerWidgets {
   /// a full-size bitmap blows straight through it.
   static const keyDayPhotoPath = 'day_photo_path';
 
+  /// Every cached day photo, newest first, newline-separated.
+  ///
+  /// ⚠️ One key rather than five. The count changes as days are posted and
+  /// expire, and five keys would each need clearing individually every time
+  /// it shrank — a stale slot the widget would happily keep flipping to.
+  static const keyDayPhotoPaths = 'day_photo_paths';
+
+  /// How often the widget moves to the next photo, in seconds. **0 is off**,
+  /// and is the default: a card that animates on its own draws the eye from
+  /// across a room, which some people want and others do not.
+  static const keyRotateSeconds = 'widget_rotate_seconds';
+
   /// Epoch millis at which the day photo stops being shown.
   ///
   /// The widget enforces this itself. Dart cannot be relied on to clear the
@@ -151,6 +163,10 @@ class DayflowerWidgets {
   /// tick live in the conversation and never land here.
   static Future<void> syncFlower({
     required FlowerMessage? received,
+    /// Their other live days, newest first, for the widget to rotate
+    /// through. ⚠️ Excludes [received] — that one is already the first slot,
+    /// and including it would show the newest photo twice per cycle.
+    List<FlowerMessage> alsoLive = const [],
     required bool sentToday,
     required String partnerName,
     String partnerFlower = '🌷',
@@ -166,12 +182,22 @@ class DayflowerWidgets {
     // widget never redraws with a stale photo still on screen.
     String photoPath = '';
     int photoExpiresAt = 0;
+    final photoPaths = <String>[];
     if (received != null && received.isPhoto && received.isFreshForWidget) {
       photoPath = await _cachePhoto(received, downloadPhoto) ?? '';
       if (photoPath.isNotEmpty) {
+        photoPaths.add(photoPath);
         photoExpiresAt = received.sentAt
             .add(FlowerMessage.widgetLifetime)
             .millisecondsSinceEpoch;
+      }
+
+      // ⚠️ Capped at the flipper's five slots, and cached in order, so a
+      // partner with seven live days fills the widget with the five newest
+      // rather than downloading all of them to show five.
+      for (final m in alsoLive.take(_maxRotation - 1)) {
+        final path = await _cachePhoto(m, downloadPhoto);
+        if (path != null && path.isNotEmpty) photoPaths.add(path);
       }
     }
 
@@ -217,6 +243,9 @@ class DayflowerWidgets {
 
     try {
       await HomeWidget.saveWidgetData<String>(keyDayPhotoPath, photoPath);
+      await HomeWidget.saveWidgetData<String>(
+          keyDayPhotoPaths, photoPaths.join('\n'));
+      await _pruneCached(photoPaths);
       await HomeWidget.saveWidgetData<String>(keyDayOwnerAvatar, avatarPath);
       await HomeWidget.saveWidgetData<String>(
           keyDayPhotoId, photoPath.isEmpty ? '' : (received?.id ?? ''));
@@ -301,9 +330,11 @@ class DayflowerWidgets {
       final file = File('${dir.path}/day_photo_${message.id}.jpg');
       if (!await file.exists()) {
         await file.writeAsBytes(await downloadPhoto(message.imagePath!));
-        // Yesterday's photos are dead weight once the slot has moved on.
-        await _pruneOldPhotos(dir, keep: file.path);
       }
+      // 🔴 Pruning is NOT done here any more. It kept exactly the file just
+      // written — right when the widget showed one photo, fatal now that it
+      // rotates, because caching the second would delete the first. syncFlower
+      // prunes once at the end, knowing the whole set.
       return file.path;
     } catch (e) {
       debugPrint('day photo cache failed: $e');
@@ -311,13 +342,37 @@ class DayflowerWidgets {
     }
   }
 
+  /// Clears cached photos outside the current set.
+  static Future<void> _pruneCached(List<String> keep) async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      await _pruneOldPhotos(dir, keep: keep.toSet());
+    } catch (e) {
+      // Litter, not a failure. The widget already has what it needs.
+      debugPrint('photo prune failed: $e');
+    }
+  }
+
+  /// How many photos the widget can rotate through.
+  ///
+  /// Five, matching the flipper's children in the layout. Well past what one
+  /// person posts in a day, and cheap enough to hold five bitmaps against
+  /// the RemoteViews budget.
+  static const _maxRotation = 5;
+
+  /// Drops cached photos the widget is no longer showing.
+  ///
+  /// ⚠️ Takes the whole **set**, not one path. It used to keep exactly the
+  /// file just written, which was right when the widget showed one photo and
+  /// is fatal now that it rotates — caching the second would have deleted
+  /// the first. Called once per sync, after every photo is cached.
   static Future<void> _pruneOldPhotos(Directory dir,
-      {required String keep}) async {
+      {required Set<String> keep}) async {
     try {
       await for (final entity in dir.list()) {
         if (entity is File &&
             entity.path.contains('day_photo_') &&
-            entity.path != keep) {
+            !keep.contains(entity.path)) {
           await entity.delete();
         }
       }
@@ -368,6 +423,27 @@ class DayflowerWidgets {
       keyBeatPulseDir,
       sent ? 'sent' : 'received',
     );
+  }
+
+  /// How often the day photos advance. 0, 3 or 5 seconds.
+  static Future<void> setRotateSeconds(int seconds) async {
+    if (!isSupported) return;
+    try {
+      await HomeWidget.saveWidgetData<int>(keyRotateSeconds, seconds);
+      await _refresh();
+    } catch (e) {
+      debugPrint('widget rotation set failed: $e');
+    }
+  }
+
+  static Future<int> currentRotateSeconds() async {
+    if (!isSupported) return 0;
+    try {
+      return await HomeWidget.getWidgetData<int>(keyRotateSeconds) ?? 0;
+    } catch (e) {
+      debugPrint('widget rotation read failed: $e');
+      return 0;
+    }
   }
 
   /// Sets what the adaptive widget renders.

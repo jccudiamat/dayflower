@@ -31,13 +31,60 @@
          aspect first: it is a straight scale, and a size the launcher
          reported slightly wrong trims a sliver rather than distorting the
          picture. -->
-    <ImageView
-        android:id="@+id/widget_photo"
+    <!-- ⚠️ A ViewFlipper, not an ImageView, because it is the only thing on
+         the RemoteViews supported list that can animate **without the app
+         running**. A widget cannot hold a timer: `updatePeriodMillis` floors
+         at 30 minutes and an AlarmManager firing every few seconds would be
+         both throttled and a battery complaint. The launcher process drives
+         a flipper itself.
+
+         Five children because five is what a flipper can hold cheaply and
+         well past what one person posts in a day; extras are simply hidden.
+         `setDisplayedChild`, `setFlipInterval`, `startFlipping` and
+         `stopFlipping` are all remotable. -->
+    <ViewFlipper
+        android:id="@+id/widget_flipper"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:scaleType="centerCrop"
-        android:contentDescription="@string/widget_description"
-        android:visibility="gone" />
+        android:inAnimation="@android:anim/fade_in"
+        android:outAnimation="@android:anim/fade_out"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/widget_photo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/widget_description" />
+
+        <ImageView
+            android:id="@+id/widget_photo_2"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/widget_description" />
+
+        <ImageView
+            android:id="@+id/widget_photo_3"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/widget_description" />
+
+        <ImageView
+            android:id="@+id/widget_photo_4"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/widget_description" />
+
+        <ImageView
+            android:id="@+id/widget_photo_5"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:contentDescription="@string/widget_description" />
+    </ViewFlipper>
 
     <!-- No photo: the flower glyph carries the card instead, centred and
          large so the widget still reads as a picture rather than a form. -->

@@ -451,8 +451,17 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 
   void _syncWidget(FlowerMessage? received) {
     if (!DayflowerWidgets.isSupported) return;
+    // ⚠️ Their *other* live days, excluding the one already in `received`.
+    // Including it would show the newest photo twice per rotation, which
+    // reads as the widget stuttering rather than cycling.
+    final theirDays = ref
+        .read(partnerDayPhotosProvider)
+        .where((m) => m.id != received?.id)
+        .toList(growable: false);
+
     DayflowerWidgets.syncFlower(
       received: received,
+      alsoLive: theirDays,
       sentToday: ref.read(sentFlowerTodayProvider),
       partnerName: _partnerName,
       partnerFlower: _partnerFlower,

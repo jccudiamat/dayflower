@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -109,17 +110,26 @@ class ChatBubble extends StatelessWidget {
         ));
   }
 
-  /// Long-press for the two things you can do to a message.
+  /// Swipe right to reply; long-press for everything else.
   ///
-  /// ⚠️ Long-press, not a visible affordance. A reply arrow on every bubble
-  /// is a control on a screen whose whole content is somebody's words, and
-  /// the gesture is the one every messaging app has already taught.
+  /// 🔴 Reply used to be buried in the long-press menu with Delete. Two very
+  /// different acts behind one gesture, and the common one — answering
+  /// something — cost a press, a wait, a sheet and a tap. Swipe is the
+  /// gesture every messaging app has taught for exactly this, and it costs
+  /// one movement.
+  ///
+  /// ⚠️ Long-press stays, for Delete. It is the destructive one, so it keeps
+  /// the deliberate gesture: nothing should be deletable by a flick.
   Widget _pressable(BuildContext context, Widget child) {
     if (onReply == null && onDelete == null) return child;
-    return GestureDetector(
-      onLongPress: () => _showActions(context),
+
+    final body = GestureDetector(
+      onLongPress: onDelete == null ? null : () => _showActions(context),
       child: child,
     );
+
+    if (onReply == null) return body;
+    return _SwipeToReply(onReply: onReply!, child: body);
   }
 
   void _showActions(BuildContext context) {
@@ -129,17 +139,9 @@ class ChatBubble extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (onReply != null)
-              ListTile(
-                leading: const Icon(CupertinoIcons.reply, size: 20),
-                title: Text('Reply', style: AppText.body(AppColors.ink)),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  onReply!();
-                },
-              ),
-            // ⚠️ Yours only. Deleting a message is taking back something you
-            // said; nobody gets to take back what somebody else said.
+            // ⚠️ Yours only, and the only thing left in here — Reply moved to
+            // a swipe. Deleting a message is taking back something you said;
+            // nobody gets to take back what somebody else said.
             if (onDelete != null)
               ListTile(
                 leading: const Icon(CupertinoIcons.delete,
@@ -203,6 +205,15 @@ class ChatBubble extends StatelessWidget {
                     .read(flowerRepositoryProvider)
                     .signedPhotoUrl(message.imagePath!),
                 builder: (context, snap) {
+                  if (snap.hasError) {
+                    return Container(
+                      height: 160,
+                      color: AppColors.surfaceSubtle,
+                      alignment: Alignment.center,
+                      child:
+                          Text('Photo unavailable', style: AppText.caption()),
+                    );
+                  }
                   if (!snap.hasData) {
                     return const SizedBox(
                       height: 180,
@@ -375,6 +386,92 @@ class ChatBubble extends StatelessWidget {
                 _MetaRow(message: message, isMine: isMine, time: _time),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Drag a bubble to the right to reply to it.
+///
+/// ⚠️ **Horizontal drag only, and it must not fight the list.** A bubble that
+/// claimed vertical drags would stop the thread scrolling through it, so this
+/// uses `onHorizontalDrag*`, which the gesture arena hands over only once the
+/// movement is clearly sideways.
+class _SwipeToReply extends StatefulWidget {
+  const _SwipeToReply({required this.onReply, required this.child});
+
+  final VoidCallback onReply;
+  final Widget child;
+
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  /// How far the bubble has been dragged, in points.
+  double _dx = 0;
+
+  /// Past this, letting go replies. Also where the bubble stops moving, so
+  /// the resistance itself says "that is far enough" without a label.
+  static const _trigger = 56.0;
+
+  /// ⚠️ Fires on *crossing* the threshold, not on release. The buzz is what
+  /// tells you it will send while your thumb is still down — a confirmation
+  /// that arrives after you have let go is a report, not feedback.
+  bool _armed = false;
+
+  void _update(DragUpdateDetails d) {
+    setState(() {
+      // Right only. Left is where "delete on swipe" lives in other apps, and
+      // this app deletes from a menu — an unclaimed direction is better than
+      // one that does something surprising.
+      _dx = (_dx + d.delta.dx).clamp(0.0, _trigger);
+    });
+    if (!_armed && _dx >= _trigger) {
+      _armed = true;
+      HapticFeedback.selectionClick();
+    } else if (_armed && _dx < _trigger) {
+      _armed = false;
+    }
+  }
+
+  void _end(DragEndDetails _) {
+    final reply = _armed;
+    setState(() {
+      _dx = 0;
+      _armed = false;
+    });
+    if (reply) widget.onReply();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onHorizontalDragUpdate: _update,
+      onHorizontalDragEnd: _end,
+      onHorizontalDragCancel: () => setState(() {
+        _dx = 0;
+        _armed = false;
+      }),
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          // The arrow, revealed by the bubble moving off it. Fades in with
+          // the drag so a half-hearted swipe shows a half-drawn hint rather
+          // than appearing all at once.
+          Opacity(
+            opacity: (_dx / _trigger).clamp(0.0, 1.0),
+            child: const Padding(
+              padding: EdgeInsets.only(left: 6),
+              child:
+                  Icon(CupertinoIcons.reply, size: 17, color: AppColors.muted),
+            ),
+          ),
+          Transform.translate(
+            offset: Offset(_dx, 0),
+            child: widget.child,
           ),
         ],
       ),

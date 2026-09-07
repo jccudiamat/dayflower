@@ -1,0 +1,37 @@
+-- 🔴 Deleting a message worked, and no phone ever found out.
+--
+-- The row went. `delete_message` returns 200, the row is gone, a re-query
+-- proves it. But the message stayed on screen on both phones until the app
+-- was restarted, and a deleted day photo left the story viewer spinning
+-- forever on a signed URL for an object that no longer existed.
+--
+-- ## Why
+--
+-- Postgres publishes a DELETE as the *old* row, and how much of that old row
+-- it publishes is `REPLICA IDENTITY`. The default is the primary key and
+-- nothing else — which is enough to replicate, and not enough to authorise.
+--
+-- Supabase Realtime evaluates the table's RLS policies against the payload
+-- before broadcasting it. `flowers_select_pair_members` asks whether the
+-- reader is a member of `pair_id`, and on a DELETE payload of `{id}` there
+-- IS no pair_id. The policy cannot be satisfied, so the event is dropped for
+-- every subscriber. Not an error anywhere: the delete succeeds, the
+-- broadcast is silently withheld, and the client's list keeps a row the
+-- database no longer has.
+--
+-- ⚠️ INSERT and UPDATE were never affected — they publish the new row in
+-- full, so the policy has everything it needs. That is exactly why this went
+-- unnoticed: every other realtime path in the app works.
+--
+-- ## The cost
+--
+-- FULL writes the entire old row to the WAL on every update and delete
+-- rather than just the key. For a two-person app whose largest table is a
+-- few hundred rows this is nothing; on a table with large columns and heavy
+-- update traffic it would be worth measuring first.
+--
+-- `heartbeats` is deliberately NOT changed: rows are only ever inserted
+-- there, never updated or deleted, so there is no event whose authorisation
+-- could fail.
+
+alter table public.flower_messages replica identity full;

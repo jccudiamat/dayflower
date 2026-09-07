@@ -170,6 +170,12 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
           .read(flowerRepositoryProvider)
           .signedPhotoUrl(widget.imagePath!, ttl: const Duration(hours: 1)),
       builder: (context, snap) {
+        // A finished failure is not still-loading. See the same fix in
+        // share_your_day.dart.
+        if (snap.hasError) {
+          return Text('Photo unavailable',
+              style: AppText.body(AppColors.onDarkMuted));
+        }
         if (!snap.hasData) {
           return const CircularProgressIndicator(color: Colors.white);
         }

@@ -234,6 +234,39 @@ class SettingsScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: AppSpace.md),
+            Text('PHOTO ROTATION', style: AppText.label()),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'How often the widget moves to their next day. Only applies '
+              'when more than one is live.',
+              style: AppText.caption(),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            const _Card(
+              children: [
+                // ⚠️ "Don't" is first and is the default. A card that moves
+                // on its own is the kind of thing that reads as delightful
+                // for a week and restless after that, so it is opt-in.
+                _WidgetRotationRow(
+                  title: "Don't rotate",
+                  subtitle: 'Only the newest day',
+                  seconds: 0,
+                ),
+                _Line(),
+                _WidgetRotationRow(
+                  title: 'Every 3 seconds',
+                  subtitle: 'Through their live days',
+                  seconds: 3,
+                ),
+                _Line(),
+                _WidgetRotationRow(
+                  title: 'Every 5 seconds',
+                  subtitle: 'A calmer pace',
+                  seconds: 5,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
 
             // ── About ────────────────────────────────
             Text('ABOUT', style: AppText.label()),
@@ -495,6 +528,75 @@ class _Line extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpace.sm),
       child: Divider(height: 1),
+    );
+  }
+}
+
+/* ── Widget photo-rotation picker row ────────────── */
+/// Same shape as [_WidgetModeRow] — one choice out of three, shown as an
+/// outline rather than a tick, per design.md.
+class _WidgetRotationRow extends ConsumerWidget {
+  const _WidgetRotationRow({
+    required this.title,
+    required this.subtitle,
+    required this.seconds,
+  });
+
+  final String title;
+  final String subtitle;
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selected = ref.watch(widgetRotationProvider) == seconds;
+    final enabled = DayflowerWidgets.isSupported;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: enabled
+            ? () => ref.read(widgetRotationProvider.notifier).setSeconds(seconds)
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpace.sm,
+            vertical: 14,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: AppText.body(
+                        enabled ? AppColors.ink : AppColors.muted,
+                      ).copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: AppText.caption()),
+                  ],
+                ),
+              ),
+              AnimatedContainer(
+                duration: AppMotion.micro,
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: selected && enabled
+                        ? AppColors.secondary
+                        : AppColors.border,
+                    width: selected && enabled ? 6 : 1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

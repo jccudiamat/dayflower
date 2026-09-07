@@ -105,7 +105,9 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             views: RemoteViews,
             widgetData: SharedPreferences,
         ) {
-            views.setViewVisibility(R.id.widget_photo, View.GONE)
+            // The flipper, not the ImageView inside it — hiding a child
+            // would leave the flipper itself cycling empty slots.
+            views.setViewVisibility(R.id.widget_flipper, View.GONE)
             views.setViewVisibility(R.id.widget_header, View.GONE)
             views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
             views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
@@ -136,15 +138,17 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         ) {
             // A day photo takes the slot when there is a live one; otherwise
             // the flower glyph does. Never both.
-            val photo = loadDayPhoto(widgetData)?.let { roundCorners(context, it, options) }
-            if (photo != null) {
-                views.setImageViewBitmap(R.id.widget_photo, photo)
-                views.setViewVisibility(R.id.widget_photo, View.VISIBLE)
+            val photos = loadDayPhotos(widgetData)
+                .map { roundCorners(context, it, options) }
+            if (photos.isNotEmpty()) {
+                renderFlipper(views, widgetData, photos)
+                views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
             } else {
-                views.setViewVisibility(R.id.widget_photo, View.GONE)
+                views.setViewVisibility(R.id.widget_flipper, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             }
+            val photo = photos.firstOrNull()
 
             // Not only over a photo any more. A flower now says who it is
             // from up here, with their face on it, rather than in the
@@ -367,6 +371,82 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             }
         }
 
+        /** The flipper's five slots, in order. */
+        private val PHOTO_SLOTS = listOf(
+            R.id.widget_photo,
+            R.id.widget_photo_2,
+            R.id.widget_photo_3,
+            R.id.widget_photo_4,
+            R.id.widget_photo_5,
+        )
+
+        /**
+         * Fills the flipper and decides whether it moves.
+         *
+         * WARNING: the interval is the user's, and zero means still. A widget
+         * that animates on its own is a widget that draws the eye every few
+         * seconds from across a room, which is welcome for some people and an
+         * irritation for others - so it is a setting, and "not at all" is one
+         * of the answers.
+         *
+         * stopFlipping is called explicitly rather than left implied: a
+         * flipper that was running before the preference changed keeps
+         * running otherwise, and the setting would look broken until the
+         * widget was removed and re-added.
+         */
+        fun renderFlipper(
+            views: RemoteViews,
+            widgetData: SharedPreferences,
+            photos: List<Bitmap>,
+        ) {
+            PHOTO_SLOTS.forEachIndexed { i, id ->
+                if (i < photos.size) {
+                    views.setImageViewBitmap(id, photos[i])
+                    views.setViewVisibility(id, View.VISIBLE)
+                } else {
+                    // ⚠️ Hidden, not left with a stale bitmap. A flipper
+                    // cycles every child it can see, so a leftover from an
+                    // earlier sync would keep appearing between the current
+                    // photos.
+                    views.setViewVisibility(id, View.GONE)
+                }
+            }
+
+            val seconds = widgetData.getInt("widget_rotate_seconds", 0)
+            // One photo has nothing to flip to, and a flipper animating a
+            // single child is a card that fades into itself.
+            if (seconds > 0 && photos.size > 1) {
+                views.setInt(R.id.widget_flipper, "setFlipInterval", seconds * 1000)
+                views.setDisplayedChild(R.id.widget_flipper, 0)
+                views.setBoolean(R.id.widget_flipper, "setAutoStart", true)
+                views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
+            } else {
+                views.setBoolean(R.id.widget_flipper, "setAutoStart", false)
+                views.setDisplayedChild(R.id.widget_flipper, 0)
+            }
+        }
+
+        /**
+         * Every cached day photo, newest first.
+         *
+         * Dart writes them as a newline-separated list under one key rather
+         * than five: the count changes, and five keys would need clearing
+         * individually every time it shrank.
+         */
+        fun loadDayPhotos(widgetData: SharedPreferences): List<Bitmap> {
+            val expiresAt = widgetData.getLong("day_photo_expires_at", 0L)
+            if (expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
+                return emptyList()
+            }
+            val joined = widgetData.getString("day_photo_paths", "") ?: ""
+            val paths = joined.split("\n").filter { it.isNotBlank() }
+            if (paths.isEmpty()) {
+                // Older data, written before rotation existed.
+                return listOfNotNull(loadDayPhoto(widgetData))
+            }
+            return paths.take(PHOTO_SLOTS.size).mapNotNull { decodePhoto(it) }
+        }
+
         /**
          * Decodes the day photo Dart cached to disk, downscaled.
          *
@@ -489,6 +569,11 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 return null
             }
 
+            return decodePhoto(path)
+        }
+
+        /** Decodes one cached photo, downscaled to [TARGET_PX]. */
+        fun decodePhoto(path: String): Bitmap? {
             val file = File(path)
             if (!file.exists()) return null
 

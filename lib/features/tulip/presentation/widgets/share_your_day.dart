@@ -1147,6 +1147,17 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                   .read(flowerRepositoryProvider)
                   .signedPhotoUrl(message.imagePath!),
               builder: (context, snap) {
+                // 🔴 `hasError` first. Signing a URL for an object that
+                // no longer exists throws, and `!hasData` alone treats a
+                // finished failure as still-loading — which is why deleting
+                // your own day left this spinning forever instead of saying
+                // the photo was gone.
+                if (snap.hasError) {
+                  return Center(
+                    child: Text('Photo unavailable',
+                        style: AppText.body(AppColors.onDarkMuted)),
+                  );
+                }
                 if (!snap.hasData) {
                   return const Center(
                     child: CircularProgressIndicator(color: Colors.white),

@@ -2507,3 +2507,67 @@ What remains is yours, because it involves minting secrets:
 3. The same string as `PUSH_SECRET` in the function's env.
 4. Deploy `supabase/functions/push`, and give it the Firebase service-account
    credentials it signs with.
+
+## 🔴 Delete worked; no phone ever found out (2026-09-07)
+
+Deleting a message did nothing visible, and deleting a day left the story
+viewer spinning forever. **The delete itself was never the problem** —
+exercised against the live database with a real signed-in session:
+`delete_message` returns 200, the row is gone, a re-query proves it.
+
+⚠️ **`REPLICA IDENTITY` was the whole thing.** Postgres publishes a DELETE as
+the *old* row, and by default that is the primary key and nothing else —
+enough to replicate, not enough to **authorise**. Supabase Realtime evaluates
+RLS against the payload before broadcasting, `flowers_select_pair_members`
+asks about `pair_id`, and a payload of `{id}` has none. The policy cannot be
+satisfied, so the event is dropped for every subscriber. No error anywhere:
+the delete succeeds and the broadcast is silently withheld.
+
+⚠️ INSERT and UPDATE were never affected — they publish the new row in full.
+That is exactly why it went unnoticed: every other realtime path works.
+
+Migration **0032** sets `replica identity full`. `heartbeats` is deliberately
+left alone: rows there are only ever inserted.
+
+### 🔴 And a spinner that could never resolve
+
+`if (!snap.hasData)` treats a **finished failure** as still-loading. Signing a
+URL for a deleted object throws, so the day viewer sat on its spinner
+forever. Fixed in all three places that had the same shape — the day viewer,
+the media viewer and the thread bubble.
+
+## Swipe to reply (2026-09-07)
+
+Reply was buried in the long-press menu next to Delete: two very different
+acts behind one gesture, and the common one cost a press, a wait, a sheet and
+a tap. Now a right swipe, the gesture every messaging app has taught for it.
+
+- ⚠️ **`onHorizontalDrag*`, not a pan.** A bubble claiming vertical drags
+  would stop the thread scrolling through it; the gesture arena hands over a
+  horizontal drag only once the movement is clearly sideways.
+- ⚠️ The haptic fires on **crossing** the threshold, not on release —
+  confirmation that arrives after you have let go is a report, not feedback.
+- Long-press stays, for Delete only. Nothing destructive should be reachable
+  by a flick.
+
+## The widget rotates its photos (2026-09-07)
+
+⚠️ **A `ViewFlipper`, because a widget cannot hold a timer.**
+`updatePeriodMillis` floors at 30 minutes and an AlarmManager firing every
+few seconds would be throttled and a battery complaint. `ViewFlipper` is on
+the RemoteViews supported list and the **launcher process** animates it, with
+the app dead.
+
+- Five slots. Unused ones are set `GONE`, not left with a stale bitmap — a
+  flipper cycles every child it can see.
+- `setAutoStart(false)` is set explicitly when rotation is off. A flipper
+  already running keeps running otherwise, and the setting would look broken
+  until the widget was removed and re-added.
+- Off by default, 3s or 5s by choice. A card that moves on its own reads as
+  delightful for a week and restless after that.
+- 🔴 **`_cachePhoto` pruned every other cached photo each time it wrote one.**
+  Correct when the widget showed a single photo, fatal the moment it rotates:
+  caching the second would delete the first. Pruning now happens once per
+  sync, knowing the whole set.
+- Their days, not mine, and excluding the one already in the first slot —
+  including it would show the newest twice per cycle.

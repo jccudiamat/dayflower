@@ -548,6 +548,21 @@ final myDayPhotosProvider = Provider.autoDispose<List<FlowerMessage>>((ref) {
   ];
 });
 
+/// Every day photo of *theirs* still inside its 24 hours, newest first.
+///
+/// What the home-screen widget rotates through. ⚠️ Their days, not mine —
+/// the widget is where their day lands on my phone, and a card cycling my
+/// own photos back at me would be a mirror.
+final partnerDayPhotosProvider =
+    Provider.autoDispose<List<FlowerMessage>>((ref) {
+  final userId = ref.watch(currentUserIdProvider);
+  final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
+  return [
+    for (final m in messages)
+      if (m.senderId != userId && m.isPhoto && m.isFreshForWidget) m,
+  ];
+});
+
 /// My newest live day. Drives whether the story bar offers "Your day" as an
 /// add button or as a live ring.
 final myDayPhotoProvider = Provider.autoDispose<FlowerMessage?>((ref) {
