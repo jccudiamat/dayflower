@@ -15,6 +15,9 @@ import '../../../home/presentation/widgets/clocks_card.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
+import '../../../reunion/data/reunion_repository.dart';
+import '../../../reunion/presentation/widgets/reunion_card.dart'
+    show showReunionEditor;
 import '../../../us/domain/couple_dates.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
@@ -292,24 +295,21 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   @override
   void initState() {
     super.initState();
-    final today = _startOfDay(DateTime.now());
     // The mock anniversary and monthsary that used to sit here are gone:
     // both are derived from the pair's start date now, and keeping the
     // fakes would have shown each of them twice, on two different days.
-    _manual = [
-      // ⚠️ The mock "Sunshine's Birthday" that sat here is gone.
-      // Birthdays are derived from the two profiles now, so keeping it
-      // would have shown a made-up name's birthday next to a real one.
-      _Event(
-        id: 3,
-        kind: _EventKind.reunion,
-        emoji: '✈️',
-        title: 'Tokyo Reunion',
-        date: _iso(today.add(const Duration(days: 84))),
-        location: 'Tokyo, Japan 🇯🇵',
-        note: "Can't wait to hold you again.",
-      ),
-    ];
+    //
+    // ⚠️ Empty, and no longer seeded with anything.
+    //
+    // "Sunshine's Birthday" went when birthdays became derived from the two
+    // profiles, and "Tokyo Reunion" went when the countdown became the real
+    // `reunions` row — a mock reunion sitting in this list under a card
+    // counting down to a different, real one is the kind of thing that
+    // makes somebody distrust every date on the screen.
+    //
+    // Events added through the + sheet still land here, and still only for
+    // as long as the screen is open. That is pre-existing and unchanged.
+    _manual = [];
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
@@ -390,13 +390,11 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     final next = _next;
     final alsoComing = _upcoming.skip(1).toList();
 
-    // The soonest reunion still ahead. Nullable because a couple who are not
-    // apart do not have one, and the card is simply absent rather than
-    // counting down to nothing.
-    final nextReunion = _upcoming
-        .where((e) => e.kind == _EventKind.reunion)
-        .cast<_Event?>()
-        .firstWhere((e) => true, orElse: () => null);
+    // 🔴 The couple's real reunion row, not an entry in the mock list this
+    // screen still keeps. It is the same `reunions` row the home-screen
+    // widget counts down from, so the card and the widget cannot disagree —
+    // which they would have the moment one of them was real.
+    final reunion = ref.watch(reunionProvider).valueOrNull;
     final passed = _passed;
 
     return Scaffold(
@@ -476,13 +474,23 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                     // countdown to seeing somebody is not the same kind of
                     // fact as a birthday: it is the one on the screen that is
                     // *moving*.
-                    if (nextReunion != null) ...[
+                    if (reunion != null) ...[
                       ReunionCard(
-                        title: nextReunion.title,
-                        place: nextReunion.location,
-                        when: DateTime.parse(nextReunion.date),
+                        title: reunion.title,
+                        place: reunion.destination,
+                        when: reunion.happensAt,
                         now: _now,
-                        onTap: () => _openEventSheet(nextReunion),
+                        onTap: () =>
+                            showReunionEditor(context, ref, reunion),
+                      ),
+                      const SizedBox(height: AppSpace.md),
+                    ] else ...[
+                      // Nothing to count down to yet. A prompt rather than
+                      // an absence: without one there is no way to create
+                      // the first reunion, and the widget has nothing to
+                      // show either.
+                      _AddReunionCard(
+                        onTap: () => showReunionEditor(context, ref, null),
                       ),
                       const SizedBox(height: AppSpace.md),
                     ],
@@ -544,6 +552,58 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
 // ═══════════════════════════════════════════════════
 //   1. NEXT UP — hero countdown
 // ═══════════════════════════════════════════════════
+
+/// Shown in the countdown's place until a reunion exists.
+///
+/// Deliberately quiet — dashed rather than filled, in the shape of the
+/// "Share your day" arch on Home. An empty state that shouts is an empty
+/// state that looks like an error.
+class _AddReunionCard extends StatelessWidget {
+  const _AddReunionCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md,
+          vertical: AppSpace.md,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+          border: Border.all(color: AppColors.blushMid),
+        ),
+        child: Row(
+          children: [
+            const Icon(CupertinoIcons.airplane,
+                color: AppColors.brand, size: 20),
+            const SizedBox(width: AppSpace.sm),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Plan your reunion', style: AppText.subtitle()),
+                  const SizedBox(height: 2),
+                  Text(
+                    'The countdown appears here and on your home screen.',
+                    style: AppText.caption(),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(CupertinoIcons.chevron_right,
+                size: 16, color: AppColors.muted),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _NextUpCard extends StatelessWidget {
   const _NextUpCard({

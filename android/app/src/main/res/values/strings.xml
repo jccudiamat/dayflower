@@ -10,6 +10,11 @@
     <string name="heartbeat_widget_label">HEARTBEAT</string>
     <string name="heartbeat_widget_prompt">No heartbeat yet today \u2014 tap to send</string>
 
+    <!-- Reunion countdown widget -->
+    <string name="reunion_widget_description">How long until you are in the same place.</string>
+    <string name="reunion_widget_label">NEXT REUNION</string>
+    <string name="reunion_widget_empty">No countdown yet — tap to set one</string>
+
     <!-- Adaptive widget (follows the in-app Settings preference) -->
-    <string name="adaptive_widget_description">Flower or heartbeat — your choice in Settings.</string>
+    <string name="adaptive_widget_description">Flower, heartbeat or reunion — your choice in Settings.</string>
 </resources>

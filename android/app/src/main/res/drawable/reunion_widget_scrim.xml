@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Full-height scrim over the reunion widget's background photo.
+
+     ⚠️ Darker and taller than widget_caption_scrim. That one protects a
+     caption sitting at the bottom edge of a photo; this one has text at the
+     top *and* a large number in the middle, so the whole card has to be
+     legible over whatever picture somebody chose — including a beach at
+     noon. It still fades through the middle so a dark photo does not go
+     flat black.
+
+     angle=90 puts startColor at the bottom. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="90"
+        android:type="linear"
+        android:startColor="#D9120C1F"
+        android:centerColor="#8C171027"
+        android:endColor="#B3120C1F" />
+</shape>

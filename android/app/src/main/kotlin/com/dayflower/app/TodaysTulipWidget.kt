@@ -257,10 +257,10 @@ class TodaysTulipWidget : HomeWidgetProvider() {
          * the bitmap looks like. API 31+ only, which is why the bitmap
          * rounding stays as the fallback rather than being replaced.
          */
-        fun roundTheWholeCard(views: RemoteViews) {
+        fun roundTheWholeCard(views: RemoteViews, rootId: Int = R.id.widget_root) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
             views.setViewOutlinePreferredRadius(
-                R.id.widget_root,
+                rootId,
                 CORNER_DP,
                 TypedValue.COMPLEX_UNIT_DIP,
             )

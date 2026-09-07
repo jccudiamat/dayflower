@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Reunion countdown widget.
+
+     The picture is the card and the countdown sits on it, the same shape as
+     the Today's Flower widget — a home screen is a wall, and a number on a
+     photograph of the place you are going is a different object from a number
+     in a box.
+
+     Values are written by ReunionWidget.render() from the data
+     DayflowerWidgets.syncReunion() pushes across; the ids here are that
+     contract, so renaming one means changing the Kotlin too.
+
+     ⚠️ Every view here is on the RemoteViews supported list (FrameLayout,
+     LinearLayout, ImageView, TextView) and every call the Kotlin makes on
+     them is a first-class RemoteViews method. Reaching a view's own method
+     by name through setInt/setBoolean is how "Problem loading widget"
+     happened before — see TodaysTulipWidget.renderPhotos. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/reunion_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_background"
+    android:clipToOutline="true">
+
+    <!-- The chosen photo. Rounded in Kotlin, not here: only Android 12+
+         launchers clip a widget's corners, and on everything else a
+         full-bleed bitmap covers the rounded background entirely. See
+         TodaysTulipWidget.roundCorners. -->
+    <ImageView
+        android:id="@+id/reunion_photo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/reunion_widget_description"
+        android:visibility="gone" />
+
+    <!-- The gradient shown until a photo is picked. -->
+    <ImageView
+        android:id="@+id/reunion_fallback"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:src="@drawable/reunion_widget_fallback"
+        android:contentDescription="@string/reunion_widget_description" />
+
+    <!-- Legibility over any picture somebody chooses. -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/reunion_widget_scrim"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_vertical"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp"
+        android:paddingTop="14dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:id="@+id/reunion_eyebrow"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/reunion_widget_label"
+            android:textColor="#B9A9D6"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.14"
+            android:maxLines="1" />
+
+        <TextView
+            android:id="@+id/reunion_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="17sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:shadowColor="#B3000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4" />
+
+        <!-- The number and its unit on one baseline: "412 days". Two views
+             rather than one string so the count can be big and the word
+             small, which is the whole reason this is a countdown card and
+             not a calendar row. -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:baselineAligned="true"
+            android:gravity="bottom">
+
+            <TextView
+                android:id="@+id/reunion_count"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="—"
+                android:textColor="#FFFFFF"
+                android:textSize="40sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:shadowColor="#B3000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="6" />
+
+            <TextView
+                android:id="@+id/reunion_unit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="7dp"
+                android:layout_marginBottom="5dp"
+                android:text=""
+                android:textColor="#F5D6E6"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:maxLines="1" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/reunion_when"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text=""
+            android:textColor="#E4DEEC"
+            android:textSize="12.5sp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:shadowColor="#B3000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="4" />
+    </LinearLayout>
+</FrameLayout>

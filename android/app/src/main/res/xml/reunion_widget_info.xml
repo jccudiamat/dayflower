@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sized like a postcard, not like a poster.
+
+     4 x 2 cells: wide enough for "412 days" beside a title and a date, short
+     enough to sit above or below another widget rather than owning the
+     screen. The countdown is a glance, not a page — the place to sit and
+     look at it is the card on Events.
+
+     updatePeriodMillis is the 30-minute floor Android allows. That is far
+     more often than a day-count needs, and the app pushes an update itself
+     whenever the reunion changes; this only covers the case where the widget
+     is left alone across midnight. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/reunion_widget"
+    android:previewLayout="@layout/reunion_widget"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="80dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="320dp"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/reunion_widget_description"
+    android:updatePeriodMillis="1800000" />

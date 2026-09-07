@@ -33,6 +33,7 @@ import 'features/calls/domain/call.dart';
 import 'features/updates/data/update_alerts.dart';
 import 'features/updates/data/update_repository.dart';
 import 'features/updates/presentation/widgets/update_screen.dart';
+import 'features/reunion/data/reunion_repository.dart';
 import 'features/widget/widget_sync.dart';
 
 class DayflowerApp extends ConsumerStatefulWidget {
@@ -156,11 +157,26 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     if (!DayflowerWidgets.isSupported) return;
     try {
       final launchUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
-      if (launchUri != null) _openTulip();
-      _widgetTaps = HomeWidget.widgetClicked.listen((_) => _openTulip());
+      if (launchUri != null) _openWidgetTarget(launchUri);
+      _widgetTaps = HomeWidget.widgetClicked.listen(_openWidgetTarget);
     } catch (e) {
       debugPrint('widget launch wiring failed: $e');
     }
+  }
+
+  /// Where a widget tap lands.
+  ///
+  /// ⚠️ There is more than one widget now, so the URI has to be read rather
+  /// than assumed. Every tap used to open the conversation, which was right
+  /// when the only widget was a flower and wrong the moment a countdown
+  /// appeared beside it.
+  void _openWidgetTarget(Uri? uri) {
+    if (uri?.host == 'events') {
+      // Router gates still apply — a signed-out tap lands on Welcome.
+      ref.read(routerProvider).go(Routes.events);
+      return;
+    }
+    _openTulip();
   }
 
   void _openTulip() {
@@ -206,6 +222,14 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     ref.listen<AsyncValue<UserProfile?>>(
       partnerProfileProvider,
       (_, __) => _syncWidget(ref.read(widgetFlowerProvider)),
+    );
+    // The countdown on the home screen comes from the same row as the card
+    // on Events, so editing one moves the other. Watching from the root
+    // keeps that stream alive app-wide — a partner changing the date while
+    // this phone sits on the chat screen still reaches its widget.
+    ref.listen<AsyncValue<Reunion?>>(
+      reunionProvider,
+      (_, next) => _syncReunion(next.valueOrNull),
     );
     ref.listen<({int mine, int partner})>(
       todayHeartbeatCountsProvider,
@@ -475,6 +499,17 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // widget layer: widget_sync has no Riverpod container and runs from a
       // background isolate too, where providers do not exist.
       downloadPhoto: ref.read(flowerRepositoryProvider).downloadPhoto,
+    );
+  }
+
+  void _syncReunion(Reunion? reunion) {
+    if (!DayflowerWidgets.isSupported) return;
+    DayflowerWidgets.syncReunion(
+      title: reunion?.title,
+      place: reunion?.destination,
+      // Null clears it. A reunion that has been deleted must not leave a
+      // countdown frozen on the home screen counting to a date nobody has.
+      happensAt: reunion?.happensAt,
     );
   }
 

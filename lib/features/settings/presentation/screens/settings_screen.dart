@@ -236,7 +236,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpace.xs),
             Text(
               DayflowerWidgets.isSupported
-                  ? 'Long-press your home screen → Widgets → Dayflower. "Today\'s Flower" and "Heartbeat" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
+                  ? 'Long-press your home screen → Widgets → Dayflower. "Today\'s Flower", "Heartbeat" and "Reunion" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
                   : 'Home screen widgets are only available on the Android and iOS app.',
               style: AppText.caption(),
             ),
@@ -254,8 +254,24 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: 'Tap it to send a pulse',
                   mode: WidgetMode.heartbeat,
                 ),
+                const _Line(),
+                const _WidgetModeRow(
+                  title: 'Reunion',
+                  subtitle: 'Days until you are in the same place',
+                  mode: WidgetMode.reunion,
+                ),
               ],
             ),
+            const SizedBox(height: AppSpace.md),
+            Text('REUNION WIDGET', style: AppText.label()),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'The picture behind the countdown. Somewhere you are going, or '
+              'somewhere you have been.',
+              style: AppText.caption(),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            const _Card(children: [_ReunionBackgroundRow()]),
             const SizedBox(height: AppSpace.md),
             Text('PHOTO ROTATION', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
@@ -552,6 +568,105 @@ class _Line extends StatelessWidget {
     return const Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpace.sm),
       child: Divider(height: 1),
+    );
+  }
+}
+
+/* ── Reunion widget background ────────────────────── */
+
+/// Picks (or clears) the photo behind the reunion countdown widget.
+///
+/// ⚠️ **Device-local, and deliberately not shared.** The countdown itself is
+/// one row on `reunions` and belongs to both of you; the picture behind it is
+/// a decision about one home screen. Syncing it would mean one person's
+/// choice of wallpaper overwriting the other's, and an upload, and a bucket,
+/// for something neither of them would ever see on the other's phone.
+class _ReunionBackgroundRow extends ConsumerStatefulWidget {
+  const _ReunionBackgroundRow();
+
+  @override
+  ConsumerState<_ReunionBackgroundRow> createState() =>
+      _ReunionBackgroundRowState();
+}
+
+class _ReunionBackgroundRowState extends ConsumerState<_ReunionBackgroundRow> {
+  String _path = '';
+  var _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final path = await DayflowerWidgets.currentReunionBackground();
+    if (mounted) setState(() => _path = path);
+  }
+
+  Future<void> _pick() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        // Generous: the widget downscales to 1200px on its own, and asking
+        // the picker for something small first would throw away detail the
+        // crop might have wanted.
+        maxWidth: 2400,
+        maxHeight: 2400,
+      );
+      if (picked == null) return;
+      final saved =
+          await DayflowerWidgets.setReunionBackground(await picked.readAsBytes());
+      if (mounted) setState(() => _path = saved ?? '');
+    } catch (e) {
+      debugPrint('reunion background pick failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _clear() async {
+    setState(() => _busy = true);
+    await DayflowerWidgets.setReunionBackground(null);
+    if (mounted) {
+      setState(() {
+        _path = '';
+        _busy = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = DayflowerWidgets.isSupported && !_busy;
+    final has = _path.isNotEmpty;
+
+    return Column(
+      children: [
+        _Row(
+          title: 'Background image',
+          subtitle: has
+              ? 'Tap to choose a different one'
+              : 'Uses the Dayflower gradient until you pick one',
+          value: _busy
+              ? 'Saving…'
+              : has
+                  ? 'Chosen'
+                  : 'Not set',
+          onTap: enabled ? _pick : null,
+        ),
+        if (has) ...[
+          const _Line(),
+          _Row(
+            title: 'Remove background',
+            danger: true,
+            chevron: false,
+            onTap: enabled ? _clear : null,
+          ),
+        ],
+      ],
     );
   }
 }

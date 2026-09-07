@@ -2807,3 +2807,84 @@ What makes it read as designed rather than assembled:
 Order changed too — DAYS leads now. It is the number that is always there and
 always moving, and it was sitting last behind three that can be zero.
 
+## The reunion countdown, on the home screen (2026-09-08)
+
+A fourth widget — `ReunionWidget` — plus `WidgetMode.reunion` for the
+adaptive one, so it can be placed on its own or swapped into the widget
+that is already there.
+
+🔴 **First it had to be real.** The card on Events was counting down to a
+mock "Tokyo Reunion" in a hardcoded list, while a genuine `reunions` row
+("Vigan", 10 April 2027) sat in the database with a working editor attached
+to a `ReunionCard` that was on no screen at all — orphaned when the
+design-copied card replaced it. A widget built on the mock would have shipped
+a countdown to a date nobody had. So:
+
+- Events reads `reunionProvider` — the same row the widget counts from, which
+  is the only way the two cannot disagree.
+- The editor that was already written is exported as `showReunionEditor`
+  rather than duplicated. Tapping the card opens it; with no reunion yet, a
+  quiet "Plan your reunion" prompt takes the card's place, because without
+  one there is no way to create the first.
+- ⚠️ `_manual` on Events is now **empty**. "Tokyo Reunion" went the way
+  "Sunshine's Birthday" did: a mock reunion in the list underneath a card
+  counting down to a different, real one is what makes somebody stop
+  trusting every date on the screen.
+
+### The widget
+
+- **The arithmetic happens in Kotlin, every time it draws.** What crosses is
+  the instant, not a string. ⚠️ A widget can sit untouched on a home screen
+  for a week, and "412 days" baked when the app last ran would still say 412
+  on Friday.
+- ⚠️ **Calendar days, not elapsed hours.** A reunion at 8am tomorrow is "1
+  day", not 0 because only fourteen hours remain — the number has to agree
+  with the one a person counts on a calendar, which is the only reason they
+  look at it. Rounded rather than truncated, because two midnights are 23 or
+  25 hours apart across a daylight-saving change and integer division would
+  quietly drop a day once a year.
+- Every call is a first-class RemoteViews method — `setTextViewText`,
+  `setImageViewBitmap`, `setViewVisibility`, `setOnClickPendingIntent`,
+  `setViewOutlinePreferredRadius`. 🔴 **Nothing is reached by name through
+  `setInt`/`setBoolean`.** That is what produced "Problem loading widget"
+  two builds ago, and the rule it left behind applies here.
+- `renderSafely`, same as the flower widget: a provider runs in the **app's
+  own process**, so an uncaught throw is the app closing a second after it
+  opens. A failure falls back to the text-only card and logs.
+- Tapping opens Events. ⚠️ Widget taps used to all open the conversation,
+  which was right when the only widget was a flower; `_openWidgetTarget`
+  reads the URI now.
+
+### The background
+
+Settable from Settings → REUNION WIDGET, with the app's pink→purple gradient
+until one is picked.
+
+- ⚠️ **Copied and downscaled into the app's own directory**, not referenced
+  where the picker found it. A gallery URI can be revoked, moved or deleted,
+  and a widget that renders while the app is dead has no way to ask for it
+  again — it would simply go blank one day for no reason the user could see.
+- 1200px on the long edge. RemoteViews has a hard bitmap budget of roughly
+  `6 × screenW × screenH`, and a modern camera photo exceeds it alone.
+- ⚠️ One fixed filename, so the path never changes and the launcher would
+  keep the bitmap it already decoded. A `?v=<millis>` suffix on the stored
+  value is what marks it new; the Kotlin strips it before opening the file.
+- **Device-local, deliberately.** The countdown is one row and belongs to
+  both of you; the picture behind it is a decision about one home screen.
+  Syncing it would mean one person's wallpaper overwriting the other's, plus
+  an upload and a bucket, for something neither would ever see.
+
+### Verified
+
+- The Events card loads the real row: "Vigan · Manila, arrivals gate 3 · 214
+  days", which matches the unit test's expected 214 days to 10 April 2027.
+- `aapt2 dump xmltree` on the built APK shows the `ReunionWidget` receiver
+  with its `APPWIDGET_UPDATE` filter, and a test asserts the provider name in
+  Dart matches that class.
+- Settings shows the Reunion mode row and the background picker, both
+  correctly disabled on web.
+- ⚠️ **Not seen on a home screen.** No emulator is available here
+  (`cmdline-tools` is missing), so the widget is verified by compilation, by
+  the manifest, and by every call being a documented RemoteViews API — not
+  by looking at it.
+

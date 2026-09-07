@@ -15,10 +15,16 @@ import '../tulip/domain/day_reactions.dart';
 /// ignore this — they always show their own thing.
 enum WidgetMode {
   flower,
-  heartbeat;
+  heartbeat,
+  reunion;
 
-  static WidgetMode fromName(String? v) =>
-      v == heartbeat.name ? heartbeat : flower;
+  static WidgetMode fromName(String? v) {
+    for (final mode in WidgetMode.values) {
+      if (mode.name == v) return mode;
+    }
+    // A name written by a newer build than this one, or nothing at all.
+    return flower;
+  }
 }
 
 /// Home-screen widget bridge.
@@ -38,6 +44,7 @@ class DayflowerWidgets {
 
   static const flowerProvider = 'com.dayflower.app.TodaysTulipWidget';
   static const heartbeatProvider = 'com.dayflower.app.HeartbeatWidget';
+  static const reunionProviderName = 'com.dayflower.app.ReunionWidget';
   static const adaptiveProvider = 'com.dayflower.app.DayflowerWidget';
   static const iOSWidgetKind = 'TodaysTulipWidget';
 
@@ -46,6 +53,9 @@ class DayflowerWidgets {
 
   /// Handled in the background isolate — does NOT open the app.
   static const heartbeatAction = 'dayflower://heartbeat';
+
+  /// Opens the app on Events, where the countdown can be edited.
+  static const eventsDeepLink = 'dayflower://events';
 
   /// Tapping one of the widget's reactions. Handled in the background
   /// isolate — the whole point of a one-tap reaction is that it costs no
@@ -99,6 +109,24 @@ class DayflowerWidgets {
   /// across a room, which some people want and others do not.
   static const keyRotateSeconds = 'widget_rotate_seconds';
 
+  // ── Reunion countdown ─────────────────────────────────────
+  static const keyReunionTitle = 'reunion_title';
+  static const keyReunionPlace = 'reunion_place';
+
+  /// When it happens, as epoch millis.
+  ///
+  /// ⚠️ Sent as a number rather than a formatted string, because the widget
+  /// has to work out "how many days from *now*" every time it draws, and a
+  /// string baked in Dart would be wrong by morning. 0 means no reunion is
+  /// set, which the widget shows as its empty state rather than as a
+  /// countdown to 1970.
+  static const keyReunionAt = 'reunion_at';
+
+  /// Absolute path to the chosen background photo, or empty for the
+  /// gradient. Device-local: this is a decision about one home screen, not
+  /// a fact about the couple, so it never leaves the phone.
+  static const keyReunionBackground = 'reunion_bg';
+
   /// Epoch millis at which the day photo stops being shown.
   ///
   /// The widget enforces this itself. Dart cannot be relied on to clear the
@@ -148,7 +176,12 @@ class DayflowerWidgets {
   /// Redraws every provider. Cheap — Android ignores providers with no
   /// placed instances.
   static Future<void> _refresh() async {
-    for (final provider in [flowerProvider, heartbeatProvider, adaptiveProvider]) {
+    for (final provider in [
+      flowerProvider,
+      heartbeatProvider,
+      reunionProviderName,
+      adaptiveProvider,
+    ]) {
       await HomeWidget.updateWidget(
         qualifiedAndroidName: provider,
         iOSName: provider == flowerProvider ? iOSWidgetKind : null,
@@ -260,6 +293,82 @@ class DayflowerWidgets {
       await _refresh();
     } catch (e) {
       debugPrint('widget flower sync failed: $e');
+    }
+  }
+
+  /// Pushes the couple's reunion onto the home screen.
+  ///
+  /// Everything here is one row from `reunions` — the same row the card on
+  /// Events reads — so the widget cannot drift from the app. Passing a null
+  /// [happensAt] clears the countdown rather than leaving the last one
+  /// frozen on the home screen.
+  static Future<void> syncReunion({
+    required String? title,
+    required String? place,
+    required DateTime? happensAt,
+  }) async {
+    if (!isSupported) return;
+    try {
+      await HomeWidget.saveWidgetData<String>(
+          keyReunionTitle, title ?? '');
+      await HomeWidget.saveWidgetData<String>(keyReunionPlace, place ?? '');
+      await HomeWidget.saveWidgetData<int>(
+        keyReunionAt,
+        happensAt?.millisecondsSinceEpoch ?? 0,
+      );
+      await _refresh();
+    } catch (e) {
+      debugPrint('widget reunion sync failed: $e');
+    }
+  }
+
+  /// Sets (or with null, clears) the reunion widget's background photo.
+  ///
+  /// ⚠️ The picked file is **copied and downscaled** into the app's own
+  /// directory rather than referenced where the picker found it. A gallery
+  /// URI can be revoked, moved or deleted, and a widget that renders while
+  /// the app is dead has no way to ask for it again — it would simply go
+  /// blank one day for no reason the user could see.
+  static Future<String?> setReunionBackground(Uint8List? bytes) async {
+    if (!isSupported) return null;
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/reunion_bg.jpg');
+
+      if (bytes == null) {
+        if (await file.exists()) await file.delete();
+        await HomeWidget.saveWidgetData<String>(keyReunionBackground, '');
+        await _refresh();
+        return null;
+      }
+
+      final scaled = await compute(_downscaleBackground, bytes);
+      await file.writeAsBytes(scaled);
+      // ⚠️ A fixed filename means the path never changes, so the launcher
+      // would happily keep the bitmap it already decoded. The mtime key
+      // below is what tells the provider the file underneath is new.
+      await HomeWidget.saveWidgetData<String>(
+        keyReunionBackground,
+        '${file.path}?v=${DateTime.now().millisecondsSinceEpoch}',
+      );
+      await _refresh();
+      return file.path;
+    } catch (e) {
+      debugPrint('reunion background save failed: $e');
+      return null;
+    }
+  }
+
+  /// The stored background path, without the cache-busting suffix.
+  static Future<String> currentReunionBackground() async {
+    if (!isSupported) return '';
+    try {
+      final raw =
+          await HomeWidget.getWidgetData<String>(keyReunionBackground) ?? '';
+      return raw.split('?').first;
+    } catch (e) {
+      debugPrint('reunion background read failed: $e');
+      return '';
     }
   }
 
@@ -600,4 +709,22 @@ Uint8List? circleAvatarPng(Uint8List bytes) {
   } catch (_) {
     return null;
   }
+}
+
+/// Shrinks a picked photo to something a widget can hold.
+///
+/// ⚠️ RemoteViews has a hard bitmap budget — roughly `6 × screenW × screenH`
+/// bytes for everything a widget draws — and a modern phone camera produces
+/// images several times that on its own. 1200px on the long edge covers a
+/// full-width widget on a 3× screen and leaves the budget alone.
+///
+/// Runs through `compute` because decoding a 12MP JPEG on the UI thread is a
+/// visible stutter in the settings sheet that triggered it.
+Uint8List _downscaleBackground(Uint8List bytes) {
+  final decoded = img.decodeImage(bytes);
+  if (decoded == null) return bytes;
+  final resized = decoded.width >= decoded.height
+      ? img.copyResize(decoded, width: 1200)
+      : img.copyResize(decoded, height: 1200);
+  return Uint8List.fromList(img.encodeJpg(resized, quality: 88));
 }

@@ -48,19 +48,29 @@ class DayflowerWidget : HomeWidgetProvider() {
         appWidgetIds: IntArray,
         widgetData: SharedPreferences,
     ) {
-        val heartbeatMode = widgetData.getString("widget_mode", "flower") == "heartbeat"
+        val mode = widgetData.getString("widget_mode", "flower")
 
         appWidgetIds.forEach { widgetId ->
             // 🔴 Same guard as TodaysTulipWidget.renderSafely, and for the
             // same reason: this runs in the app's process, so a throw here
             // is the app closing a second after it opened.
             try {
-                if (heartbeatMode) {
-                    val views = RemoteViews(context.packageName, R.layout.heartbeat_widget)
-                    HeartbeatWidget.renderHeartbeat(context, views, widgetData)
-                    appWidgetManager.updateAppWidget(widgetId, views)
-                } else {
-                    TodaysTulipWidget.renderSafely(
+                when (mode) {
+                    "heartbeat" -> {
+                        val views =
+                            RemoteViews(context.packageName, R.layout.heartbeat_widget)
+                        HeartbeatWidget.renderHeartbeat(context, views, widgetData)
+                        appWidgetManager.updateAppWidget(widgetId, views)
+                    }
+                    "reunion" -> ReunionWidget.renderSafely(
+                        context,
+                        appWidgetManager,
+                        widgetId,
+                        widgetData,
+                    )
+                    // Anything else, including a mode written by a newer
+                    // build than this one, falls back to the flower.
+                    else -> TodaysTulipWidget.renderSafely(
                         context,
                         appWidgetManager,
                         widgetId,

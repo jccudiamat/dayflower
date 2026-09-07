@@ -34,13 +34,27 @@ class ReunionCard extends ConsumerWidget {
     );
   }
 
-  void _openEditSheet(BuildContext context, WidgetRef ref, Reunion? existing) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _EditReunionSheet(existing: existing, ref: ref),
-    );
-  }
+  void _openEditSheet(BuildContext context, WidgetRef ref, Reunion? existing) =>
+      showReunionEditor(context, ref, existing);
+}
+
+/// Opens the reunion editor — title, place, date, note — writing to the
+/// pair's single `reunions` row.
+///
+/// ⚠️ Public because Events owns the countdown now. This file's own
+/// [ReunionCard] is the older, plainer version of that card and is no longer
+/// on any screen; the editor inside it always worked and is the only way to
+/// create or change a reunion, so it is exported rather than duplicated.
+Future<void> showReunionEditor(
+  BuildContext context,
+  WidgetRef ref,
+  Reunion? existing,
+) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (_) => _EditReunionSheet(existing: existing, ref: ref),
+  );
 }
 
 /* ── Empty state ─────────────────────────────────── */

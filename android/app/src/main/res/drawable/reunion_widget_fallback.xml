@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What the reunion widget shows before anybody picks a photo.
+
+     The app's own pink→purple diagonal (AppGradients.splash), so an
+     unconfigured widget still looks like Dayflower rather than like an
+     empty box waiting to be fixed. angle=225 runs top-left → bottom-right. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="225"
+        android:type="linear"
+        android:startColor="#F0709F"
+        android:endColor="#906FE8" />
+</shape>
