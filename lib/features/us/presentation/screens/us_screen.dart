@@ -17,8 +17,8 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/utils/zone_distance.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
-import '../../data/couple_stats.dart';
 import '../widgets/calling_card.dart';
+import '../widgets/couple_hero.dart';
 import '../../domain/couple_dates.dart';
 
 /// The couple's own page — the "us" the whole app is about.
@@ -67,9 +67,9 @@ class UsScreen extends ConsumerWidget {
                 padding: const EdgeInsets.fromLTRB(
                     AppSpace.sm, AppSpace.sm, AppSpace.sm, AppSpace.md),
                 children: [
-                  _CoupleHero(me: me, partner: partner, pair: pair),
-                  const SizedBox(height: AppSpace.md),
-                  const _StatsRow(),
+                  // Hero and stats are one card now — see CoupleHero for
+                  // why six rounded rectangles became one.
+                  CoupleHero(me: me, partner: partner, pair: pair),
                   const SizedBox(height: AppSpace.md),
                   Material(
                     color: AppColors.surface,
@@ -144,192 +144,6 @@ class _GearButton extends StatelessWidget {
 /* ── Who you are ─────────────────────────── */
 
 /// Both faces, both names, and how long it has been.
-class _CoupleHero extends StatelessWidget {
-  const _CoupleHero({
-    required this.me,
-    required this.partner,
-    required this.pair,
-  });
-
-  final UserProfile? me;
-  final UserProfile? partner;
-  final Pair? pair;
-
-  static const double _face = 76;
-
-  @override
-  Widget build(BuildContext context) {
-    final start = pair?.togetherSince;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpace.sm, vertical: AppSpace.md),
-      decoration: BoxDecoration(
-        gradient: AppGradients.cta,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            height: _face,
-            // Overlapped rather than side by side: two touching circles read
-            // as a couple, two spaced ones read as a list. Same reasoning as
-            // the pill this page is reached from.
-            width: partner == null ? _face : _face * 1.66,
-            child: Stack(
-              children: [
-                _ringed(me),
-                if (partner != null)
-                  Positioned(left: _face * 0.66, child: _ringed(partner)),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            _names,
-            textAlign: TextAlign.center,
-            style: AppText.title(Colors.white).copyWith(fontSize: 21),
-          ),
-          if (start != null) ...[
-            const SizedBox(height: 4),
-            Text(
-              '${togetherLabel(start, DateTime.now())} together',
-              style: AppText.body(Colors.white.withValues(alpha: .92)),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  String get _names {
-    final mine = me?.petName ?? me?.displayName;
-    final theirs = partner?.petName ?? partner?.displayName;
-    // Before pairing there is no "&" to show, and "Bunny & null" is worse
-    // than one name on its own.
-    return [if (mine != null) mine, if (theirs != null) theirs].join('  &  ');
-  }
-
-  Widget _ringed(UserProfile? profile) => Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withValues(alpha: .9), width: 2),
-        ),
-        child: UserAvatar(profile, size: _face - 4),
-      );
-}
-
-/* ── The numbers ─────────────────────────── */
-
-/// Four dark tiles, in the shape of the reference.
-///
-/// Dark on a light page on purpose: these are the only numbers on the
-/// screen, and inverting them is what makes four small tiles read as one
-/// block of statistics rather than four more cards.
-class _StatsRow extends ConsumerWidget {
-  const _StatsRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final stats = ref.watch(coupleStatsProvider);
-    final pair = ref.watch(currentPairProvider).valueOrNull;
-    final start = pair?.togetherSince;
-
-    final data = stats.valueOrNull;
-    // A dash, not a zero. "0 hearts" is a claim; while the count is in
-    // flight the app does not have one to make.
-    String show(int? n) => n == null ? '—' : '$n';
-
-    return Row(
-      children: [
-        Expanded(
-          child: _StatTile(
-            emoji: '🌷',
-            value: show(data?.flowers),
-            label: 'FLOWERS',
-          ),
-        ),
-        const SizedBox(width: AppSpace.xs),
-        Expanded(
-          child: _StatTile(
-            emoji: '🔥',
-            value: show(data?.streak),
-            label: 'STREAK',
-          ),
-        ),
-        const SizedBox(width: AppSpace.xs),
-        Expanded(
-          child: _StatTile(
-            emoji: '💗',
-            value: show(data?.hearts),
-            label: 'HEARTS',
-          ),
-        ),
-        const SizedBox(width: AppSpace.xs),
-        Expanded(
-          child: _StatTile(
-            emoji: '📅',
-            // The only tile that is not a count. Hidden behind a dash until
-            // the start date exists, rather than showing a confident 0.
-            value: start == null
-                ? '—'
-                : '${daysBetween(start, DateTime.now())}',
-            label: 'DAYS',
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatTile extends StatelessWidget {
-  const _StatTile({
-    required this.emoji,
-    required this.value,
-    required this.label,
-  });
-
-  final String emoji;
-  final String value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      label: '$value $label',
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
-        decoration: BoxDecoration(
-          color: AppColors.inkSurface,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-        ),
-        child: Column(
-          children: [
-            Text(emoji, style: const TextStyle(fontSize: 20)),
-            const SizedBox(height: 6),
-            FittedBox(
-              // Four digits of heartbeats in a quarter-width tile would
-              // otherwise overflow rather than shrink.
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: AppText.title(Colors.white).copyWith(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(label, style: AppText.label(AppColors.brandLight)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /* ── The date everything else comes from ─── */
 
 class _TogetherSinceCard extends ConsumerStatefulWidget {

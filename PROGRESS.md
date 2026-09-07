@@ -2766,3 +2766,44 @@ is not null` returns nothing.
   COMING UP, derived from the profile, with no mock birthday beside it.
 - Tapping the avatar opened the existing "Your picture" sheet.
 
+## The shared profile, redesigned (2026-09-08)
+
+Six rounded rectangles for one idea: a bright pink gradient banner, then four
+dark tiles each carrying an emoji above a number. Nothing was wrong with any
+one of them, which is exactly why the top of Us read as a template. It is one
+card now — `us/presentation/widgets/couple_hero.dart`.
+
+🔴 **The pink gradient is no longer the ground.** `AppGradients.cta` means
+"primary action", and the palette spends it once per screen region; a
+full-bleed, non-interactive card was wearing the loudest thing in the system
+as decoration. It appears now as a 28px rule under the eyebrow and as the
+ring behind each face — small, deliberate, and still where the eye lands.
+The ground is `AppGradients.hero`, the plum the system already reserves for
+"a dark hero on a light screen", which nothing had used until now.
+
+What makes it read as designed rather than assembled:
+
+- **The numbers moved inside.** They belong to the couple, so they sit in the
+  couple's card, divided by hairlines at 9% white instead of by gaps. Four
+  boxes became one frame.
+- ⚠️ **No emoji in the stats.** 🌷 over 🔥 over 💗 was carrying the meaning the
+  labels should carry, and it is the single clearest tell of a layout nobody
+  art-directed. Tabular figures so the row does not jitter as counts change,
+  a letter-spaced overline beneath, and the labels do the naming.
+- **An eyebrow and a rule.** "OUR STORY" in a 1.4-spaced overline over 28px
+  of gradient — how a studio opens a page. ⚠️ The first draft put "TOGETHER
+  SINCE · 10 APRIL 2022" there, and the editable *Together since* card sits
+  three rows below on the same screen: an eyebrow that repeats the row under
+  it is decoration wearing the clothes of information.
+- **Two radial blooms**, mostly outside the card so only the falloff shows.
+  They are the difference between a flat swatch and a lit surface.
+- **A 7% white hairline border and the `lift` shadow**, so the plum sits on
+  the lavender canvas as an object rather than a hole.
+- ⚠️ **Gradient rings with a plum gap inside them.** Without the gap, two
+  overlapping rings merge into one pink blob where they meet. Overlapped
+  rather than side by side, as before: two touching circles read as a couple,
+  two spaced ones read as a list.
+
+Order changed too — DAYS leads now. It is the number that is always there and
+always moving, and it was sitting last behind three that can be zero.
+
