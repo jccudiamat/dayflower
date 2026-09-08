@@ -25,7 +25,7 @@ export const html = `<!doctype html>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f8f6fb"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="560" cellspacing="0" cellpadding="0" style="width:100%;max-width:560px;background:#ffffff;border:1px solid #eae5f0;border-radius:24px;overflow:hidden">
 <tr><td style="padding:36px 32px;background:#100a1e;color:#f5f2f8">
-<p style="margin:0 0 30px;font-size:19px;font-weight:bold;color:#f5f2f8">🌷 Dayflower</p>
+<table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 0 30px"><tr><td style="padding-right:10px;vertical-align:middle"><img src="https://mydayflower.com/mark.png" width="36" height="36" alt="" style="display:block;border:0;width:36px;height:36px"></td><td style="vertical-align:middle;font-size:19px;font-weight:bold;color:#f5f2f8">Dayflower</td></tr></table>
 <p style="margin:0 0 14px;color:#f0709f;font-size:12px;letter-spacing:2px;font-weight:bold">A LITTLE CLOSER</p>
 <h1 style="margin:0;font-size:36px;line-height:1.15;color:#f5f2f8">You’re on the list.</h1>
 <p style="margin:18px 0 0;font-size:17px;line-height:1.6;color:#d9d0e4">Thanks for making a little room for us.</p></td></tr>
