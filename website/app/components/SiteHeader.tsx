@@ -10,6 +10,7 @@ export default function SiteHeader({ photobooth = false }: { photobooth?: boolea
           Dayflower
         </Link>
         <div className="flex w-full flex-wrap items-center justify-between gap-3 sm:w-auto sm:justify-end sm:gap-5">
+          <Link href="/journal" className="rounded py-2 text-sm font-bold text-brand-dark hover:underline">Journal</Link>
           <Link href="/photobooth" aria-current={photobooth ? "page" : undefined} className={`rounded py-2 text-sm font-bold text-brand-dark hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-brand-dark ${photobooth ? "underline underline-offset-4" : ""}`}>
             Photo booth
           </Link>
