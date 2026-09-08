@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
@@ -9,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../tulip/data/flower_repository.dart';
+import '../tulip/domain/flower_catalog.dart';
 import '../tulip/domain/day_reactions.dart';
 
 /// Which content the *adaptive* widget shows. The two dedicated widgets
@@ -76,6 +78,13 @@ class DayflowerWidgets {
   static const keyFlowerEmoji = 'tulip_emoji';
   static const keyFlowerTitle = 'tulip_title';
   static const keyFlowerBody = 'tulip_body';
+
+  /// Absolute path to the flower's bundled painting, or empty.
+  ///
+  /// ⚠️ Separate from [keyDayPhotoPath] on purpose: a day photo is
+  /// full-bleed and croppable, a 512px square painting is neither. The
+  /// widget fits this one inside the card instead.
+  static const keyFlowerArt = 'flower_art';
   static const keyBeatMine = 'beat_mine';
   static const keyBeatPartner = 'beat_partner';
   static const keyBeatPartnerName = 'beat_partner_name';
@@ -216,11 +225,18 @@ class DayflowerWidgets {
     String photoPath = '';
     int photoExpiresAt = 0;
     final photoPaths = <String>[];
-    if (received != null && received.isPhoto && received.isFreshForWidget) {
-      photoPath = await _cachePhoto(received, downloadPhoto) ?? '';
+    // Held as a variable rather than a bool so it stays promoted to
+    // non-null through the branch — and so the flower case below can ask
+    // "is this a day photo" without repeating the three conditions.
+    final dayPhoto =
+        received != null && received.isPhoto && received.isFreshForWidget
+            ? received
+            : null;
+    if (dayPhoto != null) {
+      photoPath = await _cachePhoto(dayPhoto, downloadPhoto) ?? '';
       if (photoPath.isNotEmpty) {
         photoPaths.add(photoPath);
-        photoExpiresAt = received.sentAt
+        photoExpiresAt = dayPhoto.sentAt
             .add(FlowerMessage.widgetLifetime)
             .millisecondsSinceEpoch;
       }
@@ -234,6 +250,28 @@ class DayflowerWidgets {
       }
     }
 
+    // 🔴 **A flower has artwork, and the widget was drawing its emoji.**
+    // Every entry in the catalogue ships a 512px painting — it is what the
+    // picker shows and what the chat bubble shows. The widget alone fell
+    // back to the glyph, so sending "Peach Tulips" to somebody's home
+    // screen put a generic 🌷 on it. [Flower.emoji] is documented as the
+    // fallback for a *missing* asset; it had quietly become the only thing
+    // on offer.
+    //
+    // ⚠️ **Its own key, not the day-photo slot.** The paintings are square
+    // and the card is tall, so full-bleeding one would centre-crop it to a
+    // narrow vertical strip and throw most of the flower away. It gets a
+    // fitted view of its own — see widget_flower_art in the layout — which
+    // also leaves the reaction row where it belongs, on a shared day.
+    //
+    // No expiry either. A flower stays until the next one replaces it,
+    // exactly as it did as a glyph; only a shared day carries the 24-hour
+    // clock.
+    String flowerArt = '';
+    if (dayPhoto == null && received?.flower != null) {
+      flowerArt = await _cacheFlowerArt(received!.flower!) ?? '';
+    }
+
     // ⚠️ **The body is only ever something they wrote.** It used to carry a
     // flower's dictionary meaning, or "Tap to open the conversation" — a
     // caption explaining the widget to somebody already looking at it,
@@ -244,7 +282,7 @@ class DayflowerWidgets {
     // the caption is their avatar and their name, and saying it twice on a
     // card this small is just noise.
     late final String emoji, title, body;
-    if (photoPath.isNotEmpty) {
+    if (dayPhoto != null && photoPath.isNotEmpty) {
       emoji = '📷';
       // The header already says whose day this is. What it cannot say is
       // what they wrote on it.
@@ -278,7 +316,11 @@ class DayflowerWidgets {
       await HomeWidget.saveWidgetData<String>(keyDayPhotoPath, photoPath);
       await HomeWidget.saveWidgetData<String>(
           keyDayPhotoPaths, photoPaths.join('\n'));
-      await _pruneCached(photoPaths);
+      await HomeWidget.saveWidgetData<String>(keyFlowerArt, flowerArt);
+      // ⚠️ The painting is in the keep set too. It is named into the
+      // `day_photo_` family so this one sweep cleans up last week's flower,
+      // which also means this one sweep would delete today's.
+      await _pruneCached([...photoPaths, if (flowerArt.isNotEmpty) flowerArt]);
       await HomeWidget.saveWidgetData<String>(keyDayOwnerAvatar, avatarPath);
       await HomeWidget.saveWidgetData<String>(
           keyDayPhotoId, photoPath.isEmpty ? '' : (received?.id ?? ''));
@@ -447,6 +489,37 @@ class DayflowerWidgets {
       return file.path;
     } catch (e) {
       debugPrint('day photo cache failed: $e');
+      return null;
+    }
+  }
+
+  /// Writes a flower's bundled artwork somewhere the Android widget can
+  /// read it, and returns that path.
+  ///
+  /// ⚠️ **Named into the `day_photo_` family on purpose.** [_pruneOldPhotos]
+  /// sweeps everything matching that prefix which is not in the current set,
+  /// so last week's flower is cleaned up by housekeeping that already
+  /// exists rather than by a second sweep written to mirror it.
+  ///
+  /// The bytes come from the app bundle, not the network — the artwork ships
+  /// inside the APK — so this costs a file copy the first time a given
+  /// flower is shown and nothing at all afterwards.
+  static Future<String?> _cacheFlowerArt(Flower flower) async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final file = File('${dir.path}/day_photo_flower_${flower.id}.webp');
+      if (!await file.exists()) {
+        final data = await rootBundle.load(flower.asset);
+        await file.writeAsBytes(
+          data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+        );
+      }
+      return file.path;
+    } catch (e) {
+      // A missing or unreadable asset falls back to the emoji glyph, which
+      // is what this widget drew before the artwork reached it — a plainer
+      // card, not a broken one.
+      debugPrint('flower art cache failed (${flower.id}): $e');
       return null;
     }
   }

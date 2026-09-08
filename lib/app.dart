@@ -152,6 +152,35 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     ref.read(routerProvider).go(route);
   }
 
+  /// Runs a provider-listener body once the container has settled.
+  ///
+  /// 🔴 **Riverpod runs `ref.listen` callbacks synchronously, in the middle
+  /// of rebuilding the provider that fired them.** Every callback below then
+  /// reads more providers — the partner's name, the user id, the day photos
+  /// — and each of those reads can rebuild something that the rebuild
+  /// already in flight is *iterating over*. Riverpod moves a rebuilding
+  /// provider's dependency map aside as `_previousDependencies` and each
+  /// `ref.watch` **removes** an entry from it, so the collision surfaces as
+  /// a bare `ConcurrentModificationError` out of the framework's own guts,
+  /// with no line of this app in the stack.
+  ///
+  /// That is the crash the user saw on **every sign-in**: the auth event
+  /// rebuilds the whole graph at once, which is the one moment enough of
+  /// these fire together to collide.
+  ///
+  /// A microtask cannot land mid-flush — the frame that drives it is
+  /// synchronous end to end — so the body runs with the container settled
+  /// and every value final rather than half-rebuilt.
+  ///
+  /// ⚠️ Everything here is a *side effect*: a notification, an OS alarm, a
+  /// home-screen widget. None of it belongs inside a provider rebuild, and
+  /// none of it is worse for happening a microtask later.
+  void _settled(void Function() body) {
+    scheduleMicrotask(() {
+      if (mounted) body();
+    });
+  }
+
   /// Widget taps — both the cold start and while the app is already running.
   Future<void> _wireWidgetLaunches() async {
     if (!DayflowerWidgets.isSupported) return;
@@ -203,6 +232,15 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 
   @override
   Widget build(BuildContext context) {
+    // 🔴 **Watched here, and watched first.** routerGateProvider is what
+    // drives the `authState → currentUserId → userProfile → pair` chain and
+    // writes the snapshot the router's redirect reads; nothing else watches
+    // it, and a provider nobody watches is a provider that never resolves —
+    // build 19 left the app on the splash screen forever that way.
+    //
+    // First, because the router is created on the line below and its very
+    // first redirect runs against whatever the gate holds at that moment.
+    ref.watch(routerGateProvider);
     final router = ref.watch(routerProvider);
 
     // Keep the home-screen widget in step with the flower the partner last
@@ -211,17 +249,17 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // updates the widget.
     ref.listen<FlowerMessage?>(
       widgetFlowerProvider,
-      (_, received) => _syncWidget(received),
+      (_, received) => _settled(() => _syncWidget(received)),
     );
     ref.listen<bool>(
       sentFlowerTodayProvider,
-      (_, __) => _syncWidget(ref.read(widgetFlowerProvider)),
+      (_, __) => _settled(() => _syncWidget(ref.read(widgetFlowerProvider))),
     );
     // Changing your picture has to reach their home screen too — without
     // this the widget keeps the old face until the next flower arrives.
     ref.listen<AsyncValue<UserProfile?>>(
       partnerProfileProvider,
-      (_, __) => _syncWidget(ref.read(widgetFlowerProvider)),
+      (_, __) => _settled(() => _syncWidget(ref.read(widgetFlowerProvider))),
     );
     // The countdown on the home screen comes from the same row as the card
     // on Events, so editing one moves the other. Watching from the root
@@ -229,18 +267,18 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // this phone sits on the chat screen still reaches its widget.
     ref.listen<AsyncValue<Reunion?>>(
       reunionProvider,
-      (_, next) => _syncReunion(next.valueOrNull),
+      (_, next) => _settled(() => _syncReunion(next.valueOrNull)),
     );
     ref.listen<({int mine, int partner})>(
       todayHeartbeatCountsProvider,
-      (prev, counts) {
+      (prev, counts) => _settled(() {
         _syncHeartbeat(prev, counts);
         // Sending cancels today's nudge and arms tomorrow's; the count also
         // drops back to zero at midnight, which re-arms today's.
         if (prev?.mine != counts.mine) {
           HeartbeatNudge.sync(sentToday: counts.mine > 0);
         }
-      },
+      }),
     );
 
     // The pair resolving is the cue to ask for notification permission —
@@ -248,7 +286,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // already resolved before this listener existed.
     ref.listen<AsyncValue<Pair?>>(
       currentPairProvider,
-      (_, next) => _maybeAskForNotifications(next),
+      (_, next) => _settled(() => _maybeAskForNotifications(next)),
     );
 
     // A message or a photo landing while the app is in the background is
@@ -259,14 +297,16 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // reaches: a killed process hears nothing.
     ref.listen<AsyncValue<List<FlowerMessage>>>(
       flowerMessagesProvider,
-      (_, next) => _alertMessages(next.valueOrNull ?? const []),
+      (_, next) =>
+          _settled(() => _alertMessages(next.valueOrNull ?? const [])),
     );
 
     // Same idea, quieter channel: a reminder set, a goal ticked off, half a
     // photo strip waiting on you.
     ref.listen<AsyncValue<List<Activity>>>(
       activityFeedProvider,
-      (_, next) => _alertActivity(next.valueOrNull ?? const []),
+      (_, next) =>
+          _settled(() => _alertActivity(next.valueOrNull ?? const [])),
     );
 
     // Reminders my partner sets for me arrive over realtime and have to be
@@ -277,7 +317,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // See the class doc on ReminderScheduler.
     ref.listen<List<Reminder>>(
       myOpenRemindersProvider,
-      (_, mine) => ReminderScheduler.sync(mine),
+      (_, mine) => _settled(() => ReminderScheduler.sync(mine)),
     );
 
     // ⚠️ Registered on sign-in, not at launch. A token written before there
@@ -286,7 +326,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // the next reinstall rotated the token.
     ref.listen<String?>(currentUserIdProvider, (previous, userId) {
       if (userId != null && userId != previous) {
-        PushService.registerFor(ref.read(pushRepositoryProvider));
+        _settled(() => PushService.registerFor(ref.read(pushRepositoryProvider)));
       }
     });
 
@@ -315,12 +355,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         CallAlerts.stop();
         return;
       }
-      CallAlerts.ring(
-        callId: next.id,
-        callerName: _partnerName,
-        isVideo: next.call == CallMode.video,
-        foreground: _foreground,
-      );
+      _settled(() => CallAlerts.ring(
+            callId: next.id,
+            callerName: _partnerName,
+            isVideo: next.call == CallMode.video,
+            foreground: _foreground,
+          ));
     });
 
     // A newly published build interrupts wherever the user happens to be.
@@ -338,10 +378,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         // on screen — the sheet is the better answer whenever there is one.
         // This is only for the check that finished after the phone was put
         // down. See UpdateAlerts for why that is as far as it goes.
-        final release = ref.read(updateControllerProvider).release;
-        if (release != null) {
-          UpdateAlerts.announce(release, foreground: _foreground);
-        }
+        _settled(() {
+          final release = ref.read(updateControllerProvider).release;
+          if (release != null) {
+            UpdateAlerts.announce(release, foreground: _foreground);
+          }
+        });
 
         // 🔴 The sheet used to be raised here, on the router's navigator.
         // It flashed for a frame at launch and vanished: a modal pushed

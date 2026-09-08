@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -215,6 +217,42 @@ class _RouterGate {
   AsyncValue<UserProfile?> profile = const AsyncValue.loading();
   AsyncValue<Pair?> pair = const AsyncValue.loading();
   GoRouter? router;
+
+  /// Bumped every time the snapshot changes, purely so [routerGateProvider]
+  /// has a value that differs — a provider returning the same thing notifies
+  /// nobody, and the app root has to rebuild for the new route to be drawn.
+  int version = 0;
+
+  /// One queued refresh at a time.
+  bool _refreshQueued = false;
+
+  /// Re-runs the redirect against the snapshot just written — **after this
+  /// frame**, never inside it.
+  ///
+  /// 🔴 Calling `refresh()` straight from [routerProvider]'s build crashed
+  /// the app on sign-in with a `ConcurrentModificationError` out of
+  /// Riverpod's own `_dependencies` map.
+  ///
+  /// The chain: `refresh()` synchronously notifies go_router's route
+  /// information provider, which marks the `Router` widget dirty and
+  /// re-enters the provider container while [routerProvider] is still
+  /// half-built. Riverpod's `_performBuild` moves `_dependencies` aside as
+  /// `_previousDependencies` and each `ref.watch` **removes** the element it
+  /// finds there — so the map `visitAncestors` was iterating is mutated
+  /// underneath it, and Dart throws. The user saw the crash screen every
+  /// time they signed in.
+  ///
+  /// A microtask cannot land mid-frame: `handleDrawFrame` is synchronous
+  /// from end to end, so this runs once the build and layout that scheduled
+  /// it have finished, with the gate already holding the new values.
+  void scheduleRefresh() {
+    if (_refreshQueued) return;
+    _refreshQueued = true;
+    scheduleMicrotask(() {
+      _refreshQueued = false;
+      router?.refresh();
+    });
+  }
 }
 
 final _gateProvider = Provider<_RouterGate>((ref) {
@@ -254,26 +292,59 @@ final _gateProvider = Provider<_RouterGate>((ref) {
 /// build and kept, and `refresh()` re-runs the redirect against the new
 /// values. The redirect closes over [_gate] rather than over the values, so
 /// the router built in the first pass never reads a stale one.
-final routerProvider = Provider<GoRouter>((ref) {
+/// Drives the auth → profile → pair chain and keeps [_RouterGate]'s snapshot
+/// current. Watched by the app root; **read by nothing else.**
+///
+/// 🔴 **Do not merge this back into [routerProvider], and do not replace the
+/// watches with `ref.listen`.** Both have been tried and both broke the app:
+///
+/// - `ref.listen` (build 19) observes without *driving*. The chain
+///   `authState → currentUserId → userProfile` went dirty on sign-in and was
+///   never recomputed, and the phone sat on the splash screen forever.
+/// - Watching from inside [routerProvider] (build 59) crashed on every
+///   sign-in with a `ConcurrentModificationError` out of Riverpod's own
+///   `_dependencies` map. A provider that watches is a provider that
+///   *rebuilds*, and rebuilding moves its dependency map aside as
+///   `_previousDependencies`, from which each `ref.watch` then **removes** an
+///   entry. Riverpod's scheduler was meanwhile iterating that same map. The
+///   two collided because [routerProvider] is also `ref.read` from half a
+///   dozen callbacks — alarm taps, notification taps, widget taps, the shell
+///   — and one of those reads landed mid-flush and rebuilt it re-entrantly.
+///
+/// Splitting the two jobs is what removes the collision: the thing that
+/// watches is read by nobody, and the thing that is read watches nothing.
+final routerGateProvider = Provider<int>((ref) {
   final gate = ref.watch(_gateProvider);
 
-  // 🔴 Still watches, still all three. Build 19's bug was `ref.listen`,
-  // which observes without driving — the chain
-  // `authState → currentUserIdProvider → userProfileProvider` went dirty on
-  // sign-in and was never recomputed, and the app sat on the splash screen
-  // forever. What changed here is only what a change *does*.
   gate.auth = ref.watch(authStateProvider);
   gate.profile = ref.watch(userProfileProvider);
   gate.pair = ref.watch(currentPairProvider);
 
+  // Queued, never called here. See _RouterGate.scheduleRefresh.
+  gate.scheduleRefresh();
+  return ++gate.version;
+});
+
+/// The app's one [GoRouter].
+///
+/// ⚠️ Watches only [_gateProvider], which watches nothing — so this is built
+/// **exactly once** and never rebuilds. That is what makes
+/// `ref.read(routerProvider)` safe from anywhere, including a listener
+/// firing in the middle of a provider flush.
+///
+/// It also keeps `MaterialApp.router` on one `routerDelegate`: handing it a
+/// new one rebuilt the Navigator and its whole history from
+/// `initialLocation`, which is what threw the user back to Home every time
+/// they saved something in Settings.
+///
+/// The redirect closes over the gate and reads its fields at call time, so
+/// the router built on the first pass still sees the values written on the
+/// tenth.
+final routerProvider = Provider<GoRouter>((ref) {
+  final gate = ref.watch(_gateProvider);
+
   final existing = gate.router;
-  if (existing != null) {
-    // A rebuild with the router already made: re-run the redirect against
-    // the snapshot just written, and hand back the same instance so
-    // MaterialApp.router sees no new config and keeps the Navigator.
-    existing.refresh();
-    return existing;
-  }
+  if (existing != null) return existing;
 
   return gate.router = GoRouter(
     initialLocation: Routes.splash,
@@ -453,12 +524,19 @@ class _AppShellState extends ConsumerState<AppShell> {
         return;
       }
       if (_ringingFor == next.id) return;
+      // Claimed synchronously, acted on after the container settles — so a
+      // second emission of the same call still cannot push a second screen.
       _ringingFor = next.id;
 
-      ref.read(callNotifierProvider.notifier).ring(next);
-      // Guarded because the stream can deliver while the app is settling a
-      // route change of its own.
-      if (mounted) context.push(Routes.call);
+      // 🔴 Deferred for the same reason as every listener in app.dart: this
+      // runs inside the rebuild of the provider that fired it, and both
+      // lines below re-enter — one modifies a provider, the other navigates
+      // a router that reads three of them. See _DayflowerAppState._settled.
+      scheduleMicrotask(() {
+        if (!mounted) return;
+        ref.read(callNotifierProvider.notifier).ring(next);
+        context.push(Routes.call);
+      });
     });
 
     // ⚠️ In the shell, not above the router. The call screen is a top-level

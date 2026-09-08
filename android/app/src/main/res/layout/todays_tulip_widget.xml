@@ -76,8 +76,33 @@
         android:outAnimation="@android:anim/fade_out"
         android:visibility="gone" />
 
-    <!-- No photo: the flower glyph carries the card instead, centred and
-         large so the widget still reads as a picture rather than a form. -->
+    <!-- The flower's own painting, when the newest thing from them is a
+         flower rather than a shared day.
+
+         🔴 Not the full-bleed slot above. Every painting in the catalogue
+         is a 512px **square** and this card is tall, so centreCrop would
+         scale it to the card's height and trim a narrow vertical strip out
+         of the middle — most of the bouquet gone. fitCenter keeps all of
+         it, sitting on the card's own background.
+
+         The bottom padding clears the caption scrim so the flower's name
+         never lands on top of the flower. -->
+    <ImageView
+        android:id="@+id/widget_flower_art"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:scaleType="fitCenter"
+        android:paddingLeft="12dp"
+        android:paddingRight="12dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="58dp"
+        android:contentDescription="@string/widget_description"
+        android:visibility="gone" />
+
+    <!-- No photo and no painting — a retired flower, or nothing from them
+         at all: the glyph carries the card instead, centred and large so
+         the widget still reads as a picture rather than a form. -->
     <TextView
         android:id="@+id/widget_emoji"
         android:layout_width="wrap_content"

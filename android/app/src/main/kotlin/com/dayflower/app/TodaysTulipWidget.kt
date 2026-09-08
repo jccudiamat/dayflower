@@ -109,6 +109,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // the flipper itself cycling empty slots.
             views.setViewVisibility(R.id.widget_photo_still, View.GONE)
             views.setViewVisibility(R.id.widget_flipper, View.GONE)
+            views.setViewVisibility(R.id.widget_flower_art, View.GONE)
             views.setViewVisibility(R.id.widget_header, View.GONE)
             views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
             views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
@@ -141,14 +142,29 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // the flower glyph does. Never both.
             val photos = loadDayPhotos(widgetData)
                 .map { roundCorners(context, it, options) }
+            // The flower's own painting, for when there is no day photo.
+            // WARNING: fitted rather than full-bleed, and in a view of its
+            // own - the catalogue art is a 512px square and this card is
+            // tall, so centreCrop would keep a narrow vertical strip of it.
+            val art = if (photos.isEmpty()) loadFlowerArt(widgetData) else null
             if (photos.isNotEmpty()) {
                 // Which of the two photo views is shown is renderPhotos'
                 // decision — it depends on whether anything is rotating.
                 renderPhotos(context, views, widgetData, photos)
+                views.setViewVisibility(R.id.widget_flower_art, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
-            } else {
+            } else if (art != null) {
                 views.setViewVisibility(R.id.widget_photo_still, View.GONE)
                 views.setViewVisibility(R.id.widget_flipper, View.GONE)
+                views.setImageViewBitmap(R.id.widget_flower_art, art)
+                views.setViewVisibility(R.id.widget_flower_art, View.VISIBLE)
+                views.setViewVisibility(R.id.widget_emoji, View.GONE)
+            } else {
+                // A retired flower with no artwork, or nothing from them at
+                // all. The glyph is the honest fallback, not a failure.
+                views.setViewVisibility(R.id.widget_photo_still, View.GONE)
+                views.setViewVisibility(R.id.widget_flipper, View.GONE)
+                views.setViewVisibility(R.id.widget_flower_art, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             }
             val photo = photos.firstOrNull()
@@ -582,6 +598,19 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 return null
             }
 
+            return decodePhoto(path)
+        }
+
+        /**
+         * The flower's painting, copied out of the app bundle by Dart.
+         *
+         * No expiry check, unlike the day photo: a flower stays on the home
+         * screen until the next one replaces it. Written under its own key
+         * so it never collides with a live day.
+         */
+        fun loadFlowerArt(widgetData: SharedPreferences): Bitmap? {
+            val path = widgetData.getString("flower_art", "") ?: ""
+            if (path.isEmpty()) return null
             return decodePhoto(path)
         }
 

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -338,16 +339,24 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       _spawnIncomingRipples();
       _beatCtrl.forward(from: 0);
 
-      if (ref.read(pulseAlertsEnabledProvider)) {
-        // Every one of them alerts. The service no longer decides that some
-        // are too soon to be worth hearing.
-        PulseAlerts.handleIncoming(
-          from: partnerName,
-          pulses: next.partner - prev.partner,
-        );
-      } else {
-        HapticFeedback.lightImpact();
-      }
+      // ⚠️ The ripple and the thump stay here — they are this frame's
+      // feedback. The alert does not: reading a provider inside a
+      // `ref.listen` callback re-enters the container in the middle of the
+      // rebuild that fired it, which is how sign-in used to crash the whole
+      // app. See _DayflowerAppState._settled in app.dart.
+      scheduleMicrotask(() {
+        if (!mounted) return;
+        if (ref.read(pulseAlertsEnabledProvider)) {
+          // Every one of them alerts. The service no longer decides that
+          // some are too soon to be worth hearing.
+          PulseAlerts.handleIncoming(
+            from: partnerName,
+            pulses: next.partner - prev.partner,
+          );
+        } else {
+          HapticFeedback.lightImpact();
+        }
+      });
     });
 
     return Container(

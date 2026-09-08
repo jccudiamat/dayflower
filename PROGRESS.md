@@ -2888,3 +2888,87 @@ until one is picked.
   the manifest, and by every call being a documented RemoteViews API — not
   by looking at it.
 
+
+## Two crashes and a widget drawing an emoji (2026-09-08)
+
+### 🔴 "Dayflower hit a snag" on every sign-in
+
+`ConcurrentModificationError: LinkedMap<ProviderElementBase, Object>` — a
+crash out of Riverpod's own internals with **no line of this app in the
+stack**, so the only way to find it was to reproduce it and instrument the
+container.
+
+**The mechanism, because it will recur.** Riverpod runs `ref.listen`
+callbacks *synchronously, inside the rebuild of the provider that fired
+them*. Nearly every listener in `app.dart` then reads more providers — the
+partner's name, the user id, the day photos — and a read can rebuild
+something the rebuild already in flight is iterating over. A rebuilding
+provider's dependency map is moved aside as `_previousDependencies`, and
+each `ref.watch` **removes** an entry from it, while `visitAncestors` walks
+that same map. Signing in is the one moment the whole graph rebuilds at
+once, which is why it happened there and nowhere else.
+
+- ⚠️ `_DayflowerAppState._settled` runs every listener body in a microtask.
+  A microtask cannot land mid-flush — the frame driving it is synchronous
+  end to end — so each body runs with the container settled. Everything
+  deferred is a *side effect*: a notification, an alarm, a widget sync.
+  None of it belongs inside a provider rebuild and none of it is worse for
+  happening a microtask later. The same rule now applies to `AppShell`'s
+  incoming-call listener and Home's pulse listener (the ripple stays
+  synchronous — that is this frame's feedback).
+- `routerProvider` is split in two. `routerGateProvider` does the watching
+  and is read by nobody; `routerProvider` watches only the holder, so it is
+  built **once** and never rebuilds — which is what makes
+  `ref.read(routerProvider)` safe from the half-dozen callbacks that do it.
+  🔴 Do not merge them back: watching *and* being widely read is exactly
+  what put the router in the middle of this.
+- ⚠️ `GoRouter.refresh()` is queued, never called from a build. It
+  synchronously re-runs the redirect and notifies the `Router`.
+
+Verified by reproducing it: dev auto-login runs *before* `runApp`, so the
+preview never made the signed-out → signed-in transition. Deferring it three
+seconds reproduced the crash on demand, and the fix cleared it across
+repeated cold runs.
+
+### 🔴 A second crash screen, on saving any name
+
+Found while checking the router fix, and **present in build 59 too** —
+confirmed by reverting to `HEAD` and reproducing it there.
+
+`_editText` created a `TextEditingController` beside `showModalBottomSheet`
+and disposed it on the line after the `await`. That looks right and is not:
+the future completes the moment `pop` is **called**, while the sheet is
+still animating away with the field still mounted and still reading the
+controller. "A TextEditingController was used after being disposed",
+then a cascade of layout assertions, then the crash screen.
+
+⚠️ The sheet is a `StatefulWidget` (`_TextEditSheet`) now and owns its
+controller. A State's `dispose` runs when the element actually leaves the
+tree, which is the only moment that is safe.
+
+### The flower widget was drawing an emoji
+
+Sending a flower to somebody's home screen put a generic 🌷 on it. Every
+entry in the catalogue ships a 512px painting — it is what the picker and
+the chat bubble show — and `Flower.emoji` is documented as the fallback for
+a *missing* asset. It had quietly become the only thing on offer.
+
+- ⚠️ **Its own key and its own view, not the day-photo slot.** The
+  paintings are square and the card is tall: full-bleeding one would
+  centre-crop it to a narrow vertical strip and throw most of the flower
+  away. `widget_flower_art` is `fitCenter` with the caption cleared. That
+  also leaves the reaction row where it belongs — on a shared day, which is
+  the only thing there is to react *to*.
+- Copied out of the bundle into the app's own directory, named into the
+  `day_photo_` family so the sweep that already exists cleans up last
+  week's flower. No expiry: a flower stays until the next one replaces it.
+- ⚠️ Sunflower and Hibiscus have no artwork. Both are **retired** — out of
+  the picker, so nobody can send one — and old messages referencing them
+  fall back to the glyph, which is what the glyph is for.
+  `test/flower_artwork_test.dart` asserts every *pickable* flower ships its
+  painting, because a missing one is silent and looks like this bug
+  returning.
+
+⚠️ **Not seen on a home screen.** No emulator here, so the widget half is
+verified by compilation, by `aapt2` on the built APK, and by every call
+being a documented RemoteViews API — not by looking at it.

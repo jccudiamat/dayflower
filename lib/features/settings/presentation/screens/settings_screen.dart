@@ -395,56 +395,110 @@ class SettingsScreen extends ConsumerWidget {
     required String initial,
     required Future<void> Function(String) onSave,
     bool allowEmpty = false,
-  }) async {
-    final controller = TextEditingController(text: initial);
-    await showModalBottomSheet<void>(
+  }) {
+    return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (sheetContext) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: AppSpace.md,
-          bottom: MediaQuery.of(sheetContext).viewInsets.bottom + AppSpace.md,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(child: Text(title, style: AppText.title())),
-                IconButton(
-                  onPressed: () => Navigator.of(sheetContext).pop(),
-                  icon: const Icon(
-                    CupertinoIcons.xmark,
-                    color: AppColors.muted,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.xs),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              textCapitalization: TextCapitalization.words,
-              decoration: InputDecoration(hintText: hint),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            GradientButton(
-              label: 'Save',
-              onPressed: () async {
-                final value = controller.text;
-                if (!allowEmpty && value.trim().isEmpty) return;
-                Navigator.of(sheetContext).pop();
-                await onSave(value);
-              },
-            ),
-          ],
-        ),
+      builder: (_) => _TextEditSheet(
+        title: title,
+        hint: hint,
+        initial: initial,
+        onSave: onSave,
+        allowEmpty: allowEmpty,
       ),
     );
-    controller.dispose();
+  }
+}
+
+/// One field, a Save, and a close — the shape every text row in Settings
+/// opens into.
+///
+/// 🔴 **Stateful so it owns its own [TextEditingController].** This used to
+/// be a closure with the controller created beside `showModalBottomSheet`
+/// and disposed on the line after the `await` — which looks right and is
+/// not: that future completes the moment `pop` is *called*, while the sheet
+/// is still animating away with this field still mounted and still reading
+/// the controller. "A TextEditingController was used after being disposed"
+/// followed, and behind it a cascade of layout assertions and the crash
+/// screen, every single time somebody saved a name.
+///
+/// A State's `dispose` runs when the element actually leaves the tree, which
+/// is the only moment that is safe.
+class _TextEditSheet extends StatefulWidget {
+  const _TextEditSheet({
+    required this.title,
+    required this.hint,
+    required this.initial,
+    required this.onSave,
+    required this.allowEmpty,
+  });
+
+  final String title;
+  final String hint;
+  final String initial;
+  final Future<void> Function(String) onSave;
+  final bool allowEmpty;
+
+  @override
+  State<_TextEditSheet> createState() => _TextEditSheetState();
+}
+
+class _TextEditSheetState extends State<_TextEditSheet> {
+  late final _controller = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final value = _controller.text;
+    if (!widget.allowEmpty && value.trim().isEmpty) return;
+    // ⚠️ Read before the pop and saved after it, deliberately unawaited
+    // here: this widget is on its way out and must not be holding a future
+    // that outlives it.
+    Navigator.of(context).pop();
+    widget.onSave(value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: AppSpace.md,
+        bottom: MediaQuery.of(context).viewInsets.bottom + AppSpace.md,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(child: Text(widget.title, style: AppText.title())),
+              IconButton(
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(
+                  CupertinoIcons.xmark,
+                  color: AppColors.muted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.xs),
+          TextField(
+            controller: _controller,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(hintText: widget.hint),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          GradientButton(label: 'Save', onPressed: _save),
+        ],
+      ),
+    );
   }
 }
 
