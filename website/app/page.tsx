@@ -1,5 +1,6 @@
 import SiteHeader from "./components/SiteHeader";
 import Image from "next/image";
+import type { Metadata } from "next";
 import ProductTour from "./components/ProductTour";
 import Link from "next/link";
 import PolaroidStack from "./components/PolaroidStack";
@@ -8,6 +9,7 @@ import WaitlistForm from "./components/WaitlistForm";
 import { headlineWords, polaroids } from "./lib/content";
 
 /** Landing page grounded in the current Flutter app. */
+export const metadata: Metadata = { alternates: { canonical: "https://mydayflower.com" } };
 export default function Home() {
   return (
     <div className="min-h-screen">
@@ -44,7 +46,7 @@ export default function Home() {
               <div className="mt-8 scroll-mt-36 sm:scroll-mt-24" id="waitlist">
                 <WaitlistForm dark />
                 <p className="mt-3 pl-1 text-xs text-on-dark-muted">
-                  Free at launch. One email when it&rsquo;s ready — nothing else.
+                  Free at launch. A confirmation now, a launch email when it&rsquo;s ready.
                 </p>
               </div>
             </div>
@@ -56,6 +58,14 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="mx-auto max-w-5xl px-5 py-14" aria-labelledby="free-booth-title">
+          <div className="rounded-3xl border border-border-soft bg-surface-subtle p-7 sm:p-10">
+            <p className="text-sm font-bold text-brand-dark">TRY SOMETHING TOGETHER</p>
+            <h2 id="free-booth-title" className="mt-3 text-3xl font-bold">Your next photo strip starts here.</h2>
+            <p className="my-5 max-w-xl leading-relaxed text-body">A solo moment or a keepsake for two. Take or upload photos, choose a frame, and save your strip. Free, with no account required.</p>
+            <Link href="/photobooth" className="gradient-button">Open the free photo booth</Link>
+          </div>
+        </section>
         <ProductTour />
 
         <section className="mx-auto grid max-w-5xl gap-10 px-5 py-20 sm:py-24 md:grid-cols-[0.8fr_1.2fr] md:gap-20" aria-labelledby="questions-title">
@@ -68,7 +78,7 @@ export default function Home() {
               { question: "Who is Dayflower for?", answer: "Couples who want to feel more connected in everyday life. Especially when distance, time zones, or busy schedules keep you apart." },
               { question: "Can we use it yet?", answer: "Not quite. Dayflower is in private testing. Join the waitlist and we’ll email you when it’s ready to try." },
               { question: "Is it a social network?", answer: "Dayflower is a space for you and your partner. There’s no public feed or audience to post for." },
-              { question: "What happens when I join the waitlist?", answer: "You’ll receive one launch email at the address you leave. Joining doesn’t create an app account or sign your partner up." },
+              { question: "What happens when I join the waitlist?", answer: "You’ll receive a signup confirmation, then an email when Dayflower is ready. Joining doesn’t create an app account or sign your partner up." },
             ].map((item) => (
               <details key={item.question} className="group py-5">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-6 text-base font-bold [&::-webkit-details-marker]:hidden">
@@ -87,7 +97,7 @@ export default function Home() {
             <h2 className="mt-5 text-3xl font-bold leading-tight sm:text-4xl">A little closer,<br /><span className="gradient-text">even from here.</span></h2>
             <p className="mt-5 max-w-md text-base leading-relaxed text-on-dark-muted">Be among the first to try Dayflower with your partner. Leave your email and we&rsquo;ll let you know when it&rsquo;s ready.</p>
             <div className="mt-8 flex w-full justify-center"><WaitlistForm dark /></div>
-            <p className="mt-4 text-xs text-on-dark-muted">One launch email. No newsletter.</p>
+            <p className="mt-4 text-xs text-on-dark-muted">A signup confirmation, then a launch email. No newsletter.</p>
           </div>
         </section>
       </main>

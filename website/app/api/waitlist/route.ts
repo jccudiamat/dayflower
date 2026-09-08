@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { sendConfirmation } from "../../../emails/send-confirmation";
+import { subject, html, text } from "../../../emails/waitlist-confirmation";
 
 // Deliberately loose: real-world addresses are stranger than most regexes
 // allow, so this only rejects the obviously-not-an-email. 254 is the RFC 5321
@@ -13,7 +15,8 @@ function fail(error: string, status: number) {
 export async function POST(request: Request) {
   let email: unknown;
   try {
-    ({ email } = await request.json());
+    const data = await request.json();
+    email = data?.email;
   } catch {
     return fail("Invalid request.", 400);
   }
@@ -47,20 +50,25 @@ export async function POST(request: Request) {
       body: JSON.stringify({ email: normalized, source: "landing" }),
       signal: AbortSignal.timeout(10_000),
     });
-  } catch (cause) {
+  } catch {
     // DNS failure, refused connection, timeout — Supabase never answered.
-    console.error("Waitlist: could not reach Supabase.", cause);
+    console.error("Waitlist: could not reach Supabase.");
     return fail("The waitlist isn't available right now. Please try again later.", 503);
   }
 
-  // 409 = the unique index rejected a repeat address. From the visitor's point
-  // of view they are on the list, which is exactly what they asked for.
-  if (res.ok || res.status === 409) {
-    return NextResponse.json({ ok: true });
+  const error = !res.ok ? await res.json().catch(() => null) : null;
+  // Only the email uniqueness conflict counts as an existing signup.
+  if (res.ok || (res.status === 409 && error?.code === "23505")) {
+    const confirmation = await sendConfirmation(normalized, { subject, html, text }, {
+      supabaseUrl: url,
+      serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      resendKey: process.env.RESEND_API_KEY,
+      from: process.env.WAITLIST_EMAIL_FROM,
+      replyTo: process.env.WAITLIST_EMAIL_REPLY_TO,
+    });
+    return NextResponse.json({ ok: true, confirmation });
   }
-
-  const body = await res.text().catch(() => "<unreadable>");
-  console.error("Waitlist: insert rejected.", res.status, body);
+  console.error("Waitlist: insert rejected.", res.status);
 
   // 404 here means migration 0007 has not been run yet.
   if (res.status === 404) {

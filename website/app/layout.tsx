@@ -14,6 +14,7 @@ const lora = Lora({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://mydayflower.com"),
   title: "Dayflower — One flower a day, across any distance",
   description:
     "A private app for exactly two people — somewhere to land on each other every day when you can't be in the same room. Join the waitlist.",

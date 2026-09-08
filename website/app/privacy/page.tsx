@@ -2,13 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 export const metadata: Metadata = { title: "Privacy Policy — Dayflower", description: "How the Dayflower website, waitlist, and private-testing app handle information." };
 const sections = [
+["Public photo booth","The public photo booth does not require an account. Selected photos, camera captures, crops, and generated strips are processed locally in your browser and are not uploaded to Dayflower servers. We do not maintain a booth gallery. Closing the page or clearing the session releases the photos held by the tool. Downloaded files remain on your device. Using Share sends the exported image through the app you choose. Camera access is optional and can be stopped in the tool or revoked in browser settings. Advertising spaces are currently placeholders; no ad network is loaded by the booth."],
   [
     "1. Scope and operator",
     "This policy covers the Dayflower app and mydayflower.com. The app is in private testing. Operator identity, country, and the privacy contact are pending confirmation in this review draft."
   ],
   [
     "2. Website and waitlist",
-    "When you join the waitlist, we send your email address to Supabase with a landing-page source label. We use it to notify you when Dayflower is ready. Joining the waitlist does not create an app account or enroll your partner. Hosting and network providers process connection information, such as IP addresses and request details, to deliver and secure the website."
+    "When you join the waitlist, we send your email address to Supabase with a landing-page source label. We use it to send a signup confirmation and notify you when Dayflower is ready. Confirmation emails are delivered through Resend, which processes the recipient address and message for delivery. We store confirmation attempt times and provider acceptance receipts to reduce duplicates; acceptance does not guarantee inbox delivery. Joining the waitlist does not create an app account or enroll your partner. Hosting and network providers process connection information, such as IP addresses and request details, to deliver and secure the website."
   ],
   [
     "3. Account and profile information",

@@ -8,6 +8,7 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
+  const [confirmation, setConfirmation] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -21,6 +22,8 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
         body: JSON.stringify({ email }),
       });
       if (res.ok) {
+        const data = await res.json();
+        setConfirmation(data.confirmation ?? "unavailable");
         setStatus("success");
       } else {
         // A crashed route can answer with an HTML error page rather than JSON,
@@ -46,7 +49,9 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
         </span>
         <p className="waitlist-success-title">You&rsquo;re on the list!</p>
         <p className="waitlist-success-note">
-          We&rsquo;ll send one email when Dayflower blooms — nothing else.
+          {confirmation === "accepted"
+            ? "Your confirmation email is on its way (or was sent for an earlier signup). Check your inbox and spam folder. We’ll email again when Dayflower is ready."
+            : "Your signup is saved, but we couldn’t send the confirmation yet. You can try signing up again in a few minutes. You don’t need to rejoin to keep your place."}
         </p>
       </div>
     );

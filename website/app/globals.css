@@ -149,6 +149,7 @@ body {
 }
 
 .waitlist-input {
+  border-radius: 999px;
   flex: 1;
   min-width: 0;
   border: none;
@@ -158,6 +159,24 @@ body {
   font-size: 15px;
   font-family: inherit;
   color: inherit;
+}
+.waitlist-input:autofill {
+  box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--ink);
+  caret-color: var(--ink);
+}
+.waitlist-row-dark .waitlist-input:autofill {
+  box-shadow: 0 0 0 1000px var(--dark-surface) inset;
+  -webkit-text-fill-color: var(--on-dark);
+  caret-color: var(--on-dark);
+}
+.waitlist-input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset;
+  -webkit-text-fill-color: var(--ink);
+}
+.waitlist-row-dark .waitlist-input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--dark-surface) inset;
+  -webkit-text-fill-color: var(--on-dark);
 }
 .waitlist-row-dark .waitlist-input {
   color: var(--on-dark);
