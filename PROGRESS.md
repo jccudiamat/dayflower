@@ -2972,3 +2972,43 @@ a *missing* asset. It had quietly become the only thing on offer.
 ⚠️ **Not seen on a home screen.** No emulator here, so the widget half is
 verified by compilation, by `aapt2` on the built APK, and by every call
 being a documented RemoteViews API — not by looking at it.
+
+## The status bar icon is the tulip now (2026-09-09)
+
+It was a generic Material heart — the placeholder from before the app had a
+mark of its own.
+
+⚠️ **Traced, not drawn.** `drawable-xxxhdpi/ic_launcher_monochrome.png` — the
+monochrome layer of the adaptive launcher icon — is already the tulip as a
+432px white-on-transparent silhouette, which is exactly the shape a
+notification icon has to be. `tool/trace_notification_icon.py` reads those
+pixels, walks the outer contour, simplifies it, and writes
+`drawable/ic_notification.xml`. A hand-drawn path would have been a second
+copy of the mark, free to drift from the real one at the next rebrand; this
+way a redraw is one command.
+
+- Android masks a notification icon to a silhouette — it discards every
+  colour and paints whatever is opaque white. That is why `@mipmap/
+  ic_launcher` cannot be used here and why the glow in the source image
+  would have become a blurry halo rather than a shape.
+- 22dp of artwork in the 24dp box. The shape is short (19.2dp), so its
+  visual weight lands near a 20dp square icon rather than over it.
+- ⚠️ RDP tolerance is 0.45 source px — 0.025dp, under a tenth of a screen
+  pixel at 4x. Deliberately tight, and deliberately **not** smoothed: the
+  notched top is the only thing telling this apart from a circle at
+  status-bar size, and a smoothing pass would round exactly those corners
+  off. Verified legible down to 24dp mdpi.
+- One drawable covers everything. `AndroidInitializationSettings` is the
+  only place an icon is named — no notification passes its own — and push is
+  data-only (see PushService), so FCM never draws a notification itself and
+  needs no `default_notification_icon` meta-data.
+
+Verified by rendering the committed path the way Android fills it, and by
+`aapt2 dump xmltree` on a release APK: the full traced path ships, the heart
+is gone.
+
+⚠️ **Not published.** The working tree holds another session's in-flight
+`packages/dayflower_calls` and its `lib/` changes, and `flutter build`
+compiles the tree rather than HEAD — publishing from here would ship their
+unfinished work. The version line is already at 1.0.0+62 in their hands, so
+this icon rides their next build.
