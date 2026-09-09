@@ -87,3 +87,12 @@ ios/Flutter/flutter_export_environment.sh
 # it, so a fresh clone must download its own from the Firebase console.
 android/app/google-services.json
 ios/Runner/GoogleService-Info.plist
+
+# Attachments another AI session saved from chat uploads. These are phone
+# screenshots — partner's face, home screen, wallpaper — and this repo is
+# publicly readable, so they must never reach it. Git history is forever.
+.codex-remote-attachments/
+
+# A full clone of the app kept for a website review. It is its own git repo,
+# so committing it here would store a broken gitlink rather than the files.
+website-review/booth-publish/
