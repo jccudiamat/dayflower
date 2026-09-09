@@ -2978,10 +2978,26 @@ being a documented RemoteViews API — not by looking at it.
 It was a generic Material heart — the placeholder from before the app had a
 mark of its own.
 
-⚠️ **Traced, not drawn.** `drawable-xxxhdpi/ic_launcher_monochrome.png` — the
-monochrome layer of the adaptive launcher icon — is already the tulip as a
-432px white-on-transparent silhouette, which is exactly the shape a
-notification icon has to be. `tool/trace_notification_icon.py` reads those
+🔴 **A silhouette of the mark is a blob, and the first attempt shipped one.**
+The mark reads as a flower *and* a heart because of its colour — a dark heart
+behind two overlapping petals — and masking throws every bit of that away.
+The heart is **cut into** the shape as negative space now, which is the only
+tool a status-bar icon has, and it is also what stops the mass reading as a
+blob: it puts an edge in the middle.
+
+⚠️ Two other approaches were built and rendered before this one, and both
+were worse:
+
+- **Segmenting the real artwork into its three shapes.** The colour regions
+  do separate (`G < 45` is the heart, and the cast shadow marks the seam),
+  but the heart's *visible* part is a thin crescent, and isolated and eroded
+  it reads as **antlers**. The petals, once fully cut apart, stop being a
+  tulip — the envelope is what says "flower".
+- **A centre slot, and slot-plus-heart.** Reads as a keyhole.
+
+⚠️ **Traced, not drawn — for the outline.** `ic_launcher_monochrome.png`, the
+monochrome layer of the adaptive launcher icon, is already the tulip as a
+432px white-on-transparent silhouette. `tool/trace_notification_icon.py` reads those
 pixels, walks the outer contour, simplifies it, and writes
 `drawable/ic_notification.xml`. A hand-drawn path would have been a second
 copy of the mark, free to drift from the real one at the next rebrand; this
@@ -2993,6 +3009,16 @@ way a redraw is one command.
   would have become a blurry halo rather than a shape.
 - 22dp of artwork in the 24dp box. The shape is short (19.2dp), so its
   visual weight lands near a 20dp square icon rather than over it.
+- ⚠️ The **heart is drawn, not traced** — the one place the mark is not the
+  source. Its real heart is mostly hidden behind the petals, so the only
+  part a silhouette could capture is that crescent. A clean heart curve
+  reads as a heart at 24dp, which is the only thing that matters here.
+- ⚠️ The hole is wound the **opposite way** to the outline. VectorDrawable
+  fills non-zero by default, so a second subpath running the same direction
+  fills solid instead of cutting. `fillType="evenOdd"` would also work but
+  is API 24+; winding needs no version at all.
+- ⚠️ The tightest wall is the ~2.2dp above the heart. Enlarging the heart
+  past that is what turns the top notch to mush.
 - ⚠️ RDP tolerance is 0.45 source px — 0.025dp, under a tenth of a screen
   pixel at 4x. Deliberately tight, and deliberately **not** smoothed: the
   notched top is the only thing telling this apart from a circle at
@@ -3003,9 +3029,11 @@ way a redraw is one command.
   data-only (see PushService), so FCM never draws a notification itself and
   needs no `default_notification_icon` meta-data.
 
-Verified by rendering the committed path the way Android fills it, and by
-`aapt2 dump xmltree` on a release APK: the full traced path ships, the heart
-is gone.
+Verified by rendering the committed path **with a non-zero winding fill**,
+by hand, because PIL's polygon fill has no winding rule and would have shown
+a filled heart whether or not the hole worked. And by `aapt2 dump xmltree` on
+a release APK: two subpaths, 267 points — 171 outline plus 96 heart. Legible
+down to 24dp mdpi, on light status bars as well as dark.
 
 ⚠️ **Not published.** The working tree holds another session's in-flight
 `packages/dayflower_calls` and its `lib/` changes, and `flutter build`
