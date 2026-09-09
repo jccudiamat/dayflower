@@ -122,7 +122,8 @@ function describe(payload: Payload, name: string) {
 Deno.serve(async (req) => {
   // The trigger's shared secret. Without this, anyone who learns the
   // function URL can push arbitrary notifications to your users.
-  if (req.headers.get("x-push-secret") !== Deno.env.get("PUSH_SECRET")) {
+  const secret = Deno.env.get("PUSH_SECRET");
+  if (!secret || req.headers.get("x-push-secret") !== secret) {
     return new Response("no", { status: 401 });
   }
 
@@ -162,6 +163,7 @@ Deno.serve(async (req) => {
     `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
 
   const dead: string[] = [];
+  let sent = 0;
   await Promise.all(tokens.map(async ({ token }) => {
     const res = await fetch(endpoint, {
       method: "POST",
@@ -197,14 +199,15 @@ Deno.serve(async (req) => {
     });
 
     if (!res.ok) {
-      const text = await res.text();
+      const error = await res.json().catch(() => null);
       // The device is gone — app uninstalled, or the token rotated. Reaping
       // it here is the only place that ever learns this.
-      if (res.status === 404 || text.includes("UNREGISTERED") ||
-          text.includes("INVALID_ARGUMENT")) {
+      if (error?.error?.details?.some((detail: { errorCode?: string }) => detail.errorCode === "UNREGISTERED")) {
         dead.push(token);
       }
-      console.error(`fcm ${res.status} for ${token.slice(0, 12)}…: ${text}`);
+      console.error(`fcm rejected push: HTTP ${res.status}`);
+    } else {
+      sent++;
     }
   }));
 
@@ -212,7 +215,7 @@ Deno.serve(async (req) => {
     await supabase.from("device_tokens").delete().in("token", dead);
   }
 
-  return new Response(JSON.stringify({ sent: tokens.length - dead.length }), {
+  return new Response(JSON.stringify({ sent, failed: tokens.length - sent, removed: dead.length }), {
     headers: { "Content-Type": "application/json" },
   });
 });
