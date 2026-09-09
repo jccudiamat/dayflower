@@ -3,6 +3,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../../../app_router.dart';
 import '../../../core/services/app_notifications.dart';
+import 'native_calls.dart';
 
 /// An incoming call, on the lock screen and over whatever is on top.
 ///
@@ -27,8 +28,27 @@ class CallAlerts {
   /// ⚠️ Android freezes a channel's importance, sound and vibration at
   /// creation. Bump `_v` to change any of them; an existing install keeps
   /// the old channel's settings forever otherwise.
-  static const _channelId = 'incoming_calls_v1';
+  static const _channelId = 'incoming_calls_v2';
   static const _notificationId = 4501;
+  static const actionAnswer = 'call_answer';
+  static const actionDecline = 'call_decline';
+  static String? pendingAnswerId;
+
+  static String? callIdOf(String? payload) {
+    final uri = Uri.tryParse(payload ?? '');
+    if (uri?.scheme != 'dayflower' || uri?.host != 'call') return null;
+    final id = uri?.queryParameters['id'];
+    return id == null || id.isEmpty ? null : id;
+  }
+
+  static bool handleTap(NotificationResponse response) {
+    final id = callIdOf(response.payload);
+    if (id == null) return false;
+    if (response.actionId == actionDecline) return true;
+    pendingAnswerId = response.actionId == actionAnswer ? id : null;
+    AppNotifications.pendingRoute.value = Routes.call;
+    return true;
+  }
 
   static final _plugin = AppNotifications.plugin;
   static bool _initialised = false;
@@ -57,6 +77,8 @@ class CallAlerts {
               // expires if it is not seen while it is happening.
               importance: Importance.max,
               playSound: true,
+              sound: UriAndroidNotificationSound('content://settings/system/ringtone'),
+              audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
               enableVibration: true,
             ),
           );
@@ -78,10 +100,6 @@ class CallAlerts {
     // On screen already: the call screen is showing, with the same two
     // buttons and their faces on it. A notification over that would be the
     // app telling you about something you are looking at.
-    if (foreground) {
-      _ringingId = callId;
-      return;
-    }
     if (_ringingId == callId) return;
     _ringingId = callId;
 
@@ -91,21 +109,29 @@ class CallAlerts {
         id: _notificationId,
         title: callerName,
         body: isVideo ? 'Incoming video call' : 'Incoming call',
-        notificationDetails: const NotificationDetails(
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             'Incoming calls',
             importance: Importance.max,
             priority: Priority.max,
+            sound: const UriAndroidNotificationSound('content://settings/system/ringtone'),
+            additionalFlags: Int32List.fromList([4]), // Android FLAG_INSISTENT.
             // `call` is what makes Android treat this as a phone call
             // rather than a message — it is what keeps it at the top of
             // the shade and lets it through some Do Not Disturb settings.
             category: AndroidNotificationCategory.call,
+            actions: [
+              const AndroidNotificationAction(actionDecline, 'Decline',
+                  showsUserInterface: false, cancelNotification: true),
+              const AndroidNotificationAction(actionAnswer, 'Answer',
+                  showsUserInterface: true, cancelNotification: true),
+            ],
             // ⚠️ Takes over the screen when the phone is locked, which is
             // the whole point: the app's own ring screen appears, with
             // Answer and Decline on it. Unlocked, Android shows it as a
             // heads-up strip instead — tapping it opens the same screen.
-            fullScreenIntent: true,
+            fullScreenIntent: !foreground,
             // A ringing call you can swipe away is a missed call. It is
             // cleared by [stop] when the call is answered, declined, or
             // gives up.
@@ -114,14 +140,15 @@ class CallAlerts {
             timeoutAfter: 60000,
             audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
           ),
-          iOS: DarwinNotificationDetails(
+          iOS: const DarwinNotificationDetails(
             interruptionLevel: InterruptionLevel.timeSensitive,
           ),
         ),
         // Straight to the call. The shell is already listening for the same
         // row, so by the time this lands the ring screen is what is there.
-        payload: AppNotifications.payloadForRoute(Routes.call),
+        payload: 'dayflower://call?id=${Uri.encodeComponent(callId)}',
       );
+      await NativeCalls.invoke('styleIncoming', {'name': callerName});
     } catch (e) {
       debugPrint('call alert failed: $e');
     }

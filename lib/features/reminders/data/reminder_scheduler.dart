@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -8,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../core/services/app_notifications.dart';
+import '../../calls/data/call_alerts.dart';
 import 'reminder_repository.dart';
 
 /// How long Snooze pushes a ringing alarm out for.
@@ -431,6 +430,7 @@ final ValueNotifier<String?> ringingReminderId = ValueNotifier<String?>(null);
 /// in core because the alarm case is the one with real logic — the rest is
 /// "open this route" and has none.
 void handleNotificationTap(NotificationResponse response) {
+  if (CallAlerts.handleTap(response)) return;
   if (response.actionId != null) return; // an action, handled in background
 
   final reminderId = ReminderScheduler.reminderIdOf(response.payload);
@@ -457,6 +457,27 @@ void handleNotificationTap(NotificationResponse response) {
 /// cannot be handed across the isolate boundary at all.
 @pragma('vm:entry-point')
 Future<void> reminderActionBackground(NotificationResponse response) async {
+  final callId = CallAlerts.callIdOf(response.payload);
+  if (callId != null && response.actionId == CallAlerts.actionDecline) {
+    try {
+      WidgetsFlutterBinding.ensureInitialized();
+      await dotenv.load(fileName: '.env');
+      await Supabase.initialize(
+        url: dotenv.env['SUPABASE_URL']!,
+        anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+      );
+      final client = Supabase.instance.client;
+      final user = client.auth.currentUser;
+      if (user == null) return;
+      final call = await client.from('flower_messages').select('sender_id,call_mode')
+          .eq('id', callId).maybeSingle();
+      if (call == null || call['call_mode'] == null || call['sender_id'] == user.id) return;
+      await client.rpc('end_call', params: {'p_message_id': callId});
+    } catch (e) {
+      debugPrint('call decline failed: $e');
+    }
+    return;
+  }
   final reminderId = ReminderScheduler.reminderIdOf(response.payload);
   if (reminderId == null) return;
 

@@ -14,6 +14,7 @@ import '../../../../core/widgets/timezone_picker.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/call_pip.dart';
+import '../../data/call_alerts.dart';
 import '../../data/call_usage.dart';
 import '../../domain/call.dart';
 import '../../domain/call_notifier.dart';
@@ -35,6 +36,20 @@ class CallScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(callNotifierProvider);
+    if (session != null && session.status == CallStatus.ringing &&
+        CallAlerts.pendingAnswerId == session.messageId) {
+      CallAlerts.pendingAnswerId = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!context.mounted) return;
+        final current = ref.read(callNotifierProvider);
+        if (current?.messageId != session.messageId ||
+            current?.status != CallStatus.ringing) {
+          return;
+        }
+        await CallAlerts.stop();
+        await ref.read(callNotifierProvider.notifier).answer();
+      });
+    }
     final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
         ref.watch(partnerProfileProvider).valueOrNull;
 

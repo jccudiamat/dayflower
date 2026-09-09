@@ -8,6 +8,7 @@ import '../../../core/providers/supabase_provider.dart';
 import '../../pairing/data/pair_repository.dart';
 import '../../tulip/data/flower_repository.dart';
 import '../data/call_repository.dart';
+import '../data/call_alerts.dart';
 import '../data/call_transport.dart';
 import '../data/call_usage.dart';
 import 'call.dart';
@@ -166,6 +167,7 @@ class CallNotifier extends StateNotifier<CallSession?> {
     if (session.status != CallStatus.ringing) return;
 
     state = session.copyWith(status: CallStatus.connecting);
+    await CallAlerts.stop();
     await _connect(identity: userId);
   }
 
@@ -312,6 +314,7 @@ class CallNotifier extends StateNotifier<CallSession?> {
   /// row update leaves a call the thread thinks is live — which
   /// [FlowerMessage.isLiveCall] ages out on its own after two hours.
   Future<void> hangUp() async {
+    await CallAlerts.stop();
     final session = state;
     if (session == null) return;
 

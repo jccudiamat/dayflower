@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/call.dart';
 import 'call_transport.dart';
+import 'native_calls.dart';
 
 /// Carries the call over LiveKit.
 ///
@@ -120,6 +121,7 @@ class LiveKitCallTransport implements CallTransport {
         }
       })
       ..on<lk.RoomDisconnectedEvent>((event) {
+        debugPrint('Dayflower call disconnected: ${event.reason}');
         // A disconnect we asked for is not a failure. `leave()` clears the
         // room first, so a null room here means this is our own teardown.
         if (_room == null) return;
@@ -173,12 +175,14 @@ class LiveKitCallTransport implements CallTransport {
       if (_isVideo) {
         await room0.localParticipant?.setCameraEnabled(true);
       }
+      await NativeCalls.invoke('startActive', {'video': _isVideo});
       await _routeAudio();
     } on lk.MediaConnectException catch (_) {
       // Signalling worked and media did not — the shape a carrier-level
       // block takes, and the reason this failure is worth its own branch.
       _events.add(const CallFailed(CallFailure.unreachable));
     } catch (error) {
+      debugPrint('Dayflower call setup failed: ${error.runtimeType}');
       _events.add(CallFailed(_readFailure(error)));
     }
   }
@@ -224,6 +228,11 @@ class LiveKitCallTransport implements CallTransport {
     // Cleared first so the disconnect handler knows this teardown is ours
     // and does not report a hang-up as a dropped call.
     _room = null;
+    try {
+      await NativeCalls.invoke('stopActive');
+    } catch (e) {
+      debugPrint('Dayflower call service cleanup failed: ${e.runtimeType}');
+    }
     await _listener?.dispose();
     _listener = null;
     await room?.disconnect();

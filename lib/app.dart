@@ -112,6 +112,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   Future<void> _wireAlarmTaps() async {
     ringingReminderId.addListener(_openRingingAlarm);
     final launch = await AppNotifications.launchResponse();
+    if (launch != null && CallAlerts.handleTap(launch)) return;
     final id = ReminderScheduler.reminderIdOf(launch?.payload);
     // Snooze and Done were already handled in the background isolate; only
     // a plain tap should open the screen.

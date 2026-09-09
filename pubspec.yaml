@@ -1,11 +1,13 @@
 name: dayflower
 description: Connecting hearts, one kiss at a time.
 publish_to: none
-version: 1.0.0+60
+version: 1.0.0+63
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
 dependencies:
+  dayflower_calls:
+    path: packages/dayflower_calls
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.8
