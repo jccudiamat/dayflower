@@ -29,6 +29,7 @@ import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
 import '../../../activity/presentation/widgets/activity_timeline.dart';
 import '../../../gifts/presentation/widgets/gift_occasion_card.dart';
+import '../../../greetings/presentation/monthsary_envelope.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -65,6 +66,7 @@ class HomeScreen extends ConsumerWidget {
                 delegate: SliverChildListDelegate.fixed([
                   _HomeHeader(),
                   SizedBox(height: AppSpace.md),
+                  MonthsaryEnvelope(),
                   // The two things you came to *do*, first: say how you are
                   // and reach for them. Activity sits under both because it
                   // is what happened rather than what to do, and the badge
