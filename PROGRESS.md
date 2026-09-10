@@ -3161,3 +3161,82 @@ Checked rather than assumed, on the shipped build 64 APK:
 shows **no story header** — no avatar, no name — and a flower has carried one
 since before this fix.
 
+## The gift catalogue moved to the server (2026-09-10)
+
+🔴 **It was a `const` list compiled into the APK.** Every price correction,
+every dead listing and — the reason this happened — every affiliate link was
+a new build and an update prompt on both phones, and anyone who did not
+update kept tapping links that earn nothing. Affiliate links expire, get
+revoked and rotate with campaigns. A catalogue that can only change at build
+time cannot carry them.
+
+Migration `0038_gift_products.sql`, applied live. Nine products seeded from
+the bundled list.
+
+### Updating it — three ways, no build
+
+1. **Supabase dashboard → Table editor → `gift_products`.** Edit `url` in
+   place. This is the one to use for "paste the affiliate link for one
+   product", and it needs nothing installed.
+2. **`dart run tool/sync_gifts.dart gifts.json`** — bulk. The JSON is a list
+   of objects using the table's own column names, and *only the keys present
+   are written*, so a file of `{"id": …, "url": …}` pairs updates ten
+   affiliate links at once. `--dump` prints the live table in exactly that
+   shape to start from.
+3. **`--from-app`** re-seeds from the bundled Dart list. For a fresh project,
+   not for day-to-day edits — after the seed the table is the source of
+   truth.
+
+⚠️ **Upsert, never delete.** A product missing from the file is left alone.
+Retire one with `"active": false`, which keeps its click history; a delete
+throws away the only evidence of whether it was ever worth carrying.
+
+### Decisions
+
+- ⚠️ **The bundled list stays** as the offline fallback, and the screen shows
+  it rather than a spinner or an empty state. A gifts page with nothing on it
+  looks like a broken feature; the same page with a slightly stale price
+  looks like a page.
+- 🔴 **The app cannot write the catalogue.** There is deliberately no
+  insert/update/delete policy, so a compromised phone cannot repoint an
+  affiliate link. Verified from a real session: read 200, insert **403**.
+- ⚠️ **Grants, not just policies.** The seed failed with "permission denied
+  for table" until `grant` statements were added — RLS decides *which rows*,
+  grants decide whether the table can be touched at all. Same trap migration
+  0036 hit with `device_tokens`.
+- ⚠️ **`image_url` is nullable and null means "use the bundled asset for this
+  id".** A product added from the dashboard has nowhere in the APK to keep a
+  picture, so it needs a URL; the nine that shipped do not. A *blank* cell is
+  treated as null too — a dashboard produces `''` far more often than null,
+  and `Image.network('')` throws.
+- 🔴 **Saved gifts are keyed by id, not by list position.** The old set held
+  indices into a `const` list. With the catalogue loaded from the server it
+  can reorder or shrink between builds, and indices would quietly start
+  pointing at different gifts.
+- ⚠️ **Ids must match the asset filenames.** `GiftProduct.asset` is derived
+  from `id`; renaming one drops that product to the placeholder icon.
+
+### Click logging
+
+`gift_clicks`, one row per gift opened — the only way to know whether a
+listing earns its place. Rows rather than a counter, because a counter cannot
+tell you a product died in March. Own rows only, both ways: a gift someone
+looked at is personal and no feature needs one half of a couple to see the
+other half's browsing.
+
+🔴 **The logging is wrapped and never awaited, and the first version was
+wrong.** Two things can fail and neither may reach the tap: the insert can
+reject, and `ref.read` can throw before there is anything to insert with — no
+Supabase, offline, or a test harness that never overrode the client. The read
+sat outside the try and a gift stopped opening at all. `gifts_navigation_test`
+caught it. Bookkeeping does not get to break the feature it is counting.
+
+### Still to do, and yours rather than the code's
+
+- The `url` column currently holds the plain seller links. Generating the
+  affiliate links is a Shopee-side job; once you have them, method 1 or 2
+  above puts them live without a build.
+- ⚠️ **Affiliate links need disclosure** — a visible line on the screen — and
+  `website/app/privacy/page.tsx` needs a line about click tracking before
+  this reaches anyone outside the two of you.
+

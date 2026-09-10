@@ -1,0 +1,127 @@
+[
+  {
+    "id": "crochet-bouquet",
+    "name": "Crochet flower bouquet",
+    "merchant": "BETTER LIFE",
+    "category": "Flowers",
+    "price": 86,
+    "priceMax": 116,
+    "recipients": [
+      "Partner",
+      "Family",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/Handmade-Knitted-Crochet-Flowers-Home-Ornaments-PVC-LED-Light-Bouquet-Wedding-Valentine's-Day-Gift-i.975503035.42025448680",
+    "image": "/gifts/crochet-bouquet.jpg"
+  },
+  {
+    "id": "couple-mugs",
+    "name": "Personalized couple mugs",
+    "merchant": "KST Merchandising",
+    "category": "Home",
+    "price": 990,
+    "recipients": [
+      "Partner",
+      "Family"
+    ],
+    "url": "https://shopee.ph/Personalized-Couple-Mug-with-Lid-Stirrer-Spoon-Gift-Box-i.380284623.28921400102",
+    "image": "/gifts/couple-mugs.jpg"
+  },
+  {
+    "id": "bar-necklace",
+    "name": "Engraved bar necklace",
+    "merchant": "Vnox Global Store",
+    "category": "Jewelry",
+    "price": 160,
+    "voucher": true,
+    "recipients": [
+      "Partner",
+      "Family",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/Vnox-Personalized-Vertical-Bar-Pendant-Necklace-4-Sides-Customized-Name-Box-Chain-Necklace-Jewelry-Gift-for-Women-Men-i.235558693.17642847769",
+    "image": "/gifts/bar-necklace.jpg"
+  },
+  {
+    "id": "coffee-set",
+    "name": "French press coffee set",
+    "merchant": "Kapeakita",
+    "category": "Coffee",
+    "price": 376,
+    "priceMax": 401,
+    "recipients": [
+      "Partner",
+      "Family",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/COFFEE-GIFT-SET-(French-Press-350ml-Coffee-Ground)-KAPEAKITA-i.45615137.26738387885",
+    "image": "/gifts/coffee-set.jpg"
+  },
+  {
+    "id": "mini-album",
+    "name": "Mini photo album keychain",
+    "merchant": "mianhae.ph",
+    "category": "Photo keepsakes",
+    "price": 85,
+    "recipients": [
+      "Partner",
+      "Family",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/Customizable-Mini-Photo-Album-Keychain-Valentines-Gift-with-Box-(16-photos)-i.517192411.42578518616",
+    "image": "/gifts/mini-album.jpg"
+  },
+  {
+    "id": "soy-candle",
+    "name": "Scented soy tin candle",
+    "merchant": "papeldesarapen",
+    "category": "Self-care",
+    "price": 165,
+    "recipients": [
+      "Partner",
+      "Family",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/Witty-Tin-Candle-Premium-Soy-Scented-Candle-in-Tin-Can-for-Gift-Souvenir-Wedding-Giveaway-i.378827485.40407253901",
+    "image": "/gifts/soy-candle.jpg"
+  },
+  {
+    "id": "flower-blocks",
+    "name": "Build-your-own flower bouquet",
+    "merchant": "SHL-AB",
+    "category": "Activities",
+    "price": 30,
+    "priceMax": 129,
+    "recipients": [
+      "Partner",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/Eternal-Mini-Flower-Building-Blocks-Bouquet-Assembling-Room-Decor-Educational-Toys-For-Gifts-i.1469223094.28589623849",
+    "image": "/gifts/flower-blocks.jpg"
+  },
+  {
+    "id": "anniversary-card",
+    "name": "Anniversary greeting card",
+    "merchant": "papeldesarapen",
+    "category": "Cards",
+    "price": 79,
+    "recipients": [
+      "Partner"
+    ],
+    "url": "https://shopee.ph/Papeldesarapen-Happy-Anniversary-Card-Sweet-7-Designs-Love-Card-Valentine-Greeting-Card-Partner-i.378827485.13775300723",
+    "image": "/gifts/anniversary-card.jpg"
+  },
+  {
+    "id": "photostrip-keychain",
+    "name": "Photo strip acrylic keychain",
+    "merchant": "mianhae.ph",
+    "category": "Photo keepsakes",
+    "price": 69,
+    "recipients": [
+      "Partner",
+      "Friends"
+    ],
+    "url": "https://shopee.ph/-1PC-PHOTOSTRIP-PHOTOBOOTH-ACRYLIC-KEYCHAINS-VALENTINES-GIFTS-i.517192411.26136149353",
+    "image": "/gifts/photostrip-keychain.jpg"
+  }
+]

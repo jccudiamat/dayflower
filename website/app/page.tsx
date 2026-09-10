@@ -70,6 +70,15 @@ export default function Home() {
         </section>
         <ProductTour />
 
+        <section className="mx-auto max-w-5xl px-5 py-12">
+          <div className="rounded-3xl border border-border-soft bg-surface-subtle p-7 sm:p-10">
+            <p className="text-sm font-bold text-brand-dark">A LITTLE SOMETHING FOR THEM</p>
+            <h2 className="mt-3 text-3xl font-bold">Find a gift that feels like them.</h2>
+            <p className="my-5 max-w-xl leading-relaxed text-body">Photo keepsakes, flowers, coffee, and little comforts. Browse our Shopee Philippines picks for your partner, family, and friends.</p>
+            <Link href="/gifts" className="font-bold text-brand-dark underline underline-offset-4">Browse gift ideas →</Link>
+          </div>
+        </section>
+
         <section className="mx-auto grid max-w-5xl gap-10 px-5 py-20 sm:py-24 md:grid-cols-[0.8fr_1.2fr] md:gap-20" aria-labelledby="questions-title">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-dark">Before you join</p>

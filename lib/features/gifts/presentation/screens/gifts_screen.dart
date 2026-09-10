@@ -1,26 +1,33 @@
+import 'dart:async';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/gift_catalog.dart';
+import '../../data/gift_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 
-const _products = giftProducts;
-
-class GiftsScreen extends StatefulWidget {
+class GiftsScreen extends ConsumerStatefulWidget {
   const GiftsScreen({super.key, this.occasion, this.openLink});
   final String? occasion;
   final Future<bool> Function(Uri)? openLink;
   @override
-  State<GiftsScreen> createState() => _GiftsScreenState();
+  ConsumerState<GiftsScreen> createState() => _GiftsScreenState();
 }
 
-class _GiftsScreenState extends State<GiftsScreen> {
+class _GiftsScreenState extends ConsumerState<GiftsScreen> {
   final _search = TextEditingController();
-  final _saved = <int>{};
+
+  /// 🔴 Keyed by product **id**, not by position. The catalogue is loaded from
+  /// the server now and can reorder or shrink between builds; a set of indices
+  /// would quietly start pointing at different gifts.
+  final _saved = <String>{};
   String _recipient = 'All';
   String _category = 'All types';
   int? _budget;
@@ -32,6 +39,22 @@ class _GiftsScreenState extends State<GiftsScreen> {
   }
 
   Future<void> _openProduct(GiftProduct product) async {
+    // 🔴 **Wrapped, and never awaited.** Two ways this can fail and neither
+    // may reach the tap: the insert can reject, and `ref.read` can throw
+    // before there is anything to insert with — no Supabase yet, offline, or
+    // a test harness that never overrode the client. The first version put
+    // the read outside a try and a gift stopped opening at all, which the
+    // navigation test caught. Bookkeeping does not get to break the feature
+    // it is counting.
+    try {
+      unawaited(ref
+          .read(giftRepositoryProvider)
+          .logClick(product.id)
+          .catchError((Object e) => debugPrint('gift click log failed: $e')));
+    } catch (e) {
+      debugPrint('gift click log unavailable: $e');
+    }
+
     var opened = false;
     try {
       final uri = Uri.parse(product.url);
@@ -50,15 +73,21 @@ class _GiftsScreenState extends State<GiftsScreen> {
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim().toLowerCase();
+    // ⚠️ `.valueOrNull ?? giftProducts` rather than a spinner. The catalogue
+    // is a list of shopping links, not the user's own data: showing the
+    // shipped snapshot for the half-second the network takes is better than
+    // an empty screen that looks like a broken feature, and better than a
+    // loading state on a page nobody is waiting on.
+    final catalog = ref.watch(giftCatalogProvider).valueOrNull ?? giftProducts;
     final products = [
-      for (var i = 0; i < _products.length; i++)
-        if (_products[i].matches(
+      for (final p in catalog)
+        if (p.matches(
                 query: query,
                 recipient: _recipient,
                 category: _category,
                 budget: _budget) &&
-            (!_savedOnly || _saved.contains(i)))
-          i
+            (!_savedOnly || _saved.contains(p.id)))
+          p
     ];
     return Scaffold(
         backgroundColor: AppColors.background,
@@ -149,7 +178,9 @@ class _GiftsScreenState extends State<GiftsScreen> {
             child: Row(children: [
               for (final category in [
                 'All types',
-                ..._products.map((p) => p.category).toSet()
+                // From the live catalogue, so a category introduced from
+                // the dashboard gets a chip without a build.
+                ...catalog.map((p) => p.category).toSet()
               ])
                 Padding(
                     padding: const EdgeInsets.only(right: 8),
@@ -207,12 +238,11 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             child: j >= products.length
                                 ? const SizedBox()
                                 : _ProductCard(
-                                    photo: products[j],
-                                    saved: _saved.contains(products[j]),
-                                    onView: () =>
-                                        _openProduct(_products[products[j]]),
+                                    product: products[j],
+                                    saved: _saved.contains(products[j].id),
+                                    onView: () => _openProduct(products[j]),
                                     onSave: () => setState(() {
-                                          final id = products[j];
+                                          final id = products[j].id;
                                           if (!_saved.add(id)) {
                                             _saved.remove(id);
                                           }
@@ -304,18 +334,51 @@ class _GiftUsCard extends StatelessWidget {
       ]));
 }
 
+/// The product picture: the one shipped in the APK, or one fetched for a
+/// product that was added after this build.
+class _GiftImage extends StatelessWidget {
+  const _GiftImage({required this.product});
+  final GiftProduct product;
+
+  static const _fallback = Center(child: Icon(CupertinoIcons.gift, size: 40));
+
+  @override
+  Widget build(BuildContext context) {
+    final url = product.imageUrl;
+    if (url == null) {
+      return Image.asset(product.asset,
+          fit: BoxFit.contain,
+          semanticLabel: product.name,
+          errorBuilder: (_, __, ___) => _fallback);
+    }
+    return CachedNetworkImage(
+      imageUrl: url,
+      fit: BoxFit.contain,
+      // No spinner: a grid of them is worse than a grid of quiet gaps.
+      placeholder: (_, __) => const SizedBox(),
+      // ⚠️ Falls back to the bundled asset before the icon — a row can carry
+      // an image_url that is merely broken while the APK still has a good
+      // picture for that id.
+      errorWidget: (_, __, ___) => Image.asset(product.asset,
+          fit: BoxFit.contain,
+          semanticLabel: product.name,
+          errorBuilder: (_, __, ___) => _fallback),
+    );
+  }
+}
+
 class _ProductCard extends StatelessWidget {
   const _ProductCard(
-      {required this.photo,
+      {required this.product,
       required this.saved,
       required this.onSave,
       required this.onView});
-  final int photo;
+  final GiftProduct product;
   final bool saved;
   final VoidCallback onSave, onView;
   @override
   Widget build(BuildContext context) {
-    final p = _products[photo];
+    final p = product;
     return Container(
         decoration: BoxDecoration(
             color: AppColors.surface,
@@ -326,12 +389,11 @@ class _ProductCard extends StatelessWidget {
           AspectRatio(
               aspectRatio: 1,
               child: Stack(children: [
-                Positioned.fill(
-                    child: Image.asset(p.asset,
-                        fit: BoxFit.contain,
-                        semanticLabel: p.name,
-                        errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(CupertinoIcons.gift, size: 40)))),
+                // ⚠️ Bundled asset first, network only when the row carries
+                // an image_url. A product added from the dashboard has no
+                // place in the APK to keep a picture, and without this it
+                // would show the placeholder icon forever.
+                Positioned.fill(child: _GiftImage(product: p)),
                 Positioned(
                     top: 4,
                     right: 4,

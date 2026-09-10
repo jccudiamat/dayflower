@@ -1,5 +1,10 @@
-/// Static Shopee Philippines snapshot collected on 10 September 2026.
-/// Prices are observations, not live quotes. URLs link to the original sellers.
+/// One thing you could buy them.
+///
+/// ⚠️ The list at the bottom of this file is the **offline fallback**, not
+/// the catalogue. The real one lives in `gift_products` on the server, so a
+/// price correction, a dead listing or an affiliate link can change without
+/// shipping a build — see `giftCatalogProvider`. This copy is what fills the
+/// screen on a dead network or a first run.
 class GiftProduct {
   const GiftProduct(
       {required this.id,
@@ -11,13 +16,43 @@ class GiftProduct {
       this.voucher = false,
       required this.recipients,
       required this.url,
-      required this.imageSource});
+      required this.imageSource,
+      this.imageUrl});
   final String id, name, merchant, category, url, imageSource;
   final int price;
   final int? priceMax;
   final bool voucher;
   final List<String> recipients;
+
+  /// Where the picture comes from when there is no bundled asset — a product
+  /// added from the dashboard has no place in the APK to keep one.
+  final String? imageUrl;
+
+  /// 🔴 Derived from [id], which is why ids in `gift_products` must match the
+  /// filenames in `assets/images/gifts/`. Rename one and that product drops
+  /// silently to the placeholder icon.
   String get asset => 'assets/images/gifts/$id.jpg';
+
+  /// Rebuilt from a `gift_products` row.
+  ///
+  /// ⚠️ Tolerant on purpose. This runs against rows a person edits by hand in
+  /// a dashboard, and one mistyped number should cost that field rather than
+  /// the whole screen.
+  factory GiftProduct.fromMap(Map<String, dynamic> map) => GiftProduct(
+        id: map['id'] as String,
+        name: map['name'] as String? ?? 'Gift',
+        merchant: map['merchant'] as String? ?? '',
+        category: map['category'] as String? ?? 'All types',
+        price: (map['price'] as num?)?.toInt() ?? 0,
+        priceMax: (map['price_max'] as num?)?.toInt(),
+        voucher: map['voucher'] as bool? ?? false,
+        recipients: (map['recipients'] as List?)?.cast<String>() ?? const [],
+        url: map['url'] as String? ?? '',
+        imageSource: map['image_source'] as String? ?? '',
+        imageUrl: (map['image_url'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : map['image_url'] as String,
+      );
   String get priceLabel => priceMax == null ? '₱$price' : '₱$price–₱$priceMax';
   bool matches(
           {String query = '',
@@ -33,6 +68,9 @@ class GiftProduct {
 }
 
 const giftCatalogChecked = '10 Sep 2026';
+
+/// The offline fallback. See the class doc — the live catalogue is on the
+/// server, and `tool/sync_gifts.dart` is what seeded it from this list.
 const giftProducts = <GiftProduct>[
   GiftProduct(
       id: "crochet-bouquet",
