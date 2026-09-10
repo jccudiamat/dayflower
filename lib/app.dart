@@ -83,7 +83,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _syncWidget(ref.read(widgetFlowerProvider));
-        ReminderScheduler.sync(ref.read(myOpenRemindersProvider));
+        _syncReminders(ref.read(pairOpenRemindersProvider));
         HeartbeatNudge.sync(
             sentToday: ref.read(todayHeartbeatCountsProvider).mine > 0);
         ref.read(updateControllerProvider.notifier).check();
@@ -317,8 +317,8 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // recipient's app is closed is not scheduled until they next open it.
     // See the class doc on ReminderScheduler.
     ref.listen<List<Reminder>>(
-      myOpenRemindersProvider,
-      (_, mine) => _settled(() => ReminderScheduler.sync(mine)),
+      pairOpenRemindersProvider,
+      (_, all) => _settled(() => _syncReminders(all)),
     );
 
     // ⚠️ Registered on sign-in, not at launch. A token written before there
@@ -542,6 +542,27 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // widget layer: widget_sync has no Riverpod container and runs from a
       // background isolate too, where providers do not exist.
       downloadPhoto: ref.read(flowerRepositoryProvider).downloadPhoto,
+    );
+  }
+
+  /// Hands the whole pair's reminders to the scheduler, and announces any
+  /// that were just set.
+  ///
+  /// ⚠️ Both halves of the couple, deliberately — see
+  /// [pairOpenRemindersProvider]. The scheduler needs to know which of them
+  /// are mine so only my own reminder takes over my screen, and it needs
+  /// their name so the copy can say whose each one is.
+  void _syncReminders(List<Reminder> reminders) {
+    final myId = ref.read(currentUserIdProvider);
+    ReminderScheduler.sync(
+      reminders,
+      myUserId: myId,
+      partnerName: _partnerName,
+    );
+    ReminderScheduler.announceNew(
+      reminders,
+      myUserId: myId,
+      partnerName: _partnerName,
     );
   }
 

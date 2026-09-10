@@ -109,6 +109,14 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                         isMine: reminder.isFor(userId),
                         partnerName: partner?.displayName ?? 'them',
                         onToggle: () => _toggle(reminder),
+                        // Only on a reminder that is for *them* and still
+                        // open — nudging yourself is a button that does
+                        // nothing, and nudging about something already
+                        // ticked off is noise.
+                        onNudge: reminder.isFor(userId) || reminder.isDone
+                            ? null
+                            : () => _nudge(reminder),
+                        nudged: _isSpent(reminder),
                         onTap: () => _openEditor(
                           partner: partner,
                           existing: reminder,
@@ -130,6 +138,47 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
       ),
       bottomNavigationBar: const AppBottomNav(),
     );
+  }
+
+  /// Reminders nudged recently, and when — so the button can go quiet
+  /// instead of firing again. In memory only: a cooldown that survived a
+  /// restart would need storage, and the failure it guards against (a
+  /// flurry of taps) happens in one sitting.
+  final _nudgedAt = <String, DateTime>{};
+
+  bool _isSpent(Reminder reminder) {
+    final at = _nudgedAt[reminder.id];
+    return at != null && DateTime.now().difference(at) < kNudgeCooldown;
+  }
+
+  Future<void> _nudge(Reminder reminder) async {
+    if (_isSpent(reminder)) return;
+    final myId = ref.read(currentUserIdProvider);
+    if (myId == null) return;
+
+    setState(() => _nudgedAt[reminder.id] = DateTime.now());
+    try {
+      await ref.read(reminderRepositoryProvider).nudge(
+            reminder: reminder,
+            senderId: myId,
+            now: DateTime.now(),
+          );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nudged — it is on their phone now.')),
+        );
+      }
+    } catch (e) {
+      // ⚠️ The cooldown is released again on failure. Leaving the button
+      // spent after a nudge that never sent is the one outcome worse than
+      // sending twice.
+      if (mounted) {
+        setState(() => _nudgedAt.remove(reminder.id));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not send that nudge.')),
+        );
+      }
+    }
   }
 
   Future<void> _toggle(Reminder reminder) async {
@@ -234,6 +283,8 @@ class _ReminderCard extends StatelessWidget {
     required this.partnerName,
     required this.onToggle,
     required this.onTap,
+    this.onNudge,
+    this.nudged = false,
   });
 
   final Reminder reminder;
@@ -241,6 +292,12 @@ class _ReminderCard extends StatelessWidget {
   final String partnerName;
   final VoidCallback onToggle;
   final VoidCallback onTap;
+
+  /// Null when there is nobody to nudge — the reminder is yours, or done.
+  final VoidCallback? onNudge;
+
+  /// True inside the cooldown after a tap.
+  final bool nudged;
 
   @override
   Widget build(BuildContext context) {
@@ -324,10 +381,73 @@ class _ReminderCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (onNudge != null) ...[
+                      const SizedBox(height: AppSpace.xs),
+                      _NudgeButton(
+                        name: partnerName,
+                        spent: nudged,
+                        onTap: onNudge!,
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "Remind Sheena now" — the manual nudge.
+///
+/// Sends the reminder to their phone this second, rather than waiting for
+/// the next beat of the countdown. Deliberately a full-width, labelled
+/// control rather than a small icon: it reaches into somebody else's pocket,
+/// so it should be hard to press by accident and obvious once pressed.
+class _NudgeButton extends StatelessWidget {
+  const _NudgeButton({
+    required this.name,
+    required this.spent,
+    required this.onTap,
+  });
+
+  final String name;
+  final bool spent;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: Material(
+        color: spent ? AppColors.surfaceSubtle : AppColors.blush,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: InkWell(
+          onTap: spent ? null : onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  spent
+                      ? CupertinoIcons.checkmark_alt
+                      : CupertinoIcons.bell_fill,
+                  size: 15,
+                  color: spent ? AppColors.muted : AppColors.brand,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  spent ? 'Nudged' : 'Remind $name now',
+                  style: AppText.caption(
+                    spent ? AppColors.muted : AppColors.brand,
+                  ).copyWith(fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
           ),
         ),
       ),

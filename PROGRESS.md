@@ -3040,3 +3040,89 @@ down to 24dp mdpi, on light status bars as well as dark.
 compiles the tree rather than HEAD — publishing from here would ship their
 unfinished work. The version line is already at 1.0.0+62 in their hands, so
 this icon rides their next build.
+
+## Reminders tell both phones, and count down (2026-09-10)
+
+A reminder used to be one alarm, on one phone, at one moment. Now the couple
+is told when it is set, at 3h / 2h / 1h, and at the time — and either of them
+can nudge the other by hand at any point in between.
+
+### The run-up
+
+`lib/features/reminders/domain/reminder_countdown.dart` decides everything
+that gets posted and everything it says. Pure — no plugin, no clock of its
+own — so the copy is testable and previewable without a device, and the
+scheduler is left doing nothing but handing the list to the OS.
+
+- ⚠️ **Five notifications per reminder, per phone**, and that is the whole
+  budget: set, 3h, 2h, 1h, due.
+- 🔴 **"Every hour until it is due" is unbounded, and was the first draft.**
+  The live data settled it: reminders in this pair are set a median of **53
+  hours** ahead and the longest is **277** — and that one repeats weekly.
+  Hourly from creation would have posted 277 notifications a week from one
+  row, forever. A channel that behaves like that gets muted, and a muted
+  channel misses the reminder that actually mattered, so the bound is what
+  makes the feature work rather than a compromise on it.
+  `kCountdownLeadHours` is the one number.
+- ⚠️ **Only the real thing rings.** The run-up is its own channel,
+  `reminders_countdown_v1`, at `high` — heads-up, sound, vibration,
+  dismissible. Twelve full-screen unswipeable takeovers in an evening is not
+  a countdown, it is a fault. Its own channel so it can be silenced without
+  silencing the alarm.
+- The partner watching **never** gets the alarm. She is told at 8am; her
+  screen is not taken over for his medication.
+- The countdown lives in **subText**, not the title: Android never truncates
+  subText and does truncate a long title, so the useful half is the half
+  that survives. `usesChronometer` + `chronometerCountDown` also puts a live
+  ticking counter in the notification, which keeps being right in the gaps
+  between pings.
+- ⚠️ Run-up pings carry `dayflower://reminder-soon/` so a tap opens the
+  **list**, not the ringing-alarm screen — a full-screen Snooze/Done for
+  something an hour away would be nonsense. The route string is duplicated
+  out of `Routes` on purpose (app_router pulls in every screen and this file
+  is loaded by the background isolate); a test asserts the two stay equal.
+- 🔴 Both phones are scheduled from `pairOpenRemindersProvider`, not
+  `myOpenRemindersProvider`. Filtering to my own would leave the person who
+  set it hearing nothing until it was too late to help.
+- ⚠️ The copy **always says whose it is**. Caught in the preview: with a note
+  present the due notification was just the note, so at 8am her phone read
+  "Take your meds / the blue one, with food" with nothing marking it as his.
+
+### The nudge button
+
+"Remind Jc now", on the reminders that are for the other person and still
+open.
+
+- 🔴 **Sent as a message, deliberately** — the same call `calls` made (0025).
+  A message is the only thing in this app that already crosses to the other
+  phone by *every* route: the realtime stream the conversation subscribes
+  to, so it lands while their app is open, and `flower_messages_push` (0031),
+  so it lands as a push the moment push is deployed — with **no change to
+  the push function**. A `reminder_nudges` table would need a migration, its
+  own trigger and an extension to that function before it could do either.
+- It shows in the thread, which is right rather than a side effect: "I
+  reminded you at 7:42" is a real thing that happened between two people.
+- ⚠️ **A 2-minute cooldown**, because the button reaches into somebody
+  else's pocket. Without a floor an anxious tap-tap-tap is three
+  notifications and a row of identical messages, and the person being nudged
+  learns to ignore them — the exact failure the feature exists to prevent.
+- ⚠️ The cooldown is **released again on failure**. Leaving the button spent
+  after a nudge that never sent is the one outcome worse than sending twice.
+
+### Previewing it
+
+`test/reminder_countdown_test.dart` writes the real `pingCopy()` output to
+JSON when `REMINDER_PREVIEW_OUT` is set, and the mockup is rendered from
+that — so what gets reviewed is what the phone posts, not a second version
+of the copy written to flatter it. That is how the "for Jc" bug above was
+found.
+
+### Unchanged limitations
+
+- 🔴 The recipient's app must open at least once between a reminder being
+  created and its time. No push delivery for reminders yet.
+- ⚠️ For a **repeating** reminder the OS re-fires the due alarm itself, but
+  the run-up is one-shot against the next occurrence — the offsets differ
+  per ping, so there is nothing for `matchDateTimeComponents` to match. The
+  next occurrence's run-up is scheduled the next time the app opens.
+

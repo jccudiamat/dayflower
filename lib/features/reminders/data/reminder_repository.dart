@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
 import '../../pairing/data/pair_repository.dart';
+import '../domain/reminder_countdown.dart';
 
 /// How a reminder comes back around. Resolved on the device — the row only
 /// records the rule, so changing what "monthly" means never needs a
@@ -68,6 +69,7 @@ class Reminder {
     required this.repeat,
     this.alarm = true,
     this.doneAt,
+    this.createdAt,
   });
 
   final String id;
@@ -86,6 +88,13 @@ class Reminder {
   final bool alarm;
 
   final DateTime? doneAt;
+
+  /// When the row was written. ⚠️ Used to decide whether a reminder is *new*
+  /// — the "just set" notification fires for rows created after the mark
+  /// this phone last saw, the same shape as PartnerAlerts. Nullable because
+  /// the realtime payload for an older row may predate the column being
+  /// mapped here.
+  final DateTime? createdAt;
 
   bool get isDone => doneAt != null;
   bool get repeats => repeat != ReminderRepeat.none;
@@ -110,6 +119,9 @@ class Reminder {
         doneAt: map['done_at'] == null
             ? null
             : DateTime.parse(map['done_at'] as String).toLocal(),
+        createdAt: map['created_at'] == null
+            ? null
+            : DateTime.parse(map['created_at'] as String).toLocal(),
       );
 }
 
@@ -123,6 +135,37 @@ class ReminderRepository {
   /// default — a bare `.order('remind_at')` would put next year's dentist
   /// appointment above tonight's medication. See the ordering warning in
   /// PROGRESS.md.
+  /// Nudges the person a reminder is for, right now, from a button.
+  ///
+  /// 🔴 **Written as a message, deliberately** — the same decision calls
+  /// made (see the header of 0025). A message is the only thing in this app
+  /// that already crosses to the other phone by every route there is: the
+  /// realtime stream the conversation is subscribed to, so it lands while
+  /// their app is open, and `flower_messages_push` (0031), so it lands as a
+  /// push the moment that is deployed. A `reminder_nudges` table would need
+  /// a migration, its own trigger, and a change to the push function before
+  /// it could do either.
+  ///
+  /// It shows in the thread as well, which is right rather than a side
+  /// effect: "I reminded you at 7:42" is a real thing that happened between
+  /// two people, and hiding it would make the nudge feel like it came from
+  /// the app rather than from them.
+  Future<void> nudge({
+    required Reminder reminder,
+    required String senderId,
+    required DateTime now,
+  }) async {
+    await _client.from('flower_messages').insert({
+      'pair_id': reminder.pairId,
+      'sender_id': senderId,
+      'note': nudgeMessage(reminder, now: now),
+      // Belongs in the conversation, and nowhere near the home-screen
+      // widget, which renders flowers and photos.
+      'to_chat': true,
+      'to_widget': false,
+    });
+  }
+
   Stream<List<Reminder>> watchPairReminders(String pairId) {
     return _client
         .from('reminders')
@@ -244,6 +287,15 @@ class ReminderRepository {
   }
 }
 
+/// How long the nudge button stays spent after a tap.
+///
+/// WARNING: a button that reaches into somebody's pocket needs a floor under
+/// it. Without one, an anxious tap-tap-tap is three notifications and a row
+/// of identical messages in the thread, and the person being nudged learns
+/// to ignore them — which is the failure mode this whole feature exists to
+/// avoid.
+const kNudgeCooldown = Duration(minutes: 2);
+
 final reminderRepositoryProvider = Provider<ReminderRepository>((ref) {
   return ReminderRepository(ref.watch(supabaseClientProvider));
 });
@@ -264,6 +316,17 @@ final myOpenRemindersProvider = Provider.autoDispose<List<Reminder>>((ref) {
 });
 
 /// Mine, due now or already past — the badge on the Activities hub tile.
+/// Every open reminder in the pair, **whoever it is for**.
+///
+/// 🔴 What the scheduler works from now. The run-up goes to both phones —
+/// "notify the couple" is the feature — so filtering to my own here would
+/// leave the person who set it hearing nothing until it was too late to
+/// help. [Reminder.isFor] is what the copy uses to say whose it is.
+final pairOpenRemindersProvider = Provider.autoDispose<List<Reminder>>((ref) {
+  final all = ref.watch(remindersProvider).valueOrNull ?? const [];
+  return all.where((r) => !r.isDone).toList();
+});
+
 final dueReminderCountProvider = Provider.autoDispose<int>((ref) {
   return ref.watch(myOpenRemindersProvider).where((r) => r.isOverdue).length;
 });

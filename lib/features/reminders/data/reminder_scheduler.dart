@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../core/services/app_notifications.dart';
 import '../../calls/data/call_alerts.dart';
+import '../domain/reminder_countdown.dart';
 import 'reminder_repository.dart';
 
 /// How long Snooze pushes a ringing alarm out for.
@@ -65,6 +67,19 @@ class ReminderScheduler {
   static const _alarmChannelId = 'reminders_alarm_v1';
   static const _quietChannelId = 'reminders_quiet_v1';
 
+  /// The run-up: "in 3 hours", "in 5 minutes", and the partner's copy of the
+  /// reminder itself.
+  ///
+  /// ⚠️ Its own channel, at `high` rather than `max`. High peeks as a heads-up
+  /// banner with sound and vibration — noticeable, which is the whole point —
+  /// but it is dismissible and does not take over the screen. Twelve
+  /// full-screen takeovers in an evening is not a countdown, it is a fault,
+  /// and it is also what makes somebody turn the whole thing off.
+  ///
+  /// Separate from the other two so it can be silenced on its own: a person
+  /// who wants the alarm but not the countdown has somewhere to go.
+  static const _countdownChannelId = 'reminders_countdown_v1';
+
   /// 30 seconds of beeping. Named only from here, so it must stay listed in
   /// `res/raw/keep.xml` or the release shrinker strips it and the alarm
   /// posts silently.
@@ -82,6 +97,18 @@ class ReminderScheduler {
   /// and only cancels what it is allowed to.
   static const _payloadPrefix = 'dayflower://reminder/';
 
+  /// Run-up pings. A separate prefix so a tap on one does **not** open the
+  /// ringing-alarm screen for a reminder that is not ringing — and so
+  /// [_cancelOurs] still knows they are ours to clear.
+  static const _countdownPrefix = 'dayflower://reminder-soon/';
+
+  /// Where a run-up tap lands.
+  ///
+  /// ⚠️ Spelled out rather than imported from `Routes`: app_router.dart pulls
+  /// in every screen in the app, and this file is loaded by the background
+  /// isolate. `reminder_countdown_routes_test` asserts the two stay equal.
+  static const remindersRoute = '/app/activities/reminders';
+
   static const actionSnooze = 'reminder_snooze';
   static const actionDone = 'reminder_done';
 
@@ -95,6 +122,10 @@ class ReminderScheduler {
       (payload != null && payload.startsWith(_payloadPrefix))
           ? payload.substring(_payloadPrefix.length)
           : null;
+
+  /// True when [payload] belongs to a run-up ping rather than the alarm.
+  static bool isCountdown(String? payload) =>
+      payload != null && payload.startsWith(_countdownPrefix);
 
   static Future<void> init() async {
     if (!supported || _initialised) return;
@@ -129,6 +160,20 @@ class ReminderScheduler {
           'Reminder notifications',
           description: 'Reminders set to notify quietly, without ringing.',
           importance: Importance.defaultImportance,
+        ),
+      );
+
+      // The run-up. High, not max: it peeks as a heads-up banner and makes a
+      // noise, and it can be swiped away. See _countdownChannelId.
+      await android?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          _countdownChannelId,
+          'Reminder countdown',
+          description:
+              'The run-up to a reminder — hourly, then every five minutes in '
+              'the last hour, on both phones.',
+          importance: Importance.high,
+          enableVibration: true,
         ),
       );
 
@@ -194,7 +239,11 @@ class ReminderScheduler {
   /// truth is a realtime list that can change in any direction at once
   /// (the partner edits a time, deletes one, adds three), and a wrong diff
   /// leaves a silent alarm behind that nothing will ever clean up.
-  static Future<void> sync(List<Reminder> reminders) async {
+  static Future<void> sync(
+    List<Reminder> reminders, {
+    String? myUserId,
+    String partnerName = 'your partner',
+  }) async {
     if (!supported) return;
     await init();
 
@@ -208,10 +257,78 @@ class ReminderScheduler {
         // schedule; it stays on the list in-app as overdue. A repeating
         // one is always schedulable — the OS handles the recurrence.
         if (!reminder.repeats && !reminder.remindAt.isAfter(now)) continue;
-        await _schedule(reminder);
+        await _schedule(
+          reminder,
+          isMine: myUserId == null || reminder.isFor(myUserId),
+          partnerName: partnerName,
+        );
       }
     } catch (e) {
       debugPrint('reminder sync failed: $e');
+    }
+  }
+
+  /// Posts "a reminder was just set", on both phones, for anything created
+  /// since this one last looked.
+  ///
+  /// WARNING: marked by `created_at`, the same shape as PartnerAlerts,
+  /// because the realtime list is re-delivered constantly — on reconnect, on
+  /// any edit, on every app open — and announcing on sight would fire the
+  /// same notification over and over.
+  ///
+  /// A fresh install takes what is already there as the baseline and says
+  /// nothing: arriving on a new phone is no reason to be told about a
+  /// reminder set last Tuesday.
+  static Future<void> announceNew(
+    List<Reminder> reminders, {
+    required String? myUserId,
+    required String partnerName,
+  }) async {
+    if (!supported || reminders.isEmpty) return;
+    await init();
+
+    try {
+      final stamped =
+          reminders.where((r) => r.createdAt != null).toList(growable: false);
+      if (stamped.isEmpty) return;
+
+      final newest = stamped
+          .map((r) => r.createdAt!.millisecondsSinceEpoch)
+          .reduce((a, b) => a > b ? a : b);
+
+      final prefs = await SharedPreferences.getInstance();
+      const markKey = 'reminder_set_mark';
+      final mark = prefs.getInt(markKey);
+      if (mark == null) {
+        await prefs.setInt(markKey, newest);
+        return;
+      }
+      if (newest <= mark) return;
+      await prefs.setInt(markKey, newest);
+
+      final now = DateTime.now();
+      for (final reminder in stamped) {
+        if (reminder.createdAt!.millisecondsSinceEpoch <= mark) continue;
+        if (reminder.isDone) continue;
+        if (!reminder.repeats && !reminder.remindAt.isAfter(now)) continue;
+
+        final ping = ReminderPing(
+          kind: ReminderPingKind.justSet,
+          at: now,
+          remaining: reminder.remindAt.difference(now),
+        );
+        await _post(
+          id: _pingId(reminder.id, ping),
+          reminder: reminder,
+          ping: ping,
+          isMine: myUserId == null || reminder.isFor(myUserId),
+          partnerName: partnerName,
+          // Now, not scheduled.
+          at: null,
+        );
+      }
+    } catch (e) {
+      debugPrint('reminder announce failed: $e');
     }
   }
 
@@ -249,7 +366,23 @@ class ReminderScheduler {
     if (!supported) return;
     await init();
     try {
-      await _schedule(reminder);
+      // WARNING: the reminder itself and nothing else. This is the snooze
+      // path, running in the background isolate: a run-up counting down to
+      // a time nine minutes away would post three notifications on top of
+      // the alarm somebody has just snoozed.
+      final ping = ReminderPing(
+        kind: ReminderPingKind.due,
+        at: reminder.remindAt,
+        remaining: Duration.zero,
+      );
+      await _post(
+        id: _pingId(reminder.id, ping),
+        reminder: reminder,
+        ping: ping,
+        isMine: true,
+        partnerName: 'your partner',
+        at: reminder.remindAt,
+      );
     } catch (e) {
       debugPrint('reminder scheduleOne failed: $e');
     }
@@ -258,108 +391,210 @@ class ReminderScheduler {
   static Future<void> _cancelOurs() async {
     final pending = await _plugin.pendingNotificationRequests();
     for (final request in pending) {
-      if (request.payload?.startsWith(_payloadPrefix) ?? false) {
+      final payload = request.payload ?? '';
+      if (payload.startsWith(_payloadPrefix) ||
+          payload.startsWith(_countdownPrefix)) {
         await _plugin.cancel(id: request.id);
       }
     }
   }
 
-  static Future<void> _schedule(Reminder reminder) async {
+  /// Everything this reminder should post: the run-up, then the reminder.
+  static Future<void> _schedule(
+    Reminder reminder, {
+    required bool isMine,
+    required String partnerName,
+  }) async {
+    final now = DateTime.now();
     var when = reminder.remindAt;
     if (reminder.repeats) {
       // `matchDateTimeComponents` only matches on time-of-day (or weekday
       // + time), so the date it is given has to already be in the future
       // or the first fire is skipped.
-      final now = DateTime.now();
       while (!when.isAfter(now)) {
         when = reminder.repeat.nextAfter(when)!;
       }
     }
 
-    final alarm = reminder.alarm;
+    // WARNING: for a repeating reminder the OS re-fires the *due* alarm on
+    // its own, but the run-up is one-shot against the next occurrence — the
+    // offsets differ per ping, so there is nothing for
+    // matchDateTimeComponents to match. The next occurrence's run-up is
+    // scheduled by the next [sync], which is the same "the app has to open"
+    // limitation this class already has for reminders in general.
+    for (final ping in countdownPings(reminder, now: now, due: when)) {
+      await _post(
+        id: _pingId(reminder.id, ping),
+        reminder: reminder,
+        ping: ping,
+        isMine: isMine,
+        partnerName: partnerName,
+        at: ping.at,
+        due: when,
+      );
+    }
+  }
+
+  /// Posts one notification — scheduled when [at] is given, immediately when
+  /// it is not.
+  static Future<void> _post({
+    required int id,
+    required Reminder reminder,
+    required ReminderPing ping,
+    required bool isMine,
+    required String partnerName,
+    required DateTime? at,
+    DateTime? due,
+  }) async {
+    final rings =
+        ping.alarmsFor(isMine: isMine, reminderWantsAlarm: reminder.alarm);
+    final isDue = ping.kind == ReminderPingKind.due;
+    final counts = !isDue && due != null;
+    final copy = pingCopy(
+      ping,
+      reminder,
+      isMine: isMine,
+      partnerName: partnerName,
+      now: at ?? DateTime.now(),
+    );
+
+    final details = NotificationDetails(
+      android: AndroidNotificationDetails(
+        rings
+            ? _alarmChannelId
+            : isDue
+                ? _quietChannelId
+                : _countdownChannelId,
+        rings
+            ? 'Reminder alarms'
+            : isDue
+                ? 'Reminder notifications'
+                : 'Reminder countdown',
+        importance: rings
+            ? Importance.max
+            : isDue
+                ? Importance.defaultImportance
+                : Importance.high,
+        priority: rings
+            ? Priority.max
+            : isDue
+                ? Priority.defaultPriority
+                : Priority.high,
+        // `alarm` (not `reminder`) is what tells the OS this may interrupt
+        // like a clock; `reminder` is explicitly the gentler class.
+        category: rings
+            ? AndroidNotificationCategory.alarm
+            : AndroidNotificationCategory.reminder,
+        // The countdown, on the collapsed row beside the app name. It goes
+        // here rather than in the title because Android never truncates
+        // subText and does truncate a long title.
+        subText: copy.subText,
+        ticker: copy.ticker,
+        // WARNING: a live counter ticking down inside the notification, so a
+        // glance answers "how long have I got" without opening anything —
+        // and it stays right in the gaps between pings.
+        when: counts ? due.millisecondsSinceEpoch : null,
+        usesChronometer: counts,
+        chronometerCountDown: counts,
+        // Tints the icon and title. Cheap, and it is what makes these read
+        // as one running thread rather than seven unrelated banners.
+        color: _brand,
+        sound: rings
+            ? const RawResourceAndroidNotificationSound(_alarmSound)
+            : null,
+        audioAttributesUsage: rings
+            ? AudioAttributesUsage.alarm
+            : AudioAttributesUsage.notification,
+        vibrationPattern: rings ? _vibrationPattern : null,
+        // Takes over the screen instead of arriving as a heads-up strip.
+        // Only the real thing does. A full-screen takeover every five
+        // minutes for an hour is what makes somebody turn the feature off.
+        fullScreenIntent: rings,
+        // An alarm you can swipe away is a notification. Snooze and Done
+        // are the only exits.
+        ongoing: rings,
+        autoCancel: !rings,
+        actions: rings
+            ? <AndroidNotificationAction>[
+                AndroidNotificationAction(
+                  actionSnooze,
+                  'Snooze ${kSnoozeDuration.inMinutes} min',
+                  // Handled in the background isolate — the app must not
+                  // have to come to the foreground just to snooze.
+                  showsUserInterface: false,
+                  cancelNotification: true,
+                ),
+                const AndroidNotificationAction(
+                  actionDone,
+                  'Done',
+                  showsUserInterface: false,
+                  cancelNotification: true,
+                ),
+              ]
+            : null,
+      ),
+      iOS: DarwinNotificationDetails(
+        presentAlert: true,
+        presentSound: true,
+        subtitle: copy.subText,
+        // WARNING: iOS gets the DEFAULT sound, not alarm.wav. The file lives
+        // in Android's res/raw and would have to be added to the Runner
+        // target in Xcode to exist on iOS at all — exactly the same gap as
+        // heartbeat.wav. Naming it here without doing that would fall back
+        // to the default chime anyway, just less visibly.
+        //
+        // iOS also has no full-screen intent and no alarm audio stream for
+        // local notifications, so timeSensitive (which does pierce Focus
+        // modes) is genuinely as close to an alarm as a third-party app gets
+        // without a push backend. A real iOS alarm is the system Clock app.
+        interruptionLevel: rings
+            ? InterruptionLevel.timeSensitive
+            : InterruptionLevel.active,
+      ),
+    );
+
+    final payload = isDue
+        ? '$_payloadPrefix${reminder.id}'
+        : '$_countdownPrefix${reminder.id}';
+
+    if (at == null) {
+      await _plugin.show(
+        id: id,
+        title: copy.title,
+        body: copy.body,
+        notificationDetails: details,
+        payload: payload,
+      );
+      return;
+    }
 
     await _plugin.zonedSchedule(
-      id: _notificationId(reminder.id),
-      title: '${reminder.emoji}  ${reminder.title}',
-      body: reminder.note?.trim().isNotEmpty == true
-          ? reminder.note!.trim()
-          : (alarm ? 'Time to get up' : 'A reminder from Dayflower'),
+      id: id,
+      title: copy.title,
+      body: copy.body,
       // `tz.local` is UTC here — nothing calls `setLocalLocation`, and no
       // package in the project reads the device zone. It doesn't matter:
       // `TZDateTime.from` preserves the *instant*, and the instant is what
       // the OS schedules against. Only `matchDateTimeComponents` reasons
       // about wall-clock fields, and daily/weekly repeats land on the same
       // instant either way.
-      scheduledDate: tz.TZDateTime.from(when, tz.local),
-      notificationDetails: NotificationDetails(
-        android: AndroidNotificationDetails(
-          alarm ? _alarmChannelId : _quietChannelId,
-          alarm ? 'Reminder alarms' : 'Reminder notifications',
-          importance: alarm ? Importance.max : Importance.defaultImportance,
-          priority: alarm ? Priority.max : Priority.defaultPriority,
-          // `alarm` (not `reminder`) is what tells the OS this may interrupt
-          // like a clock; `reminder` is explicitly the gentler class.
-          category: alarm
-              ? AndroidNotificationCategory.alarm
-              : AndroidNotificationCategory.reminder,
-          sound: alarm
-              ? const RawResourceAndroidNotificationSound(_alarmSound)
-              : null,
-          audioAttributesUsage: alarm
-              ? AudioAttributesUsage.alarm
-              : AudioAttributesUsage.notification,
-          vibrationPattern: alarm ? _vibrationPattern : null,
-          // Takes over the screen instead of arriving as a heads-up strip.
-          fullScreenIntent: alarm,
-          // An alarm you can swipe away is a notification. Snooze and Done
-          // are the only exits.
-          ongoing: alarm,
-          autoCancel: !alarm,
-          actions: <AndroidNotificationAction>[
-            AndroidNotificationAction(
-              actionSnooze,
-              'Snooze ${kSnoozeDuration.inMinutes} min',
-              // Handled in the background isolate — the app must not have
-              // to come to the foreground just to snooze.
-              showsUserInterface: false,
-              cancelNotification: true,
-            ),
-            const AndroidNotificationAction(
-              actionDone,
-              'Done',
-              showsUserInterface: false,
-              cancelNotification: true,
-            ),
-          ],
-        ),
-        iOS: DarwinNotificationDetails(
-          presentAlert: true,
-          presentSound: true,
-          // ⚠️ iOS gets the DEFAULT sound, not alarm.wav. The file lives in
-          // Android's res/raw and would have to be added to the Runner
-          // target in Xcode to exist on iOS at all — exactly the same gap
-          // as heartbeat.wav. Naming it here without doing that would fall
-          // back to the default chime anyway, just less visibly.
-          //
-          // iOS also has no full-screen intent and no alarm audio stream
-          // for local notifications, so timeSensitive (which does pierce
-          // Focus modes) is genuinely as close to an alarm as a
-          // third-party app gets without a push backend. A real iOS alarm
-          // is the system Clock app.
-          interruptionLevel: alarm
-              ? InterruptionLevel.timeSensitive
-              : InterruptionLevel.active,
-        ),
-      ),
+      scheduledDate: tz.TZDateTime.from(at, tz.local),
+      notificationDetails: details,
       // Exact alarms survive doze; a reminder that fires an hour late
       // because the phone was idle is a reminder that failed. Silently
       // degrades to inexact without SCHEDULE_EXACT_ALARM — see
       // [ensureAlarmPermissions].
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      matchDateTimeComponents: _repeatComponents(reminder.repeat),
-      payload: '$_payloadPrefix${reminder.id}',
+      // Only the reminder itself repeats. See the note in _schedule.
+      matchDateTimeComponents:
+          isDue ? _repeatComponents(reminder.repeat) : null,
+      payload: payload,
     );
   }
+
+  /// The brand pink, spelled out rather than imported: app_colors.dart is a
+  /// UI file and this one is loaded by the background isolate too.
+  static const _brand = Color(0xFFEE6FA8);
 
   /// Monthly has no `DateTimeComponents` equivalent, so it schedules as a
   /// single alarm and is rolled forward by
@@ -382,6 +617,25 @@ class ReminderScheduler {
   /// takes a signed int.
   static int _notificationId(String reminderId) =>
       reminderId.hashCode & 0x7fffffff;
+
+  /// A stable id per reminder *and* per beat of its run-up.
+  ///
+  /// WARNING: the due ping keeps [_notificationId] unchanged, because
+  /// [stopRinging] cancels by that id and the background isolate computes it
+  /// from the reminder id alone. Only the run-up gets derived ids.
+  ///
+  /// The salt keeps each beat of the run-up distinct, so "in 3 hours" and
+  /// "in 1 hour" cannot collide and silently replace one another.
+  static int _pingId(String reminderId, ReminderPing ping) {
+    if (ping.kind == ReminderPingKind.due) return _notificationId(reminderId);
+    final salt = switch (ping.kind) {
+      ReminderPingKind.hours => 1000 + ping.remaining.inHours,
+      // The "just set" ping is posted immediately and never scheduled, so
+      // it only needs an id nothing else uses.
+      _ => 3000,
+    };
+    return (reminderId.hashCode ^ (salt * 2654435761)) & 0x7fffffff;
+  }
 }
 
 /// What an alarm is actually allowed to do on this device. Reported field
@@ -436,6 +690,14 @@ void handleNotificationTap(NotificationResponse response) {
   final reminderId = ReminderScheduler.reminderIdOf(response.payload);
   if (reminderId != null) {
     ringingReminderId.value = reminderId;
+    return;
+  }
+
+  // A run-up ping. It opens the list, NOT the ringing-alarm screen — there
+  // is nothing ringing yet, and a full-screen Snooze/Done for a reminder
+  // that is still an hour away would be nonsense.
+  if (ReminderScheduler.isCountdown(response.payload)) {
+    AppNotifications.pendingRoute.value = ReminderScheduler.remindersRoute;
     return;
   }
 
