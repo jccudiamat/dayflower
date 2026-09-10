@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-export const metadata: Metadata = { title: "Terms of Service — Dayflower", description: "Terms for the Dayflower website, waitlist, and private-testing app." };
+export const metadata: Metadata = { title: "Terms of Service | Dayflower", description: "Terms for the Dayflower website, waitlist, and private-testing app." };
 const sections = [
 ["Public photo booth","The public website photo booth is free to use without an app account or waitlist signup. Use only photos you have permission to use, and obtain the agreement of people whose photos you share. Your images are processed in the browser. Save your export before closing or refreshing the page, because Dayflower does not keep a copy for recovery. Native sharing is subject to the capabilities and terms of the app you select."],
   [

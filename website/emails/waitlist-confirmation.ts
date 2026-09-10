@@ -3,7 +3,7 @@ export const text = `You’re on the list.
 
 Thanks for making a little room for Dayflower.
 
-Your waitlist signup is saved. We’re building a private app for two, with little ways to stay close — starting on your home screen.
+Your waitlist signup is saved. We’re building a private app for two, with little ways to stay close, starting on your home screen.
 
 What happens next?
 We’ll email you when Dayflower is ready to try. There’s no app account to create yet and no newsletter to keep up with.
@@ -30,7 +30,7 @@ export const html = `<!doctype html>
 <h1 style="margin:0;font-size:36px;line-height:1.15;color:#f5f2f8">You’re on the list.</h1>
 <p style="margin:18px 0 0;font-size:17px;line-height:1.6;color:#d9d0e4">Thanks for making a little room for us.</p></td></tr>
 <tr><td style="padding:32px">
-<p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#564a5e">Your waitlist signup is saved. We’re building a private app for two, with little ways to stay close — starting on your home screen.</p>
+<p style="margin:0 0 22px;font-size:16px;line-height:1.7;color:#564a5e">Your waitlist signup is saved. We’re building a private app for two, with little ways to stay close, starting on your home screen.</p>
 <h2 style="margin:0 0 10px;font-size:20px;color:#1c1024">What happens next?</h2>
 <p style="margin:0 0 26px;font-size:16px;line-height:1.7;color:#564a5e">We’ll email you when Dayflower is ready to try. There’s no app account to create yet and no newsletter to keep up with.</p>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="padding:24px;background:#fcedf4;border-radius:16px">

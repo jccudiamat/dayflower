@@ -37,7 +37,7 @@ export default function Home() {
                 </span>
               </h1>
               <p className="mt-5 max-w-md text-[15.5px] leading-relaxed text-on-dark-muted">
-                A private app for exactly two people — somewhere to land on
+                A private app for exactly two people. Somewhere to land on
                 each other every day when you can&rsquo;t be in the same room.
               </p>
               <div className="mt-8 scroll-mt-36 sm:scroll-mt-24" id="waitlist">

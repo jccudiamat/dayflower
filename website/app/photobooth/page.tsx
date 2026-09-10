@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   title: "Free Photo Booth, Collage & Photo Dump Maker | Dayflower",
   description: "Make scrapbook collages, photo dumps, postcards, and solo or couple photo strips. Add photos and save a story or feed-sized PNG. No login. Photos stay on your device.",
   alternates: { canonical: "https://mydayflower.com/photobooth" },
-  openGraph: { title: "Free Photo Booth — Dayflower", description: "Solo moments. Two-person keepsakes. Make a photo strip for free, without an account.", url: "https://mydayflower.com/photobooth", type: "website" },
+  openGraph: { title: "Free Photo Booth | Dayflower", description: "Solo moments. Two-person keepsakes. Make a photo strip for free, without an account.", url: "https://mydayflower.com/photobooth", type: "website" },
 };
 const faqs = [
   ["Is this online photo booth free?", "Yes. Create and download solo or couple photo strips without signing up or joining the waitlist."],

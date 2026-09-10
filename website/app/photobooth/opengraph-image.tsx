@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Dayflower free online photo booth — solo and couple photo strips";
+export const alt = "Dayflower free online photo booth for solo and couple photo strips";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
