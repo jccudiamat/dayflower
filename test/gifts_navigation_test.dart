@@ -34,7 +34,9 @@ const _capture = bool.fromEnvironment('CAPTURE_REVIEW');
 var _boundary = GlobalKey();
 
 Future<GoRouter> _pump(WidgetTester tester, String route,
-    {double width = 390, bool hasStart = true}) async {
+    {double width = 390,
+    bool hasStart = true,
+    Future<bool> Function(Uri)? openLink}) async {
   _boundary = GlobalKey();
   tester.view.physicalSize = Size(width, 844);
   tester.view.devicePixelRatio = 1;
@@ -44,9 +46,15 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
     GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
     GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
     GoRoute(path: Routes.events, builder: (_, __) => const EventsScreen()),
-    GoRoute(path: Routes.gifts, builder: (_, s) => GiftsScreen(occasion: s.uri.queryParameters['occasion'])),
+    GoRoute(
+        path: Routes.gifts,
+        builder: (_, s) => GiftsScreen(
+            occasion: s.uri.queryParameters['occasion'], openLink: openLink)),
     for (final route in [Routes.chat, Routes.flowers, Routes.activities])
-      GoRoute(path: route, builder: (_, __) => const Scaffold(body: Text('Existing destination'))),
+      GoRoute(
+          path: route,
+          builder: (_, __) =>
+              const Scaffold(body: Text('Existing destination'))),
   ]);
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox());
@@ -56,13 +64,19 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
     overrides: [
       currentUserIdProvider.overrideWithValue('preview-a'),
       currentPairProvider.overrideWith((ref) async => Pair(
-        id: 'preview', userA: 'preview-a', userB: 'preview-b', inviteCode: 'PREVIEW',
-        togetherSince: hasStart ? DateTime(2023, 9, 19) : null,
-      )),
-      userProfileProvider.overrideWith((ref) async => const UserProfile(id: 'preview-a', displayName: 'Alex', timezone: 'Asia/Dubai')),
-      partnerProfileProvider.overrideWith((ref) async => const UserProfile(id: 'preview-b', displayName: 'Jamie', timezone: 'Asia/Manila')),
+            id: 'preview',
+            userA: 'preview-a',
+            userB: 'preview-b',
+            inviteCode: 'PREVIEW',
+            togetherSince: hasStart ? DateTime(2023, 9, 19) : null,
+          )),
+      userProfileProvider.overrideWith((ref) async => const UserProfile(
+          id: 'preview-a', displayName: 'Alex', timezone: 'Asia/Dubai')),
+      partnerProfileProvider.overrideWith((ref) async => const UserProfile(
+          id: 'preview-b', displayName: 'Jamie', timezone: 'Asia/Manila')),
       unreadMessageCountProvider.overrideWithValue(0),
-      coupleStatsProvider.overrideWith((ref) async => const CoupleStats(hearts: 128, flowers: 42, photos: 36, streak: 7)),
+      coupleStatsProvider.overrideWith((ref) async =>
+          const CoupleStats(hearts: 128, flowers: 42, photos: 36, streak: 7)),
       callUsageProvider.overrideWith((ref) async => const CallUsage()),
       todayHeartbeatCountsProvider.overrideWithValue((mine: 0, partner: 0)),
       myDayPhotoProvider.overrideWithValue(null),
@@ -71,8 +85,12 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       unseenActivityCountProvider.overrideWithValue(0),
       activityLastSeenProvider.overrideWith((ref) async => null),
     ],
-    child: RepaintBoundary(key: _boundary,
-      child: MaterialApp.router(debugShowCheckedModeBanner: false, theme: AppTheme.light, routerConfig: router)),
+    child: RepaintBoundary(
+        key: _boundary,
+        child: MaterialApp.router(
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.light,
+            routerConfig: router)),
   ));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 400));
@@ -82,7 +100,8 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
 Future<void> _screenshot(WidgetTester tester, String name) async {
   if (!_capture) return;
   await tester.runAsync(() async {
-    final boundary = _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final boundary =
+        _boundary.currentContext!.findRenderObject()! as RenderRepaintBoundary;
     final image = await boundary.toImage();
     final data = await image.toByteData(format: ui.ImageByteFormat.png);
     final file = File('build/review/$name.png');
@@ -97,9 +116,11 @@ void main() {
   setUpAll(() async {
     tz.initializeTimeZones();
     SharedPreferences.setMockInitialValues({});
-    final fontCache = await Directory('build/review/fonts').create(recursive: true);
+    final fontCache =
+        await Directory('build/review/fonts').create(recursive: true);
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'),
+        .setMockMethodCallHandler(
+            const MethodChannel('plugins.flutter.io/path_provider'),
             (_) async => fontCache.absolute.path);
     HttpOverrides.global = null;
     GoogleFonts.config.allowRuntimeFetching = true;
@@ -108,17 +129,23 @@ void main() {
     await GoogleFonts.pendingFonts();
     for (final (family, asset) in [
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
-      ('packages/cupertino_icons/CupertinoIcons', 'packages/cupertino_icons/assets/CupertinoIcons.ttf'),
+      (
+        'packages/cupertino_icons/CupertinoIcons',
+        'packages/cupertino_icons/assets/CupertinoIcons.ttf'
+      ),
     ]) {
       await (FontLoader(family)..addFont(rootBundle.load(asset))).load();
     }
     final emoji = File('C:/Windows/Fonts/seguiemj.ttf');
     if (_capture && await emoji.exists()) {
-      await (FontLoader('Quicksand')..addFont(emoji.readAsBytes().then((b) => ByteData.sublistView(b)))).load();
+      await (FontLoader('Quicksand')
+            ..addFont(emoji.readAsBytes().then((b) => ByteData.sublistView(b))))
+          .load();
     }
   });
 
-  testWidgets('Home gift card opens contextual Gifts and back returns Home', (tester) async {
+  testWidgets('Home gift card opens contextual Gifts and back returns Home',
+      (tester) async {
     final router = await _pump(tester, Routes.home);
     await tester.scrollUntilVisible(find.byType(GiftOccasionCard), 250,
         scrollable: find.byType(Scrollable).first);
@@ -126,7 +153,8 @@ void main() {
     await _screenshot(tester, 'home');
     await tester.tap(find.text('Gift ideas'));
     await tester.pumpAndSettle();
-    final giftState = GoRouterState.of(tester.element(find.byType(GiftsScreen)));
+    final giftState =
+        GoRouterState.of(tester.element(find.byType(GiftsScreen)));
     expect(giftState.uri.path, Routes.gifts);
     expect(giftState.uri.queryParameters['occasion'], isNotNull);
     expect(find.textContaining('A gift for your'), findsOneWidget);
@@ -135,7 +163,9 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
-  testWidgets('Us opens intact Events with editor, clocks and reunion; back returns Us', (tester) async {
+  testWidgets(
+      'Us opens intact Events with editor, clocks and reunion; back returns Us',
+      (tester) async {
     final router = await _pump(tester, Routes.us);
     await _screenshot(tester, 'shared-profile');
     await tester.tap(find.text('Events'));
@@ -156,7 +186,8 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Gifts replaces Events in nav and fits narrow phones', (tester) async {
+  testWidgets('Gifts replaces Events in nav and fits narrow phones',
+      (tester) async {
     for (final width in [390.0, 320.0]) {
       await _pump(tester, Routes.gifts, width: width);
       expect(find.text('Gifts'), findsNWidgets(2));
@@ -164,40 +195,69 @@ void main() {
       expect(find.text('Gift us'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await _screenshot(tester, width == 390 ? 'gifts' : 'gifts-narrow');
-      await tester.scrollUntilVisible(find.text('Initial necklace'), 200,
+      await tester.scrollUntilVisible(find.text('Crochet flower bouquet'), 200,
           scrollable: find.byType(Scrollable).first);
       await tester.pumpAndSettle();
-      await tester.runAsync(() async => Future<void>.delayed(const Duration(milliseconds: 300)));
+      await tester.runAsync(
+          () async => Future<void>.delayed(const Duration(milliseconds: 300)));
       await tester.pumpAndSettle();
-      await _screenshot(tester, width == 390 ? 'gifts-products' : 'gifts-products-narrow');
+      await _screenshot(
+          tester, width == 390 ? 'gifts-products' : 'gifts-products-narrow');
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
     }
   });
 
-  testWidgets('Mock catalog search, saved ideas and Premium preview work', (tester) async {
-    await _pump(tester, Routes.gifts);
+  testWidgets(
+      'Shopee search, saved ideas, seller link and Premium preview work',
+      (tester) async {
+    Uri? opened;
+    await _pump(tester, Routes.gifts, openLink: (uri) async {
+      opened = uri;
+      return true;
+    });
     await tester.tap(find.text('View subscription'));
     await tester.pumpAndSettle();
-    expect(find.text('Subscriptions are not available yet. Nothing will be charged.'), findsOneWidget);
+    expect(
+        find.text(
+            'Subscriptions are not available yet. Nothing will be charged.'),
+        findsOneWidget);
     await _screenshot(tester, 'gift-us-subscription');
     await tester.tap(find.text('Got it'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'mugs');
     await tester.pumpAndSettle();
     expect(find.text('1 idea'), findsOneWidget);
-    await tester.scrollUntilVisible(find.byTooltip('Save A pair of mugs'), 200,
+    await tester.scrollUntilVisible(
+        find.byTooltip('Save Personalized couple mugs'), 200,
         scrollable: find.byType(Scrollable).first);
-    await tester.tap(find.byTooltip('Save A pair of mugs'));
+    await tester.tap(find.byTooltip('Save Personalized couple mugs'));
     await tester.pumpAndSettle();
-    expect(find.byTooltip('Unsave A pair of mugs'), findsOneWidget);
-    await tester.ensureVisible(find.text('View at retailer ↗'));
-    await tester.tap(find.text('View at retailer ↗'));
+    expect(find.byTooltip('Unsave Personalized couple mugs'), findsOneWidget);
+    await tester.ensureVisible(find.text('Open Shopee'));
+    await tester.tap(find.text('Open Shopee'));
     await tester.pumpAndSettle();
-    expect(find.text('A little preview'), findsOneWidget);
+    expect(opened?.host, 'shopee.ph');
+    expect(opened?.path, endsWith('i.380284623.28921400102'));
   });
 
-  testWidgets('Home without start date still offers Gifts and Events', (tester) async {
+  testWidgets('Failed seller link gives feedback', (tester) async {
+    await _pump(tester, Routes.gifts, openLink: (_) async => false);
+    await tester.enterText(find.byType(TextField), 'mugs');
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Open Shopee'), 200,
+        scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Open Shopee'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Shopee'));
+    await tester.pumpAndSettle();
+    expect(
+        find.text('Could not open Shopee. Please try again.'), findsOneWidget);
+  });
+
+  testWidgets('Home without start date still offers Gifts and Events',
+      (tester) async {
     await _pump(tester, Routes.home, hasStart: false);
     await tester.scrollUntilVisible(find.byType(GiftOccasionCard), 250,
         scrollable: find.byType(Scrollable).first);

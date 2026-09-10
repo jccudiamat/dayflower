@@ -1,22 +1,19 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../data/gift_catalog.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 
-// Sample inventory only: there are no purchase URLs or billing integrations.
-const _products = [
-  (name: 'Initial necklace', merchant: 'Jewellery retailer', price: 129),
-  (name: 'A pair of mugs', merchant: 'Homeware retailer', price: 85),
-  (name: 'A little calm', merchant: 'Lifestyle retailer', price: 65),
-  (name: 'Your story, in print', merchant: 'Photo gift retailer', price: 110),
-];
+const _products = giftProducts;
 
 class GiftsScreen extends StatefulWidget {
-  const GiftsScreen({super.key, this.occasion});
+  const GiftsScreen({super.key, this.occasion, this.openLink});
   final String? occasion;
+  final Future<bool> Function(Uri)? openLink;
   @override
   State<GiftsScreen> createState() => _GiftsScreenState();
 }
@@ -25,6 +22,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
   final _search = TextEditingController();
   final _saved = <int>{};
   String _recipient = 'All';
+  String _category = 'All types';
   int? _budget;
   bool _savedOnly = false;
   @override
@@ -33,35 +31,32 @@ class _GiftsScreenState extends State<GiftsScreen> {
     super.dispose();
   }
 
-  void _notice() => showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-          child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('A little preview', style: AppText.title()),
-                    const SizedBox(height: 12),
-                    Text(
-                        'These are sample products and prices. Retailer links will be available when the collection opens.',
-                        style: AppText.body()),
-                    TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Got it')),
-                  ]))));
+  Future<void> _openProduct(GiftProduct product) async {
+    var opened = false;
+    try {
+      final uri = Uri.parse(product.url);
+      opened = await (widget.openLink?.call(uri) ??
+          launchUrl(uri, mode: LaunchMode.externalApplication));
+    } catch (_) {
+      // Surface launch failures without losing the current filters or saves.
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Could not open Shopee. Please try again.'),
+      ));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final query = _search.text.trim().toLowerCase();
     final products = [
       for (var i = 0; i < _products.length; i++)
-        if ('${_products[i].name} ${_products[i].merchant}'
-                .toLowerCase()
-                .contains(query) &&
-            (_budget == null || _products[i].price <= _budget!) &&
+        if (_products[i].matches(
+                query: query,
+                recipient: _recipient,
+                category: _category,
+                budget: _budget) &&
             (!_savedOnly || _saved.contains(i)))
           i
     ];
@@ -137,16 +132,35 @@ class _GiftsScreenState extends State<GiftsScreen> {
                           const PopupMenuItem(
                               value: 0, child: Text('Any budget')),
                           const PopupMenuItem(
-                              value: 100, child: Text('Up to AED 100')),
+                              value: 200, child: Text('Up to ₱200')),
                           const PopupMenuItem(
-                              value: 150, child: Text('Up to AED 150'))
+                              value: 500, child: Text('Up to ₱500')),
+                          const PopupMenuItem(
+                              value: 1000, child: Text('Up to ₱1,000'))
                         ],
                     child: Chip(
                         label: Text(
-                            _budget == null ? 'Budget' : 'Up to AED $_budget'),
+                            _budget == null ? 'Budget' : 'Up to ₱$_budget'),
                         avatar: const Icon(CupertinoIcons.tag, size: 16))),
-                Text('Sample delivery: UAE', style: AppText.caption()),
+                Text('Shopee Philippines', style: AppText.caption()),
               ]),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final category in [
+                'All types',
+                ..._products.map((p) => p.category).toSet()
+              ])
+                Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                        label: Text(category),
+                        selected: _category == category,
+                        showCheckmark: false,
+                        onSelected: (_) =>
+                            setState(() => _category = category))),
+            ]),
+          ),
           if (widget.occasion?.isNotEmpty == true) ...[
             const SizedBox(height: 8),
             Text('A gift for your ${widget.occasion!.toLowerCase()}',
@@ -158,7 +172,9 @@ class _GiftsScreenState extends State<GiftsScreen> {
             Expanded(
                 child: Text(_savedOnly ? 'Saved gifts' : 'Thoughtful finds',
                     style: AppText.title())),
-            Text('${products.length} ${products.length == 1 ? 'idea' : 'ideas'}', style: AppText.caption())
+            Text(
+                '${products.length} ${products.length == 1 ? 'idea' : 'ideas'}',
+                style: AppText.caption())
           ]),
           const SizedBox(height: 4),
           Text(
@@ -166,7 +182,9 @@ class _GiftsScreenState extends State<GiftsScreen> {
                   ? 'For partners, family & friends'
                   : 'A little something for ${_recipient.toLowerCase()}',
               style: AppText.caption()),
-          Text('Sample products & prices', style: AppText.caption()),
+          Text(
+              'Prices checked $giftCatalogChecked. Prices, options and availability may change on Shopee.',
+              style: AppText.caption()),
           const SizedBox(height: 12),
           if (products.isEmpty)
             Padding(
@@ -191,7 +209,8 @@ class _GiftsScreenState extends State<GiftsScreen> {
                                 : _ProductCard(
                                     photo: products[j],
                                     saved: _saved.contains(products[j]),
-                                    onView: _notice,
+                                    onView: () =>
+                                        _openProduct(_products[products[j]]),
                                     onSave: () => setState(() {
                                           final id = products[j];
                                           if (!_saved.add(id)) {
@@ -202,7 +221,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                     ])),
           const SizedBox(height: 8),
           Text(
-              'Favourites are kept for this visit. When retailer links go live, Dayflower may earn a commission from purchases.',
+              'Favourites are kept for this visit. Product photos belong to the sellers. Orders and delivery are handled on Shopee.',
               style: AppText.caption(),
               textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -308,19 +327,11 @@ class _ProductCard extends StatelessWidget {
               aspectRatio: 1,
               child: Stack(children: [
                 Positioned.fill(
-                    child: ClipRect(
-                        child: LayoutBuilder(
-                            builder: (_, size) => Stack(children: [
-                                  Positioned(
-                                      left: -(photo % 2) * size.maxWidth,
-                                      top: -(photo ~/ 2) * size.maxHeight,
-                                      width: size.maxWidth * 2,
-                                      height: size.maxHeight * 2,
-                                      child: Image.asset(
-                                          'assets/images/gift-products-sample.png',
-                                          fit: BoxFit.fill,
-                                          excludeFromSemantics: true)),
-                                ])))),
+                    child: Image.asset(p.asset,
+                        fit: BoxFit.contain,
+                        semanticLabel: p.name,
+                        errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(CupertinoIcons.gift, size: 40)))),
                 Positioned(
                     top: 4,
                     right: 4,
@@ -344,11 +355,14 @@ class _ProductCard extends StatelessWidget {
                     Text(p.name, style: AppText.subtitle()),
                     const SizedBox(height: 4),
                     Text(p.merchant, style: AppText.caption()),
+                    Text(p.category,
+                        style: AppText.caption(AppColors.secondary)),
                     const SizedBox(height: 6),
-                    Text('AED ${p.price}', style: AppText.subtitle()),
+                    Text(p.priceLabel, style: AppText.subtitle()),
+                    if (p.voucher)
+                      Text('After voucher', style: AppText.caption()),
                   ])),
-          TextButton(
-              onPressed: onView, child: const Text('View at retailer ↗')),
+          TextButton(onPressed: onView, child: const Text('Open Shopee')),
         ]));
   }
 }
