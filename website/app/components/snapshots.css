@@ -19,7 +19,7 @@
 
 /* ── Device frames for the snapshot rail ────────────────────────────────── */
 .phone-body {
-  width: 296px;
+  width: min(296px, calc(100vw - 64px));
   padding: 9px;
   border-radius: 46px;
   background: linear-gradient(155deg, #4a4158, #17121f 42%, #322b44);

@@ -19,21 +19,18 @@ export default function Home() {
       <main id="top">
         {/* ── Hero ──────────────────────────────────────────────────────── */}
         <section className="bg-dark-canvas text-on-dark">
-          <div className="mx-auto grid max-w-5xl items-center gap-14 px-5 py-20 sm:py-28 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="mx-auto grid max-w-5xl items-center gap-9 px-5 py-10 sm:gap-14 sm:py-20 lg:grid-cols-[1.05fr_0.95fr]">
             <div>
               <p className="mb-5 inline-flex items-center gap-2 rounded-full border border-dark-border bg-dark-surface px-4 py-1.5 text-xs font-semibold text-on-dark-muted">
                 In private testing
               </p>
-              {/* min-height reserves the tallest wrap. Without it a long word
-                  ("reminder") pushes the headline onto an extra line on
-                  narrow screens and the paragraph and form below it jump
-                  every time the word changes. 1.25 = leading-tight, so 5em is
-                  four lines and 2.5em is two. */}
-              <h1 className="min-h-[5em] text-4xl font-bold leading-tight sm:min-h-[2.5em] sm:text-5xl">
+              {/* Keep the mobile headline stable; animate only on wider screens. */}
+              <h1 className="text-[clamp(28px,8.2vw,32px)] font-bold leading-[1.18] sm:min-h-[2.5em] sm:text-5xl sm:leading-tight">
                 <span className="sr-only">
                   One flower a day, across any distance.
                 </span>
-                <span aria-hidden>
+                <span aria-hidden className="sm:hidden">One <span className="gradient-text">flower</span> a day,<br />across any distance.</span>
+                <span aria-hidden className="hidden sm:inline">
                   One <RotatingWord words={headlineWords} /> a day,
                   <br />
                   across any distance.
@@ -44,6 +41,11 @@ export default function Home() {
                 each other every day when you can&rsquo;t be in the same room.
               </p>
               <div className="mt-8 scroll-mt-36 sm:scroll-mt-24" id="waitlist">
+                <div className="mb-7 sm:hidden">
+                  <Link href="/photobooth" className="gradient-button !h-12 !px-6">Make a photo strip ↗</Link>
+                  <p className="mt-2 text-xs text-on-dark-muted">Free photo booth · No account needed</p>
+                </div>
+                <p className="mb-3 text-sm font-semibold text-on-dark-muted sm:hidden">Want the app? Join the waitlist.</p>
                 <WaitlistForm dark />
                 <p className="mt-3 pl-1 text-xs text-on-dark-muted">
                   Free at launch. A confirmation now, a launch email when it&rsquo;s ready.
@@ -63,7 +65,7 @@ export default function Home() {
             <p className="text-sm font-bold text-brand-dark">TRY SOMETHING TOGETHER</p>
             <h2 id="free-booth-title" className="mt-3 text-3xl font-bold">Your next photo strip starts here.</h2>
             <p className="my-5 max-w-xl leading-relaxed text-body">A solo moment or a keepsake for two. Take or upload photos, choose a frame, and save your strip. Free, with no account required.</p>
-            <Link href="/photobooth" className="gradient-button">Open the free photo booth</Link>
+            <Link href="/photobooth" className="gradient-button !max-w-full !whitespace-normal text-center">Open the photo booth ↗</Link>
           </div>
         </section>
         <ProductTour />
