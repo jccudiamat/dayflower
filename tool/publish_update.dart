@@ -6,6 +6,7 @@
 //
 // Flags:
 //   -n, --note <text>   Release note bullet. Repeat for several.
+//                       REQUIRED — see --no-notes.
 //   --build <n>         Build number to publish as. Default: current + 1.
 //   --min <n>           Oldest build still allowed to keep running. Set this
 //                       to <n> to make the update unskippable for anyone
@@ -14,6 +15,7 @@
 //                       is every phone made since roughly 2016. Others:
 //                       armeabi-v7a (old 32-bit), x86_64 (emulators).
 //   --skip-build        Upload the APK already in build/, don't recompile.
+//   --no-notes          Publish with an empty note list, deliberately.
 //   --dry-run           Do everything except upload.
 //
 // Credentials come from `.publish.env` (gitignored, and NOT a Flutter asset
@@ -95,6 +97,26 @@ Future<void> _publish(List<String> args) async {
         '  cmd /c "echo SUPABASE_SERVICE_ROLE_KEY=<paste> > .publish.env"',
       );
     }
+  }
+
+  // 🔴 **Notes are required, and this check is why.** Builds 53 through 64
+  // all shipped with `"notes": []`, because leaving `-n` off is silent and
+  // the update screen simply renders nothing where the changes should be —
+  // the person tapping "Update now" is told the size and the number and not
+  // one word about what they are getting. Nothing failed, so nobody noticed
+  // for eleven builds.
+  //
+  // ⚠️ `--no-notes` still exists, because a genuine no-op rebuild is a real
+  // thing. It just has to be said out loud rather than happening by default.
+  if (options.notes.isEmpty && !options.noNotes) {
+    _fail(
+      'No release notes. The update screen shows them to whoever is about '
+      'to install this, and with none it says nothing about what changed.\n\n'
+      'Add one or more:\n'
+      '  dart run tool/publish_update.dart -n "Reminders now count down"\n\n'
+      'Or say you mean it:\n'
+      '  dart run tool/publish_update.dart --no-notes',
+    );
   }
 
   // ── 1. Work out which build number we're publishing ──────────
@@ -357,6 +379,7 @@ String _decodeUtf16(List<int> bytes, {required bool littleEndian}) {
 class _Options {
   _Options({
     required this.notes,
+    required this.noNotes,
     required this.build,
     required this.minBuild,
     required this.skipBuild,
@@ -371,6 +394,9 @@ class _Options {
   final String abi;
 
   final List<String> notes;
+
+  /// Publishing with nothing to say, on purpose.
+  final bool noNotes;
   final int? build;
   final int minBuild;
   final bool skipBuild;
@@ -381,6 +407,7 @@ class _Options {
     int? build;
     var minBuild = 0;
     var skipBuild = false;
+    var noNotes = false;
     var dryRun = false;
     var abi = _defaultAbi;
 
@@ -403,6 +430,8 @@ class _Options {
             _fail('Unknown --abi "$abi". '
                 'One of: ${_targetPlatforms.keys.join(", ")}.');
           }
+        case '--no-notes':
+          noNotes = true;
         case '--skip-build':
           skipBuild = true;
         case '--dry-run':
@@ -414,6 +443,7 @@ class _Options {
 
     return _Options(
       notes: notes,
+      noNotes: noNotes,
       build: build,
       minBuild: minBuild,
       skipBuild: skipBuild,

@@ -3126,3 +3126,38 @@ found.
   per ping, so there is nothing for `matchDateTimeComponents` to match. The
   next occurrence's run-up is scheduled the next time the app opens.
 
+## The updater said nothing about what changed (2026-09-10)
+
+🔴 **Builds 53 to 64 all shipped `"notes": []`.** The update screen renders
+release notes perfectly well — `release.notes.take(3)` has been there the
+whole time — but `publish_update.dart` takes them from `-n` flags and every
+publish left them off. Nothing failed, so nobody noticed for eleven builds:
+the person tapping "Update now" was told the version, the build number and
+the size, and not one word about what they were getting.
+
+⚠️ The tool now **refuses to publish without notes**. `--no-notes` still
+exists, because a genuine no-op rebuild is real — it just has to be said out
+loud instead of being the default. Build 64's `latest.json` was re-uploaded
+with its notes so the update already waiting on the phones shows them.
+
+## Widget flower artwork: the fix is in, the phone was not
+
+Reported again on a phone that was being *offered* build 64 — so it was
+running something older, and older is where the emoji-only rendering lives.
+
+Checked rather than assumed, on the shipped build 64 APK:
+
+- `widget_flower_art` is in the compiled layout resources.
+- `flower_art` and `loadFlowerArt` are in `classes.dex`.
+- `flower_art` and `day_photo_flower_` are in the Dart snapshot.
+- `test/flower_art_bundle_test.dart` (new) proves every pickable flower
+  actually **loads through `rootBundle`** under its asset key. ⚠️ That was
+  the one silent failure mode left: `_cacheFlowerArt` catches, returns null,
+  and the widget quietly falls back to the glyph — indistinguishable from
+  the original bug. A file on disk is not the same as a key in the bundle;
+  only the `assets:` list makes it so.
+
+⚠️ Independent evidence the installed build is old: the widget in the report
+shows **no story header** — no avatar, no name — and a flower has carried one
+since before this fix.
+
