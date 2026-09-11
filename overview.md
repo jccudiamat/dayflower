@@ -441,7 +441,7 @@ All `TODO: Replace with Supabase` comments mark mock data insertion points in th
 
 ### Connection & Communication
 
-**2Lip Chat**
+**Dayflower Chat**
 A dedicated sacred channel separate from WhatsApp/iMessage. Not a replacement for everyday messaging — reserved for important moments: celebrations, heartfelt voice messages, milestone announcements, and love letters. Treated with more ceremony than a normal chat.
 
 **Affirmations after a fight**

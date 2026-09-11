@@ -181,13 +181,13 @@ unbounded-write shape and the one to watch next.
 ## How to run
 
 - Dev server: `preview_start` with name `flutter web` (config in `.claude/launch.json`) → `flutter run -d web-server --web-port 8770`. **Hot reload doesn't apply Dart changes** — restart the server after edits. ⚠️ Port was 8765, changed to **8770** on 2026-08-01: Windows had reserved 8765 in an excluded port range, so the bind failed outright.
-- **Dev auto-login** (`lib/core/dev/dev_login.dart`) — **currently ON**; observed signing in as `twolip.test.partner@gmail.com` on 2026-08-01. (This doc previously claimed it was off.) When true, debug builds sign in with `DEV_EMAIL`/`DEV_PASSWORD` from `.env` (the Sheena test account) and open straight on the Nest, skipping login. Guarded by `kDebugMode` + `kDevAutoLogin` + presence of the env keys, so it can never run in a release build.
+- **Dev auto-login** (`lib/core/dev/dev_login.dart`) — **currently ON**; observed signing in as the configured test-partner account (`DEV_EMAIL`) on 2026-08-01. (This doc previously claimed it was off.) When true, debug builds sign in with `DEV_EMAIL`/`DEV_PASSWORD` from `.env` (the Sheena test account) and open straight on the Nest, skipping login. Guarded by `kDebugMode` + `kDevAutoLogin` + presence of the env keys, so it can never run in a release build.
   - **Gotcha:** flipping the flag to false does *not* sign you out — Supabase persists the session in browser localStorage. To actually reach the login screen, also clear it: `Object.keys(localStorage).filter(k=>k.startsWith('sb-')).forEach(k=>localStorage.removeItem(k))` then reload.
 - Give the app ~15–20s after load before judging the UI: cards render empty (partner "—", clocks −8h) until `currentPairProvider` resolves. That's load state, not a bug.
 - The user interacts with the preview pane directly; automated clicking on the Flutter canvas is unreliable (glass-pane coordinate hack works sometimes; the user testing manually is faster).
 - `flutter analyze lib` is the check before every server restart — keep it at zero errors/warnings.
 
-## Renamed Twolip -> Dayflower (2026-08-30)
+## Dayflower rebrand (2026-08-30)
 
 Product decision: **stays a couple app** — the inner-circle/family pivot was considered and declined. Only the name changed. Done before any launch, which is the cheapest this could ever be: nothing published, no users, no store listing.
 
@@ -196,21 +196,21 @@ Why Dayflower: it keeps the floral identity (the flower catalog and artwork are 
 ⚠️ Know the etymology: *Commelina communis* blooms open in the morning and wither the same day — in Japanese poetry (*tsuyukusa*) it is a stock symbol of transience. Chosen deliberately: the flower lasts a day, the record lasts forever, which is what Chapters accumulates.
 
 **What changed**
-- Dart package `twolip` -> `dayflower`; `TwoLipApp` -> `DayflowerApp`; `TwolipWidgets` -> `DayflowerWidgets`; `twolipWidgetBackground` -> `dayflowerWidgetBackground`.
-- **applicationId / namespace / iOS+macOS bundle id: `com.example.twolip` -> `com.dayflower.app`.** Kotlin package directory physically moved to `com/dayflower/app/`; `TwolipWidget` -> `DayflowerWidget` (class, file, and `@xml/dayflower_widget_info`).
-- Deep links `twolip://` -> `dayflower://`. Widget provider strings in `widget_sync.dart` match the manifest exactly — they are matched by string, so they must move together or widget taps die silently.
+- Dart package: `dayflower`; app class: `DayflowerApp`; widgets: `DayflowerWidgets`; background handler: `dayflowerWidgetBackground`.
+- **Application ID, namespace, and iOS/macOS bundle ID: `com.dayflower.app`.** Kotlin package directory: `com/dayflower/app/`; widget class: `DayflowerWidget`, with `@xml/dayflower_widget_info`.
+- Deep links use `dayflower://`. Widget provider strings in `widget_sync.dart` match the manifest exactly — they are matched by string, so they must move together or widget taps die silently.
 - Display names capitalised ("Dayflower") while binary/project names stay lowercase (`dayflower`), which is the Flutter convention.
 
 **Deliberately NOT renamed** — changing any of these breaks something real:
-- `twolip.test.partner@gmail.com` and the `<see DEV_PASSWORD in .env>` password — a real Gmail account.
+- the configured test-partner account (`DEV_EMAIL`) and the `<see DEV_PASSWORD in .env>` password — a real Gmail account.
 - Notification channel ids (`heartbeat_pulse_v1`, `reminders_v1`) — Android freezes channel settings at creation; renaming silently resets users' sound/vibration prefs for no gain.
 - home_widget data keys (`tulip_emoji`, `beat_mine`, ...) — matched by string against the Kotlin providers.
-- The on-disk project directory, still `dev/twolip`. Renaming it breaks the working directory, launch configs and scratchpad paths. Optional follow-up.
+- The outer workspace directory requires closing active tools before moving it and repairing linked Git worktrees.
 - Supabase project ref and all table/column names.
 
 **Verified:** `flutter analyze` clean, and `flutter build apk --debug` succeeds. `aapt2` on the built APK confirms package `com.dayflower.app`, label `Dayflower`, scheme `dayflower`, all three widget providers under the new package, and `HomeWidgetBackgroundReceiver` still declared (its absence is what killed widget taps once before).
 
-🔴 **Still says Twolip: the artwork.** `assets/images/logo.png` is a squircle whose wordmark reads "2lip", and every launcher icon is generated from it. `AppColors.wordmark` / `wordNum` exist only to match that lettering. Until the logo is redrawn, the app icon on a phone home screen still says the old name. After replacing it: `dart run flutter_launcher_icons`.
+**Artwork:** the coral tulip mark replaced the former wordmark in commit `2550d7f`. The launcher icons use the Dayflower artwork.
 
 ⚠️ A **backup of the whole repo before the rename** is at `scratchpad/backup-pre-rename/` (370 files). This project has **no version control** — if the rename needs undoing, that copy is the only way back.
 
@@ -1132,7 +1132,7 @@ Also added `finance_recurring_budget_only_on_expense` — finance_entries had th
 
 **Not yet built:** the salary→% plan, and Insights charts.
 
-**Live data note:** entries were cleared 2026-08-31 at the user's request (backup in `backups/`). Both accounts (`E&`, `Dragonfi`, AED) are owned by **twolip.test.partner** because the debug build auto-logs-in as them, while entries had been created as **jccudiamat55**. Signed in as the primary user, Finance shows no accounts — they are the partner's and now private. Not a bug, but it looks like one.
+**Live data note:** entries were cleared 2026-08-31 at the user's request (backup in `backups/`). Both accounts (`E&`, `Dragonfi`, AED) are owned by **the configured test partner** because the debug build auto-logs-in as them, while entries had been created as **jccudiamat55**. Signed in as the primary user, Finance shows no accounts — they are the partner's and now private. Not a bug, but it looks like one.
 
 ## Finances (Activities → Finances) — 2026-08-29
 
@@ -1438,7 +1438,7 @@ Messages, day photos and activity now raise a notification on the receiving phon
 ## Accounts & test data
 
 - **User:** jccudiamat55@gmail.com — profile "jessie" / nickname "hubby", id `3f41e37d-0880-4371-8e07-b4ec6bc9b5f3`.
-- **Test partner:** twolip.test.partner@gmail.com / password `<see DEV_PASSWORD in .env>` (the literal string — predates the Dayflower rebrand, do not "fix" it), profile "Sheena", id `ee6681c4-7711-4795-80d7-8aa664a65ed0`.
+- **Test partner:** credentials from `DEV_EMAIL` / `DEV_PASSWORD` in `.env`, profile "Sheena", id `ee6681c4-7711-4795-80d7-8aa664a65ed0`.
 - **Pair:** id `0f3f7069-bdca-47f5-900b-f3651401212d`, invite code `BMXQNW`, linked.
 - **`.gitignore` was broken until 2026-07-26**: the `.env` line had been appended as UTF-16 (`2e 00 65 00 6e 00 76 00`), so it matched nothing and secrets were NOT ignored. Rewritten as clean ASCII. If you ever append to it from PowerShell, use `-Encoding utf8`.
 - **Two-sided testing pattern:** get a token with `POST /auth/v1/token?grant_type=password` as the test partner, then hit `/rest/v1/...` with curl to simulate the partner while the user watches the preview. (Windows shell mangles emoji in curl JSON bodies — avoid emoji in test payloads.)
@@ -1478,7 +1478,7 @@ Messages, day photos and activity now raise a notification on the receiving phon
   - `PolaroidStack.tsx` copies the app's Classic Polaroid **by measurement, not by eye** (booth_screen.dart § `_PolaroidFrame`): #FFFEF8 paper, **4px** card radius, **2px** slot radius, the two-layer shadow, caption #3A2A20 at 0.3 letter-spacing. The app's duo template splits the slot in two; the site uses one slot, because a bloom is one picture.
   - Two bugs worth remembering, both invisible on a desktop mouse: the top card advanced on `pointerup` only, so **keyboard users could not advance it** (Enter/Space fires `click` with no pointer events — `e.detail === 0` is what separates the two); and the rotator's width was measured on a grid item *inside* the very box being sized, so it could only ever shrink and "photo" rendered as "phot" — `width: max-content` on the word breaks the loop.
   - The h1 carries `min-h-[5em] sm:min-h-[2.5em]`. Without it a long word rewraps the headline on a phone and the form below it jumps every 2.4s. Verified stable by sampling the form's `top` across several word changes.
-- **Brand mark is on the site.** `assets/images/mark.png` (transparent cutout) → `website/public/mark.png` for the nav and footer; `assets/images/logo.png` (peach square) → `website/app/icon.png` + `apple-icon.png`, and the old `app/favicon.ico` was deleted so Next generates the tags from those. ⚠️ **PROGRESS's old "the artwork still says 2lip" warning was stale** — commit 2550d7f replaced it; the mark is the coral tulip now.
+- **Brand mark is on the site.** `assets/images/mark.png` (transparent cutout) → `website/public/mark.png` for the nav and footer; `assets/images/logo.png` (peach square) → `website/app/icon.png` + `apple-icon.png`, and the old `app/favicon.ico` was deleted so Next generates the tags from those. The earlier artwork warning was stale — commit 2550d7f replaced it; the mark is the coral tulip now.
 - **The 2026-09-05 rebuild (now superseded) replaced the 2026-07-28 overview.md mirror.** That version was 12 sections long and promised the *vision*: a 31-item roadmap, a pricing table for a Premium tier that has no billing behind it, a competitive matrix, and a 7-flower catalog three months out of date. It now reads as a sneak peek — hero (a real flower message) · 5-screen snapshot rail · 3 pillars · 6 shipped features · the bloom grid · 3-step setup + an honest "still on the way" row · CTA.
 - ⚠️ **`overview.md` is no longer the source for the site.** Copy now comes from § Feature status in this file and from the screens themselves. If a feature isn't built, it goes in `later` (the "still on the way" chips), never in `features`.
 - **The snapshots are recreations, not captures.** `app/components/Snapshots.tsx` rebuilds five screens (Flowers · Home · Calling · Us · Activities) in HTML against the same tokens the app uses, inside a CSS phone frame. Chosen over real screenshots because the Flutter web build takes minutes to paint, automated taps on its canvas are unreliable (see § How to run), and a capture would carry a test account's data. **They will drift** — when a screen changes materially, change the mock or drop it. Fidelity notes baked in: bubbles are `blush`/`blushMid`, not the gradient; the chat has no bottom nav (composer instead) while Us and Activities do, matching `AppBottomNav` in each screen.

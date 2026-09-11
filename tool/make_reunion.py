@@ -7,9 +7,10 @@ illustration fades into whatever is behind it, at any card width.
 """
 from PIL import Image
 import os
+from pathlib import Path
 
 SRC = r'C:\Users\jccud\.claude\uploads\ce9fdc26-434d-4f06-b877-0f0350378016\733a755c-image.jpg'
-OUT = r'C:\Users\jccud\dev\twolip\assets\images\reunion.png'
+OUT = Path(__file__).resolve().parents[1] / 'assets' / 'images' / 'reunion.png'
 
 im = Image.open(SRC).convert('RGBA')
 
