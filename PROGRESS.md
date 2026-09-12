@@ -1468,6 +1468,11 @@ Messages, day photos and activity now raise a notification on the receiving phon
 
 ### Bouquet builder (`website/app/bouquet/`)
 
+- 🔴 **The taper clip was eating flowers whenever the wrapper was resized.** Its *sides* are drawn under `wrapTransform` on purpose — they should follow the paper — but its **opening** was following too. At `wrapScale` 0.81 the mouth fell from y=100 to **y=212**, swallowing 76px of blooms that shrink-to-fit had already made room for. Invisible until someone resizes their wrapper, which is why neither the earlier fix nor a synthetic reproduction caught it.
+  - The mouth is now placed wherever it must sit *before* the transform to land off-card *after* it, so it opens at any `wrapScale`. The card's own rect clip bounds the top, and that one does not move.
+  - **How it was found:** disabling both clips and diffing the render. Clipped, the first art row was 244; unclipped, 168. That 76px gap named the culprit in one step after a lot of fruitless squinting at screenshots — reach for the diff sooner.
+  - ⚠️ Regression guard when touching this: at `wrapScale` 1.05 a real gift must still show **no** stray leaves beside the tie (sample canvas rows around y=620, x<200 and x>520).
+
 - 🔴 **Tall bouquets were being cut off at the top, and the header could never have bought back enough room.** A stem may sit as high as y=490 at scale 1.15, which puts a bloom tip *off the top of the card*; a real gift was overshooting the y=112 clip by 25px. `fitScale()` now measures the tallest bloom (and photo corner, allowing for tilt) and, if it breaks `FIT_CEILING`, scales the whole arrangement about the tie so it fits. Render-time only — stored bouquets are never rewritten, they just stop being clipped.
   - ⚠️ **`point()` applies the inverse.** Without it every drag lands offset from the flower under the finger by exactly that factor. Wrapper, taper clip, flowers, photos and grips all sit inside the one transform, or the paper and its contents drift apart.
   - The header also moved up (title 49→42, name 94→86, clip 112→100), which keeps the shrink small rather than doing the work alone.

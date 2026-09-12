@@ -522,8 +522,19 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     // paper, then the transform is undone before clipping — the current path
     // is not part of the state save/restore touches, so it survives with its
     // points already resolved, and the flowers that follow draw untransformed.
+    // 🔴 The *sides* of the taper must follow the wrapper — that is the whole
+    // point of drawing it under the same transform. Its **opening must not**.
+    // A fixed top edge gets dragged down with the paper: at wrapScale .81 it
+    // fell from y=100 to y=212 and started eating blooms that shrink-to-fit
+    // had already made room for, which is invisible until someone resizes
+    // their wrapper. So the mouth is placed wherever it must sit *before* the
+    // transform in order to land off the card *after* it — the card's own
+    // rect clip is what bounds the top, and it does not move.
+    const k = bouquet.wrapScale ?? 1;
+    const pre = (target: number, axis: "x" | "y") => WRAP_PIVOT[axis] + (target - WRAP_PIVOT[axis]) / k;
+    const mouthY = pre(-400, "y"), mouthL = pre(-400, "x"), mouthR = pre(WIDTH + 400, "x");
     ctx.save(); wrapTransform();
-    ctx.beginPath(); ctx.moveTo(28, 100); ctx.lineTo(692, 100); ctx.lineTo(656, 390);
+    ctx.beginPath(); ctx.moveTo(mouthL, mouthY); ctx.lineTo(mouthR, mouthY); ctx.lineTo(656, 390);
     ctx.lineTo(500, 530); ctx.lineTo(402, 658); ctx.lineTo(318, 658); ctx.lineTo(220, 530); ctx.lineTo(64, 390); ctx.closePath();
     ctx.restore();
     ctx.clip();
