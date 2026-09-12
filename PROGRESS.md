@@ -2975,6 +2975,12 @@ being a documented RemoteViews API — not by looking at it.
 
 ## The status bar icon is the tulip now (2026-09-09)
 
+> ⚠️ **Superseded 2026-09-12** — see *The status bar icon is traced
+> from a flat master now* at the end of this file. The drawn-heart
+> cutout described below is gone; the heart is a real traced shape.
+> Kept because the two rejected approaches are still worth not
+> repeating.
+
 It was a generic Material heart — the placeholder from before the app had a
 mark of its own.
 
@@ -3239,4 +3245,67 @@ caught it. Bookkeeping does not get to break the feature it is counting.
 - ⚠️ **Affiliate links need disclosure** — a visible line on the screen — and
   `website/app/privacy/page.tsx` needs a line about click tracking before
   this reaches anyone outside the two of you.
+
+## The status bar icon is traced from a flat master now (2026-09-12)
+
+The 2026-09-09 icon was a traced outline with a **heart drawn into it** as a
+cutout, because the mark's own heart is hidden behind the petals and could
+not be traced. It was a workaround, and it looked like one.
+
+🔴 **The fix was never in the tracing. It was in the source.** A silhouette
+can only show what is already a gap. The launcher icon carries the
+boundaries between the heart and the two petals in its *shading* — a dark
+heart behind, one petal lit in front of the other — and masking throws
+shading away, so every version traced from it melted into one round lump no
+matter how the contour was simplified.
+
+`assets/icon/src/notification_mark.png` is the same mark redrawn **flat**,
+with those boundaries cut as real gaps in the artwork. It traces to three
+separate shapes — the heart and the two petals — and the silhouette keeps
+every edge that makes the mark legible. No cutout, no drawn curve, nothing
+hand-placed.
+
+### What to protect if the mark is ever redrawn
+
+⚠️ **The gaps, measured.** They run ~40px of a 710px-wide master, which lands
+at **1.3dp** inside the 24dp box — about three screen pixels on a 3x phone.
+Much narrower and the three shapes close back into the blob at status-bar
+size. `tool/trace_notification_icon.py` prints this on every run; it is the
+number to watch, not the point count.
+
+⚠️ **It is the median gap that is reported, not the minimum.** Every one of
+these gaps tapers to nothing at the tangent where two shapes meet, so the
+minimum is always ~0 and says nothing about whether the separation reads.
+The first version of the measurement reported the minimum and made a
+perfectly good icon look broken.
+
+### The tool
+
+- ⚠️ **`SRC` is `assets/icon/src/notification_mark.png`, not the launcher
+  icon and not `ic_launcher_monochrome.png`.** Pointing it back at the
+  launcher artwork is exactly how the blob comes back. `assets/icon/` is
+  deliberately not a bundled Flutter asset directory, so the master ships
+  nothing.
+- Traces **every** shape in the mask rather than one outer contour, and
+  detects enclosed background regions as holes, winding them the opposite
+  way so non-zero fill cuts them instead of filling them. There are no holes
+  in the mark as drawn — `--self-test` traces a synthetic donut to prove
+  that path works, because otherwise it would be untested code waiting for
+  the next redraw.
+- RDP tolerance is now in **dp, not source pixels** (`EPS_DP = 0.05`), so
+  re-running against a bigger or smaller master gives the same curve rather
+  than a different one. The old 0.45px was tuned to a 432px source and would
+  have over-simplified this 1254px one.
+- ⚠️ `rdp()` still has the closed-ring guard: a ring arrives with
+  first == last, so `span` is 0 and the line-distance formula is undefined.
+  It returns distance-to-point there. Returning 0 collapses the whole
+  contour to two points.
+
+98 points across 3 subpaths, 22dp of artwork in the 24dp box. Verified in the
+release APK with `aapt2 dump xmltree ... --file res/vO.xml` — three `M...Z`
+subpaths, so what shipped is the new path and not a cached one.
+
+⚠️ **Not seen on a phone.** Rendered with a non-zero scanline fill at 24, 36,
+48, 72 and 96px and read at each; legible from 36px up, which covers every
+density in use. The 1x rendering is mushy and nothing ships at 1x.
 
