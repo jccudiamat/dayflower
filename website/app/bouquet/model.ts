@@ -7,16 +7,43 @@ export const flowers = [
   { name: "Peony", detail: "Something lovely", color: "#d994b1" },
 ] as const;
 
+// ⚠️ These were written into `flowers` before their artwork existed, which made
+// 48 of the 54 blooms add an invisible stem: `renderBouquet` skips any flower
+// whose sprite sheet is missing, silently. They stay here, unpickable, until
+// `flowers-a|b|c|d.webp` land in public/bouquet (12 cells each, 4×3 grid, in
+// this order). Move a batch back into `flowers` above as each sheet arrives —
+// and only a whole sheet at a time, since `flowerSprite` maps index → sheet by
+// arithmetic. Never reorder what is already live: gift links store the index.
+export const pendingFlowers = [
+  "Lily", "Orchid", "Hydrangea", "Gerbera", "Carnation", "Poppy", "Anemone", "Ranunculus", "Dahlia", "Iris", "Calla lily", "Camellia",
+  "Daffodil", "Gardenia", "Magnolia", "Jasmine", "Sweet pea", "Delphinium", "Snapdragon", "Cornflower", "Cosmos", "Zinnia", "Marigold", "Aster",
+  "Chrysanthemum", "Lisianthus", "Freesia", "Alstroemeria", "Scabiosa", "Stock", "Amaryllis", "Hyacinth", "Muscari", "Allium", "Hellebore", "Lily of the valley",
+  "Forget-me-not", "Baby’s breath", "Protea", "Bird of paradise", "Anthurium", "Lotus", "Craspedia", "Snowdrop", "Crocus", "Agapanthus", "Bleeding heart", "Mimosa",
+] as const;
+
 export const papers = [
   { name: "Rose & ivory", background: "#f7edf0", ink: "#703e54", sprite: 6 },
   { name: "Lilac love", background: "#eee9f7", ink: "#65507c", sprite: 7 },
   { name: "Just the stems", background: "#edf2ec", ink: "#4b6554", sprite: -1 },
+  { name: "Midnight", background: "#f0edf2", ink: "#4c4357", sprite: 7 },
+  { name: "Blush", background: "#f9ecee", ink: "#7f465a", sprite: 6 },
 ] as const;
 
 export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number };
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string };
-export const MAX_STEMS = 12;
+export const photoFrames = ["Polaroid", "Sticker", "Cutout", "Heart", "Circle", "Arch", "Postage stamp"] as const;
+export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front" };
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[] };
+export const MAX_STEMS = 24;
+export const MAX_PHOTOS = 8;
+export const MAX_PHOTO_LENGTH = 180_000;
 export const ART_URL = "/bouquet/botanical-sprites.webp";
+export const WRAPPER_URL = "/bouquet/wrapper-layers.webp";
+export const EXTRA_ART_URLS = ["a", "b", "c", "d"].map(id => `/bouquet/flowers-${id}.webp`);
+export function flowerSprite(index: number) {
+  return index < 6 ? { url: ART_URL, index, rows: 2 } : { url: EXTRA_ART_URLS[Math.floor((index - 6) / 12)], index: (index - 6) % 12, rows: 3 };
+}
+export function photoCount(b: Bouquet) { return b.photos?.length ?? 0; }
+export function hasContents(b: Bouquet) { return b.stems.length > 0 || photoCount(b) > 0; }
 export const WIDTH = 720;
 export const HEIGHT = 960;
 
@@ -46,14 +73,33 @@ export function validateBouquet(value: unknown): Bouquet | null {
         !finiteIn(s.y, 490, 690) || !finiteIn(s.angle, -45, 45) || !finiteIn(s.scale, .7, 1.15)) return null;
     stems.push({ id: stems.length + 1, flower: s.flower, x: s.x, y: s.y, angle: s.angle, scale: s.scale });
   }
-  return { v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message };
+  const photos: Photo[] = [];
+  if (b.photos !== undefined) {
+    if (!Array.isArray(b.photos) || b.photos.length > MAX_PHOTOS) return null;
+    let total = 0;
+    for (const item of b.photos) {
+      if (!item || typeof item !== "object") return null;
+      const p = item as Record<string, unknown>;
+      if (typeof p.src !== "string" || p.src.length > MAX_PHOTO_LENGTH || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(p.src) ||
+          !Number.isInteger(p.frame) || !finiteIn(p.frame, 0, photoFrames.length - 1) || !finiteIn(p.x, 110, 610) || !finiteIn(p.y, 190, 570) ||
+          !finiteIn(p.angle, -45, 45) || !finiteIn(p.scale, .55, 1.5) || !finiteIn(p.zoom, 1, 3) || !finiteIn(p.cropX, 0, 100) || !finiteIn(p.cropY, 0, 100) ||
+          typeof p.caption !== "string" || p.caption.length > 35 || (p.layer !== "back" && p.layer !== "front")) return null;
+      total += p.src.length;
+      // Must match what the editor can actually produce, or a full bouquet is
+      // rejected on reload and the saved draft vanishes without a word.
+      if (total > MAX_PHOTOS * MAX_PHOTO_LENGTH) return null;
+      photos.push({ id: photos.length + 1, src: p.src, frame: p.frame, x: p.x, y: p.y, angle: p.angle, scale: p.scale, zoom: p.zoom, cropX: p.cropX, cropY: p.cropY, caption: p.caption, layer: p.layer });
+    }
+  }
+  return { v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message, ...(photos.length ? { photos } : {}) };
 }
 
 // The gift travels in the URL fragment. No account, database row, or note upload is needed.
 // This is an encoded gift, not encryption: anyone with the complete link can open it.
 export function encodeBouquet(bouquet: Bouquet): string {
   const clean = validateBouquet(bouquet);
-  if (!clean || !clean.stems.length) throw new Error("Add at least one flower before sharing.");
+  if (!clean || !hasContents(clean)) throw new Error("Add at least one flower or photo before sharing.");
+  if (photoCount(clean)) throw new Error("Photo bouquets must be saved before sharing.");
   const bytes = new TextEncoder().encode(JSON.stringify(clean));
   return btoa(Array.from(bytes, b => String.fromCharCode(b)).join("")).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
@@ -63,12 +109,12 @@ export function decodeBouquet(encoded: string): Bouquet | null {
     const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/");
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
     const result = validateBouquet(JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
-    return result?.stems.length ? result : null;
+    return result && hasContents(result) && !photoCount(result) ? result : null;
   } catch { return null; }
 }
 
-export function spriteRect(index: number, imageWidth: number, imageHeight: number) {
-  return { x: index % 4 * imageWidth / 4, y: Math.floor(index / 4) * imageHeight / 2, w: imageWidth / 4, h: imageHeight / 2 };
+export function spriteRect(index: number, imageWidth: number, imageHeight: number, rows = 2) {
+  return { x: index % 4 * imageWidth / 4, y: Math.floor(index / 4) * imageHeight / rows, w: imageWidth / 4, h: imageHeight / rows };
 }
 export function stemGeometry(stem: Stem) {
   const h = 470 * stem.scale;
@@ -102,7 +148,54 @@ function wrappedLines(ctx: CanvasRenderingContext2D, text: string, width: number
   return lines;
 }
 
-export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: HTMLImageElement, selected?: number) {
+export function photoGeometry(photo: Photo) {
+  return { w: 184 * photo.scale, h: (photo.frame === 0 ? 222 : 184) * photo.scale, angle: photo.angle * Math.PI / 180 };
+}
+export function hitPhoto(photos: Photo[], x: number, y: number): Photo | undefined {
+  return [...photos].reverse().find(photo => {
+    const { w, h, angle } = photoGeometry(photo), dx = x - photo.x, dy = y - photo.y;
+    return Math.abs(dx * Math.cos(angle) + dy * Math.sin(angle)) <= w / 2 && Math.abs(-dx * Math.sin(angle) + dy * Math.cos(angle)) <= h / 2;
+  });
+}
+function framePath(ctx: CanvasRenderingContext2D, frame: number, x: number, y: number, w: number, h: number) {
+  ctx.beginPath();
+  if (frame === 3) {
+    ctx.moveTo(x + w / 2, y + h);
+    ctx.bezierCurveTo(x - w * .45, y + h * .3, x + w * .1, y - h * .3, x + w / 2, y + h * .2);
+    ctx.bezierCurveTo(x + w * .9, y - h * .3, x + w * 1.45, y + h * .3, x + w / 2, y + h);
+    ctx.closePath();
+  } else if (frame === 4) ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+  else if (frame === 5) { ctx.moveTo(x, y + h); ctx.lineTo(x, y + w / 2); ctx.arc(x + w / 2, y + w / 2, w / 2, Math.PI, 0); ctx.lineTo(x + w, y + h); ctx.closePath(); }
+  else ctx.roundRect(x, y, w, h, frame === 1 ? 18 : 2);
+}
+function drawPhoto(ctx: CanvasRenderingContext2D, photo: Photo, image: HTMLImageElement, selected: boolean) {
+  ctx.save(); ctx.translate(photo.x, photo.y); ctx.rotate(photo.angle * Math.PI / 180); ctx.scale(photo.scale, photo.scale);
+  const w = 184, h = photo.frame === 0 ? 222 : 184, inset = photo.frame === 6 ? 13 : 10;
+  const iw = w - inset * 2, ih = photo.frame === 0 ? 164 : h - inset * 2;
+  if (photo.frame !== 2) {
+    ctx.shadowColor = "#25152d30"; ctx.shadowBlur = 9; ctx.shadowOffsetY = 4;
+    framePath(ctx, photo.frame, -w / 2, -h / 2, w, h); ctx.fillStyle = "#fffdf8"; ctx.fill();
+    ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  }
+  ctx.save();
+  if (photo.frame !== 2) { framePath(ctx, photo.frame, -w / 2 + inset, -h / 2 + inset, iw, ih); ctx.clip(); }
+  const imageW = image.naturalWidth, imageH = image.naturalHeight;
+  const fit = (photo.frame === 2 ? Math.min(iw / imageW, ih / imageH) : Math.max(iw / imageW, ih / imageH)) * photo.zoom;
+  const dw = imageW * fit, dh = imageH * fit;
+  const dx = -w / 2 + inset - (dw - iw) * photo.cropX / 100, dy = -h / 2 + inset - (dh - ih) * photo.cropY / 100;
+  // Cutout photos preserve alpha, including transparent PNGs and the local background-removal result.
+  if (photo.frame === 2) { ctx.shadowColor = "#fff"; ctx.shadowBlur = 8; }
+  ctx.drawImage(image, dx, dy, dw, dh); ctx.restore();
+  if (photo.frame === 0) { ctx.fillStyle = "#705268"; ctx.font = "italic 13px Georgia, serif"; ctx.textAlign = "center"; ctx.fillText(photo.caption || "a moment to keep", 0, h / 2 - 16, w - 20); }
+  if (photo.frame === 6) {
+    ctx.strokeStyle = "#ba9eac"; ctx.lineWidth = 2; ctx.setLineDash([1, 7]); ctx.strokeRect(-w / 2 + 5, -h / 2 + 5, w - 10, h - 10); ctx.setLineDash([]);
+  }
+  if (selected) { ctx.strokeStyle = "#754766"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.strokeRect(-w / 2 - 5, -h / 2 - 5, w + 10, h + 10); }
+  ctx.restore();
+}
+
+export type RenderAssets = Record<string, HTMLImageElement>;
+export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: HTMLImageElement, selected?: number, assets: RenderAssets = {}, selectedPhoto?: number) {
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
   const ctx = canvas.getContext("2d");
@@ -118,14 +211,38 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 94, 620);
   ctx.save();
   ctx.beginPath(); ctx.rect(12, 112, WIDTH - 24, 615); ctx.clip();
+  const wrapper = assets[WRAPPER_URL];
+  const wrapIndex = bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
+  const drawWrapper = (front: boolean) => {
+    if (!wrapper || paper.sprite < 0 || !hasContents(bouquet)) return;
+    const crop = spriteRect(wrapIndex + (front ? 1 : 0), wrapper.naturalWidth, wrapper.naturalHeight);
+    ctx.drawImage(wrapper, crop.x, crop.y, crop.w, crop.h, 104, 130, 512, 600);
+  };
+  drawWrapper(false);
+  ctx.save();
+  if (paper.sprite >= 0 && wrapper) {
+    // The opening stays broad; below it the foliage tapers into the tied paper.
+    // This prevents leaves and stem ends from sticking through the wrapper's sides.
+    ctx.beginPath(); ctx.moveTo(28, 112); ctx.lineTo(692, 112); ctx.lineTo(656, 390);
+    ctx.lineTo(500, 530); ctx.lineTo(402, 658); ctx.lineTo(318, 658); ctx.lineTo(220, 530); ctx.lineTo(64, 390); ctx.closePath(); ctx.clip();
+  }
+  const drawPhotos = (layer: "back" | "front") => {
+    for (const photo of bouquet.photos ?? []) if (photo.layer === layer && assets[photo.src]) drawPhoto(ctx, photo, assets[photo.src], selectedPhoto === photo.id);
+  };
+  drawPhotos("back");
   for (const stem of bouquet.stems) {
-    const crop = spriteRect(stem.flower, art.naturalWidth, art.naturalHeight);
+    const sprite = flowerSprite(stem.flower), sheet = sprite.url === ART_URL ? art : assets[sprite.url];
+    if (!sheet) continue;
+    const crop = spriteRect(sprite.index, sheet.naturalWidth, sheet.naturalHeight, sprite.rows);
     const { w, h, angle } = stemGeometry(stem);
     ctx.save(); ctx.translate(stem.x, stem.y); ctx.rotate(angle);
-    ctx.drawImage(art, crop.x, crop.y, crop.w, crop.h, -w / 2, -h * .94, w, h);
+    ctx.drawImage(sheet, crop.x, crop.y, crop.w, crop.h, -w / 2, -h * .94, w, h);
     ctx.restore();
   }
-  if (paper.sprite >= 0 && bouquet.stems.length) {
+  drawPhotos("front");
+  ctx.restore();
+  drawWrapper(true);
+  if (!wrapper && paper.sprite >= 0 && bouquet.stems.length) {
     const crop = spriteRect(paper.sprite, art.naturalWidth, art.naturalHeight);
     ctx.drawImage(art, crop.x, crop.y, crop.w, crop.h, 207, 398, 306, 340);
   }
