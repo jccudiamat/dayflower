@@ -242,7 +242,10 @@ export function validateBouquet(value: unknown): Bouquet | null {
 export function encodeBouquet(bouquet: Bouquet): string {
   const clean = validateBouquet(bouquet);
   if (!clean || !hasContents(clean)) throw new Error("Add at least one flower or photo before sharing.");
-  if (photoCount(clean)) throw new Error("Photo bouquets must be saved before sharing.");
+  // Only the private link comes through here now. A data URL will not fit in
+  // a URL fragment, so this stays — but the message has to name the link that
+  // actually refused, not imply photos cannot be shared at all.
+  if (photoCount(clean)) throw new Error("A private link can’t carry photos. Use the gift link instead, or remove the photos.");
   const bytes = new TextEncoder().encode(JSON.stringify(clean));
   return btoa(Array.from(bytes, b => String.fromCharCode(b)).join("")).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
