@@ -3309,3 +3309,57 @@ subpaths, so what shipped is the new path and not a cached one.
 48, 72 and 96px and read at each; legible from 36px up, which covers every
 density in use. The 1x rendering is mushy and nothing ships at 1x.
 
+## The storage quota was blown by our own build history (2026-09-12)
+
+Supabase emailed that the org exceeded its quota, with projects to be
+restricted from **12 Oct 2026**. Measured rather than guessed:
+
+| bucket | objects | size |
+| --- | --- | --- |
+| `app-builds` | 64 | **2,238 MB** |
+| `day_photos` | 32 | 8.7 MB |
+| `avatars` | 2 | 0.13 MB |
+
+🔴 **99.6% of stored bytes were old APKs.** The free plan allows 1 GB, so the
+project sat at over twice its quota on release artefacts alone, while
+everything the app actually stores for the two people using it came to under
+9 MB. Builds 2 through 65 were all still there, 2 to 65 inclusive, at 33-49 MB
+each and growing with every publish.
+
+⚠️ **Nothing reads an old APK.** The updater fetches `latest.json` and
+downloads exactly the one object it names. Old builds are useful only for
+sideloading a known-good version when a release turns out broken, and five of
+them is a fortnight at the cadence this project actually runs at.
+
+This is shape 3 from the cost model in *Cost exposure* — a cost multiplied by
+the dev loop rather than by users — and the entry there said the control is
+"release cadence and hosting". That was right about the cause and wrong about
+the remedy: **the control was retention, and there wasn't any.**
+
+### The fix
+
+`tool/publish_update.dart` now prunes after a successful publish. `--keep <n>`
+defaults to 5; `--keep 0` restores the old forever behaviour.
+
+- ⚠️ **It only deletes objects it can identify.** Names are matched against
+  `dayflower-<n>-`; `latest.json` and anything unrecognised are left alone
+  rather than guessed at. Verified against the live bucket before any delete
+  was wired up: 64 objects, 63 parsed, `latest.json` untouched.
+- 🔴 **A backlog is opt-in, this run's leftovers are not.** The first run
+  after this change would have deleted 58 objects because a default changed.
+  Over 10 deletions in one run stops and asks for `--prune-backlog`. A tool
+  that has never deleted anything must not start by deleting 2 GB quietly.
+- One bulk DELETE, not a loop: a partial delete halfway through leaves the
+  bucket in a state nobody chose.
+- The list call pages at 100. The bucket that prompted this had 64 objects,
+  which is exactly the size where trusting a single page works right up until
+  it doesn't.
+
+### Egress is the other half, and is not measured here
+
+Storage is what the numbers above prove. Downloads count separately against
+egress, and two phones pulling ~40 MB per build across 60-odd builds is the
+same order as the 5 GB monthly allowance. Retention does not shrink egress;
+**publishing less often does.** Worth remembering that every `publish_update`
+run costs both quotas.
+

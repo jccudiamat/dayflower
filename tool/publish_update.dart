@@ -16,6 +16,12 @@
 //                       armeabi-v7a (old 32-bit), x86_64 (emulators).
 //   --skip-build        Upload the APK already in build/, don't recompile.
 //   --no-notes          Publish with an empty note list, deliberately.
+//   --keep <n>          Old builds to leave in the bucket. Default 5.
+//                       0 keeps everything, which is how the bucket reached
+//                       2.2 GB and put the org over its storage quota.
+//   --prune-backlog     Allow removing more than 10 old builds in one run.
+//                       The routine case needs no flag; the one-time cleanup
+//                       of a backlog does.
 //   --dry-run           Do everything except upload.
 //
 // Credentials come from `.publish.env` (gitignored, and NOT a Flutter asset
@@ -236,6 +242,15 @@ Future<void> _publish(List<String> args) async {
       '  or resume, or immediately via Settings → Check for updates.',
     );
     pubspecStamped = false; // keep the bump, it's now the published truth
+
+    // ── 4. Retention. Nothing downloads an old build, but every one of
+    // them keeps counting against the storage quota forever. ────────
+    await _prune(
+      supabaseUrl: supabaseUrl,
+      serviceKey: serviceKey,
+      keep: options.keep,
+      backlog: options.pruneBacklog,
+    );
   } finally {
     // A half-finished publish must not leave pubspec claiming a build number
     // that was never uploaded — the next run would skip straight past it.
@@ -243,6 +258,154 @@ Future<void> _publish(List<String> args) async {
       pubspec.writeAsStringSync(originalPubspec);
       stdout.writeln('Restored pubspec.yaml to +${version.build}.');
     }
+  }
+}
+
+/* ── Retention ───────────────────────────────────────────────── */
+
+/// 🔴 **Every build ever published stayed in the bucket.** Nothing deleted
+/// them and nothing needed them: the updater reads `latest.json` and fetches
+/// exactly one APK. 64 objects and 2.2 GB of them put the organization over
+/// its 1 GB storage quota on 2026-09-12 — a quota blown entirely by the dev
+/// loop, with the app's own data (day photos, avatars) under 9 MB of it.
+///
+/// ⚠️ Old APKs are kept for **manual rollback only** — sideloading a known-good
+/// build when a release turns out broken. Five is a fortnight of them at the
+/// cadence this project actually runs at. Nothing in the app reads them.
+Future<void> _prune({
+  required String supabaseUrl,
+  required String serviceKey,
+  required int keep,
+  required bool backlog,
+}) async {
+  if (keep <= 0) {
+    stdout.writeln('\n→ keeping every build (--keep 0).');
+    return;
+  }
+
+  final objects = await _listBuilds(supabaseUrl: supabaseUrl,
+      serviceKey: serviceKey);
+  // Only APKs this tool named. Anything else in the bucket — latest.json
+  // above all — is left alone, and an unparseable name is left alone too
+  // rather than guessed at.
+  final builds = <int, _Build>{};
+  for (final o in objects) {
+    final match = RegExp(r'^dayflower-(\d+)-').firstMatch(o.name);
+    if (match != null) builds[int.parse(match.group(1)!)] = o;
+  }
+  if (builds.length <= keep) {
+    stdout.writeln('\n→ ${builds.length} build(s) in the bucket, keeping $keep'
+        ' — nothing to remove.');
+    return;
+  }
+
+  final numbers = builds.keys.toList()..sort();
+  final doomed = numbers.take(numbers.length - keep).toList();
+  final freed = doomed.fold<int>(0, (sum, n) => sum + builds[n]!.size);
+
+  // ⚠️ The one-time cleanup is opt-in, the routine one is not. This tool has
+  // never deleted anything; a run that silently removed 59 objects because
+  // the default changed is exactly the surprise worth refusing to spring.
+  const surprise = 10;
+  if (doomed.length > surprise && !backlog) {
+    stdout.writeln(
+      '\n⚠ ${doomed.length} old builds (${_mb(freed)}) are past the keep-$keep'
+      ' window.\n'
+      '  That is a backlog, not this run\'s leftovers, so it is not deleted'
+      ' automatically.\n'
+      '  Review them, then re-run with --prune-backlog to remove builds'
+      ' ${doomed.first}–${doomed.last}.',
+    );
+    return;
+  }
+
+  stdout.writeln('\n→ removing ${doomed.length} build(s) past the keep-$keep'
+      ' window (${_mb(freed)})');
+  await _delete(
+    supabaseUrl: supabaseUrl,
+    serviceKey: serviceKey,
+    names: [for (final n in doomed) builds[n]!.name],
+  );
+  stdout.writeln('  kept ${numbers.skip(numbers.length - keep).join(", ")}');
+}
+
+class _Build {
+  _Build(this.name, this.size);
+  final String name;
+  final int size;
+}
+
+Future<List<_Build>> _listBuilds({
+  required String supabaseUrl,
+  required String serviceKey,
+}) async {
+  final out = <_Build>[];
+  // Storage caps a list response, so page rather than trusting one call —
+  // the bucket that prompted this had 64 objects in it.
+  for (var offset = 0;; offset += 100) {
+    final page = await _storageJson(
+      supabaseUrl: supabaseUrl,
+      serviceKey: serviceKey,
+      method: 'POST',
+      path: '/storage/v1/object/list/$_bucket',
+      body: {'limit': 100, 'offset': offset, 'prefix': ''},
+    );
+    if (page is! List || page.isEmpty) break;
+    for (final item in page) {
+      if (item is! Map) continue;
+      final name = item['name'];
+      final size = (item['metadata'] as Map?)?['size'];
+      if (name is String && size is int) out.add(_Build(name, size));
+    }
+    if (page.length < 100) break;
+  }
+  return out;
+}
+
+Future<void> _delete({
+  required String supabaseUrl,
+  required String serviceKey,
+  required List<String> names,
+}) async {
+  // One request, not one per file: a partial delete halfway through a loop
+  // leaves the bucket in a state nobody chose.
+  await _storageJson(
+    supabaseUrl: supabaseUrl,
+    serviceKey: serviceKey,
+    method: 'DELETE',
+    path: '/storage/v1/object/$_bucket',
+    body: {'prefixes': names},
+  );
+}
+
+Future<dynamic> _storageJson({
+  required String supabaseUrl,
+  required String serviceKey,
+  required String method,
+  required String path,
+  required Map<String, Object?> body,
+}) async {
+  final client = HttpClient();
+  try {
+    final uri =
+        Uri.parse('${supabaseUrl.replaceAll(RegExp(r'/+$'), '')}$path');
+    final request = await client.openUrl(method, uri);
+    final payload = utf8.encode(jsonEncode(body));
+    request.headers
+      ..set(HttpHeaders.authorizationHeader, 'Bearer $serviceKey')
+      ..set('apikey', serviceKey)
+      ..set(HttpHeaders.contentTypeHeader, 'application/json');
+    request.contentLength = payload.length;
+    request.add(payload);
+
+    final response = await request.close();
+    final text = await response.transform(utf8.decoder).join();
+    if (response.statusCode >= 300) {
+      _fail('$method $path failed (${response.statusCode}): $text');
+    }
+    return text.isEmpty ? null : jsonDecode(text);
+  } finally {
+    client.close(force: true);
   }
 }
 
@@ -385,6 +548,8 @@ class _Options {
     required this.skipBuild,
     required this.dryRun,
     required this.abi,
+    required this.keep,
+    required this.pruneBacklog,
   });
 
   /// Which architecture's APK to publish. Every Android phone made since
@@ -402,6 +567,14 @@ class _Options {
   final bool skipBuild;
   final bool dryRun;
 
+  /// How many builds survive a publish. Nothing in the app reads an old APK
+  /// — the updater fetches whatever `latest.json` names — so these exist
+  /// only to sideload a known-good build when a release turns out broken.
+  final int keep;
+
+  /// Permission to delete a backlog rather than just this run's leftovers.
+  final bool pruneBacklog;
+
   static _Options parse(List<String> args) {
     final notes = <String>[];
     int? build;
@@ -410,6 +583,8 @@ class _Options {
     var noNotes = false;
     var dryRun = false;
     var abi = _defaultAbi;
+    var keep = 5;
+    var pruneBacklog = false;
 
     for (var i = 0; i < args.length; i++) {
       switch (args[i]) {
@@ -430,6 +605,12 @@ class _Options {
             _fail('Unknown --abi "$abi". '
                 'One of: ${_targetPlatforms.keys.join(", ")}.');
           }
+        case '--keep':
+          if (++i >= args.length) _fail('--keep needs a number after it.');
+          keep = int.tryParse(args[i]) ?? _fail('--keep must be a number.');
+          if (keep < 0) _fail('--keep cannot be negative.');
+        case '--prune-backlog':
+          pruneBacklog = true;
         case '--no-notes':
           noNotes = true;
         case '--skip-build':
@@ -449,6 +630,8 @@ class _Options {
       skipBuild: skipBuild,
       dryRun: dryRun,
       abi: abi,
+      keep: keep,
+      pruneBacklog: pruneBacklog,
     );
   }
 }
