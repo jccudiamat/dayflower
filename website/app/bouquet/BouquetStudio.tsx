@@ -69,6 +69,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   const [lostSheets, setLostSheets] = useState<string[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [search, setSearch] = useState("");
   const [gift, setGift] = useState(!!served);
   const [preview, setPreview] = useState(false);
   const [opened, setOpened] = useState(false);
@@ -84,6 +85,15 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   const fileRef = useRef<HTMLInputElement>(null);
   const drag = useRef<{ kind: "stem" | "photo" | "tilt" | "size" | "photoTilt" | "photoSize"; id: number; startX: number; startY: number; x: number; y: number; grab?: number; from?: number } | null>(null);
   const active = bouquet.stems.find(s => s.id === selected);
+  const plain = (text: string) => text.toLowerCase().replace(/[’']/g, "'");
+  const matches = useMemo(() => {
+    const needle = plain(search.trim());
+    // Meanings are searchable too, so "calm" finds Lavender — people remember
+    // what a flower is for more often than what it is called.
+    return flowers
+      .map((flower, i) => ({ flower, i }))
+      .filter(({ flower }) => !needle || plain(flower.name).includes(needle) || plain(flower.detail).includes(needle));
+  }, [search]);
   const photos = useMemo(() => bouquet.photos ?? [], [bouquet.photos]);
   const activePhoto = photos.find(p => p.id === selectedPhoto);
   const viewing = gift || preview;
@@ -474,7 +484,22 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
         {step === 0 && <div className="bouquet-panel">
           <div className="bouquet-section-heading"><h2>Pick their favorites</h2><span>{bouquet.stems.length}/{MAX_STEMS} stems</span></div>
           <p className="bouquet-help">Tap to add a flower. A little wild looks lovely.</p>
-          <div className="bouquet-flower-grid">{flowers.map((flower, i) => <button key={flower.name} className="bouquet-flower" disabled={!art || bouquet.stems.length >= MAX_STEMS || lostSheets.includes(flowerSprite(i).url)} aria-label={`Add ${flower.name}`} onClick={() => addFlower(i)}><Sprite index={i} /><span className="bouquet-flower-name">{flower.name}<span aria-hidden="true">+</span></span><small>{flower.detail}</small></button>)}</div>
+          <div className="bouquet-search">
+            <label htmlFor="bouquet-flower-search" className="bouquet-visually-hidden">Search flowers</label>
+            <input id="bouquet-flower-search" type="search" value={search} placeholder="Search 54 flowers — try “rose” or “calm”"
+              onChange={e => setSearch(e.target.value)} autoComplete="off" />
+            {search && <button className="bouquet-search-clear" aria-label="Clear search" onClick={() => setSearch("")}>×</button>}
+          </div>
+          {matches.length === 0
+            ? <p className="bouquet-help">Nothing by that name. Try another word, or <button className="bouquet-text-button" onClick={() => setSearch("")}>show them all</button>.</p>
+            : <div className="bouquet-flower-grid" role="group" aria-label={`${matches.length} flowers, scroll sideways for more`}>
+                {matches.map(({ flower, i }) => <button key={flower.name} className="bouquet-flower" disabled={!art || bouquet.stems.length >= MAX_STEMS || lostSheets.includes(flowerSprite(i).url)} aria-label={`Add ${flower.name}`} onClick={() => addFlower(i)}><Sprite index={i} /><span className="bouquet-flower-name">{flower.name}<span aria-hidden="true">+</span></span><small>{flower.detail}</small></button>)}
+              </div>}
+          {/* Three rows fit about three columns on a phone, so anything past
+              nine is off-screen and worth mentioning. Fewer than that needs no
+              instruction, and saying "swipe" when there is nowhere to swipe
+              just makes the control look broken. */}
+          {matches.length > 0 && <p className="bouquet-grid-hint">{search ? `${matches.length} of ${flowers.length}` : `All ${flowers.length} flowers`}{matches.length > 9 ? " · swipe sideways for more" : ""}</p>}
           {bouquet.stems.length >= MAX_STEMS && <p className="bouquet-help">A full bunch! Remove a stem to add another.</p>}
           {lostSheets.length > 0 && <p className="bouquet-help">Some flowers couldn’t load just now. <button className="bouquet-text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
           <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: next.stems, paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>

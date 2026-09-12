@@ -1468,6 +1468,10 @@ Messages, day photos and activity now raise a notification on the receiving phon
 
 ### Bouquet builder (`website/app/bouquet/`)
 
+- **The flower picker is three rows scrolled sideways, with a search box (2026-09-13).** 54 tiles stacked in a 3-column grid made the panel ~3410px tall and buried the note and send steps under it; the same tiles flowing into columns are **560px**, whatever is in them. `grid-auto-flow: column` + `grid-template-rows: repeat(3, auto)` + `overflow-x: auto`, with `overscroll-behavior-x: contain` so a sideways flick does not also send the browser back a page.
+- Search matches the **meaning as well as the name** — "calm" finds Lavender and Lotus — because people remember what a flower is *for* more often than what it is called. ⚠️ Both sides are normalised for the apostrophe: the catalogue uses a curly `’`, so without it "baby's breath" typed with a straight quote finds nothing while Baby's breath sits there on screen.
+- The "swipe sideways" hint only appears past nine matches, which is roughly what three rows × three columns shows. Promising a swipe when there is nowhere to swipe makes the control look broken.
+
 - 🔴 **The taper clip was eating flowers whenever the wrapper was resized.** Its *sides* are drawn under `wrapTransform` on purpose — they should follow the paper — but its **opening** was following too. At `wrapScale` 0.81 the mouth fell from y=100 to **y=212**, swallowing 76px of blooms that shrink-to-fit had already made room for. Invisible until someone resizes their wrapper, which is why neither the earlier fix nor a synthetic reproduction caught it.
   - The mouth is now placed wherever it must sit *before* the transform to land off-card *after* it, so it opens at any `wrapScale`. The card's own rect clip bounds the top, and that one does not move.
   - **How it was found:** disabling both clips and diffing the render. Clipped, the first art row was 244; unclipped, 168. That 76px gap named the culprit in one step after a lot of fruitless squinting at screenshots — reach for the diff sooner.
