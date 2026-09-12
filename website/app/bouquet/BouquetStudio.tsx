@@ -26,9 +26,9 @@ function VesselView({ bouquet, art, assets }: { bouquet: Bouquet; art: HTMLImage
     aria-label={`${vessels[bouquet.vessel ?? 0].name}${bouquet.to.trim() ? `, addressed to ${bouquet.to.trim()}` : ""}`} />;
 }
 
-export default function BouquetStudio() {
-  const [bouquet, setBouquet] = useState<Bouquet>(makeBouquet);
-  const [ready, setReady] = useState(false);
+export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {}) {
+  const [bouquet, setBouquet] = useState<Bouquet>(() => served ?? makeBouquet());
+  const [ready, setReady] = useState(!!served);
   const [art, setArt] = useState<HTMLImageElement | null>(null);
   const [artError, setArtError] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -40,7 +40,7 @@ export default function BouquetStudio() {
   const [lostSheets, setLostSheets] = useState<string[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
-  const [gift, setGift] = useState(false);
+  const [gift, setGift] = useState(!!served);
   const [preview, setPreview] = useState(false);
   const [opened, setOpened] = useState(false);
   const [badLink, setBadLink] = useState(false);
@@ -58,6 +58,9 @@ export default function BouquetStudio() {
   const viewing = gift || preview;
 
   useEffect(() => {
+    // A served gift is already decided; there is no hash to read and no draft
+    // to restore over the top of someone else's present.
+    if (served) return;
     let cancelled = false;
     function loadLocation() {
       if (cancelled) return;
@@ -79,7 +82,7 @@ export default function BouquetStudio() {
     queueMicrotask(loadLocation);
     window.addEventListener("hashchange", loadLocation);
     return () => { cancelled = true; window.removeEventListener("hashchange", loadLocation); };
-  }, []);
+  }, [served]);
 
   useEffect(() => {
     const image = new Image();
@@ -134,12 +137,12 @@ export default function BouquetStudio() {
   }, [photos, photoImages]);
 
   useEffect(() => {
-    if (!ready || gift || badLink) return;
+    if (!ready || gift || badLink || served) return;
     const timer = window.setTimeout(() => {
       try { localStorage.setItem(DRAFT_KEY, JSON.stringify(bouquet)); } catch { /* Optional local draft. */ }
     }, 300);
     return () => window.clearTimeout(timer);
-  }, [bouquet, ready, gift, badLink]);
+  }, [bouquet, ready, gift, badLink, served]);
 
   useEffect(() => {
     if (canvasRef.current && art) {
@@ -277,13 +280,45 @@ export default function BouquetStudio() {
     }
     setShareUrl("");
   }
-  // encodeBouquet refuses a bouquet with photos: a data URL cannot ride in a
-  // URL fragment. Returning null keeps that refusal a message rather than an
-  // uncaught throw out of a click handler.
-  function makeLink() {
+  /**
+   * The shareable link: a short /g/<id> backed by a stored row.
+   *
+   * It has to be stored. A `#gift=` fragment is never sent to the server, so
+   * the crawler behind a chat or mail preview can only ever see the generic
+   * page — every gift got an identical card. Storing it is also what lets a
+   * bouquet with photos be shared at all, since a data URL was never going to
+   * fit in a URL.
+   */
+  async function makeLink() {
+    if (shareUrl) return shareUrl;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/gift", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bouquet }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.id) {
+        setShareUrl("");
+        setNotice(data?.error ?? "This bouquet could not be turned into a link.");
+        return null;
+      }
+      const url = `${window.location.origin}/g/${data.id}`;
+      setShareUrl(url);
+      return url;
+    } catch {
+      setShareUrl("");
+      setNotice("Couldn’t reach the flower shop. Check your connection and try again.");
+      return null;
+    } finally { setBusy(false); }
+  }
+  /** The old link: nothing stored, no preview card, and no photos. */
+  function makePrivateLink() {
     try {
       const url = `${window.location.origin}/bouquet#gift=${encodeBouquet(bouquet)}`;
       setShareUrl(url);
+      setNotice("Private link ready. Nothing about it is stored.");
       return url;
     } catch (error) {
       setShareUrl("");
@@ -291,17 +326,24 @@ export default function BouquetStudio() {
       return null;
     }
   }
+  async function copyPrivateLink() {
+    const url = makePrivateLink();
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); setNotice("Private link copied. Nothing about it is stored."); }
+    catch { linkRef.current?.focus(); linkRef.current?.select(); }
+  }
   async function copyLink() {
-    const url = makeLink();
+    const url = await makeLink();
     if (!url) return;
     try { await navigator.clipboard.writeText(url); setNotice("Link copied. Send a little happiness."); }
     catch { setNotice("Select and copy the gift link below."); linkRef.current?.focus(); linkRef.current?.select(); }
   }
   async function shareGift() {
-    const url = makeLink();
+    const url = await makeLink();
     if (!url) return;
     if (!navigator.share) { await copyLink(); return; }
-    try { await navigator.share({ title: "A bouquet for you · Dayflower", text: "I picked these just for you.", url }); setNotice("Your bouquet is ready to send."); }
+    // Nothing here names what is inside, for the same reason as the card.
+    try { await navigator.share({ title: "A little something, just for you", text: "I made you something. Open it when you have a minute.", url }); setNotice("Your bouquet is ready to send."); }
     catch (error) { if (!(error instanceof Error && error.name === "AbortError")) setNotice("Sharing is unavailable here. Copy the link below instead."); }
   }
   async function download() {
@@ -415,7 +457,8 @@ export default function BouquetStudio() {
             <VesselView bouquet={bouquet} art={art} assets={assets} />
             <div className="bouquet-vessel-list">{vessels.map((vessel, i) => <button key={vessel.name} aria-pressed={(bouquet.vessel ?? 0) === i} onClick={() => update({ ...bouquet, vessel: i })}>{vessel.name}</button>)}</div>
             <p className="bouquet-help">{vessels[bouquet.vessel ?? 0].blurb}</p>
-          </div>{photoCount(bouquet) > 0 && <p className="bouquet-photo-note">Your photos travel in the image, not in a link. Download this bouquet and send the picture — or remove the photos to share a gift link instead.</p>}<button className="bouquet-button primary" disabled={photoCount(bouquet) > 0} onClick={copyLink}>Copy gift link <span aria-hidden="true">↗</span></button><button className="bouquet-button" disabled={photoCount(bouquet) > 0} onClick={shareGift}>Share bouquet</button><div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button className={photoCount(bouquet) > 0 ? "bouquet-emphasis" : undefined} disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the full link can open your bouquet and read your note.</p><button className="bouquet-text-button" onClick={() => setStep(2)}>Back to your note</button></div>}
+          </div><button className="bouquet-button primary" disabled={busy} onClick={copyLink}>{busy ? "Wrapping…" : <>Copy gift link <span aria-hidden="true">↗</span></>}</button><button className="bouquet-button" disabled={busy} onClick={shareGift}>Share bouquet</button><div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button className={photoCount(bouquet) > 0 ? "bouquet-emphasis" : undefined} disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the link can open your bouquet and read your note. The preview they see says only that you made them something — it never gives away what is inside.</p>
+          <details className="bouquet-private"><summary>Rather store nothing?</summary><p>This makes a much longer link that carries the whole bouquet inside it. Nothing is saved on our side, but chat apps show no preview for it, and photos can’t travel this way.</p><button className="bouquet-text-button" onClick={copyPrivateLink}>Copy a private link instead</button></details><button className="bouquet-text-button" onClick={() => setStep(2)}>Back to your note</button></div>}
       </section>
     </div>
   </>;

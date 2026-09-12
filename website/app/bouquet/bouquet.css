@@ -189,3 +189,9 @@
 .bouquet-depth > div { display: flex; gap: 6px; }
 .bouquet-depth button { min-height: 34px; padding: 5px 10px; border: 1px solid #e2d8e9; border-radius: 18px; font-size: 12px; color: #6d5374; background: #fff; }
 .bouquet-depth button:hover { background: #f6f0f8; border-color: #b795c0; }
+
+/* The no-storage link, tucked away: correct for a few people, confusing as a
+   headline option for everyone else. */
+.bouquet-private { margin-top: 14px; border-top: 1px solid #eee8f0; padding-top: 12px; text-align: left; }
+.bouquet-private summary { font-size: 13px; color: #6d5374; cursor: pointer; }
+.bouquet-private p { font-size: 12.5px; line-height: 1.6; color: #736679; margin: 9px 0; }
