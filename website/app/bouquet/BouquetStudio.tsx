@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from "react";
 import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, angleToward, arrange, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import "./bouquet.css";
@@ -47,6 +47,8 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   const [notice, setNotice] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [email, setEmail] = useState("");
+  const [emailState, setEmailState] = useState<"idle" | "sending" | "sent">("idle");
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const linkRef = useRef<HTMLTextAreaElement>(null);
   const revealRef = useRef<HTMLHeadingElement>(null);
@@ -326,6 +328,44 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
       return null;
     }
   }
+  async function sendByEmail(event: FormEvent) {
+    event.preventDefault();
+    if (emailState === "sending") return;
+    setEmailState("sending"); setNotice("");
+    // The link has to exist before it can be mailed, and makeLink reuses the
+    // one already made rather than storing the same bouquet twice.
+    const url = await makeLink();
+    if (!url) { setEmailState("idle"); return; }
+    try {
+      const res = await fetch("/api/gift/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: url.split("/g/")[1], email }),
+      });
+      const data = await res.json().catch(() => null);
+      if (res.ok) { setEmailState("sent"); setNotice(""); }
+      else { setEmailState("idle"); setNotice(data?.error ?? "That didn’t go through. Try again."); }
+    } catch {
+      setEmailState("idle");
+      setNotice("Couldn’t reach the flower shop. Check your connection and try again.");
+    }
+  }
+
+  /**
+   * Hands the gift to the Dayflower app. The website has no session and no
+   * idea who anyone's partner is, so it cannot post to a chat itself — it
+   * opens the app and leaves the link on the clipboard to paste in.
+   */
+  async function openInApp() {
+    const url = await makeLink();
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); } catch { /* The link is on screen either way. */ }
+    // Honest about the two halves: the copy always happens, the app opening
+    // only does if it is installed.
+    setNotice("Link copied. If you have Dayflower, it’s opening now — paste this into your chat.");
+    window.location.href = `dayflower://gift/${url.split("/g/")[1]}`;
+  }
+
   async function copyPrivateLink() {
     const url = makePrivateLink();
     if (!url) return;
@@ -457,7 +497,19 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
             <VesselView bouquet={bouquet} art={art} assets={assets} />
             <div className="bouquet-vessel-list">{vessels.map((vessel, i) => <button key={vessel.name} aria-pressed={(bouquet.vessel ?? 0) === i} onClick={() => update({ ...bouquet, vessel: i })}>{vessel.name}</button>)}</div>
             <p className="bouquet-help">{vessels[bouquet.vessel ?? 0].blurb}</p>
-          </div><button className="bouquet-button primary" disabled={busy} onClick={copyLink}>{busy ? "Wrapping…" : <>Copy gift link <span aria-hidden="true">↗</span></>}</button><button className="bouquet-button" disabled={busy} onClick={shareGift}>Share bouquet</button><div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button className={photoCount(bouquet) > 0 ? "bouquet-emphasis" : undefined} disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the link can open your bouquet and read your note. The preview they see says only that you made them something — it never gives away what is inside.</p>
+          </div><button className="bouquet-button primary" disabled={busy} onClick={copyLink}>{busy ? "Wrapping…" : <>Copy gift link <span aria-hidden="true">↗</span></>}</button><button className="bouquet-button" disabled={busy} onClick={shareGift}>Share bouquet</button><form className="bouquet-email" onSubmit={sendByEmail}>
+            {emailState === "sent"
+              ? <p className="bouquet-email-sent" role="status"><span aria-hidden="true">✉</span> On its way to {email}. They&rsquo;ll see only that you made them something.</p>
+              : <><label htmlFor="bouquet-email-field">Or send it straight to their inbox</label>
+                <div className="bouquet-email-row">
+                  <input id="bouquet-email-field" type="email" required value={email} placeholder="them@example.com" autoComplete="email"
+                    disabled={emailState === "sending"} onChange={e => { setEmail(e.target.value); setNotice(""); }} />
+                  <button type="submit" className="bouquet-button primary" disabled={emailState === "sending" || !email.trim()}>{emailState === "sending" ? "Sending…" : "Send"}</button>
+                </div>
+                <p className="bouquet-email-note">We send it once and don&rsquo;t keep the address.</p></>}
+          </form>
+          <button className="bouquet-button bouquet-in-app" onClick={openInApp}>Send in the Dayflower app</button>
+          <div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button className={photoCount(bouquet) > 0 ? "bouquet-emphasis" : undefined} disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the link can open your bouquet and read your note. The preview they see says only that you made them something — it never gives away what is inside.</p>
           <details className="bouquet-private"><summary>Rather store nothing?</summary><p>This makes a much longer link that carries the whole bouquet inside it. Nothing is saved on our side, but chat apps show no preview for it, and photos can’t travel this way.</p><button className="bouquet-text-button" onClick={copyPrivateLink}>Copy a private link instead</button></details><button className="bouquet-text-button" onClick={() => setStep(2)}>Back to your note</button></div>}
       </section>
     </div>

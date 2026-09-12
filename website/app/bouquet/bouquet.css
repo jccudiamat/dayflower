@@ -195,3 +195,19 @@
 .bouquet-private { margin-top: 14px; border-top: 1px solid #eee8f0; padding-top: 12px; text-align: left; }
 .bouquet-private summary { font-size: 13px; color: #6d5374; cursor: pointer; }
 .bouquet-private p { font-size: 12.5px; line-height: 1.6; color: #736679; margin: 9px 0; }
+
+/* ── Send by email, send to the app ─────────────────────────────────────── */
+.bouquet-email { margin: 18px 0 12px; text-align: left; }
+.bouquet-email label { display: block; font-size: 13px; font-weight: 700; color: #6d5374; margin-bottom: 9px; }
+.bouquet-email-row { display: flex; gap: 8px; }
+.bouquet-email-row input { flex: 1; min-width: 0; border: 1px solid #e2d8e9; border-radius: 999px; padding: 12px 16px; font-size: 15px; background: #fff; }
+.bouquet-email-row input:disabled { opacity: .6; }
+.bouquet-email-row .bouquet-button { flex-shrink: 0; }
+.bouquet-email-note { font-size: 12px; color: #8a7c8d; margin-top: 8px; }
+.bouquet-email-sent { font-size: 14px; line-height: 1.6; color: #4d7a5e; background: #eef7f0; border-radius: 14px; padding: 14px 16px; }
+.bouquet-email-sent span { margin-right: 6px; }
+.bouquet-in-app { width: 100%; margin-bottom: 4px; }
+
+@media (max-width: 420px) {
+  .bouquet-email-row { flex-direction: column; }
+}
