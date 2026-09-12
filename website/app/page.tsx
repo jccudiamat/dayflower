@@ -68,6 +68,16 @@ export default function Home() {
             <Link href="/photobooth" className="gradient-button !max-w-full !whitespace-normal text-center">Open the photo booth ↗</Link>
           </div>
         </section>
+        <section className="mx-auto max-w-5xl px-5 pb-14" aria-labelledby="free-bouquet-title">
+          <div className="grid items-center gap-6 overflow-hidden rounded-3xl border border-border-soft bg-blush p-7 sm:grid-cols-[1fr_180px] sm:p-10">
+            <div><p className="text-sm font-bold text-brand-dark">A LITTLE BOUQUET. A LOT OF LOVE.</p>
+              <h2 id="free-bouquet-title" className="mt-3 text-3xl font-bold">Flowers, just because.</h2>
+              <p className="my-5 max-w-xl leading-relaxed text-body">Pick their favorite blooms, wrap them with love, and tuck in a note. Send a digital bouquet to someone who makes your world a little lovelier. Free, with no account needed.</p>
+              <Link href="/bouquet" className="gradient-button !max-w-full !whitespace-normal text-center">Make a bouquet ↗</Link>
+            </div>
+            <div aria-hidden="true" className="hidden h-[240px] w-[180px] rotate-12 sm:block" style={{ backgroundImage: "url('/bouquet/botanical-sprites.webp')", backgroundSize: "400% 200%", backgroundPosition: "33.333% 100%" }} />
+          </div>
+        </section>
         <ProductTour />
 
         <section className="mx-auto max-w-5xl px-5 py-12">

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 export const metadata: Metadata = { title: "Privacy Policy | Dayflower", description: "How the Dayflower website, waitlist, and private-testing app handle information." };
 const sections = [
+["Digital bouquet creator", "The bouquet creator works without an account. Your unfinished bouquet and note are saved in this browser’s local storage when available. Clear this website’s browser data to remove the local draft. Gift links contain the arrangement and note in the URL fragment (the part after #), which is not sent to our server in the page request. The link is not encrypted: anyone who receives the complete link can open and copy its contents. Sharing sends the link through the app you choose. Each link keeps the version created at that time; later edits do not update or revoke earlier links. Downloaded bouquet images remain on your device."],
 ["Public photo booth","The public photo booth does not require an account. Selected photos, camera captures, crops, and generated strips are processed locally in your browser and are not uploaded to Dayflower servers. We do not maintain a booth gallery. Closing the page or clearing the session releases the photos held by the tool. Downloaded files remain on your device. Using Share sends the exported image through the app you choose. Camera access is optional and can be stopped in the tool or revoked in browser settings. Advertising spaces are currently placeholders; no ad network is loaded by the booth."],
   [
     "1. Scope and operator",
