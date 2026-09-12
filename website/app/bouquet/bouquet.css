@@ -183,3 +183,9 @@
 .bouquet-vessel .bouquet-help { text-align: center; }
 /* On the recipient's screen the vessel is the hero, not a control. */
 .bouquet-envelope .bouquet-vessel-art { max-width: 380px; margin: 8px auto 18px; }
+
+/* ── Depth ──────────────────────────────────────────────────────────────── */
+.bouquet-depth { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; min-height: 35px; margin-top: 4px; }
+.bouquet-depth > div { display: flex; gap: 6px; }
+.bouquet-depth button { min-height: 34px; padding: 5px 10px; border: 1px solid #e2d8e9; border-radius: 18px; font-size: 12px; color: #6d5374; background: #fff; }
+.bouquet-depth button:hover { background: #f6f0f8; border-color: #b795c0; }

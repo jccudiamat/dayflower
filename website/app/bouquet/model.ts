@@ -68,10 +68,60 @@ export const papers = [
   { name: "Blush", background: "#f9ecee", ink: "#7f465a", sprite: 6 },
 ] as const;
 
-export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number };
+export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number; z?: number };
 export const photoFrames = ["Polaroid", "Sticker", "Cutout", "Heart", "Circle", "Arch", "Postage stamp"] as const;
-export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front" };
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number };
+export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front"; z?: number };
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number };
+
+/** The wrapper turns and grows about its tie, not its middle, so it leans the way a held bouquet does. */
+export const WRAP_PIVOT = { x: 360, y: 690 };
+
+/**
+ * One stack for flowers and photos together, so either can be moved forward or
+ * back past the other.
+ *
+ * **Everything in this list draws between the wrapper's back and front halves**
+ * — reordering can shuffle the contents, but nothing can climb out of the
+ * paper or sink behind it. That is a property of where the loop sits in
+ * renderBouquet, not a rule enforced here.
+ *
+ * Old links carry no `z`. The fallbacks reproduce exactly the order that used
+ * to be hardcoded — photos marked "back", then stems in array order, then
+ * photos marked "front" — so a bouquet sent before this feature renders
+ * unchanged. `layer` is kept for those links and is no longer consulted once
+ * an item has a real `z`.
+ */
+const STEM_BAND = 1000;
+export type Layered = { kind: "stem"; z: number; stem: Stem } | { kind: "photo"; z: number; photo: Photo };
+export function layeredItems(bouquet: Bouquet): Layered[] {
+  const photos = bouquet.photos ?? [];
+  return [
+    ...photos.map((photo, i) => ({ kind: "photo" as const, photo, z: photo.z ?? (photo.layer === "back" ? i : STEM_BAND * 2 + i) })),
+    ...bouquet.stems.map((stem, i) => ({ kind: "stem" as const, stem, z: stem.z ?? (STEM_BAND + i) })),
+  ].sort((a, b) => a.z - b.z);
+}
+export function layerKey(item: Layered) { return item.kind === "stem" ? `stem:${item.stem.id}` : `photo:${item.photo.id}`; }
+
+/** One step forward or back in the shared stack, renumbered 0..n-1 afterwards. */
+export function reorder(bouquet: Bouquet, kind: "stem" | "photo", id: number, delta: 1 | -1): Bouquet {
+  const list = layeredItems(bouquet);
+  const from = list.findIndex(item => layerKey(item) === `${kind}:${id}`);
+  const to = from + delta;
+  if (from < 0 || to < 0 || to >= list.length) return bouquet;
+  [list[from], list[to]] = [list[to], list[from]];
+  const depth = new Map(list.map((item, i) => [layerKey(item), i]));
+  const photos = (bouquet.photos ?? []).map(photo => ({ ...photo, z: depth.get(`photo:${photo.id}`) ?? photo.z }));
+  return {
+    ...bouquet,
+    stems: bouquet.stems.map(stem => ({ ...stem, z: depth.get(`stem:${stem.id}`) ?? stem.z })),
+    ...(photos.length ? { photos } : {}),
+  };
+}
+/** Depth for something just added, so it lands on top of everything already there. */
+export function topZ(bouquet: Bouquet) {
+  const list = layeredItems(bouquet);
+  return list.length ? list[list.length - 1].z + 1 : 0;
+}
 
 /**
  * How the bouquet arrives. The vessel is what the recipient sees *before*
@@ -146,7 +196,8 @@ export function validateBouquet(value: unknown): Bouquet | null {
     const s = item as Record<string, unknown>;
     if (!Number.isInteger(s.flower) || !finiteIn(s.flower, 0, flowers.length - 1) || !finiteIn(s.x, 220, 500) ||
         !finiteIn(s.y, 490, 690) || !finiteIn(s.angle, -45, 45) || !finiteIn(s.scale, .7, 1.15)) return null;
-    stems.push({ id: stems.length + 1, flower: s.flower, x: s.x, y: s.y, angle: s.angle, scale: s.scale });
+    const z = Number.isInteger(s.z) && finiteIn(s.z, 0, 9999) ? s.z as number : undefined;
+    stems.push({ id: stems.length + 1, flower: s.flower, x: s.x, y: s.y, angle: s.angle, scale: s.scale, ...(z !== undefined ? { z } : {}) });
   }
   const photos: Photo[] = [];
   if (b.photos !== undefined) {
@@ -163,7 +214,8 @@ export function validateBouquet(value: unknown): Bouquet | null {
       // Must match what the editor can actually produce, or a full bouquet is
       // rejected on reload and the saved draft vanishes without a word.
       if (total > MAX_PHOTOS * MAX_PHOTO_LENGTH) return null;
-      photos.push({ id: photos.length + 1, src: p.src, frame: p.frame, x: p.x, y: p.y, angle: p.angle, scale: p.scale, zoom: p.zoom, cropX: p.cropX, cropY: p.cropY, caption: p.caption, layer: p.layer });
+      const pz = Number.isInteger(p.z) && finiteIn(p.z, 0, 9999) ? p.z as number : undefined;
+      photos.push({ id: photos.length + 1, src: p.src, frame: p.frame, x: p.x, y: p.y, angle: p.angle, scale: p.scale, zoom: p.zoom, cropX: p.cropX, cropY: p.cropY, caption: p.caption, layer: p.layer, ...(pz !== undefined ? { z: pz } : {}) });
     }
   }
   // ⚠️ These three are **defaulted, not rejected**, unlike everything above.
@@ -173,12 +225,15 @@ export function validateBouquet(value: unknown): Bouquet | null {
   const vessel = Number.isInteger(b.vessel) && finiteIn(b.vessel, 0, vessels.length - 1) ? b.vessel as number : 0;
   const print = Number.isInteger(b.print) && finiteIn(b.print, 0, prints.length - 1) ? b.print as number : 0;
   const printOpacity = finiteIn(b.printOpacity, 0, 100) ? Math.round(b.printOpacity as number) : DEFAULT_PRINT_OPACITY;
+  const wrapScale = finiteIn(b.wrapScale, .75, 1.3) ? b.wrapScale as number : 1;
+  const wrapAngle = finiteIn(b.wrapAngle, -20, 20) ? b.wrapAngle as number : 0;
   return {
     v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message,
     ...(photos.length ? { photos } : {}),
     // Defaults are left out so a plain bouquet's link stays as short as it was.
     ...(vessel ? { vessel } : {}), ...(print ? { print } : {}),
     ...(print && printOpacity !== DEFAULT_PRINT_OPACITY ? { printOpacity } : {}),
+    ...(wrapScale !== 1 ? { wrapScale } : {}), ...(wrapAngle !== 0 ? { wrapAngle } : {}),
   };
 }
 
@@ -223,6 +278,25 @@ export function stemHandle(stem: Stem) {
   const bloom = bloomPoint(stem), { angle } = stemGeometry(stem);
   return { x: bloom.x + Math.cos(angle) * (bloom.r + 22), y: bloom.y + Math.sin(angle) * (bloom.r + 22), r: 19 };
 }
+/** The size grip, mirrored across the bloom from the tilt one so the two never overlap. */
+export function stemScaleHandle(stem: Stem) {
+  const bloom = bloomPoint(stem), { angle } = stemGeometry(stem);
+  return { x: bloom.x - Math.cos(angle) * (bloom.r + 22), y: bloom.y - Math.sin(angle) * (bloom.r + 22), r: 19 };
+}
+
+/** A photo's grips ride its own corners, so they turn and grow with it. */
+function photoCorner(photo: Photo, sx: number, sy: number) {
+  const { w, h, angle } = photoGeometry(photo);
+  const lx = sx * (w / 2 + 13), ly = sy * (h / 2 + 13);
+  return { x: photo.x + lx * Math.cos(angle) - ly * Math.sin(angle), y: photo.y + lx * Math.sin(angle) + ly * Math.cos(angle), r: 19 };
+}
+export const photoTiltHandle = (photo: Photo) => photoCorner(photo, 1, -1);
+export const photoScaleHandle = (photo: Photo) => photoCorner(photo, 1, 1);
+/** Degrees that would point a photo's top edge away from (x, y). */
+export function photoAngleToward(photo: Photo, x: number, y: number) {
+  return Math.atan2(x - photo.x, -(y - photo.y)) * 180 / Math.PI;
+}
+
 /** Degrees that would point the stem from its base toward (x, y). */
 export function angleToward(stem: Stem, x: number, y: number) {
   return Math.atan2(x - stem.x, -(y - stem.y)) * 180 / Math.PI;
@@ -300,9 +374,41 @@ function drawPhoto(ctx: CanvasRenderingContext2D, photo: Photo, image: HTMLImage
   }
   if (selected) { ctx.strokeStyle = "#754766"; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.strokeRect(-w / 2 - 5, -h / 2 - 5, w + 10, h + 10); }
   ctx.restore();
+  // Outside the photo's own transform: the grips keep a constant size however
+  // far the photo has been scaled, the way a handle should.
+  if (selected) {
+    const tilt = photoTiltHandle(photo), size = photoScaleHandle(photo);
+    drawGrip(ctx, tilt.x, tilt.y, "tilt", "#754766");
+    drawGrip(ctx, size.x, size.y, "size", "#754766");
+  }
 }
 
 export type RenderAssets = Record<string, HTMLImageElement>;
+
+function drawGrip(ctx: CanvasRenderingContext2D, x: number, y: number, kind: "tilt" | "size", ink: string) {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle = ink;
+  ctx.beginPath(); ctx.arc(x, y, 13, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#fffdf8"; ctx.lineWidth = 2.2; ctx.lineCap = "round";
+  if (kind === "tilt") {
+    ctx.beginPath(); ctx.arc(x, y, 6.4, Math.PI * .35, Math.PI * 1.65); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 1.2, y - 8.4); ctx.lineTo(x + 6.4, y - 5.6); ctx.lineTo(x + 1.2, y - 2.4); ctx.closePath();
+    ctx.fillStyle = "#fffdf8"; ctx.fill();
+  } else {
+    // A diagonal double arrow: the universal "drag me bigger".
+    ctx.beginPath(); ctx.moveTo(x - 5, y + 5); ctx.lineTo(x + 5, y - 5); ctx.stroke();
+    ctx.fillStyle = "#fffdf8";
+    for (const [dx, dy] of [[1, -1], [-1, 1]] as const) {
+      ctx.beginPath();
+      ctx.moveTo(x + dx * 7.5, y + dy * 7.5);
+      ctx.lineTo(x + dx * 7.5 - dx * 6.5, y + dy * 7.5);
+      ctx.lineTo(x + dx * 7.5, y + dy * 7.5 - dy * 6.5);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.restore();
+}
 export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: HTMLImageElement, selected?: number, assets: RenderAssets = {}, selectedPhoto?: number) {
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
@@ -324,24 +430,47 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.beginPath(); ctx.rect(12, 112, WIDTH - 24, 615); ctx.clip();
   const wrapper = assets[WRAPPER_URL];
   const wrapIndex = bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
+  // Both halves of the paper and the taper below share one transform, or the
+  // front would slide off the back the moment the wrapper is turned.
+  const wrapTransform = () => {
+    ctx.translate(WRAP_PIVOT.x, WRAP_PIVOT.y);
+    ctx.rotate((bouquet.wrapAngle ?? 0) * Math.PI / 180);
+    ctx.scale(bouquet.wrapScale ?? 1, bouquet.wrapScale ?? 1);
+    ctx.translate(-WRAP_PIVOT.x, -WRAP_PIVOT.y);
+  };
   const drawWrapper = (front: boolean) => {
     if (!wrapper || paper.sprite < 0 || !hasContents(bouquet)) return;
     const crop = spriteRect(wrapIndex + (front ? 1 : 0), wrapper.naturalWidth, wrapper.naturalHeight);
+    ctx.save(); wrapTransform();
     ctx.drawImage(wrapper, crop.x, crop.y, crop.w, crop.h, 104, 130, 512, 600);
+    ctx.restore();
   };
   drawWrapper(false);
   ctx.save();
   if (paper.sprite >= 0 && wrapper) {
     // The opening stays broad; below it the foliage tapers into the tied paper.
     // This prevents leaves and stem ends from sticking through the wrapper's sides.
+    //
+    // The path is laid down under the wrapper's transform so it follows the
+    // paper, then the transform is undone before clipping — the current path
+    // is not part of the state save/restore touches, so it survives with its
+    // points already resolved, and the flowers that follow draw untransformed.
+    ctx.save(); wrapTransform();
     ctx.beginPath(); ctx.moveTo(28, 112); ctx.lineTo(692, 112); ctx.lineTo(656, 390);
-    ctx.lineTo(500, 530); ctx.lineTo(402, 658); ctx.lineTo(318, 658); ctx.lineTo(220, 530); ctx.lineTo(64, 390); ctx.closePath(); ctx.clip();
+    ctx.lineTo(500, 530); ctx.lineTo(402, 658); ctx.lineTo(318, 658); ctx.lineTo(220, 530); ctx.lineTo(64, 390); ctx.closePath();
+    ctx.restore();
+    ctx.clip();
   }
-  const drawPhotos = (layer: "back" | "front") => {
-    for (const photo of bouquet.photos ?? []) if (photo.layer === layer && assets[photo.src]) drawPhoto(ctx, photo, assets[photo.src], selectedPhoto === photo.id);
-  };
-  drawPhotos("back");
-  for (const stem of bouquet.stems) {
+  // One pass, flowers and photos interleaved by depth. Because this whole loop
+  // sits between drawWrapper(false) and drawWrapper(true), no amount of
+  // reordering can put anything in front of the paper or behind it.
+  for (const item of layeredItems(bouquet)) {
+    if (item.kind === "photo") {
+      const image = assets[item.photo.src];
+      if (image) drawPhoto(ctx, item.photo, image, selectedPhoto === item.photo.id);
+      continue;
+    }
+    const stem = item.stem;
     const sprite = flowerSprite(stem.flower), sheet = sprite.url === ART_URL ? art : assets[sprite.url];
     if (!sheet) continue;
     const crop = spriteRect(sprite.index, sheet.naturalWidth, sheet.naturalHeight, sprite.rows);
@@ -350,7 +479,6 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     ctx.drawImage(sheet, crop.x, crop.y, crop.w, crop.h, -w / 2, -h * .94, w, h);
     ctx.restore();
   }
-  drawPhotos("front");
   ctx.restore();
   drawWrapper(true);
   if (!wrapper && paper.sprite >= 0 && bouquet.stems.length) {
@@ -359,19 +487,15 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   }
   const active = bouquet.stems.find(s => s.id === selected);
   if (active) {
-    const bloom = bloomPoint(active), grip = stemHandle(active);
+    const bloom = bloomPoint(active), tilt = stemHandle(active), size = stemScaleHandle(active);
     ctx.strokeStyle = paper.ink; ctx.lineWidth = 2; ctx.setLineDash([5, 6]);
     ctx.beginPath(); ctx.arc(bloom.x, bloom.y, bloom.r, 0, Math.PI * 2); ctx.stroke();
-    // The grip: a solid disc with a turning arrow, tethered to the ring so it
-    // reads as part of the selection rather than a stray dot on the paper.
+    // Tethered to the ring so the grips read as part of the selection rather
+    // than stray dots on the paper.
     ctx.setLineDash([]);
-    ctx.beginPath(); ctx.moveTo(bloom.x, bloom.y); ctx.lineTo(grip.x, grip.y); ctx.stroke();
-    ctx.fillStyle = paper.ink;
-    ctx.beginPath(); ctx.arc(grip.x, grip.y, 13, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "#fffdf8"; ctx.lineWidth = 2.2;
-    ctx.beginPath(); ctx.arc(grip.x, grip.y, 6.4, Math.PI * .35, Math.PI * 1.65); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(grip.x + 1.2, grip.y - 8.4); ctx.lineTo(grip.x + 6.4, grip.y - 5.6); ctx.lineTo(grip.x + 1.2, grip.y - 2.4); ctx.closePath();
-    ctx.fillStyle = "#fffdf8"; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(tilt.x, tilt.y); ctx.lineTo(size.x, size.y); ctx.stroke();
+    drawGrip(ctx, tilt.x, tilt.y, "tilt", paper.ink);
+    drawGrip(ctx, size.x, size.y, "size", paper.ink);
   }
   ctx.restore();
   ctx.fillStyle = "#ffffffcf";

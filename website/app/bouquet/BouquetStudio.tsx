@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
-import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, angleToward, arrange, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, prints, renderBouquet, renderVessel, stemHandle, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, angleToward, arrange, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import "./bouquet.css";
 
@@ -51,7 +51,7 @@ export default function BouquetStudio() {
   const linkRef = useRef<HTMLTextAreaElement>(null);
   const revealRef = useRef<HTMLHeadingElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const drag = useRef<{ kind: "stem" | "photo" | "tilt"; id: number; startX: number; startY: number; x: number; y: number; grab?: number } | null>(null);
+  const drag = useRef<{ kind: "stem" | "photo" | "tilt" | "size" | "photoTilt" | "photoSize"; id: number; startX: number; startY: number; x: number; y: number; grab?: number; from?: number } | null>(null);
   const active = bouquet.stems.find(s => s.id === selected);
   const photos = useMemo(() => bouquet.photos ?? [], [bouquet.photos]);
   const activePhoto = photos.find(p => p.id === selectedPhoto);
@@ -160,7 +160,7 @@ export default function BouquetStudio() {
   function addFlower(flower: number) {
     if (bouquet.stems.length >= MAX_STEMS) return;
     const id = Math.max(0, ...bouquet.stems.map(s => s.id)) + 1;
-    const stem = { id, flower, x: 360, y: 646, angle: (bouquet.stems.length % 5 - 2) * 13, scale: .94 };
+    const stem = { id, flower, x: 360, y: 646, angle: (bouquet.stems.length % 5 - 2) * 13, scale: .94, z: topZ(bouquet) };
     update({ ...bouquet, stems: [...bouquet.stems, stem] }); setSelected(id);
   }
   function updatePhoto(values: Partial<Photo>) {
@@ -175,7 +175,7 @@ export default function BouquetStudio() {
     try {
       const src = await readPhoto(file);
       const id = Math.max(0, ...photos.map(p => p.id)) + 1;
-      const photo = newPhoto(src, id, photos.length);
+      const photo = { ...newPhoto(src, id, photos.length), z: topZ(bouquet) };
       update({ ...bouquet, photos: [...photos, photo] });
       setSelectedPhoto(id); setSelected(undefined);
     } catch (error) {
@@ -203,19 +203,39 @@ export default function BouquetStudio() {
     const p = point(event);
     // The tilt grip belongs to the stem that is already selected and sits on
     // top of everything, so it gets first refusal on the pointer.
-    const turning = active && step === 0 ? stemHandle(active) : null;
-    if (active && turning && Math.hypot(p.x - turning.x, p.y - turning.y) <= turning.r) {
-      // Remember how far the grip sits from the stem's own heading, so the
-      // flower turns with the finger instead of snapping under it.
-      drag.current = { kind: "tilt", id: active.id, startX: p.x, startY: p.y, x: active.x, y: active.y, grab: angleToward(active, p.x, p.y) - active.angle };
-      event.currentTarget.setPointerCapture(event.pointerId);
-      return;
+    const near = (h: { x: number; y: number; r: number }) => Math.hypot(p.x - h.x, p.y - h.y) <= h.r;
+    if (active && step === 0) {
+      if (near(stemHandle(active))) {
+        // Remember how far the grip sits from the stem's own heading, so the
+        // flower turns with the finger instead of snapping under it.
+        drag.current = { kind: "tilt", id: active.id, startX: p.x, startY: p.y, x: active.x, y: active.y, grab: angleToward(active, p.x, p.y) - active.angle };
+        event.currentTarget.setPointerCapture(event.pointerId); return;
+      }
+      if (near(stemScaleHandle(active))) {
+        // Scale rides the ratio of distances from the stem's base, so wherever
+        // the grip is grabbed it stays under the finger.
+        drag.current = { kind: "size", id: active.id, startX: p.x, startY: p.y, x: active.x, y: active.y, from: active.scale, grab: Math.max(1, Math.hypot(p.x - active.x, p.y - active.y)) };
+        event.currentTarget.setPointerCapture(event.pointerId); return;
+      }
     }
-    // Photos in front are drawn last, so they are grabbed first; stems come
-    // next; photos tucked behind the flowers are the last thing you can catch.
-    const front = hitPhoto(photos.filter(photo => photo.layer === "front"), p.x, p.y);
-    const stem = front ? undefined : hitStem(bouquet.stems, p.x, p.y);
-    const photo = front ?? (stem ? undefined : hitPhoto(photos.filter(item => item.layer === "back"), p.x, p.y));
+    if (activePhoto && step === 1) {
+      if (near(photoTiltHandle(activePhoto))) {
+        drag.current = { kind: "photoTilt", id: activePhoto.id, startX: p.x, startY: p.y, x: activePhoto.x, y: activePhoto.y, grab: photoAngleToward(activePhoto, p.x, p.y) - activePhoto.angle };
+        event.currentTarget.setPointerCapture(event.pointerId); return;
+      }
+      if (near(photoScaleHandle(activePhoto))) {
+        drag.current = { kind: "photoSize", id: activePhoto.id, startX: p.x, startY: p.y, x: activePhoto.x, y: activePhoto.y, from: activePhoto.scale, grab: Math.max(1, Math.hypot(p.x - activePhoto.x, p.y - activePhoto.y)) };
+        event.currentTarget.setPointerCapture(event.pointerId); return;
+      }
+    }
+    // Topmost first, so what you grab is what you can see. The stack is shared
+    // now, so this walks it from the front rather than assuming photos sit in
+    // fixed bands around the flowers.
+    let stem: Stem | undefined, photo: Photo | undefined;
+    for (const item of [...layeredItems(bouquet)].reverse()) {
+      if (item.kind === "photo") { const found = hitPhoto([item.photo], p.x, p.y); if (found) { photo = found; break; } }
+      else { const found = hitStem([item.stem], p.x, p.y); if (found) { stem = found; break; } }
+    }
     setSelected(stem?.id);
     setSelectedPhoto(photo?.id);
     if (photo) { setStep(1); drag.current = { kind: "photo", id: photo.id, startX: p.x, startY: p.y, x: photo.x, y: photo.y }; }
@@ -236,6 +256,20 @@ export default function BouquetStudio() {
         const angle = angleToward(stem, p.x, p.y) - (moving.grab ?? 0);
         return { ...stem, angle: Math.round(clamp(angle, -45, 45)) };
       }) }));
+    } else if (moving.kind === "size") {
+      const reach = Math.hypot(p.x - moving.x, p.y - moving.y) / (moving.grab ?? 1);
+      setBouquet(current => ({ ...current, stems: current.stems.map(stem =>
+        stem.id === moving.id ? { ...stem, scale: +clamp((moving.from ?? 1) * reach, .7, 1.15).toFixed(2) } : stem) }));
+    } else if (moving.kind === "photoTilt") {
+      setBouquet(current => ({ ...current, photos: (current.photos ?? []).map(photo => {
+        if (photo.id !== moving.id) return photo;
+        const angle = photoAngleToward(photo, p.x, p.y) - (moving.grab ?? 0);
+        return { ...photo, angle: Math.round(clamp(angle, -45, 45)) };
+      }) }));
+    } else if (moving.kind === "photoSize") {
+      const reach = Math.hypot(p.x - moving.x, p.y - moving.y) / (moving.grab ?? 1);
+      setBouquet(current => ({ ...current, photos: (current.photos ?? []).map(photo =>
+        photo.id === moving.id ? { ...photo, scale: +clamp((moving.from ?? 1) * reach, .55, 1.5).toFixed(2) } : photo) }));
     } else if (moving.kind === "stem") {
       setBouquet(current => ({ ...current, stems: current.stems.map(s => s.id === moving.id ? { ...s, x: Math.round(clamp(x, 220, 500)), y: Math.round(clamp(y, 490, 690)) } : s) }));
     } else {
@@ -324,13 +358,18 @@ export default function BouquetStudio() {
           {lostSheets.length > 0 && <p className="bouquet-help">Some flowers couldn’t load just now. <button className="bouquet-text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
           <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: next.stems, paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>
           <fieldset className="bouquet-paper"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span style={{ background: paper.background, borderColor: paper.ink }}>{bouquet.paper === i ? "✓" : ""}</span>{paper.name}</button>)}</div></fieldset>
+          {papers[bouquet.paper].sprite >= 0 && <fieldset className="bouquet-paper bouquet-print"><legend>The wrapping</legend>
+            <p className="bouquet-help">Size and lean of the paper itself. The flowers stay tucked inside it.</p>
+            <label className="bouquet-print-opacity">Size<input aria-label="Wrapper size" type="range" min={.75} max={1.3} step={.01} value={bouquet.wrapScale ?? 1} onChange={e => update({ ...bouquet, wrapScale: +e.target.value })} /></label>
+            <label className="bouquet-print-opacity">Lean<input aria-label="Wrapper lean" type="range" min={-20} max={20} value={bouquet.wrapAngle ?? 0} onChange={e => update({ ...bouquet, wrapAngle: +e.target.value })} /></label>
+          </fieldset>}
           <fieldset className="bouquet-paper bouquet-print"><legend>Stationery</legend>
             <p className="bouquet-help">A print behind the flowers. Keep it faint and it reads like nice paper.</p>
             <div className="bouquet-print-list">{prints.map((sheet, i) => <button key={sheet.name} aria-pressed={(bouquet.print ?? 0) === i} onClick={() => update({ ...bouquet, print: i })}>{sheet.name}</button>)}</div>
             {(bouquet.print ?? 0) > 0 && <label className="bouquet-print-opacity">How strong<input aria-label="Stationery strength" type="range" min={5} max={100} value={bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY} onChange={e => update({ ...bouquet, printOpacity: +e.target.value })} /></label>}
           </fieldset>
           <details className="bouquet-arrange" open={selected !== undefined ? true : undefined}><summary>Arrange your stems <span>{bouquet.stems.length}</span></summary><div className="bouquet-stem-list">{bouquet.stems.map((stem, i) => <button aria-pressed={selected === stem.id} key={stem.id} onClick={() => setSelected(stem.id)}>{i + 1}. {flowers[stem.flower].name}</button>)}</div>
-            {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={220} max={500} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={490} max={690} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={.7} max={1.15} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
+            {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={220} max={500} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={490} max={690} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={.7} max={1.15} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><div className="bouquet-depth"><span>Depth</span><div><button onClick={() => update(reorder(bouquet, "stem", active.id, -1))}>Send back</button><button onClick={() => update(reorder(bouquet, "stem", active.id, 1))}>Bring forward</button></div></div><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
             <div className="bouquet-arrange-actions"><button onClick={() => { update({ ...bouquet, stems: arrange(bouquet.stems.map(s => s.flower)) }); setSelected(undefined); }}>Arrange for me</button><button disabled={!bouquet.stems.length} onClick={() => { update({ ...bouquet, stems: [] }); setSelected(undefined); }}>Clear flowers</button></div>
           </details>
           <button className="bouquet-button primary bouquet-next" disabled={!art || !bouquet.stems.length} onClick={() => { setStep(1); setSelected(undefined); }}>Add a photo <span aria-hidden="true">→</span></button><button className="bouquet-text-button" disabled={!art || !bouquet.stems.length} onClick={() => { setStep(2); setSelected(undefined); }}>Skip to your note</button>
@@ -359,7 +398,8 @@ export default function BouquetStudio() {
             <label>Zoom<input aria-label="Photo zoom" type="range" min={1} max={3} step={.01} value={activePhoto.zoom} onChange={e => updatePhoto({ zoom: +e.target.value })} /></label>
             <label>Move across<input aria-label="Photo crop across" type="range" min={0} max={100} value={activePhoto.cropX} onChange={e => updatePhoto({ cropX: +e.target.value })} /></label>
             <label>Move up<input aria-label="Photo crop up and down" type="range" min={0} max={100} value={activePhoto.cropY} onChange={e => updatePhoto({ cropY: +e.target.value })} /></label>
-            <div className="bouquet-photo-layer"><span>Sits</span><div>{(["back", "front"] as const).map(layer => <button key={layer} aria-pressed={activePhoto.layer === layer} onClick={() => updatePhoto({ layer })}>{layer === "back" ? "Behind the flowers" : "In front"}</button>)}</div></div>
+            <div className="bouquet-depth"><span>Depth</span><div><button onClick={() => update(reorder(bouquet, "photo", activePhoto.id, -1))}>Send back</button><button onClick={() => update(reorder(bouquet, "photo", activePhoto.id, 1))}>Bring forward</button></div></div>
+            <p className="bouquet-help">Moves one step through the flowers. Everything stays tucked inside the wrapper.</p>
             <div className="bouquet-photo-actions">
               <button className="bouquet-text-button" disabled={photoBusy} onClick={cutOut}>{photoBusy ? "Working…" : "Lift off the background"}</button>
               <button className="bouquet-text-button" onClick={() => { update({ ...bouquet, photos: photos.filter(item => item.id !== selectedPhoto) }); setSelectedPhoto(undefined); }}>Remove this photo</button>
