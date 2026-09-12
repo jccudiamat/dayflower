@@ -71,7 +71,43 @@ export const papers = [
 export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number };
 export const photoFrames = ["Polaroid", "Sticker", "Cutout", "Heart", "Circle", "Arch", "Postage stamp"] as const;
 export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front" };
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[] };
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number };
+
+/**
+ * How the bouquet arrives. The vessel is what the recipient sees *before*
+ * anything opens — the preview card in a chat, the image in an email, the
+ * bubble in the app — so it is deliberately separate from the paper the
+ * flowers are wrapped in.
+ *
+ * Drawn in code for now (see renderVessel). Swapping in a sprite sheet later
+ * means changing only that function; the ids and order below are stored in
+ * gift links, so **never reorder them**.
+ */
+export const vessels = [
+  { name: "Paper envelope", blurb: "Classic. A flap and a little wax seal." },
+  { name: "Postcard", blurb: "A stamp, a postmark, a short hello." },
+  { name: "Love letter", blurb: "Folded in three, sealed with a heart." },
+  { name: "Carrier pigeon", blurb: "Takes the long way. Always arrives." },
+  { name: "Single stem", blurb: "One flower, tied with a ribbon." },
+  { name: "Gift box", blurb: "Lid, ribbon, and a moment before it lifts." },
+] as const;
+
+/** Stationery printed under everything. Borders frame the page; patterns tile it. */
+export const prints = [
+  { name: "Plain", kind: "none" },
+  { name: "Hearts", kind: "pattern" },
+  { name: "Little stars", kind: "pattern" },
+  { name: "Bows", kind: "pattern" },
+  { name: "Sprigs", kind: "pattern" },
+  { name: "Gingham", kind: "pattern" },
+  { name: "Vines", kind: "border" },
+  { name: "Petals", kind: "border" },
+  { name: "Scalloped", kind: "border" },
+] as const;
+
+export const DEFAULT_PRINT_OPACITY = 30;
+export const VESSEL_W = 520;
+export const VESSEL_H = 380;
 export const MAX_STEMS = 24;
 export const MAX_PHOTOS = 8;
 export const MAX_PHOTO_LENGTH = 180_000;
@@ -130,7 +166,20 @@ export function validateBouquet(value: unknown): Bouquet | null {
       photos.push({ id: photos.length + 1, src: p.src, frame: p.frame, x: p.x, y: p.y, angle: p.angle, scale: p.scale, zoom: p.zoom, cropX: p.cropX, cropY: p.cropY, caption: p.caption, layer: p.layer });
     }
   }
-  return { v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message, ...(photos.length ? { photos } : {}) };
+  // ⚠️ These three are **defaulted, not rejected**, unlike everything above.
+  // Gift links sent before they existed carry none of them, and a link someone
+  // already posted must never stop opening because the editor grew a feature.
+  // Out-of-range values fall back for the same reason.
+  const vessel = Number.isInteger(b.vessel) && finiteIn(b.vessel, 0, vessels.length - 1) ? b.vessel as number : 0;
+  const print = Number.isInteger(b.print) && finiteIn(b.print, 0, prints.length - 1) ? b.print as number : 0;
+  const printOpacity = finiteIn(b.printOpacity, 0, 100) ? Math.round(b.printOpacity as number) : DEFAULT_PRINT_OPACITY;
+  return {
+    v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message,
+    ...(photos.length ? { photos } : {}),
+    // Defaults are left out so a plain bouquet's link stays as short as it was.
+    ...(vessel ? { vessel } : {}), ...(print ? { print } : {}),
+    ...(print && printOpacity !== DEFAULT_PRINT_OPACITY ? { printOpacity } : {}),
+  };
 }
 
 // The gift travels in the URL fragment. No account, database row, or note upload is needed.
@@ -262,6 +311,9 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   const paper = papers[bouquet.paper];
   ctx.fillStyle = paper.background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  // Stationery sits under everything, including the title, so a border frames
+  // the whole card the way a printed sheet would.
+  drawPrint(ctx, bouquet.print ?? 0, bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY, paper.ink);
   ctx.textAlign = "center";
   ctx.fillStyle = paper.ink;
   ctx.font = '16px sans-serif';
@@ -334,4 +386,280 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.fillText(bouquet.from.trim() ? `With love, ${bouquet.from.trim()}` : "With love", WIDTH / 2, 889, 590);
   ctx.font = "13px sans-serif";
   ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, 938);
+}
+
+/* ── Stationery ───────────────────────────────────────────────────────────
+   Printed under everything, at the sender's chosen opacity, in the paper's
+   own ink so it can never clash with the wrapping. Motifs are drawn at the
+   origin and placed by the caller, which is what lets the pattern tiler jitter
+   and rotate them without each one knowing where it sits. */
+
+function motifHeart(ctx: CanvasRenderingContext2D, s: number) {
+  ctx.beginPath();
+  ctx.moveTo(0, s * .78);
+  ctx.bezierCurveTo(-s * 1.15, -s * .1, -s * .48, -s * .98, 0, -s * .34);
+  ctx.bezierCurveTo(s * .48, -s * .98, s * 1.15, -s * .1, 0, s * .78);
+  ctx.fill();
+}
+function motifStar(ctx: CanvasRenderingContext2D, s: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? s * .42 : s, a = -Math.PI / 2 + i * Math.PI / 5;
+    if (i) ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); else ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+  }
+  ctx.closePath(); ctx.fill();
+}
+function motifBow(ctx: CanvasRenderingContext2D, s: number) {
+  ctx.beginPath(); ctx.ellipse(-s * .58, 0, s * .52, s * .38, -.38, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(s * .58, 0, s * .52, s * .38, .38, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(-s * .34, s * .62, s * .16, s * .44, -.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(s * .34, s * .62, s * .16, s * .44, .5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, 0, s * .21, 0, Math.PI * 2); ctx.fill();
+}
+function motifSprig(ctx: CanvasRenderingContext2D, s: number) {
+  ctx.lineWidth = Math.max(1, s * .14); ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(0, s * 1.1); ctx.lineTo(0, -s * 1.1); ctx.stroke();
+  for (let i = -2; i <= 1; i++) {
+    const y = i * s * .52;
+    ctx.beginPath(); ctx.ellipse(-s * .44, y, s * .42, s * .17, -.55, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(s * .44, y + s * .26, s * .42, s * .17, .55, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+/** A deterministic wobble, so the tiling looks hand-stamped but never changes. */
+function jitter(n: number) { return (Math.sin(n * 12.9898) * 43758.5453) % 1; }
+
+function drawPattern(ctx: CanvasRenderingContext2D, name: string) {
+  if (name === "Gingham") {
+    // Overlapping bands at partial alpha make the darker squares for free.
+    const step = 48;
+    ctx.globalAlpha *= .5;
+    for (let x = 0; x < WIDTH; x += step * 2) ctx.fillRect(x, 0, step, HEIGHT);
+    for (let y = 0; y < HEIGHT; y += step * 2) ctx.fillRect(0, y, WIDTH, step);
+    return;
+  }
+  const motif = name === "Hearts" ? motifHeart : name === "Little stars" ? motifStar : name === "Bows" ? motifBow : motifSprig;
+  const stepX = 96, stepY = 92, size = name === "Bows" ? 11 : 13;
+  let n = 0;
+  for (let row = 0; row * stepY < HEIGHT + stepY; row++) {
+    for (let col = 0; col * stepX < WIDTH + stepX; col++) {
+      const x = col * stepX + (row % 2 ? stepX / 2 : 0) + jitter(++n) * 9;
+      const y = row * stepY + jitter(n + 99) * 9;
+      ctx.save(); ctx.translate(x, y); ctx.rotate(jitter(n + 7) * .5); motif(ctx, size); ctx.restore();
+    }
+  }
+}
+
+function drawBorder(ctx: CanvasRenderingContext2D, name: string) {
+  const m = 32;
+  if (name === "Scalloped") {
+    ctx.lineWidth = 2;
+    const r = 16;
+    for (const [len, horizontal] of [[WIDTH, true], [HEIGHT, false]] as const) {
+      for (let i = m + r; i < len - m; i += r * 2) {
+        for (const edge of horizontal ? [m, HEIGHT - m] : [m, WIDTH - m]) {
+          ctx.beginPath();
+          if (horizontal) ctx.arc(i, edge, r, Math.PI, 0, edge !== m);
+          else ctx.arc(edge, i, r, Math.PI * .5, Math.PI * 1.5, edge === m);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.strokeRect(m + 14, m + 14, WIDTH - (m + 14) * 2, HEIGHT - (m + 14) * 2);
+    return;
+  }
+  if (name === "Vines") {
+    // Sprigs march along each edge, turned to face the middle of the page.
+    const place = (x: number, y: number, rotation: number, s: number) => {
+      ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); motifSprig(ctx, s); ctx.restore();
+    };
+    for (let x = m + 26; x < WIDTH - m; x += 58) { place(x, m, Math.PI / 2, 10); place(x, HEIGHT - m, Math.PI / 2, 10); }
+    for (let y = m + 26; y < HEIGHT - m; y += 58) { place(m, y, 0, 10); place(WIDTH - m, y, 0, 10); }
+    return;
+  }
+  // Petals: clusters tucked into the four corners, thinning as they trail away.
+  for (const [cx, cy, sx, sy] of [[m, m, 1, 1], [WIDTH - m, m, -1, 1], [m, HEIGHT - m, 1, -1], [WIDTH - m, HEIGHT - m, -1, -1]] as const) {
+    for (let i = 0; i < 9; i++) {
+      const t = i / 8, along = 26 + t * 150, drift = 14 + jitter(i + 3) * 16;
+      const flip = i % 2 ? 1 : -1;
+      ctx.save();
+      ctx.translate(cx + sx * (flip > 0 ? along : drift), cy + sy * (flip > 0 ? drift : along));
+      ctx.rotate(jitter(i) * Math.PI);
+      ctx.globalAlpha *= 1 - t * .55;
+      ctx.beginPath(); ctx.ellipse(0, 0, 11 - t * 4, 6 - t * 2, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+  }
+}
+
+/** Lays the stationery under the bouquet. A no-op for "Plain" or zero opacity. */
+export function drawPrint(ctx: CanvasRenderingContext2D, index: number, opacity: number, ink: string) {
+  const print = prints[index];
+  if (!print || print.kind === "none" || opacity <= 0) return;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, opacity / 100));
+  ctx.fillStyle = ink; ctx.strokeStyle = ink;
+  if (print.kind === "pattern") drawPattern(ctx, print.name); else drawBorder(ctx, print.name);
+  ctx.restore();
+}
+
+/* ── Vessels ──────────────────────────────────────────────────────────────
+   What the recipient sees before anything opens. Drawn in code so the send
+   flow does not wait on artwork; a sprite sheet can replace the bodies of
+   these six branches without touching anything that stores a vessel index. */
+
+function seal(ctx: CanvasRenderingContext2D, x: number, y: number, r: number) {
+  const wax = ctx.createLinearGradient(x - r, y - r, x + r, y + r);
+  wax.addColorStop(0, "#f0709f"); wax.addColorStop(1, "#906fe8");
+  ctx.fillStyle = wax;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#fffdf8";
+  ctx.save(); ctx.translate(x, y - r * .06); motifHeart(ctx, r * .46); ctx.restore();
+}
+
+function ribbon(ctx: CanvasRenderingContext2D, x: number, y: number, s: number) {
+  const silk = ctx.createLinearGradient(x - s, y, x + s, y);
+  silk.addColorStop(0, "#f0709f"); silk.addColorStop(1, "#d5568f");
+  ctx.fillStyle = silk;
+  ctx.save(); ctx.translate(x, y); motifBow(ctx, s); ctx.restore();
+}
+
+/**
+ * Draws the closed vessel. `art` and `assets` are only needed by "Single stem",
+ * which borrows the bouquet's own first flower rather than inventing one.
+ */
+export function renderVessel(canvas: HTMLCanvasElement, bouquet: Bouquet, art: HTMLImageElement | null, assets: RenderAssets = {}) {
+  canvas.width = VESSEL_W;
+  canvas.height = VESSEL_H;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const paper = papers[bouquet.paper], ink = paper.ink, cream = "#fffdf8";
+  const cx = VESSEL_W / 2, cy = VESSEL_H / 2;
+  ctx.clearRect(0, 0, VESSEL_W, VESSEL_H);
+  ctx.textAlign = "center";
+  const shadow = () => { ctx.shadowColor = "#25152220"; ctx.shadowBlur = 26; ctx.shadowOffsetY = 10; };
+  const noShadow = () => { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; };
+  const to = bouquet.to.trim();
+
+  switch (bouquet.vessel ?? 0) {
+    case 1: { // Postcard
+      const w = 372, h = 250, x = cx - w / 2, y = cy - h / 2;
+      shadow(); ctx.fillStyle = cream; ctx.fillRect(x, y, w, h); noShadow();
+      ctx.strokeStyle = ink; ctx.globalAlpha = .35; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(cx + 14, y + 18); ctx.lineTo(cx + 14, y + h - 18); ctx.stroke();
+      for (let i = 0; i < 4; i++) { const ly = y + 118 + i * 26; ctx.beginPath(); ctx.moveTo(cx + 34, ly); ctx.lineTo(x + w - 24, ly); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([3, 4]); ctx.strokeRect(x + w - 92, y + 20, 68, 80); ctx.setLineDash([]);
+      ctx.fillStyle = ink;
+      ctx.save(); ctx.translate(x + w - 58, y + 60); ctx.globalAlpha = .5; motifSprig(ctx, 13); ctx.restore();
+      ctx.globalAlpha = .3; ctx.lineWidth = 2;
+      for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(x + w - 132, y + 54, 20 + i * 7, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = ink; ctx.font = "italic 21px Georgia, serif"; ctx.textAlign = "left";
+      ctx.fillText(to ? "For " + to : "For you", x + 30, y + 56, 180);
+      ctx.textAlign = "center";
+      break;
+    }
+    case 2: { // Love letter
+      const w = 258, h = 320, x = cx - w / 2, y = cy - h / 2;
+      shadow(); ctx.fillStyle = cream; ctx.fillRect(x, y, w, h); noShadow();
+      ctx.globalAlpha = .07; ctx.fillStyle = ink;
+      for (const fy of [y + h / 3, y + h * 2 / 3]) ctx.fillRect(x, fy - 7, w, 7);
+      ctx.strokeStyle = ink; ctx.globalAlpha = .34; ctx.lineWidth = 1.5;
+      for (const fy of [y + h / 3, y + h * 2 / 3]) { ctx.beginPath(); ctx.moveTo(x, fy); ctx.lineTo(x + w, fy); ctx.stroke(); }
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 9; i++) {
+        const ly = y + 40 + i * 24, indent = i === 0 ? 46 : 22;
+        ctx.beginPath(); ctx.moveTo(x + indent, ly); ctx.lineTo(x + w - 22 - (i % 3) * 30, ly); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+      seal(ctx, cx, y + h - 46, 26);
+      break;
+    }
+    case 3: { // Carrier pigeon
+      ctx.save(); ctx.translate(cx + 8, cy - 16);
+      const outline = () => { ctx.strokeStyle = ink; ctx.globalAlpha = .32; ctx.lineWidth = 2; ctx.stroke(); ctx.globalAlpha = 1; };
+      // Tail first, so the body edge overlaps and joins it to the bird.
+      ctx.fillStyle = cream;
+      ctx.beginPath();
+      ctx.moveTo(52, -8); ctx.lineTo(150, -42); ctx.lineTo(144, -18); ctx.lineTo(152, 4); ctx.lineTo(58, 20);
+      ctx.closePath(); ctx.fill(); outline();
+      ctx.strokeStyle = ink; ctx.globalAlpha = .2; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(74, -2); ctx.lineTo(142, -26); ctx.moveTo(78, 8); ctx.lineTo(146, -6); ctx.stroke();
+      ctx.globalAlpha = 1;
+      shadow();
+      ctx.fillStyle = cream;
+      ctx.beginPath(); ctx.ellipse(0, 0, 96, 60, -.1, 0, Math.PI * 2); ctx.fill();
+      noShadow(); ctx.beginPath(); ctx.ellipse(0, 0, 96, 60, -.1, 0, Math.PI * 2); outline();
+      ctx.fillStyle = cream;
+      ctx.beginPath(); ctx.ellipse(-82, -42, 38, 33, -.3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(-82, -42, 38, 33, -.3, 0, Math.PI * 2); outline();
+      // Wing: a real shape with its own edge, not a pale ellipse that sank in.
+      ctx.beginPath();
+      ctx.moveTo(-26, -20);
+      ctx.bezierCurveTo(34, -46, 84, -22, 74, 14);
+      ctx.bezierCurveTo(34, 34, -8, 20, -26, -20);
+      ctx.closePath();
+      ctx.fillStyle = ink; ctx.globalAlpha = .13; ctx.fill(); ctx.globalAlpha = 1; outline();
+      ctx.beginPath(); ctx.moveTo(-116, -42); ctx.lineTo(-152, -30); ctx.lineTo(-114, -18); ctx.closePath();
+      ctx.fillStyle = "#e8922a"; ctx.fill();
+      ctx.fillStyle = ink; ctx.beginPath(); ctx.arc(-92, -50, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#fffdf8"; ctx.beginPath(); ctx.arc(-93.6, -51.6, 1.8, 0, Math.PI * 2); ctx.fill();
+      // The message it carries, slung under the body and tied with a ribbon.
+      ctx.strokeStyle = ink; ctx.globalAlpha = .5; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(-34, 44); ctx.lineTo(-30, 70); ctx.moveTo(16, 44); ctx.lineTo(14, 70); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.save(); ctx.translate(-8, 88); ctx.rotate(.06);
+      shadow(); ctx.fillStyle = cream; ctx.fillRect(-56, -17, 112, 34); noShadow();
+      ctx.beginPath(); ctx.rect(-56, -17, 112, 34); outline();
+      ctx.strokeStyle = ink; ctx.globalAlpha = .34; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(-40, -6); ctx.lineTo(30, -6); ctx.moveTo(-40, 5); ctx.lineTo(12, 5); ctx.stroke();
+      ctx.globalAlpha = 1; ribbon(ctx, 0, 0, 13);
+      ctx.restore();
+      ctx.restore();
+      break;
+    }
+    case 4: { // Single stem
+      const stem = bouquet.stems[0];
+      const sprite = stem ? flowerSprite(stem.flower) : null;
+      const sheet = sprite ? (sprite.url === ART_URL ? art : assets[sprite.url]) : null;
+      if (sheet && sprite) {
+        const crop = spriteRect(sprite.index, sheet.naturalWidth, sheet.naturalHeight, sprite.rows);
+        const h = 292, w = h * .75;
+        ctx.drawImage(sheet, crop.x, crop.y, crop.w, crop.h, cx - w / 2, cy - h * .56, w, h);
+      }
+      ribbon(ctx, cx, cy + 104, 17);
+      break;
+    }
+    case 5: { // Gift box
+      const w = 244, h = 158, x = cx - w / 2, y = cy - h / 2 + 44, lidH = 40, lidY = y - lidH;
+      const silk = ctx.createLinearGradient(cx - 26, 0, cx + 26, 0);
+      silk.addColorStop(0, "#f0709f"); silk.addColorStop(1, "#d5568f");
+      shadow(); ctx.fillStyle = cream; ctx.fillRect(x, y, w, h); noShadow();
+      ctx.fillStyle = ink; ctx.globalAlpha = .06; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
+      // Ribbon down the front of the box only — it disappears under the lid.
+      ctx.fillStyle = silk; ctx.fillRect(cx - 22, y, 44, h);
+      shadow(); ctx.fillStyle = cream; ctx.fillRect(x - 14, lidY, w + 28, lidH); noShadow();
+      ctx.fillStyle = ink; ctx.globalAlpha = .16; ctx.fillRect(x - 14, y - 3, w + 28, 3); ctx.globalAlpha = 1;
+      ctx.fillStyle = silk; ctx.fillRect(cx - 22, lidY, 44, lidH);
+      // Sits above the lid rather than across it, so the loops stay legible
+      // when the whole vessel is scaled down to a preview card.
+      ribbon(ctx, cx, lidY - 10, 30);
+      break;
+    }
+    default: { // Paper envelope
+      const w = 344, h = 232, x = cx - w / 2, y = cy - h / 2 + 10;
+      shadow(); ctx.fillStyle = cream; ctx.fillRect(x, y, w, h); noShadow();
+      ctx.fillStyle = ink; ctx.globalAlpha = .06;
+      ctx.beginPath(); ctx.moveTo(x, y + h); ctx.lineTo(x + w / 2, y + h * .46); ctx.lineTo(x + w, y + h); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = cream; shadow();
+      ctx.beginPath(); ctx.moveTo(x - 2, y); ctx.lineTo(x + w + 2, y); ctx.lineTo(x + w / 2, y + h * .62); ctx.closePath(); ctx.fill();
+      noShadow();
+      ctx.strokeStyle = ink; ctx.globalAlpha = .25; ctx.lineWidth = 1; ctx.stroke(); ctx.globalAlpha = 1;
+      seal(ctx, cx, y + h * .6, 27);
+      ctx.fillStyle = ink; ctx.font = "italic 20px Georgia, serif";
+      ctx.fillText(to ? "For " + to : "For you", cx, y + h - 26, w - 60);
+    }
+  }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
-import { ART_URL, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, WIDTH, WRAPPER_URL, angleToward, arrange, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, renderBouquet, stemHandle, validateBouquet, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, angleToward, arrange, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, prints, renderBouquet, renderVessel, stemHandle, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import "./bouquet.css";
 
@@ -17,6 +17,13 @@ function Sprite({ index, className = "" }: { index: number; className?: string }
     // last one sits at 100%, so the step is 100/(N-1), not 100/N.
     backgroundPosition: `${sprite.index % 4 * 100 / 3}% ${Math.floor(sprite.index / 4) * 100 / (sprite.rows - 1)}%`,
   }} />;
+}
+
+function VesselView({ bouquet, art, assets }: { bouquet: Bouquet; art: HTMLImageElement | null; assets: RenderAssets }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => { if (ref.current) renderVessel(ref.current, bouquet, art, assets); }, [bouquet, art, assets]);
+  return <canvas ref={ref} width={VESSEL_W} height={VESSEL_H} className="bouquet-vessel-art" role="img"
+    aria-label={`${vessels[bouquet.vessel ?? 0].name}${bouquet.to.trim() ? `, addressed to ${bouquet.to.trim()}` : ""}`} />;
 }
 
 export default function BouquetStudio() {
@@ -296,7 +303,7 @@ export default function BouquetStudio() {
     {preview && <p className="bouquet-preview-label">A peek at what they’ll see <button onClick={() => { setPreview(false); setOpened(false); }}>Back to editing</button></p>}
     {!opened ? <div className="bouquet-envelope">
       <p className="bouquet-eyebrow">A DELIVERY FROM THE HEART</p>
-      <Sprite index={5} className="bouquet-seal-flower" />
+      <VesselView bouquet={bouquet} art={art} assets={assets} />
       <h1>{bouquet.to.trim() ? `${bouquet.to.trim()}, these are for you.` : "Someone’s thinking of you."}</h1>
       <p>{bouquet.from.trim() ? `${bouquet.from.trim()} picked you a little happiness.` : "A little bouquet, with a lot of love inside."}</p>
       <button className="bouquet-button primary" onClick={() => setOpened(true)}>Open your bouquet <span aria-hidden="true">♡</span></button>
@@ -317,6 +324,11 @@ export default function BouquetStudio() {
           {lostSheets.length > 0 && <p className="bouquet-help">Some flowers couldn’t load just now. <button className="bouquet-text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
           <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: next.stems, paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>
           <fieldset className="bouquet-paper"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span style={{ background: paper.background, borderColor: paper.ink }}>{bouquet.paper === i ? "✓" : ""}</span>{paper.name}</button>)}</div></fieldset>
+          <fieldset className="bouquet-paper bouquet-print"><legend>Stationery</legend>
+            <p className="bouquet-help">A print behind the flowers. Keep it faint and it reads like nice paper.</p>
+            <div className="bouquet-print-list">{prints.map((sheet, i) => <button key={sheet.name} aria-pressed={(bouquet.print ?? 0) === i} onClick={() => update({ ...bouquet, print: i })}>{sheet.name}</button>)}</div>
+            {(bouquet.print ?? 0) > 0 && <label className="bouquet-print-opacity">How strong<input aria-label="Stationery strength" type="range" min={5} max={100} value={bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY} onChange={e => update({ ...bouquet, printOpacity: +e.target.value })} /></label>}
+          </fieldset>
           <details className="bouquet-arrange" open={selected !== undefined ? true : undefined}><summary>Arrange your stems <span>{bouquet.stems.length}</span></summary><div className="bouquet-stem-list">{bouquet.stems.map((stem, i) => <button aria-pressed={selected === stem.id} key={stem.id} onClick={() => setSelected(stem.id)}>{i + 1}. {flowers[stem.flower].name}</button>)}</div>
             {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={220} max={500} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={490} max={690} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={.7} max={1.15} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
             <div className="bouquet-arrange-actions"><button onClick={() => { update({ ...bouquet, stems: arrange(bouquet.stems.map(s => s.flower)) }); setSelected(undefined); }}>Arrange for me</button><button disabled={!bouquet.stems.length} onClick={() => { update({ ...bouquet, stems: [] }); setSelected(undefined); }}>Clear flowers</button></div>
@@ -357,7 +369,13 @@ export default function BouquetStudio() {
           <button className="bouquet-text-button" onClick={() => { setStep(0); setSelectedPhoto(undefined); }}>Back to flowers</button>
         </div>}
         {step === 2 && <div className="bouquet-panel bouquet-note-panel"><p className="bouquet-eyebrow">THE BEST PART IS WHAT YOU SAY</p><h2>A few words, just for them.</h2><p className="bouquet-help">It doesn’t have to be poetry. It just has to be you.</p><label>Their name <span>optional</span><input maxLength={40} value={bouquet.to} placeholder="Someone special" onChange={e => update({ ...bouquet, to: e.target.value })} autoComplete="off" /></label><label>Your note<textarea maxLength={280} rows={5} value={bouquet.message} onChange={e => update({ ...bouquet, message: e.target.value })} placeholder="I saw these and thought of you…" /><small>{bouquet.message.length}/280</small></label><div className="bouquet-note-ideas"><span>A little help finding the words</span>{["Just because you’re you.", "Different places. Still my favorite person.", "You make the ordinary days feel special."].map(text => <button key={text} onClick={() => update({ ...bouquet, message: text })}>{text}</button>)}</div><label>From <span>optional</span><input maxLength={40} value={bouquet.from} placeholder="Your name" onChange={e => update({ ...bouquet, from: e.target.value })} autoComplete="name" /></label><button className="bouquet-button primary bouquet-next" onClick={() => setStep(3)}>Ready to make their day <span aria-hidden="true">→</span></button><button className="bouquet-text-button" onClick={() => setStep(0)}>Back to flowers</button></div>}
-        {step === 3 && <div className="bouquet-panel bouquet-send-panel"><span className="bouquet-send-heart" aria-hidden="true">♡</span><p className="bouquet-eyebrow">HAPPINESS, READY FOR DELIVERY</p><h2>Good things are<br />meant to be shared.</h2><p>Send a little surprise. They’ll open your bouquet and the note you tucked inside.</p>{photoCount(bouquet) > 0 && <p className="bouquet-photo-note">Your photos travel in the image, not in a link. Download this bouquet and send the picture — or remove the photos to share a gift link instead.</p>}<button className="bouquet-button primary" disabled={photoCount(bouquet) > 0} onClick={copyLink}>Copy gift link <span aria-hidden="true">↗</span></button><button className="bouquet-button" disabled={photoCount(bouquet) > 0} onClick={shareGift}>Share bouquet</button><div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button className={photoCount(bouquet) > 0 ? "bouquet-emphasis" : undefined} disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the full link can open your bouquet and read your note.</p><button className="bouquet-text-button" onClick={() => setStep(2)}>Back to your note</button></div>}
+        {step === 3 && <div className="bouquet-panel bouquet-send-panel"><span className="bouquet-send-heart" aria-hidden="true">♡</span><p className="bouquet-eyebrow">HAPPINESS, READY FOR DELIVERY</p><h2>Good things are<br />meant to be shared.</h2><p>Send a little surprise. They’ll open your bouquet and the note you tucked inside.</p>
+          <div className="bouquet-vessel">
+            <p className="bouquet-eyebrow">HOW IT ARRIVES</p>
+            <VesselView bouquet={bouquet} art={art} assets={assets} />
+            <div className="bouquet-vessel-list">{vessels.map((vessel, i) => <button key={vessel.name} aria-pressed={(bouquet.vessel ?? 0) === i} onClick={() => update({ ...bouquet, vessel: i })}>{vessel.name}</button>)}</div>
+            <p className="bouquet-help">{vessels[bouquet.vessel ?? 0].blurb}</p>
+          </div>{photoCount(bouquet) > 0 && <p className="bouquet-photo-note">Your photos travel in the image, not in a link. Download this bouquet and send the picture — or remove the photos to share a gift link instead.</p>}<button className="bouquet-button primary" disabled={photoCount(bouquet) > 0} onClick={copyLink}>Copy gift link <span aria-hidden="true">↗</span></button><button className="bouquet-button" disabled={photoCount(bouquet) > 0} onClick={shareGift}>Share bouquet</button><div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button className={photoCount(bouquet) > 0 ? "bouquet-emphasis" : undefined} disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the full link can open your bouquet and read your note.</p><button className="bouquet-text-button" onClick={() => setStep(2)}>Back to your note</button></div>}
       </section>
     </div>
   </>;
