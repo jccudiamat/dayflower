@@ -5,20 +5,59 @@ export const flowers = [
   { name: "Sunflower", detail: "You are sunshine", color: "#dfa63d" },
   { name: "Lavender", detail: "A moment of calm", color: "#9f88c5" },
   { name: "Peony", detail: "Something lovely", color: "#d994b1" },
-] as const;
 
-// ⚠️ These were written into `flowers` before their artwork existed, which made
-// 48 of the 54 blooms add an invisible stem: `renderBouquet` skips any flower
-// whose sprite sheet is missing, silently. They stay here, unpickable, until
-// `flowers-a|b|c|d.webp` land in public/bouquet (12 cells each, 4×3 grid, in
-// this order). Move a batch back into `flowers` above as each sheet arrives —
-// and only a whole sheet at a time, since `flowerSprite` maps index → sheet by
-// arithmetic. Never reorder what is already live: gift links store the index.
-export const pendingFlowers = [
-  "Lily", "Orchid", "Hydrangea", "Gerbera", "Carnation", "Poppy", "Anemone", "Ranunculus", "Dahlia", "Iris", "Calla lily", "Camellia",
-  "Daffodil", "Gardenia", "Magnolia", "Jasmine", "Sweet pea", "Delphinium", "Snapdragon", "Cornflower", "Cosmos", "Zinnia", "Marigold", "Aster",
-  "Chrysanthemum", "Lisianthus", "Freesia", "Alstroemeria", "Scabiosa", "Stock", "Amaryllis", "Hyacinth", "Muscari", "Allium", "Hellebore", "Lily of the valley",
-  "Forget-me-not", "Baby’s breath", "Protea", "Bird of paradise", "Anthurium", "Lotus", "Craspedia", "Snowdrop", "Crocus", "Agapanthus", "Bleeding heart", "Mimosa",
+  // Indexes 6+ come from flowers-a|b|c|d.webp, 12 to a sheet in this exact
+  // order — `flowerSprite` maps index → sheet by arithmetic, so a sheet is all
+  // or nothing. **Never reorder or remove:** gift links store the index, and a
+  // shuffle here rewrites every bouquet anyone has already sent.
+  { name: "Lily", detail: "Pure and true", color: "#e8e2d6" },
+  { name: "Orchid", detail: "Rare, like you", color: "#c473c0" },
+  { name: "Hydrangea", detail: "A whole armful", color: "#e58ab0" },
+  { name: "Gerbera", detail: "Instant cheer", color: "#e87a2a" },
+  { name: "Carnation", detail: "Sweet and steady", color: "#e5697c" },
+  { name: "Poppy", detail: "A bright hello", color: "#d9382a" },
+  { name: "Anemone", detail: "Soft and brave", color: "#7b6fd0" },
+  { name: "Ranunculus", detail: "Layers of lovely", color: "#e8902a" },
+  { name: "Dahlia", detail: "Bold and kind", color: "#d63a86" },
+  { name: "Iris", detail: "Good news soon", color: "#3f5fd0" },
+  { name: "Calla lily", detail: "Simply elegant", color: "#eee9dc" },
+  { name: "Camellia", detail: "My admiration", color: "#e8769f" },
+  { name: "Daffodil", detail: "New beginnings", color: "#e8c02a" },
+  { name: "Gardenia", detail: "A secret joy", color: "#eee8dc" },
+  { name: "Magnolia", detail: "Gentle strength", color: "#e195b4" },
+  { name: "Jasmine", detail: "Sweet on you", color: "#eae6d8" },
+  { name: "Sweet pea", detail: "Thank you for today", color: "#e6e0d4" },
+  { name: "Delphinium", detail: "Reaching for you", color: "#4a63c4" },
+  { name: "Snapdragon", detail: "Playful and strong", color: "#e892a8" },
+  { name: "Cornflower", detail: "A small blue wish", color: "#4a6ad0" },
+  { name: "Cosmos", detail: "Peace and quiet", color: "#e9e4da" },
+  { name: "Zinnia", detail: "Thinking of you", color: "#e0588e" },
+  { name: "Marigold", detail: "Warm as the sun", color: "#e8801f" },
+  { name: "Aster", detail: "Patient love", color: "#9a7ad0" },
+  { name: "Chrysanthemum", detail: "Long life and joy", color: "#ece8dc" },
+  { name: "Lisianthus", detail: "Quietly devoted", color: "#e284a6" },
+  { name: "Freesia", detail: "Trust and friendship", color: "#e88fae" },
+  { name: "Alstroemeria", detail: "Our little bond", color: "#d63c34" },
+  { name: "Scabiosa", detail: "I remember", color: "#7f8fd0" },
+  { name: "Stock", detail: "A lasting bond", color: "#a87ad0" },
+  { name: "Amaryllis", detail: "Proud of you", color: "#d02f2f" },
+  { name: "Hyacinth", detail: "Play and springtime", color: "#5a76d4" },
+  { name: "Muscari", detail: "Small and certain", color: "#6a80d0" },
+  { name: "Allium", detail: "Wonderfully odd", color: "#a86ad0" },
+  { name: "Hellebore", detail: "Steady in winter", color: "#a8c07a" },
+  { name: "Lily of the valley", detail: "Happiness returns", color: "#ebe7db" },
+  { name: "Forget-me-not", detail: "Don’t forget me", color: "#6a92d8" },
+  { name: "Baby’s breath", detail: "Everlasting", color: "#ece9df" },
+  { name: "Protea", detail: "Brave and rare", color: "#d6607e" },
+  { name: "Bird of paradise", detail: "Somewhere far", color: "#e8801f" },
+  { name: "Anthurium", detail: "Open-hearted", color: "#e0778c" },
+  { name: "Lotus", detail: "A calm start", color: "#e38fb0" },
+  { name: "Craspedia", detail: "A pocket of sun", color: "#e8c62a" },
+  { name: "Snowdrop", detail: "Hope, early", color: "#ebe8de" },
+  { name: "Crocus", detail: "First of spring", color: "#9a72c8" },
+  { name: "Agapanthus", detail: "Love letters", color: "#5f7ace" },
+  { name: "Bleeding heart", detail: "All my heart", color: "#e0708f" },
+  { name: "Mimosa", detail: "A soft surprise", color: "#e8c73a" },
 ] as const;
 
 export const papers = [
@@ -120,6 +159,26 @@ export function stemGeometry(stem: Stem) {
   const h = 470 * stem.scale;
   return { w: h * .75, h, angle: stem.angle * Math.PI / 180 };
 }
+/** Centre of the bloom end, which is what the selection ring circles. */
+export function bloomPoint(stem: Stem) {
+  const { h, angle } = stemGeometry(stem);
+  return { x: stem.x + Math.sin(angle) * h * .70, y: stem.y - Math.cos(angle) * h * .70, r: h * .19 };
+}
+/**
+ * The tilt grip, set *beside* the bloom rather than beyond it. Past the tip
+ * would read more naturally, but a tall stem puts the bloom near the top of
+ * the card and anything further up lands outside the clip — an invisible
+ * handle. Perpendicular keeps it in the same band as the flower it turns.
+ */
+export function stemHandle(stem: Stem) {
+  const bloom = bloomPoint(stem), { angle } = stemGeometry(stem);
+  return { x: bloom.x + Math.cos(angle) * (bloom.r + 22), y: bloom.y + Math.sin(angle) * (bloom.r + 22), r: 19 };
+}
+/** Degrees that would point the stem from its base toward (x, y). */
+export function angleToward(stem: Stem, x: number, y: number) {
+  return Math.atan2(x - stem.x, -(y - stem.y)) * 180 / Math.PI;
+}
+
 export function hitStem(stems: Stem[], x: number, y: number): Stem | undefined {
   // Pick the bloom end, so overlapping transparent stem rectangles don't swallow clicks.
   return [...stems].reverse().find(stem => {
@@ -248,9 +307,19 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   }
   const active = bouquet.stems.find(s => s.id === selected);
   if (active) {
-    const { h, angle } = stemGeometry(active);
+    const bloom = bloomPoint(active), grip = stemHandle(active);
     ctx.strokeStyle = paper.ink; ctx.lineWidth = 2; ctx.setLineDash([5, 6]);
-    ctx.beginPath(); ctx.arc(active.x + Math.sin(angle) * h * .70, active.y - Math.cos(angle) * h * .70, h * .19, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(bloom.x, bloom.y, bloom.r, 0, Math.PI * 2); ctx.stroke();
+    // The grip: a solid disc with a turning arrow, tethered to the ring so it
+    // reads as part of the selection rather than a stray dot on the paper.
+    ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(bloom.x, bloom.y); ctx.lineTo(grip.x, grip.y); ctx.stroke();
+    ctx.fillStyle = paper.ink;
+    ctx.beginPath(); ctx.arc(grip.x, grip.y, 13, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#fffdf8"; ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(grip.x, grip.y, 6.4, Math.PI * .35, Math.PI * 1.65); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(grip.x + 1.2, grip.y - 8.4); ctx.lineTo(grip.x + 6.4, grip.y - 5.6); ctx.lineTo(grip.x + 1.2, grip.y - 2.4); ctx.closePath();
+    ctx.fillStyle = "#fffdf8"; ctx.fill();
   }
   ctx.restore();
   ctx.fillStyle = "#ffffffcf";

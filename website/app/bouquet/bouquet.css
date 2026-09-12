@@ -32,7 +32,9 @@
 .bouquet-flower-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 18px 0; }
 .bouquet-flower { position: relative; display: flex; flex-direction: column; align-items: stretch; padding: 8px 10px 10px; border: 1px solid #eae3ed; border-radius: 13px; background: #fcfafc; text-align: left; transition: background .2s, border-color .2s, transform .2s; }
 .bouquet-flower:hover:not(:disabled) { background: #f8f0f7; border-color: #c4a4bc; transform: translateY(-2px); }
-.bouquet-sprite { display: block; width: 68px; height: 91px; background-image: url('/bouquet/botanical-sprites.webp'); background-size: 400% 200%; background-repeat: no-repeat; flex-shrink: 0; }
+/* background-image, -size and -position are set inline per flower: which of
+   the five sheets it lives on, and whether that sheet is 2 or 3 rows deep. */
+.bouquet-sprite { display: block; width: 68px; height: 91px; background-repeat: no-repeat; flex-shrink: 0; }
 .bouquet-flower .bouquet-sprite { margin: 0 auto 6px; }
 .bouquet-flower-name { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 700; gap: 3px; }
 .bouquet-flower-name > span { position: absolute; top: 5px; right: 9px; color: #8a627e; font-weight: 400; font-size: 20px; }

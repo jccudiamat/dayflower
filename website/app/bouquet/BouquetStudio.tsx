@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type PointerEvent } from "react";
-import { ART_URL, HEIGHT, MAX_PHOTOS, MAX_STEMS, WIDTH, arrange, decodeBouquet, encodeBouquet, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, renderBouquet, validateBouquet, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { ART_URL, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, WIDTH, WRAPPER_URL, angleToward, arrange, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, renderBouquet, stemHandle, validateBouquet, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import "./bouquet.css";
 
@@ -9,7 +9,14 @@ const DRAFT_KEY = "dayflower-bouquet-v1";
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
 function Sprite({ index, className = "" }: { index: number; className?: string }) {
-  return <span aria-hidden="true" className={`bouquet-sprite ${className}`} style={{ backgroundPosition: `${index % 4 * 100 / 3}% ${Math.floor(index / 4) * 100}%` }} />;
+  const sprite = flowerSprite(index);
+  return <span aria-hidden="true" className={`bouquet-sprite ${className}`} style={{
+    backgroundImage: `url('${sprite.url}')`,
+    backgroundSize: `400% ${sprite.rows * 100}%`,
+    // Percentage background-position is a ratio, not an offset: with N rows the
+    // last one sits at 100%, so the step is 100/(N-1), not 100/N.
+    backgroundPosition: `${sprite.index % 4 * 100 / 3}% ${Math.floor(sprite.index / 4) * 100 / (sprite.rows - 1)}%`,
+  }} />;
 }
 
 export default function BouquetStudio() {
@@ -22,6 +29,8 @@ export default function BouquetStudio() {
   const [selected, setSelected] = useState<number>();
   const [selectedPhoto, setSelectedPhoto] = useState<number>();
   const [photoImages, setPhotoImages] = useState<RenderAssets>({});
+  const [sheets, setSheets] = useState<RenderAssets>({});
+  const [lostSheets, setLostSheets] = useState<string[]>([]);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState("");
   const [gift, setGift] = useState(false);
@@ -35,7 +44,7 @@ export default function BouquetStudio() {
   const linkRef = useRef<HTMLTextAreaElement>(null);
   const revealRef = useRef<HTMLHeadingElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const drag = useRef<{ kind: "stem" | "photo"; id: number; startX: number; startY: number; x: number; y: number } | null>(null);
+  const drag = useRef<{ kind: "stem" | "photo" | "tilt"; id: number; startX: number; startY: number; x: number; y: number; grab?: number } | null>(null);
   const active = bouquet.stems.find(s => s.id === selected);
   const photos = useMemo(() => bouquet.photos ?? [], [bouquet.photos]);
   const activePhoto = photos.find(p => p.id === selectedPhoto);
@@ -73,6 +82,32 @@ export default function BouquetStudio() {
     return () => { image.onload = null; image.onerror = null; };
   }, [attempt]);
 
+  // The wrapper's two layers and the four extra flower sheets. A stem whose
+  // sheet has not arrived is skipped by renderBouquet rather than drawn wrong,
+  // so these simply fill in as they load.
+  useEffect(() => {
+    let cancelled = false;
+    for (const url of [WRAPPER_URL, ...EXTRA_ART_URLS]) {
+      const image = new Image();
+      // Clearing the whole list up front would be a synchronous setState in an
+      // effect body; retiring each url as it arrives says the same thing and
+      // keeps a retry from blanking the warning before it has succeeded.
+      image.onload = () => {
+        if (cancelled) return;
+        setSheets(current => ({ ...current, [url]: image }));
+        setLostSheets(current => current.includes(url) ? current.filter(item => item !== url) : current);
+      };
+      // renderBouquet skips a stem whose sheet is absent *silently*, so a sheet
+      // that fails to arrive would otherwise let someone add invisible flowers.
+      // Its blooms come out of the picker instead.
+      image.onerror = () => { if (!cancelled) setLostSheets(current => current.includes(url) ? current : [...current, url]); };
+      image.src = url;
+    }
+    return () => { cancelled = true; };
+  }, [attempt]);
+
+  const assets = useMemo(() => ({ ...sheets, ...photoImages }), [sheets, photoImages]);
+
   // Photos live in state as data URLs; the canvas needs decoded images. Keyed
   // by src so a re-add of the same photo reuses the decode, and so nothing is
   // dropped while a bouquet is being edited.
@@ -103,9 +138,9 @@ export default function BouquetStudio() {
     if (canvasRef.current && art) {
       const editing = !viewing;
       renderBouquet(canvasRef.current, bouquet, art, editing && step === 0 ? selected : undefined,
-        photoImages, editing && step === 1 ? selectedPhoto : undefined);
+        assets, editing && step === 1 ? selectedPhoto : undefined);
     }
-  }, [art, bouquet, selected, selectedPhoto, photoImages, viewing, opened, step, ready, badLink]);
+  }, [art, bouquet, selected, selectedPhoto, assets, viewing, opened, step, ready, badLink]);
 
   useEffect(() => {
     if (opened) revealRef.current?.focus();
@@ -159,6 +194,16 @@ export default function BouquetStudio() {
   function pointerDown(event: PointerEvent<HTMLCanvasElement>) {
     if (viewing || step > 1) return;
     const p = point(event);
+    // The tilt grip belongs to the stem that is already selected and sits on
+    // top of everything, so it gets first refusal on the pointer.
+    const turning = active && step === 0 ? stemHandle(active) : null;
+    if (active && turning && Math.hypot(p.x - turning.x, p.y - turning.y) <= turning.r) {
+      // Remember how far the grip sits from the stem's own heading, so the
+      // flower turns with the finger instead of snapping under it.
+      drag.current = { kind: "tilt", id: active.id, startX: p.x, startY: p.y, x: active.x, y: active.y, grab: angleToward(active, p.x, p.y) - active.angle };
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
     // Photos in front are drawn last, so they are grabbed first; stems come
     // next; photos tucked behind the flowers are the last thing you can catch.
     const front = hitPhoto(photos.filter(photo => photo.layer === "front"), p.x, p.y);
@@ -178,7 +223,13 @@ export default function BouquetStudio() {
     const x = moving.x + p.x - moving.startX, y = moving.y + p.y - moving.startY;
     // The clamps match validateBouquet, so a dragged piece can never land
     // somewhere a decoded gift link would be rejected for.
-    if (moving.kind === "stem") {
+    if (moving.kind === "tilt") {
+      setBouquet(current => ({ ...current, stems: current.stems.map(stem => {
+        if (stem.id !== moving.id) return stem;
+        const angle = angleToward(stem, p.x, p.y) - (moving.grab ?? 0);
+        return { ...stem, angle: Math.round(clamp(angle, -45, 45)) };
+      }) }));
+    } else if (moving.kind === "stem") {
       setBouquet(current => ({ ...current, stems: current.stems.map(s => s.id === moving.id ? { ...s, x: Math.round(clamp(x, 220, 500)), y: Math.round(clamp(y, 490, 690)) } : s) }));
     } else {
       setBouquet(current => ({ ...current, photos: (current.photos ?? []).map(item => item.id === moving.id ? { ...item, x: Math.round(clamp(x, 110, 610)), y: Math.round(clamp(y, 190, 570)) } : item) }));
@@ -217,7 +268,7 @@ export default function BouquetStudio() {
     setBusy(true); setNotice("");
     try {
       const canvas = document.createElement("canvas");
-      renderBouquet(canvas, bouquet, art, undefined, photoImages);
+      renderBouquet(canvas, bouquet, art, undefined, assets);
       const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error("Image export failed")), "image/png"));
       const url = URL.createObjectURL(blob), anchor = document.createElement("a");
       anchor.href = url; anchor.download = "dayflower-bouquet.png";
@@ -255,14 +306,15 @@ export default function BouquetStudio() {
   return <>
     <header className="bouquet-heading"><div><p className="bouquet-eyebrow">THE DAYFLOWER FLOWER SHOP</p><h1>A little bouquet.<br className="bouquet-mobile-break" /> <span>A lot of love.</span></h1><p>Pick a few blooms, tuck in a note, and make someone’s day.</p></div><span className="bouquet-free">Free to make & send <span aria-hidden="true">♡</span></span></header>
     <div className="bouquet-studio">
-      <section className="bouquet-preview" aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Your flowers, your way. Tap a bloom to move it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
+      <section className="bouquet-preview" aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Tap a bloom to pick it up. Drag the flower to move it, or its little dial to tilt it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
       <section className="bouquet-controls" aria-label="Bouquet creator">
         <div className="bouquet-steps" aria-label="Creation steps">{["Flowers", "Photos", "Your note", "Send love"].map((label, i) => <button key={label} aria-current={step === i ? "step" : undefined} disabled={i > 1 && !hasContents(bouquet)} onClick={() => { setStep(i); setSelected(undefined); setSelectedPhoto(undefined); setNotice(""); }}><span>{i + 1}</span>{label}</button>)}</div>
         {step === 0 && <div className="bouquet-panel">
           <div className="bouquet-section-heading"><h2>Pick their favorites</h2><span>{bouquet.stems.length}/{MAX_STEMS} stems</span></div>
           <p className="bouquet-help">Tap to add a flower. A little wild looks lovely.</p>
-          <div className="bouquet-flower-grid">{flowers.map((flower, i) => <button key={flower.name} className="bouquet-flower" disabled={!art || bouquet.stems.length >= MAX_STEMS} aria-label={`Add ${flower.name}`} onClick={() => addFlower(i)}><Sprite index={i} /><span className="bouquet-flower-name">{flower.name}<span aria-hidden="true">+</span></span><small>{flower.detail}</small></button>)}</div>
+          <div className="bouquet-flower-grid">{flowers.map((flower, i) => <button key={flower.name} className="bouquet-flower" disabled={!art || bouquet.stems.length >= MAX_STEMS || lostSheets.includes(flowerSprite(i).url)} aria-label={`Add ${flower.name}`} onClick={() => addFlower(i)}><Sprite index={i} /><span className="bouquet-flower-name">{flower.name}<span aria-hidden="true">+</span></span><small>{flower.detail}</small></button>)}</div>
           {bouquet.stems.length >= MAX_STEMS && <p className="bouquet-help">A full bunch! Remove a stem to add another.</p>}
+          {lostSheets.length > 0 && <p className="bouquet-help">Some flowers couldn’t load just now. <button className="bouquet-text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
           <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: next.stems, paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>
           <fieldset className="bouquet-paper"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span style={{ background: paper.background, borderColor: paper.ink }}>{bouquet.paper === i ? "✓" : ""}</span>{paper.name}</button>)}</div></fieldset>
           <details className="bouquet-arrange" open={selected !== undefined ? true : undefined}><summary>Arrange your stems <span>{bouquet.stems.length}</span></summary><div className="bouquet-stem-list">{bouquet.stems.map((stem, i) => <button aria-pressed={selected === stem.id} key={stem.id} onClick={() => setSelected(stem.id)}>{i + 1}. {flowers[stem.flower].name}</button>)}</div>
