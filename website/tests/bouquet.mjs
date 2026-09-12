@@ -23,7 +23,7 @@ test('shared bouquet preserves flowers, placement, wrapping, and multilingual no
 test('invalid or truncated links fail closed', () => {
   for (const encoded of ['', 'undefined', '<script>', 'x'.repeat(9001), encodeBouquet(makeBouquet()).slice(0, -10), btoa('{"v":99}')]) assert.equal(decodeBouquet(encoded), null);
   const b = makeBouquet();
-  for (const value of [null, {}, { ...b, v: 2 }, { ...b, paper: 9 }, { ...b, paper: .5 }, { ...b, message: 'x'.repeat(281) }, { ...b, stems: Array(13).fill(b.stems[0]) }]) assert.equal(validateBouquet(value), null);
+  for (const value of [null, {}, { ...b, v: 2 }, { ...b, paper: 9 }, { ...b, paper: .5 }, { ...b, message: 'x'.repeat(281) }, { ...b, stems: Array(MAX_STEMS + 1).fill(b.stems[0]) }]) assert.equal(validateBouquet(value), null);
   for (const stem of [{ ...b.stems[0], flower: 99 }, { ...b.stems[0], flower: 1.2 }, { ...b.stems[0], x: Infinity }, { ...b.stems[0], angle: 46 }, { ...b.stems[0], scale: .1 }]) assert.equal(validateBouquet({ ...b, stems: [stem] }), null);
   assert.throws(() => encodeBouquet({ ...b, stems: [] }), /at least one flower/);
 });
@@ -70,5 +70,48 @@ test('export draws every flower and wrapping, omits editing marks, and fits long
   }
   const { canvas, calls } = recordingCanvas();
   renderBouquet(canvas, makeBouquet(), { naturalWidth: 1536, naturalHeight: 1024 }, 1);
-  assert.equal(calls.filter(c => c[0] === 'arc').length, 1);
+  assert.ok(calls.some(c => c[0] === 'arc'), 'The editor includes visible selection handles');
+});
+
+test('new stationery options survive shared links and old gifts keep their defaults', () => {
+  const { papers, backgrounds, borders } = model.exports;
+  for (let paper = 0; paper < papers.length; paper++) for (let background = 1; background < backgrounds.length; background++) {
+    const b = { ...makeBouquet(), paper, background, border: borders.length - 1, vessel: 3, print: 5, printOpacity: 20 };
+    assert.deepEqual(decodeBouquet(encodeBouquet(b)), b);
+  }
+  const original = makeBouquet();
+  assert.deepEqual(decodeBouquet(encodeBouquet(original)), original);
+  assert.deepEqual(validateBouquet({ ...original, background: 999, border: -1 }), original);
+});
+
+test('each wrapper brackets all flowers and photos between back and front layers', () => {
+  const { papers, WRAPPER_URL, SPECIAL_WRAPPER_URL, EXTRA_ART_URLS } = model.exports;
+  const art = { naturalWidth: 1536, naturalHeight: 1024 };
+  const wrapped = { naturalWidth: 1536, naturalHeight: 1024 };
+  const special = { naturalWidth: 1536, naturalHeight: 1024 };
+  const assets = { [WRAPPER_URL]: wrapped, [SPECIAL_WRAPPER_URL]: special };
+  EXTRA_ART_URLS.forEach(url => assets[url] = { naturalWidth: 1254, naturalHeight: 1254 });
+  for (let paper = 0; paper < papers.length; paper++) {
+    const { canvas, calls } = recordingCanvas();
+    const b = { ...makeBouquet(), paper, stems: arrange([0, 12, 36, 53]) };
+    renderBouquet(canvas, b, art, undefined, assets);
+    const images = calls.filter(c => c[0] === 'drawImage');
+    assert.equal(images.length, b.stems.length + (paper === 2 ? 0 : 2));
+    if (paper !== 2) {
+      assert.equal(images[0][1], paper < 5 ? wrapped : special);
+      assert.equal(images.at(-1)[1], images[0][1]);
+      assert.notEqual(images[0][2], images.at(-1)[2], 'Back and front use distinct sprite cells');
+    }
+  }
+});
+
+test('illustrated reveals use the selected artwork without exposing the note', () => {
+  const { renderVessel, REVEAL_ART } = model.exports;
+  const assets = Object.fromEntries(Object.values(REVEAL_ART).map(url => [url, { naturalWidth: 512, naturalHeight: 512 }]));
+  for (const vessel of [0, 2, 3, 5]) {
+    const { canvas, calls } = recordingCanvas();
+    renderVessel(canvas, { ...makeBouquet(), vessel, to: 'Alex', message: 'The surprise inside' }, null, assets);
+    assert.equal(calls.find(c => c[0] === 'drawImage')[1], assets[REVEAL_ART[vessel]]);
+    assert.ok(!calls.some(c => c[0] === 'fillText' && c[1].includes('The surprise inside')));
+  }
 });

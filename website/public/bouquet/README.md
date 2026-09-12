@@ -1,5 +1,7 @@
 # Bouquet artwork
 
+The September 13 stationery update adds `wrapper-special.webp` (four back/front pairs: kraft, blue toile, blush mesh, and vintage print) and `reveal-envelope.webp`, `reveal-letter.webp`, `reveal-pigeon.webp`, `reveal-box.webp`. These are original OpenAI-generated watercolor assets. The reveal images were cropped from one generated sheet and normalized to transparent 512px squares. Existing flower and paper indexes remain stable for previously sent gifts.
+
 Original artwork generated for Dayflower, not extracted from any reference site.
 `botanical-sprites.webp` was made on 2026-09-12; the rest were supplied on
 2026-09-12 and converted from PNG to WebP (quality 82, alpha preserved).

@@ -66,12 +66,28 @@ export const papers = [
   { name: "Just the stems", background: "#edf2ec", ink: "#4b6554", sprite: -1 },
   { name: "Midnight", background: "#f0edf2", ink: "#4c4357", sprite: 7 },
   { name: "Blush", background: "#f9ecee", ink: "#7f465a", sprite: 6 },
+  { name: "Kraft & twine", background: "#f4eee3", ink: "#795840", sprite: 0 },
+  { name: "Blue toile", background: "#eaf0f8", ink: "#506080", sprite: 2 },
+  { name: "Blush mesh", background: "#faedf3", ink: "#85506c", sprite: 4 },
+  { name: "Vintage print", background: "#f2efe8", ink: "#66594b", sprite: 6 },
 ] as const;
+
+export const backgrounds = [
+  { name: "Match the wrap", color: "", ink: "" },
+  { name: "Rosewater", color: "#f7edf0", ink: "#703e54" }, { name: "Lilac", color: "#eee9f7", ink: "#65507c" },
+  { name: "Ivory", color: "#faf6ec", ink: "#78634b" }, { name: "Sage", color: "#edf2ec", ink: "#4b6554" },
+  { name: "Blue sky", color: "#eaf2f9", ink: "#496680" }, { name: "Midnight", color: "#292333", ink: "#ead9e3" },
+  { name: "Peach", color: "#fbefdf", ink: "#8a5e4f" }, { name: "Parchment", color: "#f7f2e9", ink: "#746146" },
+] as const;
+export const borders = ["None", "Fine line", "Double line", "Postage", "Photo corners", "Scalloped"] as const;
+export function bouquetColors(b: Bouquet) {
+  return b.background ? backgrounds[b.background] : { color: papers[b.paper].background, ink: papers[b.paper].ink };
+}
 
 export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number; z?: number };
 export const photoFrames = ["Polaroid", "Sticker", "Cutout", "Heart", "Circle", "Arch", "Postage stamp"] as const;
 export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front"; z?: number };
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number };
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number; background?: number; border?: number };
 
 /** The wrapper turns and grows about its tie, not its middle, so it leans the way a held bouquet does. */
 export const WRAP_PIVOT = { x: 360, y: 690 };
@@ -205,6 +221,8 @@ export const MAX_PHOTOS = 8;
 export const MAX_PHOTO_LENGTH = 180_000;
 export const ART_URL = "/bouquet/botanical-sprites.webp";
 export const WRAPPER_URL = "/bouquet/wrapper-layers.webp";
+export const SPECIAL_WRAPPER_URL = "/bouquet/wrapper-special.webp";
+export const REVEAL_ART: Record<number, string> = { 0: "/bouquet/reveal-envelope.webp", 2: "/bouquet/reveal-letter.webp", 3: "/bouquet/reveal-pigeon.webp", 5: "/bouquet/reveal-box.webp" };
 export const EXTRA_ART_URLS = ["a", "b", "c", "d"].map(id => `/bouquet/flowers-${id}.webp`);
 export function flowerSprite(index: number) {
   return index < 6 ? { url: ART_URL, index, rows: 2 } : { url: EXTRA_ART_URLS[Math.floor((index - 6) / 12)], index: (index - 6) % 12, rows: 3 };
@@ -280,6 +298,8 @@ export function validateBouquet(value: unknown): Bouquet | null {
   const wrapScale = finiteIn(b.wrapScale, .75, 1.3) ? b.wrapScale as number : 1;
   const wrapAngle = finiteIn(b.wrapAngle, -20, 20) ? b.wrapAngle as number : 0;
   const stemFlower = Number.isInteger(b.stemFlower) && finiteIn(b.stemFlower, 0, flowers.length - 1) ? b.stemFlower as number : undefined;
+  const background = Number.isInteger(b.background) && finiteIn(b.background, 0, backgrounds.length - 1) ? b.background as number : 0;
+  const border = Number.isInteger(b.border) && finiteIn(b.border, 0, borders.length - 1) ? b.border as number : 0;
   return {
     v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message,
     ...(photos.length ? { photos } : {}),
@@ -288,6 +308,7 @@ export function validateBouquet(value: unknown): Bouquet | null {
     ...(print && printOpacity !== DEFAULT_PRINT_OPACITY ? { printOpacity } : {}),
     ...(wrapScale !== 1 ? { wrapScale } : {}), ...(wrapAngle !== 0 ? { wrapAngle } : {}),
     ...(stemFlower !== undefined ? { stemFlower } : {}),
+    ...(background ? { background } : {}), ...(border ? { border } : {}),
   };
 }
 
@@ -472,21 +493,23 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Your browser could not create the bouquet image.");
   const paper = papers[bouquet.paper];
-  ctx.fillStyle = paper.background;
+  const colors = bouquetColors(bouquet);
+  ctx.fillStyle = colors.color;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   // Stationery sits under everything, including the title, so a border frames
   // the whole card the way a printed sheet would.
-  drawPrint(ctx, bouquet.print ?? 0, bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY, paper.ink);
+  drawPrint(ctx, bouquet.print ?? 0, bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY, colors.ink);
+  drawCardBorder(ctx, bouquet.border ?? 0, colors.ink);
   ctx.textAlign = "center";
-  ctx.fillStyle = paper.ink;
+  ctx.fillStyle = colors.ink;
   ctx.font = '16px sans-serif';
   ctx.fillText("A LITTLE SOMETHING, JUST FOR YOU", WIDTH / 2, 42);
   ctx.font = 'italic 32px Georgia, serif';
   ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 86, 620);
   ctx.save();
   ctx.beginPath(); ctx.rect(12, 100, WIDTH - 24, 627); ctx.clip();
-  const wrapper = assets[WRAPPER_URL];
-  const wrapIndex = bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
+  const wrapper = assets[bouquet.paper >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL];
+  const wrapIndex = bouquet.paper >= 5 ? (bouquet.paper - 5) * 2 : bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
   // Both halves of the paper and the taper below share one transform, or the
   // front would slide off the back the moment the wrapper is turned.
   const wrapTransform = () => {
@@ -499,7 +522,10 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     if (!wrapper || paper.sprite < 0 || !hasContents(bouquet)) return;
     const crop = spriteRect(wrapIndex + (front ? 1 : 0), wrapper.naturalWidth, wrapper.naturalHeight);
     ctx.save(); wrapTransform();
-    ctx.drawImage(wrapper, crop.x, crop.y, crop.w, crop.h, 104, 130, 512, 600);
+    // The special sheet's rear paper tips cross into the next cell's left margin.
+    // Crop only that empty margin from the front, keeping its position unchanged.
+    const inset = front && bouquet.paper >= 5 ? .07 : 0;
+    ctx.drawImage(wrapper, crop.x + crop.w * inset, crop.y, crop.w * (1 - inset), crop.h, 104 + 512 * inset, 130, 512 * (1 - inset), 600);
     ctx.restore();
   };
   // Everything from here to the matching restore is the bouquet itself, and
@@ -579,7 +605,7 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.restore();
   ctx.fillStyle = "#ffffffcf";
   ctx.beginPath(); ctx.roundRect(42, 743, WIDTH - 84, 166, 12); ctx.fill();
-  ctx.fillStyle = paper.ink;
+  ctx.fillStyle = bouquet.background === 6 ? "#5b425c" : colors.ink;
   let size = 23;
   let lines: string[] = [];
   do { ctx.font = `italic ${size}px Georgia, serif`; lines = wrappedLines(ctx, bouquet.message, WIDTH - 144); if (lines.length * (size + 6) <= 100) break; size--; } while (size > 10);
@@ -588,7 +614,24 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.font = "16px sans-serif";
   ctx.fillText(bouquet.from.trim() ? `With love, ${bouquet.from.trim()}` : "With love", WIDTH / 2, 889, 590);
   ctx.font = "13px sans-serif";
+  ctx.fillStyle = colors.ink;
   ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, 938);
+}
+
+function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: string) {
+  if (!border) return;
+  ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .5; ctx.lineWidth = 1.5;
+  if (border === 3) ctx.setLineDash([3, 7]);
+  if (border === 4) {
+    for (const [x, y, dx, dy] of [[20, 20, 1, 1], [700, 20, -1, 1], [20, 940, 1, -1], [700, 940, -1, -1]]) {
+      ctx.beginPath(); ctx.moveTo(x + dx * 50, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * 50); ctx.stroke();
+    }
+  } else if (border === 5) {
+    ctx.beginPath();
+    for (let x = 20; x <= 700; x += 20) { ctx.moveTo(x - 10, 17); ctx.quadraticCurveTo(x, 29, x + 10, 17); ctx.moveTo(x - 10, 943); ctx.quadraticCurveTo(x, 931, x + 10, 943); }
+    for (let y = 20; y <= 940; y += 20) { ctx.moveTo(17, y - 10); ctx.quadraticCurveTo(29, y, 17, y + 10); ctx.moveTo(703, y - 10); ctx.quadraticCurveTo(691, y, 703, y + 10); } ctx.stroke();
+  } else { ctx.strokeRect(18, 18, WIDTH - 36, HEIGHT - 36); if (border === 2) ctx.strokeRect(24, 24, WIDTH - 48, HEIGHT - 48); }
+  ctx.restore();
 }
 
 /* ── Stationery ───────────────────────────────────────────────────────────
@@ -743,6 +786,13 @@ export function renderVessel(canvas: HTMLCanvasElement, bouquet: Bouquet, art: H
   const shadow = () => { ctx.shadowColor = "#25152220"; ctx.shadowBlur = 26; ctx.shadowOffsetY = 10; };
   const noShadow = () => { ctx.shadowColor = "transparent"; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0; };
   const to = bouquet.to.trim();
+  const illustration = assets[REVEAL_ART[bouquet.vessel ?? 0]];
+  if (illustration) {
+    const scale = Math.min(460 / illustration.naturalWidth, 330 / illustration.naturalHeight);
+    const w = illustration.naturalWidth * scale, h = illustration.naturalHeight * scale;
+    ctx.drawImage(illustration, (VESSEL_W - w) / 2, 8 + (330 - h) / 2, w, h);
+    return;
+  }
 
   switch (bouquet.vessel ?? 0) {
     case 1: { // Postcard

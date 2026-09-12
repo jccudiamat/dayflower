@@ -198,6 +198,25 @@
 .bouquet-vessel-list button { min-height: 34px; padding: 5px 11px; border: 1px solid #e2d8e9; border-radius: 18px; font-size: 12px; color: #6d5374; background: #fff; }
 .bouquet-vessel-list button[aria-pressed=true] { background: #ede2f2; border-color: #9471a0; font-weight: 700; }
 .bouquet-vessel .bouquet-help { text-align: center; }
+.bouquet-envelope :is(h1, p) { color: inherit; }
+.bouquet-wraps > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.bouquet-wraps button { border: 1px solid #e4d9e8; border-radius: 12px; padding: 7px 6px 10px; background: #fdfbfd; }
+.bouquet-wraps button[aria-pressed=true] { border-color: #976787; box-shadow: 0 0 0 1px #976787; }
+.bouquet-wraps button > .bouquet-wrap-thumb { position: relative; display: block; width: 65px; height: 82px; border: 0; border-radius: 6px; }
+.bouquet-wrap-thumb > span { position: absolute; inset: 0; display: grid; place-items: center; background-repeat: no-repeat; }
+.bouquet-wraps strong { font-size: 12px; line-height: 1.4; font-weight: 600; }
+.bouquet-background { margin-top: 23px; }
+.bouquet-background > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 15px 9px; margin-top: 14px; }
+.bouquet-background button { line-height: 1.4; }
+.bouquet-background button > span { width: 30px; height: 30px; border-color: #bba4ba; }
+.bouquet-vessel-gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.bouquet-vessel-gallery button { border-radius: 12px; padding: 8px; display: flex; flex-direction: column; align-items: center; }
+.bouquet-vessel-gallery .bouquet-vessel-art { margin: 0 0 5px; width: 100%; }
+.bouquet-vessel-gallery button[aria-pressed=true] { border-color: #976787; box-shadow: 0 0 0 1px #976787; }
+.bouquet-envelope.vessel-3 .bouquet-vessel-art { animation: pigeon-delivery 3s ease-in-out infinite; }
+@keyframes pigeon-delivery { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(1deg); } }
+@media (max-width: 767px) and (min-width: 681px) { .bouquet-preview { top: 117px; } }
+@media (prefers-reduced-motion: reduce) { .bouquet-envelope.vessel-3 .bouquet-vessel-art { animation: none; } }
 /* On the recipient's screen the vessel is the hero, not a control. */
 .bouquet-envelope .bouquet-vessel-art { max-width: 380px; margin: 8px auto 18px; }
 

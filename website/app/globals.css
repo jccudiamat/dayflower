@@ -88,16 +88,22 @@ body {
 .site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--border-soft); background: #faf7fcf5; backdrop-filter: blur(16px); }
 .site-nav { position: relative; display: flex; align-items: center; gap: 12px; max-width: 1024px; min-height: 68px; margin: auto; padding: 10px 20px; }
 .site-brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 19px; font-weight: 700; }
-.site-nav-secondary { display: flex; align-items: center; gap: 24px; margin-left: auto; font-size: 14px; font-weight: 600; color: var(--brand-dark); }
+.site-nav-secondary { display: flex; align-items: center; gap: 28px; margin-left: auto; font-size: 14px; font-weight: 600; color: #735f78; }
+.site-nav-secondary a { display: inline-flex; align-items: center; min-height: 44px; border-bottom: 2px solid transparent; }
+.site-nav-secondary a[aria-current="page"] { color: #754766; border-bottom-color: #a97896; }
+.site-waitlist-link { display: inline-flex; align-items: center; justify-content: center; margin-left: 15px; min-height: 44px; padding: 0 20px; border-radius: 999px; background: #754766; color: #fff; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.site-waitlist-link:hover { background: #5e3551; }
 .site-booth-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #733952; color: white; font-size: 14px; font-weight: 700; white-space: nowrap; }
 .site-booth-link:hover { background: #592a40; }
 .site-nav a:focus-visible, .site-mobile-menu summary:focus-visible { outline: 2px solid #733952; outline-offset: 4px; }
 .site-mobile-menu { display: none; }
 @media (max-width: 767px) {
-  .site-nav { min-height: 64px; padding: 8px 16px; gap: 8px; }
+  .site-nav { min-height: 64px; padding: 8px 16px 0; gap: 4px 8px; flex-wrap: wrap; justify-content: space-between; }
   .site-brand { font-size: 16px; gap: 6px; }
   .site-brand img { width: 25px; height: 25px; }
-  .site-nav-secondary { display: none; }
+  .site-nav-secondary { display: flex; order: 3; flex-basis: 100%; justify-content: space-around; gap: 12px; margin-left: 0; font-size: 13px; }
+  .site-nav-secondary a { justify-content: center; flex: 1; min-height: 40px; }
+  .site-waitlist-link { margin-left: auto; font-size: 12px; padding: 0 15px; min-height: 40px; }
   .site-booth-link { margin-left: auto; padding: 0 12px; font-size: 12px; gap: 5px; }
   .site-mobile-menu { display: block; }
   .site-mobile-menu summary { display: grid; place-items: center; width: 36px; height: 44px; list-style: none; cursor: pointer; color: #733952; font-size: 21px; }

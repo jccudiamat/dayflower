@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: {
+    "/g/*/opengraph-image": ["./public/bouquet/reveal-*.png"],
+  },
 };
 
 export default nextConfig;

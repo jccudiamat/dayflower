@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from "react";
 import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
+import { SPECIAL_WRAPPER_URL, REVEAL_ART, backgrounds, borders, bouquetColors } from "./model";
 import "./bouquet.css";
 
 const DRAFT_KEY = "dayflower-bouquet-v1";
@@ -138,7 +139,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   // so these simply fill in as they load.
   useEffect(() => {
     let cancelled = false;
-    for (const url of [WRAPPER_URL, ...EXTRA_ART_URLS]) {
+    for (const url of [WRAPPER_URL, SPECIAL_WRAPPER_URL, ...Object.values(REVEAL_ART), ...EXTRA_ART_URLS]) {
       const image = new Image();
       // Clearing the whole list up front would be a synchronous setState in an
       // effect body; retiring each url as it arrives says the same thing and
@@ -456,7 +457,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     setStep(0); setSelected(undefined); setSelectedPhoto(undefined); setPhotoError(""); update(makeBouquet());
   }
 
-  const artwork = <div className={`bouquet-artwork ${viewing ? "is-gift" : ""}`} style={{ background: papers[bouquet.paper].background }}>
+  const artwork = <div className={`bouquet-artwork ${viewing ? "is-gift" : ""}`} style={{ background: bouquetColors(bouquet).color }}>
     <canvas ref={canvasRef} width={WIDTH} height={HEIGHT} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }} className={!viewing && step <= 1 ? "is-editable" : ""} role="img" aria-label={`Bouquet of ${bouquet.stems.map(s => flowers[s.flower].name).join(", ") || "no flowers yet"}${photoCount(bouquet) ? `, with ${photoCount(bouquet)} photo${photoCount(bouquet) > 1 ? "s" : ""}` : ""}${bouquet.to ? ` for ${bouquet.to}` : ""}. ${bouquet.message}${bouquet.from ? ` From ${bouquet.from}.` : ""}`} />
     {!art && <div className="bouquet-art-loading" role="status">{artError ? <><p>The flowers couldn’t load.</p><button className="bouquet-button" onClick={() => { setArtError(false); setAttempt(n => n + 1); }}>Try again</button></> : "Gathering your flowers…"}</div>}
     {art && !hasContents(bouquet) && <div className="bouquet-empty"><p>A little space for something lovely.</p><span>Choose a flower to begin.</span></div>}
@@ -466,7 +467,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   if (badLink) return <section className="bouquet-invalid"><p className="bouquet-eyebrow">DAYFLOWER BOUQUETS</p><h1>This bouquet link is incomplete.</h1><p>Ask the sender to copy and send the whole gift link, including everything after the #.</p><button className="bouquet-button primary" onClick={startFresh}>Make your own bouquet</button></section>;
   if (viewing) return <section className="bouquet-gift">
     {preview && <p className="bouquet-preview-label">A peek at what they’ll see <button onClick={() => { setPreview(false); setOpened(false); }}>Back to editing</button></p>}
-    {!opened ? <div className="bouquet-envelope">
+    {!opened ? <div className={`bouquet-envelope vessel-${bouquet.vessel ?? 0}`} style={{ background: bouquetColors(bouquet).color, color: bouquetColors(bouquet).ink }}>
       <p className="bouquet-eyebrow">A DELIVERY FROM THE HEART</p>
       <VesselView bouquet={bouquet} art={art} assets={assets} />
       <h1>{bouquet.to.trim() ? `${bouquet.to.trim()}, these are for you.` : "Someone’s thinking of you."}</h1>
@@ -503,17 +504,22 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
           {bouquet.stems.length >= MAX_STEMS && <p className="bouquet-help">A full bunch! Remove a stem to add another.</p>}
           {lostSheets.length > 0 && <p className="bouquet-help">Some flowers couldn’t load just now. <button className="bouquet-text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
           <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: next.stems, paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>
-          <fieldset className="bouquet-paper"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span style={{ background: paper.background, borderColor: paper.ink }}>{bouquet.paper === i ? "✓" : ""}</span>{paper.name}</button>)}</div></fieldset>
+          <fieldset className="bouquet-paper bouquet-wraps"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => {
+            const cell = i >= 5 ? (i - 5) * 2 : i === 0 ? 0 : i === 1 ? 2 : i === 3 ? 4 : 6;
+            return <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span className="bouquet-wrap-thumb" style={{ backgroundColor: paper.background }}>{paper.sprite < 0 ? <span aria-hidden="true">—</span> : [0, 1].map(front => <span aria-hidden="true" key={front} style={{ backgroundImage: `url('${i >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL}')`, backgroundSize: "400% 200%", backgroundPosition: `${(cell + front) % 4 * 100 / 3}% ${Math.floor((cell + front) / 4) * 100}%`, clipPath: i >= 5 && front ? "inset(0 0 0 7%)" : undefined }} />)}</span><strong>{paper.name}</strong></button>;
+          })}</div></fieldset>
           {papers[bouquet.paper].sprite >= 0 && <fieldset className="bouquet-paper bouquet-print"><legend>The wrapping</legend>
             <p className="bouquet-help">Size and lean of the paper itself. The flowers stay tucked inside it.</p>
             <label className="bouquet-print-opacity">Size<input aria-label="Wrapper size" type="range" min={.75} max={1.3} step={.01} value={bouquet.wrapScale ?? 1} onChange={e => update({ ...bouquet, wrapScale: +e.target.value })} /></label>
             <label className="bouquet-print-opacity">Lean<input aria-label="Wrapper lean" type="range" min={-20} max={20} value={bouquet.wrapAngle ?? 0} onChange={e => update({ ...bouquet, wrapAngle: +e.target.value })} /></label>
           </fieldset>}
-          <fieldset className="bouquet-paper bouquet-print"><legend>Stationery</legend>
+          <fieldset className="bouquet-paper bouquet-background"><legend>Set the mood</legend><p className="bouquet-help">Choose the background separately from your wrapping.</p><div>{backgrounds.map((background, i) => <button key={background.name} aria-pressed={(bouquet.background ?? 0) === i} onClick={() => update({ ...bouquet, background: i })}><span style={{ background: background.color || papers[bouquet.paper].background, color: background.ink || papers[bouquet.paper].ink }}>{(bouquet.background ?? 0) === i ? "✓" : ""}</span>{background.name}</button>)}</div></fieldset>
+          <fieldset className="bouquet-paper bouquet-print"><legend>Paper pattern</legend>
             <p className="bouquet-help">A print behind the flowers. Keep it faint and it reads like nice paper.</p>
             <div className="bouquet-print-list">{prints.map((sheet, i) => <button key={sheet.name} aria-pressed={(bouquet.print ?? 0) === i} onClick={() => update({ ...bouquet, print: i })}>{sheet.name}</button>)}</div>
             {(bouquet.print ?? 0) > 0 && <label className="bouquet-print-opacity">How strong<input aria-label="Stationery strength" type="range" min={5} max={100} value={bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY} onChange={e => update({ ...bouquet, printOpacity: +e.target.value })} /></label>}
           </fieldset>
+          <fieldset className="bouquet-paper bouquet-print"><legend>A finishing border</legend><div className="bouquet-print-list">{borders.map((border, i) => <button key={border} aria-pressed={(bouquet.border ?? 0) === i} onClick={() => update({ ...bouquet, border: i })}>{border}</button>)}</div></fieldset>
           <details className="bouquet-arrange" open={selected !== undefined ? true : undefined}><summary>Arrange your stems <span>{bouquet.stems.length}</span></summary><div className="bouquet-stem-list">{bouquet.stems.map((stem, i) => <button aria-pressed={selected === stem.id} key={stem.id} onClick={() => setSelected(stem.id)}>{i + 1}. {flowers[stem.flower].name}</button>)}</div>
             {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={220} max={500} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={490} max={690} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={.7} max={1.15} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><div className="bouquet-depth"><span>Depth</span><div><button onClick={() => update(reorder(bouquet, "stem", active.id, -1))}>Send back</button><button onClick={() => update(reorder(bouquet, "stem", active.id, 1))}>Bring forward</button></div></div><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
             <div className="bouquet-arrange-actions"><button onClick={() => { update({ ...bouquet, stems: arrange(bouquet.stems.map(s => s.flower)) }); setSelected(undefined); }}>Arrange for me</button><button disabled={!bouquet.stems.length} onClick={() => { update({ ...bouquet, stems: [] }); setSelected(undefined); }}>Clear flowers</button></div>
@@ -559,7 +565,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
           <div className="bouquet-vessel">
             <p className="bouquet-eyebrow">HOW IT ARRIVES</p>
             <VesselView bouquet={bouquet} art={art} assets={assets} onPickStem={flower => update({ ...bouquet, stemFlower: flower })} />
-            <div className="bouquet-vessel-list">{vessels.map((vessel, i) => <button key={vessel.name} aria-pressed={(bouquet.vessel ?? 0) === i} onClick={() => update({ ...bouquet, vessel: i })}>{vessel.name}</button>)}</div>
+            <div className="bouquet-vessel-list bouquet-vessel-gallery">{vessels.map((vessel, i) => <button key={vessel.name} aria-pressed={(bouquet.vessel ?? 0) === i} onClick={() => update({ ...bouquet, vessel: i })}><VesselView bouquet={{ ...bouquet, vessel: i }} art={art} assets={assets} /><span>{vessel.name}</span></button>)}</div>
             <p className="bouquet-help">{vessels[bouquet.vessel ?? 0].blurb}</p>
           </div><button className="bouquet-button primary" disabled={busy} onClick={copyLink}>{busy ? "Wrapping…" : <>Copy gift link <span aria-hidden="true">↗</span></>}</button><button className="bouquet-button" disabled={busy} onClick={shareGift}>Share bouquet</button><form className="bouquet-email" onSubmit={sendByEmail}>
             {emailState === "sent"

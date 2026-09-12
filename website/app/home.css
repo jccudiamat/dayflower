@@ -1,0 +1,84 @@
+.dayflower-home { overflow: clip; }
+.home-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: #78566e; }
+.home-hero { max-width: 1120px; margin: auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: 65px; align-items: center; padding: 68px 28px 75px; }
+.home-hero h1 { font-size: clamp(38px, 4.6vw, 58px); line-height: 1.13; letter-spacing: -.05em; font-weight: 700; margin: 22px 0; }
+.home-hero h1 span { color: #8c5675; }
+.home-hero-copy > p:not(.home-eyebrow):not(.home-availability) { color: #726178; font-size: 17px; line-height: 1.9; max-width: 510px; }
+.home-hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin: 30px 0 18px; }
+.home-primary { display: inline-flex; min-height: 50px; align-items: center; padding: 12px 25px; border-radius: 30px; background: #754766; color: #fff; font-weight: 700; font-size: 15px; }
+.home-primary:hover { background: #5e3551; }
+.home-text-link { display: inline-flex; gap: 12px; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; color: #78576f; }
+.home-availability { max-width: 380px; color: #837187; font-size: 13px; line-height: 1.7; }
+.home-letter { position: relative; text-align: center; border: 1px solid #eadce5; border-radius: 130px 130px 20px 20px; background: radial-gradient(ellipse at 50% 25%, #fff7f2, #f3e3e8 80%); padding: 36px 20px 30px; transform: rotate(3deg); box-shadow: 0 18px 55px #613d5810; }
+.home-letter-to { color: #866477; font-size: 20px; }
+.home-letter-art { width: 100%; height: auto; max-width: 345px; margin: -8px auto -30px; }
+.home-letter-note { font-size: 14px; color: #79586e; font-weight: 600; }
+.home-letter-signature { display: block; margin-top: 12px; font-size: 12px; letter-spacing: .06em; color: #997c8f; }
+.home-explore { max-width: 1120px; padding: 30px 28px 75px; margin: auto; scroll-margin-top: 90px; }
+.home-section-intro { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 28px; }
+.home-section-intro h2, .home-questions h2 { font-size: clamp(27px, 3vw, 36px); font-weight: 700; line-height: 1.25; letter-spacing: -.035em; margin-top: 12px; }
+.home-section-intro > p { max-width: 295px; font-size: 15px; color: #79677e; line-height: 1.8; }
+.home-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
+.home-tool { display: flex; flex-direction: column; min-width: 0; padding: 22px; border: 1px solid #e5dce9; border-radius: 18px; background: #f6ecf1; }
+.home-tool.is-booth { background: #eeeaf6; }
+.home-tool.is-gifts { background: #f3eee5; }
+.home-tool.is-journal { background: #eaf0ed; }
+.home-tool-top { display: flex; align-items: start; justify-content: space-between; gap: 14px; font-size: 12px; color: #817085; min-height: 42px; }
+.home-tool-top > span { font-size: 13px; }
+.home-tool-top > p { max-width: 116px; text-align: right; }
+.home-tool h3 { font-size: 28px; font-weight: 700; letter-spacing: -.03em; margin: 25px 0 12px; }
+.home-tool-label { font-size: 15px; font-weight: 700; line-height: 1.55; min-height: 48px; }
+.home-tool-description { font-size: 14px; line-height: 1.85; color: #75647a; margin: 14px 0 24px; flex: 1; }
+.home-tool > a { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #dacee2; padding-top: 17px; min-height: 44px; font-size: 14px; font-weight: 700; color: #765570; }
+.home-tool > a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.home-app { background: #21182e; color: #f7eff6; }
+.home-app-inner { max-width: 1120px; margin: auto; display: grid; grid-template-columns: 1.4fr 1fr; gap: 70px; padding: 75px 28px; align-items: center; }
+.home-app .home-eyebrow { color: #d4afc7; }
+.home-app h2 { font-size: clamp(29px, 3.2vw, 42px); font-weight: 700; line-height: 1.2; letter-spacing: -.03em; margin: 20px 0; }
+.home-app h2 span { color: #e0bad4; }
+.home-app-copy > p:not(.home-eyebrow) { font-size: 16px; line-height: 1.85; color: #bcb0c6; }
+.home-app-features { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin: 32px 0; }
+.home-app-features article { scroll-margin-top: 130px; }
+.home-app-features h3 { font-size: 15px; line-height: 1.6; font-weight: 700; }
+.home-app-features p { font-size: 14px; color: #bcb0c6; line-height: 1.85; margin-top: 8px; }
+.home-app-link { display: inline-flex; gap: 14px; color: #e5bfd9; font-size: 14px; font-weight: 700; min-height: 44px; align-items: center; }
+.home-app-preview { min-width: 0; display: flex; flex-direction: column; align-items: center; }
+.home-app-preview figcaption { margin-top: 25px; font-size: 12px; color: #ad9fb9; text-align: center; }
+.home-questions { max-width: 1060px; margin: auto; padding: 75px 28px; display: grid; grid-template-columns: .85fr 1.15fr; gap: 65px; }
+.home-questions details { border-bottom: 1px solid #e2d8e8; padding: 20px 0; }
+.home-questions summary { font-size: 15px; font-weight: 700; cursor: pointer; }
+.home-questions details p { color: #75637c; line-height: 1.85; font-size: 15px; margin-top: 15px; }
+.home-waitlist { background: #21182e; text-align: center; padding: 65px 24px; color: #f9f1f8; scroll-margin-top: 85px; }
+.home-waitlist > div { max-width: 550px; margin: auto; }
+.home-waitlist .home-eyebrow { color: #ccabc3; }
+.home-waitlist h2 { font-size: 40px; letter-spacing: -.03em; font-weight: 700; line-height: 1.2; margin-top: 20px; }
+.home-waitlist h2 span { color: #dfb7d0; }
+.home-waitlist p:not(.home-eyebrow) { color: #bfb0c9; font-size: 16px; line-height: 1.9; margin: 22px auto 27px; max-width: 455px; }
+.home-waitlist small { display: block; color: #b2a0bc; margin-top: 17px; font-size: 12px; }
+.home-waitlist .waitlist-form { margin: auto; }
+.home-footer { max-width: 1120px; margin: auto; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 25px; padding: 30px 28px; color: #86748d; font-size: 12px; }
+.home-footer-brand { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; color: #6e5173; }
+.home-footer nav { display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px; }
+.dayflower-home a:focus-visible, .home-footer a:focus-visible { outline: 3px solid #906fe8; outline-offset: 5px; }
+@media (max-width: 1000px) { .home-tools { grid-template-columns: 1fr 1fr; } .home-hero { gap: 35px; } .home-app-inner { gap: 35px; } }
+@media (max-width: 700px) {
+  .home-hero { grid-template-columns: 1fr; padding: 35px 22px 45px; gap: 30px; }
+  .home-hero h1 { font-size: clamp(33px, 8.5vw, 48px); }
+  .home-hero-copy > p:not(.home-eyebrow):not(.home-availability) { font-size: 16px; }
+  .home-letter { width: min(100%, 340px); margin: auto; padding-top: 25px; }
+  .home-letter-art { max-width: 250px; margin-block: -15px -25px; }
+  .home-section-intro { display: block; }
+  .home-section-intro > p { margin-top: 16px; max-width: 100%; }
+  .home-explore { padding: 20px 18px 45px; scroll-margin-top: 120px; }
+  .home-tool { padding: 18px; }
+  .home-tool h3 { font-size: 26px; }
+  .home-tool-top { display: block; min-height: 59px; }
+  .home-tool-top > p { text-align: left; margin-top: 8px; }
+  .home-tool > a { font-size: 13px; gap: 6px; }
+  .home-app-inner, .home-questions { grid-template-columns: 1fr; gap: 35px; padding: 45px 22px; }
+  .home-app-features { gap: 22px; }
+  .home-waitlist { scroll-margin-top: 120px; padding: 45px 22px; }
+  .home-footer { justify-content: center; text-align: center; padding: 28px 20px; }
+  .home-footer nav { justify-content: center; }
+}
+@media (max-width: 380px) { .home-tools { grid-template-columns: 1fr; } .home-tool-top { min-height: 0; display: flex; } .home-tool h3 { margin-top: 20px; } .home-tool-label { min-height: 0; } .home-hero-actions { gap: 12px; } }

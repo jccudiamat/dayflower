@@ -1,6 +1,16 @@
 import { ImageResponse } from "next/og";
 import { loadGift } from "../../lib/gift";
 import { papers } from "../../bouquet/model";
+import { bouquetColors } from "../../bouquet/model";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+const revealSources: Record<number, () => Promise<Buffer>> = {
+  0: () => readFile(join(process.cwd(), "public/bouquet/reveal-envelope.png")),
+  2: () => readFile(join(process.cwd(), "public/bouquet/reveal-letter.png")),
+  3: () => readFile(join(process.cwd(), "public/bouquet/reveal-pigeon.png")),
+  5: () => readFile(join(process.cwd(), "public/bouquet/reveal-box.png")),
+};
 
 export const alt = "A little something, just for you";
 export const size = { width: 1200, height: 630 };
@@ -13,10 +23,8 @@ export const contentType = "image/png";
  * the notification defeats the point, and it is why the vessel is a separate
  * choice from the wrapping paper in the first place.
  *
- * Drawn in SVG rather than reusing `renderVessel`: ImageResponse renders
- * through Satori, which has no canvas. These are deliberately simple
- * silhouettes — a thumbnail, not the article. When the vessels get real
- * artwork, this becomes one <img> per vessel and the shapes below go away.
+ * Uses the same illustrated keepsakes as the editor. SVG fallbacks cover
+ * the postcard and single stem, since ImageResponse has no canvas.
  */
 
 const CREAM = "#fffdf8";
@@ -83,10 +91,12 @@ export default async function GiftOpenGraphImage({ params }: { params: Promise<{
   const { id } = await params;
   const bouquet = await loadGift(id);
   const paper = papers[bouquet?.paper ?? 0];
+  const colors = bouquet ? bouquetColors(bouquet) : { color: paper.background, ink: paper.ink };
+  const image = await revealSources[bouquet?.vessel ?? 0]?.().catch(() => null);
   const to = bouquet?.to.trim();
 
   return new ImageResponse(
-    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: paper.background, padding: "0 84px", fontFamily: "sans-serif", color: paper.ink }}>
+    <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: colors.color, padding: "0 84px", fontFamily: "sans-serif", color: colors.ink }}>
       <div style={{ display: "flex", flexDirection: "column", width: 620 }}>
         <div style={{ fontSize: 24, letterSpacing: 3, opacity: 0.65, marginBottom: 26 }}>A LITTLE SOMETHING</div>
         <div style={{ fontSize: 70, fontWeight: 700, lineHeight: 1.1 }}>
@@ -95,7 +105,11 @@ export default async function GiftOpenGraphImage({ params }: { params: Promise<{
         <div style={{ fontSize: 30, opacity: 0.7, marginTop: 28 }}>Open when you have a minute.</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", transform: "rotate(-6deg)" }}>
-        <Vessel vessel={bouquet?.vessel ?? 0} ink={paper.ink} />
+        {image ?
+          // ImageResponse consumes this inline image directly; next/image is for browser pages.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`data:image/png;base64,${image.toString("base64")}`} alt="" width={360} height={360} />
+          : <Vessel vessel={bouquet?.vessel ?? 0} ink={colors.ink} />}
       </div>
     </div>,
     size,
