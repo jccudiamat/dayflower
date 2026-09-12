@@ -79,12 +79,13 @@ export const WRAP_PIVOT = { x: 360, y: 690 };
 /**
  * The highest a bloom may reach before the card starts cutting it.
  *
- * Sits just below the clip rect so there is a hair of margin rather than a
- * flush edge. Stems are allowed as high as y=490 at scale 1.15, which puts a
+ * ⚠️ Must stay **below both** the card clip and the taper, which are the two
+ * things that actually cut. They were 100 and 112 while this was 108, so the
+ * fit aimed at a height the taper then shaved. All three move together. Stems are allowed as high as y=490 at scale 1.15, which puts a
  * bloom tip well off the top of the card — raising the header cannot buy back
  * anything like enough room, so the arrangement is scaled instead.
  */
-export const FIT_CEILING = 108;
+export const FIT_CEILING = 112;
 
 /**
  * How much the whole arrangement has to shrink so nothing is clipped.
@@ -522,7 +523,7 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     // is not part of the state save/restore touches, so it survives with its
     // points already resolved, and the flowers that follow draw untransformed.
     ctx.save(); wrapTransform();
-    ctx.beginPath(); ctx.moveTo(28, 112); ctx.lineTo(692, 112); ctx.lineTo(656, 390);
+    ctx.beginPath(); ctx.moveTo(28, 100); ctx.lineTo(692, 100); ctx.lineTo(656, 390);
     ctx.lineTo(500, 530); ctx.lineTo(402, 658); ctx.lineTo(318, 658); ctx.lineTo(220, 530); ctx.lineTo(64, 390); ctx.closePath();
     ctx.restore();
     ctx.clip();
