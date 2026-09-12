@@ -3355,6 +3355,24 @@ defaults to 5; `--keep 0` restores the old forever behaviour.
   which is exactly the size where trusting a single page works right up until
   it doesn't.
 
+### 🔴 Pruning must not be able to rewrite latest.json
+
+The first cleanup was run as `--skip-build --no-notes --prune-backlog`,
+because a full publish was the only route to the prune step. It worked, and
+it **overwrote `latest.json` with an empty note list** — silently undoing the
+release notes the real publish had written minutes earlier. The exact failure
+the required-notes check was added to prevent, reintroduced through the back
+door by the person who added the check.
+
+`--prune-only` exists now: it prunes and returns before anything touches
+pubspec, the APK or the manifest. ⚠️ **Housekeeping must never be able to
+rewrite the one file every phone reads.** If a future flag needs the bucket
+without needing a release, it belongs on that path, not on the publish path
+with the safety checks switched off.
+
+Result: `app-builds` went from 64 objects / 2,238 MB to 6 / 232 MB, and the
+whole project from 2,247 MB to **240 MB** against a 1 GB quota.
+
 ### Egress is the other half, and is not measured here
 
 Storage is what the numbers above prove. Downloads count separately against
@@ -3362,4 +3380,3 @@ egress, and two phones pulling ~40 MB per build across 60-odd builds is the
 same order as the 5 GB monthly allowance. Retention does not shrink egress;
 **publishing less often does.** Worth remembering that every `publish_update`
 run costs both quotas.
-

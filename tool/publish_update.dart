@@ -22,6 +22,8 @@
 //   --prune-backlog     Allow removing more than 10 old builds in one run.
 //                       The routine case needs no flag; the one-time cleanup
 //                       of a backlog does.
+//   --prune-only        Prune and do nothing else. No build, no upload, and
+//                       crucially no latest.json rewrite.
 //   --dry-run           Do everything except upload.
 //
 // Credentials come from `.publish.env` (gitignored, and NOT a Flutter asset
@@ -103,6 +105,25 @@ Future<void> _publish(List<String> args) async {
         '  cmd /c "echo SUPABASE_SERVICE_ROLE_KEY=<paste> > .publish.env"',
       );
     }
+  }
+
+  // 🔴 **Pruning is not publishing, and coupling them cost the release
+  // notes once already.** The only way to reach the prune step used to be a
+  // full publish, so tidying the bucket meant re-running with `--no-notes`,
+  // which re-uploaded the APK and overwrote `latest.json` with an empty note
+  // list — silently undoing the notes the real publish had just written.
+  // Housekeeping must not be able to rewrite what phones read.
+  if (options.pruneOnly) {
+    if (serviceKey == null || serviceKey.isEmpty) {
+      _fail('--prune-only still needs the service_role key in .publish.env.');
+    }
+    await _prune(
+      supabaseUrl: supabaseUrl,
+      serviceKey: serviceKey,
+      keep: options.keep,
+      backlog: options.pruneBacklog,
+    );
+    return;
   }
 
   // 🔴 **Notes are required, and this check is why.** Builds 53 through 64
@@ -550,6 +571,7 @@ class _Options {
     required this.abi,
     required this.keep,
     required this.pruneBacklog,
+    required this.pruneOnly,
   });
 
   /// Which architecture's APK to publish. Every Android phone made since
@@ -575,6 +597,10 @@ class _Options {
   /// Permission to delete a backlog rather than just this run's leftovers.
   final bool pruneBacklog;
 
+  /// ⚠️ Tidy the bucket and touch nothing else. In particular it does not
+  /// write `latest.json`, which is the file every phone reads.
+  final bool pruneOnly;
+
   static _Options parse(List<String> args) {
     final notes = <String>[];
     int? build;
@@ -585,6 +611,7 @@ class _Options {
     var abi = _defaultAbi;
     var keep = 5;
     var pruneBacklog = false;
+    var pruneOnly = false;
 
     for (var i = 0; i < args.length; i++) {
       switch (args[i]) {
@@ -611,6 +638,8 @@ class _Options {
           if (keep < 0) _fail('--keep cannot be negative.');
         case '--prune-backlog':
           pruneBacklog = true;
+        case '--prune-only':
+          pruneOnly = true;
         case '--no-notes':
           noNotes = true;
         case '--skip-build':
@@ -632,6 +661,7 @@ class _Options {
       abi: abi,
       keep: keep,
       pruneBacklog: pruneBacklog,
+      pruneOnly: pruneOnly,
     );
   }
 }
