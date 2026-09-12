@@ -210,3 +210,13 @@
 @media (max-width: 420px) {
   .bouquet-email-row { flex-direction: column; }
 }
+
+/* ── Single stem: pick the bloom by swiping ─────────────────────────────── */
+.bouquet-stem-picker { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.bouquet-stem-swipe { touch-action: pan-y; cursor: grab; user-select: none; }
+.bouquet-stem-swipe:active { cursor: grabbing; }
+.bouquet-stem-swipe .bouquet-vessel-art { margin: 6px auto 0; }
+.bouquet-stem-arrow { width: 38px; height: 38px; border: 1px solid #e2d8e9; border-radius: 50%; background: #fff; font-size: 20px; line-height: 1; color: #6d5374; }
+.bouquet-stem-arrow:hover { background: #f6f0f8; border-color: #b795c0; }
+.bouquet-stem-name { grid-column: 1 / -1; text-align: center; font-size: 14px; font-weight: 700; color: #5f4a63; margin-top: 2px; }
+.bouquet-stem-name span { display: block; font-size: 12px; font-weight: 400; color: #8a7c8d; margin-top: 3px; }

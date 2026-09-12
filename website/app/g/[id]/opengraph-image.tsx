@@ -83,18 +83,16 @@ export default async function GiftOpenGraphImage({ params }: { params: Promise<{
   const { id } = await params;
   const bouquet = await loadGift(id);
   const paper = papers[bouquet?.paper ?? 0];
-  const to = bouquet?.to.trim(), from = bouquet?.from.trim();
+  const to = bouquet?.to.trim();
 
   return new ImageResponse(
     <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", background: paper.background, padding: "0 84px", fontFamily: "sans-serif", color: paper.ink }}>
       <div style={{ display: "flex", flexDirection: "column", width: 620 }}>
         <div style={{ fontSize: 24, letterSpacing: 3, opacity: 0.65, marginBottom: 26 }}>A LITTLE SOMETHING</div>
         <div style={{ fontSize: 70, fontWeight: 700, lineHeight: 1.1 }}>
-          {to ? `${to}, this is\nfor you.` : "Someone left\nthis for you."}
+          {to ? `${to}, I made this for you.` : "I made this for you."}
         </div>
-        <div style={{ fontSize: 30, opacity: 0.7, marginTop: 28 }}>
-          {from ? `From ${from} · Open it when you have a minute.` : "Open it when you have a minute."}
-        </div>
+        <div style={{ fontSize: 30, opacity: 0.7, marginTop: 28 }}>Open when you have a minute.</div>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", transform: "rotate(-6deg)" }}>
         <Vessel vessel={bouquet?.vessel ?? 0} ink={paper.ink} />

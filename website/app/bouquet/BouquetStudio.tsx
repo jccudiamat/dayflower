@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from "react";
-import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, angleToward, arrange, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import "./bouquet.css";
 
@@ -19,11 +19,40 @@ function Sprite({ index, className = "" }: { index: number; className?: string }
   }} />;
 }
 
-function VesselView({ bouquet, art, assets }: { bouquet: Bouquet; art: HTMLImageElement | null; assets: RenderAssets }) {
+function VesselView({ bouquet, art, assets, onPickStem }: {
+  bouquet: Bouquet; art: HTMLImageElement | null; assets: RenderAssets;
+  /** Present only in the editor; the recipient's copy is not adjustable. */
+  onPickStem?: (flower: number) => void;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const swipe = useRef<number | null>(null);
   useEffect(() => { if (ref.current) renderVessel(ref.current, bouquet, art, assets); }, [bouquet, art, assets]);
-  return <canvas ref={ref} width={VESSEL_W} height={VESSEL_H} className="bouquet-vessel-art" role="img"
-    aria-label={`${vessels[bouquet.vessel ?? 0].name}${bouquet.to.trim() ? `, addressed to ${bouquet.to.trim()}` : ""}`} />;
+
+  const single = (bouquet.vessel ?? 0) === 4 && onPickStem;
+  const step = (delta: number) => onPickStem?.((singleStem(bouquet) + delta + flowers.length) % flowers.length);
+
+  const canvas = <canvas ref={ref} width={VESSEL_W} height={VESSEL_H} className="bouquet-vessel-art" role="img"
+    aria-label={`${vessels[bouquet.vessel ?? 0].name}${single ? `, showing ${flowers[singleStem(bouquet)].name}` : ""}${bouquet.to.trim() ? `, addressed to ${bouquet.to.trim()}` : ""}`} />;
+  if (!single) return canvas;
+
+  return <div className="bouquet-stem-picker">
+    <button type="button" className="bouquet-stem-arrow" aria-label="Previous flower" onClick={() => step(-1)}><span aria-hidden="true">‹</span></button>
+    <div className="bouquet-stem-swipe"
+      onPointerDown={e => { swipe.current = e.clientX; }}
+      onPointerUp={e => {
+        // A flick either way changes the bloom; anything shorter is a tap and
+        // should not move it by accident.
+        if (swipe.current === null) return;
+        const travel = e.clientX - swipe.current;
+        swipe.current = null;
+        if (Math.abs(travel) > 30) step(travel < 0 ? 1 : -1);
+      }}
+      onPointerCancel={() => { swipe.current = null; }}>
+      {canvas}
+    </div>
+    <button type="button" className="bouquet-stem-arrow" aria-label="Next flower" onClick={() => step(1)}><span aria-hidden="true">›</span></button>
+    <p className="bouquet-stem-name">{flowers[singleStem(bouquet)].name} <span>Swipe, or use the arrows</span></p>
+  </div>;
 }
 
 export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {}) {
@@ -201,7 +230,17 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   }
   function point(event: PointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
-    return { x: (event.clientX - rect.left) * WIDTH / rect.width, y: (event.clientY - rect.top) * HEIGHT / rect.height };
+    const x = (event.clientX - rect.left) * WIDTH / rect.width;
+    const y = (event.clientY - rect.top) * HEIGHT / rect.height;
+    // renderBouquet shrinks a too-tall arrangement about the tie so nothing is
+    // clipped; undo exactly that here, or every drag lands offset from the
+    // flower the finger is actually on.
+    const fit = fitScale(bouquet);
+    if (fit >= 1) return { x, y };
+    return {
+      x: WRAP_PIVOT.x + (x - WRAP_PIVOT.x) / fit,
+      y: WRAP_PIVOT.y + (y - WRAP_PIVOT.y) / fit,
+    };
   }
   function pointerDown(event: PointerEvent<HTMLCanvasElement>) {
     if (viewing || step > 1) return;
@@ -494,7 +533,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
         {step === 3 && <div className="bouquet-panel bouquet-send-panel"><span className="bouquet-send-heart" aria-hidden="true">♡</span><p className="bouquet-eyebrow">HAPPINESS, READY FOR DELIVERY</p><h2>Good things are<br />meant to be shared.</h2><p>Send a little surprise. They’ll open your bouquet and the note you tucked inside.</p>
           <div className="bouquet-vessel">
             <p className="bouquet-eyebrow">HOW IT ARRIVES</p>
-            <VesselView bouquet={bouquet} art={art} assets={assets} />
+            <VesselView bouquet={bouquet} art={art} assets={assets} onPickStem={flower => update({ ...bouquet, stemFlower: flower })} />
             <div className="bouquet-vessel-list">{vessels.map((vessel, i) => <button key={vessel.name} aria-pressed={(bouquet.vessel ?? 0) === i} onClick={() => update({ ...bouquet, vessel: i })}>{vessel.name}</button>)}</div>
             <p className="bouquet-help">{vessels[bouquet.vessel ?? 0].blurb}</p>
           </div><button className="bouquet-button primary" disabled={busy} onClick={copyLink}>{busy ? "Wrapping…" : <>Copy gift link <span aria-hidden="true">↗</span></>}</button><button className="bouquet-button" disabled={busy} onClick={shareGift}>Share bouquet</button><form className="bouquet-email" onSubmit={sendByEmail}>

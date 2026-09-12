@@ -71,10 +71,51 @@ export const papers = [
 export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number; z?: number };
 export const photoFrames = ["Polaroid", "Sticker", "Cutout", "Heart", "Circle", "Arch", "Postage stamp"] as const;
 export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front"; z?: number };
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number };
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number };
 
 /** The wrapper turns and grows about its tie, not its middle, so it leans the way a held bouquet does. */
 export const WRAP_PIVOT = { x: 360, y: 690 };
+
+/**
+ * The highest a bloom may reach before the card starts cutting it.
+ *
+ * Sits just below the clip rect so there is a hair of margin rather than a
+ * flush edge. Stems are allowed as high as y=490 at scale 1.15, which puts a
+ * bloom tip well off the top of the card — raising the header cannot buy back
+ * anything like enough room, so the arrangement is scaled instead.
+ */
+export const FIT_CEILING = 108;
+
+/**
+ * How much the whole arrangement has to shrink so nothing is clipped.
+ *
+ * Render-time only: it never touches stored values, so a gift made before
+ * this simply stops being cut rather than being rewritten. Scaled about the
+ * tie, so a too-tall bouquet settles toward its own wrapping instead of
+ * drifting off-centre.
+ *
+ * ⚠️ `point()` in the editor applies the inverse, or dragging would be offset
+ * from the art by exactly this factor.
+ */
+export function fitScale(bouquet: Bouquet) {
+  let top = Infinity;
+  const raise = (x: number, y: number, lx: number, ly: number, angle: number) =>
+    { top = Math.min(top, y + lx * Math.sin(angle) + ly * Math.cos(angle)); };
+  for (const stem of bouquet.stems) {
+    const { w, h, angle } = stemGeometry(stem);
+    // The art fills a w × h box hanging from (-w/2, -h*.94) in the stem's own
+    // frame; tilted, either upper corner can be the highest point.
+    raise(stem.x, stem.y, -w / 2, -h * .94, angle);
+    raise(stem.x, stem.y, w / 2, -h * .94, angle);
+  }
+  for (const photo of bouquet.photos ?? []) {
+    const { w, h, angle } = photoGeometry(photo);
+    raise(photo.x, photo.y, -w / 2, -h / 2, angle);
+    raise(photo.x, photo.y, w / 2, -h / 2, angle);
+  }
+  if (!Number.isFinite(top) || top >= FIT_CEILING) return 1;
+  return (WRAP_PIVOT.y - FIT_CEILING) / (WRAP_PIVOT.y - top);
+}
 
 /**
  * One stack for flowers and photos together, so either can be moved forward or
@@ -138,7 +179,7 @@ export const vessels = [
   { name: "Postcard", blurb: "A stamp, a postmark, a short hello." },
   { name: "Love letter", blurb: "Folded in three, sealed with a heart." },
   { name: "Carrier pigeon", blurb: "Takes the long way. Always arrives." },
-  { name: "Single stem", blurb: "One flower, tied with a ribbon." },
+  { name: "Single stem", blurb: "Just one flower. Swipe to choose it." },
   { name: "Gift box", blurb: "Lid, ribbon, and a moment before it lifts." },
 ] as const;
 
@@ -168,6 +209,16 @@ export function flowerSprite(index: number) {
   return index < 6 ? { url: ART_URL, index, rows: 2 } : { url: EXTRA_ART_URLS[Math.floor((index - 6) / 12)], index: (index - 6) % 12, rows: 3 };
 }
 export function photoCount(b: Bouquet) { return b.photos?.length ?? 0; }
+/**
+ * The bloom the Single stem vessel shows. Picked on its own, because the
+ * vessel is what arrives first and deserves its own choice — but it falls
+ * back to the bouquet's first flower so it is never empty or arbitrary.
+ */
+export function singleStem(b: Bouquet) {
+  const chosen = b.stemFlower;
+  if (Number.isInteger(chosen) && chosen! >= 0 && chosen! < flowers.length) return chosen!;
+  return b.stems[0]?.flower ?? 0;
+}
 export function hasContents(b: Bouquet) { return b.stems.length > 0 || photoCount(b) > 0; }
 export const WIDTH = 720;
 export const HEIGHT = 960;
@@ -227,6 +278,7 @@ export function validateBouquet(value: unknown): Bouquet | null {
   const printOpacity = finiteIn(b.printOpacity, 0, 100) ? Math.round(b.printOpacity as number) : DEFAULT_PRINT_OPACITY;
   const wrapScale = finiteIn(b.wrapScale, .75, 1.3) ? b.wrapScale as number : 1;
   const wrapAngle = finiteIn(b.wrapAngle, -20, 20) ? b.wrapAngle as number : 0;
+  const stemFlower = Number.isInteger(b.stemFlower) && finiteIn(b.stemFlower, 0, flowers.length - 1) ? b.stemFlower as number : undefined;
   return {
     v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message,
     ...(photos.length ? { photos } : {}),
@@ -234,6 +286,7 @@ export function validateBouquet(value: unknown): Bouquet | null {
     ...(vessel ? { vessel } : {}), ...(print ? { print } : {}),
     ...(print && printOpacity !== DEFAULT_PRINT_OPACITY ? { printOpacity } : {}),
     ...(wrapScale !== 1 ? { wrapScale } : {}), ...(wrapAngle !== 0 ? { wrapAngle } : {}),
+    ...(stemFlower !== undefined ? { stemFlower } : {}),
   };
 }
 
@@ -426,11 +479,11 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.textAlign = "center";
   ctx.fillStyle = paper.ink;
   ctx.font = '16px sans-serif';
-  ctx.fillText("A LITTLE SOMETHING, JUST FOR YOU", WIDTH / 2, 49);
+  ctx.fillText("A LITTLE SOMETHING, JUST FOR YOU", WIDTH / 2, 42);
   ctx.font = 'italic 32px Georgia, serif';
-  ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 94, 620);
+  ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 86, 620);
   ctx.save();
-  ctx.beginPath(); ctx.rect(12, 112, WIDTH - 24, 615); ctx.clip();
+  ctx.beginPath(); ctx.rect(12, 100, WIDTH - 24, 627); ctx.clip();
   const wrapper = assets[WRAPPER_URL];
   const wrapIndex = bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
   // Both halves of the paper and the taper below share one transform, or the
@@ -448,6 +501,16 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     ctx.drawImage(wrapper, crop.x, crop.y, crop.w, crop.h, 104, 130, 512, 600);
     ctx.restore();
   };
+  // Everything from here to the matching restore is the bouquet itself, and
+  // it all has to scale together — wrapper, taper, flowers, photos, grips —
+  // or the paper and what is in it drift apart.
+  const fit = fitScale(bouquet);
+  ctx.save();
+  if (fit < 1) {
+    ctx.translate(WRAP_PIVOT.x, WRAP_PIVOT.y);
+    ctx.scale(fit, fit);
+    ctx.translate(-WRAP_PIVOT.x, -WRAP_PIVOT.y);
+  }
   drawWrapper(false);
   ctx.save();
   if (paper.sprite >= 0 && wrapper) {
@@ -500,6 +563,7 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     drawGrip(ctx, tilt.x, tilt.y, "tilt", paper.ink);
     drawGrip(ctx, size.x, size.y, "size", paper.ink);
   }
+  ctx.restore();   // end shrink-to-fit
   ctx.restore();
   ctx.fillStyle = "#ffffffcf";
   ctx.beginPath(); ctx.roundRect(42, 743, WIDTH - 84, 166, 12); ctx.fill();
@@ -746,16 +810,14 @@ export function renderVessel(canvas: HTMLCanvasElement, bouquet: Bouquet, art: H
       ctx.restore();
       break;
     }
-    case 4: { // Single stem
-      const stem = bouquet.stems[0];
-      const sprite = stem ? flowerSprite(stem.flower) : null;
-      const sheet = sprite ? (sprite.url === ART_URL ? art : assets[sprite.url]) : null;
-      if (sheet && sprite) {
+    case 4: { // Single stem — one flower, and nothing tied to it.
+      const sprite = flowerSprite(singleStem(bouquet));
+      const sheet = sprite.url === ART_URL ? art : assets[sprite.url];
+      if (sheet) {
         const crop = spriteRect(sprite.index, sheet.naturalWidth, sheet.naturalHeight, sprite.rows);
-        const h = 292, w = h * .75;
-        ctx.drawImage(sheet, crop.x, crop.y, crop.w, crop.h, cx - w / 2, cy - h * .56, w, h);
+        const h = 330, w = h * .75;
+        ctx.drawImage(sheet, crop.x, crop.y, crop.w, crop.h, cx - w / 2, cy - h * .5, w, h);
       }
-      ribbon(ctx, cx, cy + 104, 17);
       break;
     }
     case 5: { // Gift box

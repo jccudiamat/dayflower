@@ -23,11 +23,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const bouquet = await loadGift(id);
   if (!bouquet) return { title: "This gift link has expired", robots: { index: false, follow: false } };
 
-  const to = bouquet.to.trim(), from = bouquet.from.trim();
-  const title = to ? `${to}, someone left this for you` : "A little something, just for you";
-  const description = from
-    ? `${from} made you something. Open it when you have a minute.`
-    : "Someone made you something. Open it when you have a minute.";
+  const to = bouquet.to.trim();
+  // First person on purpose: the card sits directly under the sender's own
+  // message, so it should read as them speaking, not as the site announcing.
+  const title = to ? `${to}, I made this for you` : "I made this for you";
+  const description = "Open when you have a minute.";
   return {
     title,
     description,
