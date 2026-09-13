@@ -284,7 +284,7 @@
 @media (max-width: 680px) {
  .bouquet-heading { margin-bottom: 16px; }
  .bouquet-heading p:last-child, .bouquet-eyebrow { display: none; }
- .bouquet-preview { position: sticky; top: 0; z-index: 5; background: #faf7fc; padding-bottom: 6px; }
+ .bouquet-preview { position: sticky; top: 117px; z-index: 5; background: #faf7fc; padding-bottom: 6px; }
  .bouquet-preview .bouquet-artwork { width: min(100%, 42dvh); }
  .bouquet-preview-hint { display: none; }
  .bouquet-artwork { border-radius: 8px; }
