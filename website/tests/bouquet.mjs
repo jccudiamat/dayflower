@@ -165,3 +165,17 @@ test('gift email never reveals the private note in HTML or plain text', () => {
   }
   assert.ok(mail.exports.htmlFor(gift).includes(gift.imageUrl));
 });
+
+
+test('special wrapping includes paper tips beyond the nominal cell without stretching', () => {
+  const { drawWrapperLayer } = model.exports;
+  for (const paper of [5, 6, 7, 8]) {
+    const { canvas, calls } = recordingCanvas();
+    drawWrapperLayer(canvas.getContext('2d'), paper, false, { naturalWidth: 1536, naturalHeight: 1024 });
+    const [, , sx, , sw, sh, , , dw, dh] = calls.find(call => call[0] === 'drawImage');
+    assert.ok(sw >= 403, 'The right paper tip extends beyond the 384px cell');
+    assert.ok(sx + sw <= 1536, 'The expanded crop stays inside the sheet');
+    assert.ok(Math.abs(dw / sw - 512 / 384) < 1e-9, 'Paper keeps its original horizontal scale');
+    assert.equal(dh / sh, 600 / 512);
+  }
+});

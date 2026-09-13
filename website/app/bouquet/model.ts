@@ -149,7 +149,7 @@ export function fitScale(bouquet: Bouquet) {
   }
   if (papers[bouquet.paper].sprite >= 0 && hasContents(bouquet)) {
     const k = bouquet.wrapScale ?? 1;
-    box(WRAP_PIVOT.x, WRAP_PIVOT.y, (104 - WRAP_PIVOT.x) * k, (130 - WRAP_PIVOT.y) * k, 512 * k, 600 * k, (bouquet.wrapAngle ?? 0) * Math.PI / 180);
+    box(WRAP_PIVOT.x, WRAP_PIVOT.y, (104 - WRAP_PIVOT.x) * k, (130 - WRAP_PIVOT.y) * k, 512 * (bouquet.paper >= 5 ? 1.055 : 1) * k, 600 * k, (bouquet.wrapAngle ?? 0) * Math.PI / 180);
   }
   return fit;
 }
@@ -377,6 +377,17 @@ export function stemGeometry(stem: Stem) {
   const h = 470 * stem.scale;
   return { w: h * .75, h, angle: stem.angle * Math.PI / 180 };
 }
+/** Special rear paper tips extend into the following cell's empty margin. */
+export function drawWrapperLayer(ctx: CanvasRenderingContext2D, paper: number, front: boolean, image: HTMLImageElement) {
+  const index = paper >= 5 ? (paper - 5) * 2 : paper === 0 ? 0 : paper === 1 ? 2 : paper === 3 ? 4 : 6;
+  const crop = spriteRect(index + (front ? 1 : 0), image.naturalWidth, image.naturalHeight);
+  const inset = paper >= 5 && front ? .07 : 0;
+  const bleed = paper >= 5 && !front ? .055 : 0;
+  const width = 1 - inset + bleed;
+  ctx.drawImage(image, crop.x + crop.w * inset, crop.y, crop.w * width, crop.h,
+    104 + 512 * inset, 130, 512 * width, 600);
+}
+
 /** Centre of the bloom end, which is what the selection ring circles. */
 export function bloomPoint(stem: Stem) {
   const { h, angle } = stemGeometry(stem);
@@ -547,7 +558,6 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.beginPath(); ctx.rect(24, 112, WIDTH - 48, 775); ctx.clip();
   ctx.translate(ARRANGEMENT_OFFSET.x, ARRANGEMENT_OFFSET.y);
   const wrapper = assets[bouquet.paper >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL];
-  const wrapIndex = bouquet.paper >= 5 ? (bouquet.paper - 5) * 2 : bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
   // Both halves of the paper and the taper below share one transform, or the
   // front would slide off the back the moment the wrapper is turned.
   const wrapTransform = () => {
@@ -558,12 +568,8 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   };
   const drawWrapper = (front: boolean) => {
     if (!wrapper || paper.sprite < 0 || !hasContents(bouquet)) return;
-    const crop = spriteRect(wrapIndex + (front ? 1 : 0), wrapper.naturalWidth, wrapper.naturalHeight);
     ctx.save(); wrapTransform();
-    // The special sheet's rear paper tips cross into the next cell's left margin.
-    // Crop only that empty margin from the front, keeping its position unchanged.
-    const inset = front && bouquet.paper >= 5 ? .07 : 0;
-    ctx.drawImage(wrapper, crop.x + crop.w * inset, crop.y, crop.w * (1 - inset), crop.h, 104 + 512 * inset, 130, 512 * (1 - inset), 600);
+    drawWrapperLayer(ctx, bouquet.paper, front, wrapper);
     ctx.restore();
   };
   // Everything from here to the matching restore is the bouquet itself, and

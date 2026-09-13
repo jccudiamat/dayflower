@@ -289,3 +289,5 @@
  .bouquet-preview-hint { display: none; }
  .bouquet-artwork { border-radius: 8px; }
 }
+
+.bouquet-wrap-thumb canvas { display: block; width: 100%; height: 100%; }
