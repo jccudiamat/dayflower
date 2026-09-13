@@ -110,6 +110,17 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   const [busy, setBusy] = useState(false);
   const [email, setEmail] = useState("");
   const [emailState, setEmailState] = useState<"idle" | "sending" | "sent">("idle");
+  useEffect(() => {
+    const header = document.querySelector<HTMLElement>(".site-header");
+    if (!header) return;
+    const root = document.documentElement;
+    const measure = () => root.style.setProperty("--bouquet-header-height", `${header.getBoundingClientRect().height}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => { observer.disconnect(); root.style.removeProperty("--bouquet-header-height"); };
+  }, []);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const linkRef = useRef<HTMLTextAreaElement>(null);
   const revealRef = useRef<HTMLHeadingElement>(null);

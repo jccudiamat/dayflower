@@ -215,7 +215,7 @@
 .bouquet-vessel-gallery button[aria-pressed=true] { border-color: #976787; box-shadow: 0 0 0 1px #976787; }
 .bouquet-envelope.vessel-3 .bouquet-vessel-art { animation: pigeon-delivery 3s ease-in-out infinite; }
 @keyframes pigeon-delivery { 0%, 100% { transform: translateY(0) rotate(-2deg); } 50% { transform: translateY(-9px) rotate(1deg); } }
-@media (max-width: 767px) and (min-width: 681px) { .bouquet-preview { top: 117px; } }
+@media (max-width: 767px) and (min-width: 681px) { .bouquet-preview { top: var(--bouquet-header-height, 93px); } }
 @media (prefers-reduced-motion: reduce) { .bouquet-envelope.vessel-3 .bouquet-vessel-art { animation: none; } }
 /* On the recipient's screen the vessel is the hero, not a control. */
 .bouquet-envelope .bouquet-vessel-art { max-width: 380px; margin: 8px auto 18px; }
@@ -284,10 +284,16 @@
 @media (max-width: 680px) {
  .bouquet-heading { margin-bottom: 16px; }
  .bouquet-heading p:last-child, .bouquet-eyebrow { display: none; }
- .bouquet-preview { position: sticky; top: 117px; z-index: 5; background: #faf7fc; padding-bottom: 6px; }
+ .bouquet-preview { position: sticky; top: var(--bouquet-header-height, 93px); z-index: 5; background: #faf7fc; padding-bottom: 6px; }
  .bouquet-preview .bouquet-artwork { width: min(100%, 42dvh); }
  .bouquet-preview-hint { display: none; }
  .bouquet-artwork { border-radius: 8px; }
 }
 
 .bouquet-wrap-thumb canvas { display: block; width: 100%; height: 100%; }
+
+/* The preview meets the actual navigation edge, including after font/viewport changes. */
+.site-header:has(a[href="/bouquet"][aria-current="page"]) { background: #faf7fc; }
+@media (max-width: 680px) {
+ .bouquet-preview::before { content: ""; position: absolute; inset: -1px -16px 0; background: #faf7fc; z-index: -1; }
+}
