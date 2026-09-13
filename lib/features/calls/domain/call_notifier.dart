@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,7 +24,13 @@ import 'call.dart';
 /// learns which service is carrying the call, which is what lets the whole
 /// feature be written, reviewed and screenshotted before that is decided.
 class CallNotifier extends StateNotifier<CallSession?> {
-  CallNotifier(this._ref) : super(null);
+  CallNotifier(this._ref) : super(null) {
+    // Bound to the session, not to the call screen. A call outlives that
+    // screen — it minimises to a bubble and keeps running — so a widget's
+    // lifecycle would drop the lock mid-call, and a lock left on after one
+    // ends is a flat battery by morning.
+    addListener(_holdTheScreen, fireImmediately: false);
+  }
 
   final Ref _ref;
 
@@ -435,11 +442,27 @@ class CallNotifier extends StateNotifier<CallSession?> {
     _tick = null;
   }
 
+  /// Keeps the display awake while a call is up.
+  ///
+  /// A video call is the one screen nobody touches while they are using it,
+  /// so the idle timer reads looking at someone's face as inactivity and
+  /// dims them away mid-sentence.
+  ///
+  /// Failures are swallowed: no platform this ships on refuses, but a
+  /// display that will not stay awake is never a reason to drop a call.
+  void _holdTheScreen(CallSession? session) {
+    final awake = session != null && !session.status.isTerminal;
+    WakelockPlus.toggle(enable: awake).catchError((_) {});
+  }
+
   @override
   void dispose() {
     _stopTicking();
     _stopNoAnswer();
     _events?.cancel();
+    // Whatever ended this — hang up, failure, or the provider going away —
+    // the screen goes back to sleeping normally.
+    WakelockPlus.disable().catchError((_) {});
     super.dispose();
   }
 }

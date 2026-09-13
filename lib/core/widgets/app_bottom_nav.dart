@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app_router.dart';
 import '../../features/tulip/data/flower_repository.dart';
+import '../../features/tulip/presentation/widgets/share_your_day.dart';
 import '../theme/app_colors.dart';
 import '../theme/design_tokens.dart';
 
@@ -70,7 +71,16 @@ class AppBottomNav extends ConsumerWidget {
                 // `== flowers`, not `startsWith`: the thread is nested under
                 // this path, and startsWith would light both tabs at once.
                 selected: location == Routes.flowers,
-                onTap: () => context.go(Routes.flowers),
+                // Each door declares where a photo taken behind it should
+                // land — the chat sets `chat` the same way. The provider is
+                // global and sticky, so without this the camera keeps
+                // whatever the last entry point chose and the destination
+                // silently depends on where you have been.
+                onTap: () {
+                  ref.read(dayPhotoTargetProvider.notifier).state =
+                      DayPhotoTarget.widget;
+                  context.go(Routes.flowers);
+                },
               ),
               _NavItem(
                 icon: CupertinoIcons.gift_fill,

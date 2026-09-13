@@ -84,6 +84,10 @@ dependencies:
   # that fails with a misleading "cannot find symbol". If the next Android
   # build breaks, clean before believing the error.
   livekit_client: ^2.11.0
+  # Keeps the display awake for the length of a call. A video call is the one
+  # screen nobody touches while they are using it, so the idle timer treats
+  # looking at someone's face as inactivity and dims them away mid-sentence.
+  wakelock_plus: ^1.2.8
   url_launcher: 6.3.2
 
 dev_dependencies:

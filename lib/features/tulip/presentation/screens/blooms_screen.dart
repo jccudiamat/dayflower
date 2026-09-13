@@ -3,24 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app_router.dart';
+import '../../../../core/models/user_profile.dart';
+import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
 import '../../../../core/widgets/flower_image.dart';
-import '../../../../core/providers/supabase_provider.dart';
-import '../../data/flower_repository.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
+import '../../data/flower_repository.dart';
 
 /// The Flowers tab.
 ///
 /// The tab used to open the conversation directly, which meant the one place
 /// named after the flowers never showed you any — every bloom either of you
 /// had ever sent was buried in a thread you had to scroll. This is where
-/// they live: the newest one large, the rest as a garden underneath, and the
-/// conversation one tap away.
+/// they live, with the conversation previewed at the top rather than hidden
+/// behind a row that said nothing.
 class BloomsScreen extends ConsumerWidget {
   const BloomsScreen({super.key});
 
@@ -31,6 +34,8 @@ class BloomsScreen extends ConsumerWidget {
     final unread = ref.watch(unreadMessageCountProvider);
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
     final theirName = partner?.petName ?? partner?.displayName ?? 'them';
+    final chat = ref.watch(chatMessagesProvider).valueOrNull;
+    final last = (chat == null || chat.isEmpty) ? null : chat.first;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -49,6 +54,14 @@ class BloomsScreen extends ConsumerWidget {
               for (final m in all)
                 if (m.flower != null) m,
             ];
+            // A bouquet made on the website arrives as a pasted link, not as
+            // a flower row — the site has no idea who anyone's partner is.
+            // See FlowerMessage.bouquetGiftId.
+            final bouquets = [
+              for (final m in all)
+                if (m.isBouquet) m,
+            ];
+
             return CustomScrollView(
               slivers: [
                 SliverPadding(
@@ -58,15 +71,30 @@ class BloomsScreen extends ConsumerWidget {
                       const SizedBox(height: AppSpace.sm),
                       FeatureScreenHeader(
                         title: 'Flowers',
-                        subtitle: blooms.isEmpty
+                        subtitle: blooms.isEmpty && bouquets.isEmpty
                             ? 'Every bloom you send each other lands here.'
-                            : '${blooms.length} between you and $theirName',
+                            : '${blooms.length + bouquets.length} between you and $theirName',
                       ),
                       const SizedBox(height: AppSpace.md),
-                      _OpenChat(unread: unread),
-                      const SizedBox(height: AppSpace.md),
+                      _Conversation(
+                        partner: partner,
+                        name: theirName,
+                        last: last,
+                        mine: last != null && last.senderId == userId,
+                        unread: unread,
+                      ),
+                      if (bouquets.isNotEmpty) ...[
+                        const SizedBox(height: AppSpace.md),
+                        Text('FROM THE FLOWER SHOP', style: AppText.label()),
+                        const SizedBox(height: AppSpace.xs),
+                        _Bouquets(messages: bouquets),
+                      ],
                       if (blooms.isNotEmpty) ...[
-                        _Latest(message: blooms.first, mine: blooms.first.senderId == userId),
+                        const SizedBox(height: AppSpace.md),
+                        _Latest(
+                          message: blooms.first,
+                          mine: blooms.first.senderId == userId,
+                        ),
                         const SizedBox(height: AppSpace.md),
                         Text('THE GARDEN', style: AppText.label()),
                         const SizedBox(height: AppSpace.xs),
@@ -79,7 +107,8 @@ class BloomsScreen extends ConsumerWidget {
                     hasScrollBody: false,
                     child: _Message(
                       title: 'Nothing picked yet',
-                      body: 'Open the conversation and send $theirName their first one.',
+                      body:
+                          'Open the conversation and send $theirName their first one.',
                     ),
                   )
                 else
@@ -113,14 +142,28 @@ class BloomsScreen extends ConsumerWidget {
   }
 }
 
-/* ── The way into the conversation ─────────────────── */
-class _OpenChat extends StatelessWidget {
-  const _OpenChat({required this.unread});
+/* ── The conversation, previewed ────────────────────── */
+/// Who it is with, what was said last, and — for your own last message —
+/// whether they have seen it. The row this replaces said only "Your
+/// conversation", so you had to open the thread to learn anything at all.
+class _Conversation extends StatelessWidget {
+  const _Conversation({
+    required this.partner,
+    required this.name,
+    required this.last,
+    required this.mine,
+    required this.unread,
+  });
 
+  final UserProfile? partner;
+  final String name;
+  final FlowerMessage? last;
+  final bool mine;
   final int unread;
 
   @override
   Widget build(BuildContext context) {
+    final message = last;
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(AppRadius.lg),
@@ -135,50 +178,154 @@ class _OpenChat extends StatelessWidget {
           ),
           child: Row(
             children: [
-              Container(
-                width: 42,
-                height: 42,
-                decoration: const BoxDecoration(
-                  gradient: AppGradients.cta,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(CupertinoIcons.chat_bubble_2_fill,
-                    color: Colors.white, size: 20),
-              ),
+              UserAvatar(partner, size: 46),
               const SizedBox(width: AppSpace.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('Your conversation', style: AppText.title()),
-                    Text(
-                      unread > 0
-                          ? '$unread new ${unread == 1 ? 'message' : 'messages'}'
-                          : 'Send a flower, a photo, or just say hello',
-                      style: AppText.caption(
-                          unread > 0 ? AppColors.brand : AppColors.muted),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            name,
+                            style: AppText.title(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (message != null)
+                          Text(_when(message.sentAt), style: AppText.caption()),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        // Only your own message carries a receipt. Whether
+                        // you have read theirs is a fact about you, not news.
+                        if (message != null && mine) ...[
+                          Icon(
+                            message.seenAt != null
+                                ? CupertinoIcons.checkmark_alt_circle_fill
+                                : CupertinoIcons.checkmark_alt_circle,
+                            size: 14,
+                            color: message.seenAt != null
+                                ? AppColors.secondary
+                                : AppColors.muted,
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                        Expanded(
+                          child: Text(
+                            message == null
+                                ? 'Say hello — nothing here yet'
+                                : message.previewFor(mine: mine),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: unread > 0 && !mine
+                                ? AppText.body(AppColors.ink)
+                                    .copyWith(fontWeight: FontWeight.w700)
+                                : AppText.body(AppColors.muted),
+                          ),
+                        ),
+                        if (unread > 0) ...[
+                          const SizedBox(width: AppSpace.xxs),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.brand,
+                              borderRadius:
+                                  BorderRadius.circular(AppRadius.pill),
+                            ),
+                            child: Text(
+                              '$unread',
+                              style: AppText.caption(Colors.white)
+                                  .copyWith(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
               ),
-              if (unread > 0)
-                Container(
-                  margin: const EdgeInsets.only(right: AppSpace.xxs),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.brand,
-                    borderRadius: BorderRadius.circular(AppRadius.pill),
-                  ),
-                  child: Text('$unread',
-                      style: AppText.caption(Colors.white)
-                          .copyWith(fontWeight: FontWeight.w700)),
-                ),
-              const Icon(CupertinoIcons.chevron_forward,
-                  size: 16, color: AppColors.muted),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Time today, weekday this week, date beyond it. "2:31 PM" on something
+  /// from March tells you nothing.
+  static String _when(DateTime at) {
+    final now = DateTime.now();
+    final sameDay =
+        at.year == now.year && at.month == now.month && at.day == now.day;
+    if (sameDay) return DateFormat('h:mm a').format(at);
+    if (now.difference(at).inDays < 7) return DateFormat('EEE').format(at);
+    return DateFormat('d MMM').format(at);
+  }
+}
+
+/* ── Bouquets made on the website ───────────────────── */
+/// Shown as the card the website renders for the gift — the sealed vessel,
+/// never the flowers, so opening it is still the moment it was meant to be.
+class _Bouquets extends StatelessWidget {
+  const _Bouquets({required this.messages});
+
+  final List<FlowerMessage> messages;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 126,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: messages.length,
+        separatorBuilder: (_, __) => const SizedBox(width: AppSpace.xs),
+        itemBuilder: (context, i) {
+          final message = messages[i];
+          return GestureDetector(
+            onTap: () {
+              final url = message.bouquetUrl;
+              if (url == null) return;
+              launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                    child: Container(
+                      width: 186,
+                      color: AppColors.surfaceSubtle,
+                      child: Image.network(
+                        message.bouquetCardUrl!,
+                        fit: BoxFit.cover,
+                        // Fetched from the website, so a dead connection has
+                        // to read as a bouquet rather than a broken tile.
+                        errorBuilder: (_, __, ___) => const Center(
+                          child: Text('💐', style: TextStyle(fontSize: 32)),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  DateFormat('d MMM').format(message.sentAt),
+                  style: AppText.caption(),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -219,14 +366,18 @@ class _Latest extends StatelessWidget {
                 Text(flower.meaning, style: AppText.note(AppColors.muted)),
                 if ((message.note ?? '').trim().isNotEmpty) ...[
                   const SizedBox(height: AppSpace.xs),
-                  Text('“${message.note!.trim()}”',
-                      style: AppText.note(AppColors.body),
-                      maxLines: 3,
-                      overflow: TextOverflow.ellipsis),
+                  Text(
+                    '“${message.note!.trim()}”',
+                    style: AppText.note(AppColors.body),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
                 const SizedBox(height: AppSpace.xxs),
-                Text(DateFormat('d MMM · h:mm a').format(message.sentAt),
-                    style: AppText.caption()),
+                Text(
+                  DateFormat('d MMM · h:mm a').format(message.sentAt),
+                  style: AppText.caption(),
+                ),
               ],
             ),
           ),
@@ -277,8 +428,11 @@ class _Bloom extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(DateFormat('d MMM').format(message.sentAt),
-            style: AppText.caption(), textAlign: TextAlign.center),
+        Text(
+          DateFormat('d MMM').format(message.sentAt),
+          style: AppText.caption(),
+          textAlign: TextAlign.center,
+        ),
       ],
     );
   }
@@ -300,9 +454,11 @@ class _Message extends StatelessWidget {
           children: [
             Text(title, style: AppText.title(), textAlign: TextAlign.center),
             const SizedBox(height: AppSpace.xxs),
-            Text(body,
-                style: AppText.body(AppColors.muted),
-                textAlign: TextAlign.center),
+            Text(
+              body,
+              style: AppText.body(AppColors.muted),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),

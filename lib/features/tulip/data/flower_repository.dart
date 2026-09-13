@@ -135,11 +135,20 @@ class FlowerMessage {
   /// Computed rather than stored — see the note in migration 0013.
   static const widgetLifetime = Duration(hours: 24);
 
+  /// Eligible for the home screen: sent there **and** still inside its day.
+  ///
+  /// 🔴 The `toWidget` half is load-bearing and was missing. Without it this
+  /// was a plain age check, so a photo sent only to the conversation still
+  /// satisfied it — and every caller that asks "is this a day photo" put it
+  /// on My Day, on the partner's story ring, and into the widget rotation.
+  /// Choosing "Chat" as the destination did nothing at all.
   bool get isFreshForWidget =>
-      DateTime.now().difference(sentAt) < widgetLifetime;
+      toWidget && DateTime.now().difference(sentAt) < widgetLifetime;
 
-  /// Null once it has expired. Drives the ring countdown on the story bar.
+  /// Null once it has expired, **or if it was never bound for the widget** —
+  /// a countdown to leaving a place it never occupied is a lie either way.
   Duration? get widgetTimeLeft {
+    if (!toWidget) return null;
     final left = widgetLifetime - DateTime.now().difference(sentAt);
     return left.isNegative ? null : left;
   }
@@ -165,6 +174,8 @@ class FlowerMessage {
       return isLiveCall ? '$kind — tap to join' : '$kind ended';
     }
 
+    if (isBouquet) return 'Sent you a bouquet 💐';
+
     if (isText) return note;
 
     // Non-null by here: the two returns above cover every case where
@@ -174,6 +185,62 @@ class FlowerMessage {
     final bloom = flower!;
     final sent = 'Sent you a ${bloom.name} ${bloom.emoji}';
     return note.isEmpty ? sent : '$sent — $note';
+  }
+
+  /// One line for a conversation list, from the reader's side.
+  ///
+  /// Separate from [alertLine], which is always "them → me" because a
+  /// notification only ever fires for something received. A list shows your
+  /// own messages too, and "Sent you a tulip" above a tulip *you* sent reads
+  /// as though it arrived.
+  String previewFor({required bool mine}) {
+    final note = this.note?.trim() ?? '';
+    if (isBouquet) return mine ? 'You sent a bouquet 💐' : 'Sent you a bouquet 💐';
+    if (isPhoto) {
+      if (note.isNotEmpty) return '📷  $note';
+      return mine ? '📷  You shared a photo' : '📷  Shared a photo';
+    }
+    if (isCall) {
+      final kind = call == CallMode.video ? 'Video call' : 'Voice call';
+      return isLiveCall ? '$kind — happening now' : kind;
+    }
+    if (isText) return note;
+    final bloom = flower!;
+    final line = mine ? 'You sent ${bloom.name} ${bloom.emoji}'
+                      : '${bloom.name} ${bloom.emoji}';
+    return note.isEmpty ? line : '$line — $note';
+  }
+
+  /// A bouquet made on the website, recognised by its gift link.
+  ///
+  /// The website has no idea who anyone's partner is, so a bouquet reaches a
+  /// conversation the only way it can: as a link someone pasted. Reading it
+  /// back out here is what lets the Flowers page show those alongside the
+  /// blooms sent from inside the app, rather than leaving them as a naked
+  /// URL in the thread.
+  ///
+  /// Deliberately narrow — our own host, our own `/g/` path, and the id
+  /// shape the API issues. Anything else is just a link someone sent.
+  static final _giftLink = RegExp(
+    r'https?://(?:www\.)?mydayflower\.com/g/([A-Za-z0-9_-]{8,24})',
+    caseSensitive: false,
+  );
+
+  String? get bouquetGiftId =>
+      _giftLink.firstMatch(note ?? '')?.group(1);
+
+  bool get isBouquet => bouquetGiftId != null;
+
+  /// The card the website renders for this gift — the sealed vessel, never
+  /// the flowers. Safe to show even before it has been opened.
+  String? get bouquetCardUrl {
+    final id = bouquetGiftId;
+    return id == null ? null : 'https://mydayflower.com/g/$id/opengraph-image';
+  }
+
+  String? get bouquetUrl {
+    final id = bouquetGiftId;
+    return id == null ? null : 'https://mydayflower.com/g/$id';
   }
 
   /// The artwork this message carries, or null if it's text.

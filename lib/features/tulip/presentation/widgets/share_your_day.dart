@@ -570,7 +570,18 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                         onTap: () => context.go(Routes.home),
                       ),
                       const SizedBox(width: AppSpace.xs),
-                      Text('My Day', style: AppText.title(Colors.white)),
+                      // Named after where this shot is going, not after the
+                      // feature. Arriving from the thread and reading "My
+                      // Day" above the viewfinder is exactly how someone
+                      // concludes their photo went somewhere it did not.
+                      Text(
+                        switch (ref.watch(dayPhotoTargetProvider)) {
+                          DayPhotoTarget.widget => 'My Day',
+                          DayPhotoTarget.chat => 'Send a photo',
+                          DayPhotoTarget.both => 'My Day + chat',
+                        },
+                        style: AppText.title(Colors.white),
+                      ),
                       const Spacer(),
                       _TargetPill(
                         target: ref.watch(dayPhotoTargetProvider),

@@ -182,7 +182,10 @@ class ChatBubble extends StatelessWidget {
   /// Once it has expired the bubble says so, so the two surfaces don't
   /// silently disagree.
   Widget _buildPhoto(BuildContext context) {
-    final expired = !message.isFreshForWidget;
+    // Only a photo that was actually sent to the home screen can have left
+    // it. A chat-only photo never went, so saying it expired invents a
+    // history the sender did not choose.
+    final expired = message.toWidget && !message.isFreshForWidget;
     return Consumer(
       builder: (context, ref, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
