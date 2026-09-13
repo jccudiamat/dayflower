@@ -54,7 +54,12 @@ class _FlowerCatalogPanelState extends State<FlowerCatalogPanel> {
               AppSpace.sm,
               AppSpace.xs,
             ),
-            child: Row(
+            // Scrollable since "Stems" made it four: the row fits a modern
+            // phone and overflows a small one, and a RenderFlex error in the
+            // sticker drawer is not a thing anyone should meet.
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
               children: [
                 _CategoryChip(
                   label: 'All',
@@ -74,7 +79,14 @@ class _FlowerCatalogPanelState extends State<FlowerCatalogPanel> {
                   selected: _category == FlowerCategory.scene,
                   onTap: () => setState(() => _category = FlowerCategory.scene),
                 ),
+                const SizedBox(width: AppSpace.xs),
+                _CategoryChip(
+                  label: 'Stems',
+                  selected: _category == FlowerCategory.stem,
+                  onTap: () => setState(() => _category = FlowerCategory.stem),
+                ),
               ],
+              ),
             ),
           ),
           Expanded(

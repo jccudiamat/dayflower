@@ -13,7 +13,8 @@ import '../../../calls/domain/call.dart';
 import '../../../calls/domain/call_notifier.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
-import '../../../home/data/mood_prefs.dart';
+import '../../../presence/data/presence_repository.dart';
+import '../../../presence/domain/presence.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
@@ -571,12 +572,14 @@ class _ChatHeader extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // The live row, not the cached one: a mood is only worth showing if it
-    // arrives while they are looking at the thread.
+    // The live row, not the cached one, so a changed name or face lands
+    // while they are looking at the thread.
     final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
         ref.watch(partnerProfileProvider).valueOrNull;
     final name = partner?.petName ?? partner?.displayName ?? '…';
-    final mood = ref.watch(partnerMoodProvider);
+    // Their mood lives on the Flowers card now. Here, the useful thing about
+    // the person you are typing to is whether they are there to read it.
+    final active = activeLabel(ref.watch(partnerLastActiveProvider).valueOrNull);
     final live = ref.watch(liveCallProvider);
 
     return Container(
@@ -617,19 +620,21 @@ class _ChatHeader extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(name, style: AppText.title().copyWith(fontSize: 17)),
-                // How they are, rather than a running total of flowers.
-                // The count was true and told you nothing you would act on;
-                // this is the one line about them that changes.
+                // Whether they are there, rather than a running total of
+                // flowers. The count was true and told you nothing you would
+                // act on; this is the one line that changes while you read.
                 //
-                // Nothing at all when they have not said or it has gone
-                // stale — see UserProfile.freshMood. An old mood shown as a
-                // current one is worse than no mood.
-                Text(
-                  mood == null
-                      ? 'Tap to say hello'
-                      : '${mood.emoji}  Feeling ${mood.label.toLowerCase()}',
-                  style: AppText.caption(),
-                ),
+                // ⚠️ Nothing at all when we have never heard from their
+                // phone — see activeLabel. A partner on a build with no
+                // heartbeat is not "away", we simply do not know, and a
+                // header must not turn that into a claim about them.
+                if (active != null)
+                  Text(
+                    active,
+                    style: active == 'Active now'
+                        ? AppText.caption(AppColors.secondary)
+                        : AppText.caption(),
+                  ),
               ],
             ),
                 ),

@@ -14,6 +14,7 @@ import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
 import '../../../../core/widgets/flower_image.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../home/data/mood_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
 
@@ -32,8 +33,13 @@ class BloomsScreen extends ConsumerWidget {
     final userId = ref.watch(currentUserIdProvider);
     final messages = ref.watch(flowerMessagesProvider);
     final unread = ref.watch(unreadMessageCountProvider);
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    // The live row: a mood set on their phone should reach this card while
+    // it is on screen, which is the whole reason `users` is in the realtime
+    // publication. Falls back to the cached read on a cold start.
+    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+        ref.watch(partnerProfileProvider).valueOrNull;
     final theirName = partner?.petName ?? partner?.displayName ?? 'them';
+    final mood = ref.watch(partnerMoodProvider);
     final chat = ref.watch(chatMessagesProvider).valueOrNull;
     final last = (chat == null || chat.isEmpty) ? null : chat.first;
 
@@ -79,6 +85,7 @@ class BloomsScreen extends ConsumerWidget {
                       _Conversation(
                         partner: partner,
                         name: theirName,
+                        mood: mood,
                         last: last,
                         mine: last != null && last.senderId == userId,
                         unread: unread,
@@ -150,6 +157,7 @@ class _Conversation extends StatelessWidget {
   const _Conversation({
     required this.partner,
     required this.name,
+    required this.mood,
     required this.last,
     required this.mine,
     required this.unread,
@@ -157,6 +165,11 @@ class _Conversation extends StatelessWidget {
 
   final UserProfile? partner;
   final String name;
+
+  /// How they said they are feeling, or null when they have not said or it
+  /// has gone stale. Null is shown as **nothing** — see the title below.
+  final Mood? mood;
+
   final FlowerMessage? last;
   final bool mine;
   final int unread;
@@ -187,10 +200,30 @@ class _Conversation extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        // Their name, and how they are, as one sentence:
+                        // "Hubby is feeling loved 🥰". The name stays in the
+                        // heavier style so the row is still scannable as a
+                        // conversation rather than as a status.
+                        //
+                        // ⚠️ With no mood this is the bare name, not "is
+                        // feeling nothing" and not a placeholder inviting
+                        // them to set one. A mood is theirs to volunteer.
                         Expanded(
-                          child: Text(
-                            name,
-                            style: AppText.title(),
+                          child: Text.rich(
+                            TextSpan(
+                              text: name,
+                              style: AppText.title(),
+                              children: mood == null
+                                  ? null
+                                  : [
+                                      TextSpan(
+                                        text: ' is feeling '
+                                            '${mood!.label.toLowerCase()} '
+                                            '${mood!.emoji}',
+                                        style: AppText.body(AppColors.muted),
+                                      ),
+                                    ],
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),

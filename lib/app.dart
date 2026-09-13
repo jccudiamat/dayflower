@@ -25,6 +25,7 @@ import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/data/call_pip.dart';
+import 'features/presence/data/presence_repository.dart';
 import 'features/push/data/push_repository.dart';
 import 'features/push/data/push_service.dart';
 import 'features/calls/presentation/screens/call_screen.dart';
@@ -73,6 +74,10 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // Resume is when a new build is most likely to be waiting: the phone was
     // put down while the APK was being published on the desktop.
     WidgetsBinding.instance.addObserver(this);
+    // "Active now" in the chat header. Started here rather than by the chat
+    // screen: being active means having the app open, not having this one
+    // screen open, and a partner reading your photos is plainly around.
+    ref.read(heartbeatProvider).start();
     // Native tells us when the floating window opens and closes.
     wirePipMode(ref);
     _wireWidgetLaunches();
@@ -95,6 +100,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     _lifecycle = lifecycle;
+    // Stop claiming to be here the moment the app leaves the screen, and beat
+    // immediately on the way back rather than up to a minute later.
+    if (lifecycle == AppLifecycleState.resumed) {
+      ref.read(heartbeatProvider).start();
+    } else {
+      ref.read(heartbeatProvider).stop();
+    }
     // Throttled inside the controller — coming back to the app twenty times
     // an hour must not mean twenty manifest fetches.
     if (lifecycle == AppLifecycleState.resumed) {
