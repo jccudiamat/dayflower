@@ -1,3 +1,4 @@
+import '../time/zones.dart';
 import 'avatar_flower.dart';
 
 class UserProfile {
@@ -64,23 +65,31 @@ class UserProfile {
   /// being reported as how somebody feels on Friday — see [freshMood].
   final DateTime? moodAt;
 
-  /// How long a mood is worth showing to the other person.
+  /// The mood, if it is still **today's**.
   ///
-  /// A day. Long enough that setting one in the morning still means
-  /// something that evening, short enough that it never becomes furniture
-  /// nobody has looked at in a week.
-  static const moodLifetime = Duration(hours: 24);
-
-  /// The mood, if it is recent enough to still be true.
-  ///
-  /// Null once it has gone stale, which the UI shows as nothing at all
+  /// Null once the day has turned, which the UI shows as nothing at all
   /// rather than as an old feeling presented as a current one.
+  ///
+  /// ⚠️ A calendar day, not a rolling 24 hours, and the difference is the
+  /// point. Under the old rule a mood set at 9pm Monday was still being
+  /// reported at 8pm Tuesday — so nobody was ever asked again, and the
+  /// question "how are you feeling?" quietly became furniture. Resetting on
+  /// the day means each morning starts blank and worth answering.
+  ///
+  /// 🔴 Judged in **[timezone]** — the setter's day, not the reader's. This
+  /// is a long-distance app: the two phones are routinely on different
+  /// dates, and both have to reach the same answer or the card and the chat
+  /// header disagree about whether somebody has said anything today.
+  ///
+  /// The cost is a mood set at 11pm lasting an hour. That is the honest
+  /// meaning of "how I am today", and the alternative — carrying it into a
+  /// day it was never about — is the bug this replaced.
   String? get freshMood {
     final name = mood;
     final at = moodAt;
     if (name == null || name.isEmpty) return null;
     if (at == null) return null;
-    return DateTime.now().difference(at) < moodLifetime ? name : null;
+    return isSameDayIn(timezone, at) ? name : null;
   }
 
   /// Whether this person has a photo rather than a flower.

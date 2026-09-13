@@ -5,6 +5,12 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../theme/app_colors.dart';
 import '../theme/design_tokens.dart';
+import '../time/zones.dart';
+
+// Moved to core/time/zones.dart so a plain model can ask what day it is
+// without importing a widget file. Re-exported so every existing
+// `import '.../timezone_picker.dart'` keeps working unchanged.
+export '../time/zones.dart' show safeLocation, zoneCity, isSameDayIn;
 
 /// Frequently-picked zones surface at the top of the picker.
 const kCommonZones = [
@@ -17,18 +23,6 @@ const kCommonZones = [
   'Australia/Sydney',
   'Asia/Dubai',
 ];
-
-/// Never throws on an unknown/stale zone name — falls back to UTC.
-tz.Location safeLocation(String name) {
-  try {
-    return tz.getLocation(name);
-  } catch (_) {
-    return tz.UTC;
-  }
-}
-
-/// Human-readable city from an IANA zone ("Asia/Manila" → "Manila").
-String zoneCity(String zone) => zone.split('/').last.replaceAll('_', ' ');
 
 /// Opens the timezone picker. Resolves to the chosen IANA name, or null.
 Future<String?> showTimezonePicker(BuildContext context) {

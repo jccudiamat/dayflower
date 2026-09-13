@@ -17,6 +17,7 @@ import 'core/models/pair.dart';
 import 'core/models/user_profile.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/pairing/data/pair_repository.dart';
+import 'features/home/data/mood_prefs.dart';
 import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
@@ -104,6 +105,10 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // immediately on the way back rather than up to a minute later.
     if (lifecycle == AppLifecycleState.resumed) {
       ref.read(heartbeatProvider).start();
+      // Yesterday's mood is not today's. Checked on the way back in, which
+      // is when a day has actually turned under somebody — see
+      // MoodPrefs.refresh for why this is not a midnight timer.
+      ref.read(moodProvider.notifier).refresh();
     } else {
       ref.read(heartbeatProvider).stop();
     }

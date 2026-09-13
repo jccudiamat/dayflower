@@ -1,19 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dayflower/core/models/user_profile.dart';
 import 'package:dayflower/features/home/data/mood_prefs.dart';
+import 'package:dayflower/core/time/zones.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
 
-/// The chat header shows your partner's mood where it used to count the
-/// flowers between you. A count could not be wrong; a mood can — and the way
-/// it goes wrong is by being *old*, which looks exactly like being right.
+/// The conversation card and the chat header both show your partner's mood.
+/// The way a mood goes wrong is by being *old*, which looks exactly like
+/// being right — so what counts as "still true" is pinned here.
 
-UserProfile _profile({String? mood, DateTime? at}) => UserProfile(
+UserProfile _profile({String? mood, DateTime? at, String zone = 'Asia/Manila'}) =>
+    UserProfile(
       id: 'u1',
       displayName: 'Sheena',
+      timezone: zone,
       mood: mood,
       moodAt: at,
     );
 
 void main() {
+  // ⚠️ Without this every zone silently resolves to UTC (see safeLocation),
+  // and these tests would pass while testing something else.
+  setUpAll(tzdata.initializeTimeZones);
+
   group('freshness', () {
     test('a mood set just now is shown', () {
       final profile = _profile(mood: 'happy', at: DateTime.now());
@@ -22,9 +30,9 @@ void main() {
     });
 
     test('a mood set two days ago is not', () {
-      // ⚠️ The whole point. Without the timestamp check this would report
-      // Tuesday's feeling as how they are on Thursday, with nothing on
-      // screen to suggest it was old.
+      // ⚠️ Without the timestamp check this would report Tuesday's feeling
+      // as how they are on Thursday, with nothing on screen to suggest it
+      // was old.
       final profile = _profile(
         mood: 'low',
         at: DateTime.now().subtract(const Duration(days: 2)),
@@ -32,17 +40,40 @@ void main() {
       expect(profile.freshMood, isNull);
     });
 
-    test('the boundary is a day, and it holds on both sides', () {
-      final justInside = _profile(
-        mood: 'calm',
-        at: DateTime.now().subtract(const Duration(hours: 23, minutes: 30)),
+    test('the boundary is the day, not twenty-four hours', () {
+      // 🔴 The regression this replaced. Manila is UTC+8, so these two
+      // instants are 23 hours apart — inside the old rolling window — and
+      // on different days. A mood set at 9pm Monday was still being
+      // reported at 8pm Tuesday, about a day nobody was living in any
+      // more, and so nobody was ever asked again.
+      expect(
+        isSameDayIn('Asia/Manila', DateTime.utc(2026, 6, 4, 13),
+            now: DateTime.utc(2026, 6, 5, 12)),
+        isFalse,
       );
-      final justOutside = _profile(
-        mood: 'calm',
-        at: DateTime.now().subtract(const Duration(hours: 24, minutes: 30)),
+
+      // And the other way: nearly 24 hours apart, still the same day, so a
+      // mood set a minute after midnight lasts until midnight.
+      expect(
+        isSameDayIn('Asia/Manila', DateTime.utc(2026, 6, 4, 16, 1),
+            now: DateTime.utc(2026, 6, 5, 15, 59)),
+        isTrue,
       );
-      expect(justInside.freshMood, 'calm');
-      expect(justOutside.freshMood, isNull);
+    });
+
+    test('the day belongs to the setter, not the reader', () {
+      // Long distance is the whole app: the two phones are routinely on
+      // different dates. Both judge a mood against the zone on the profile
+      // carrying it, so the card and the chat header can never disagree
+      // about whether anything was said today.
+      //
+      // 13:00 UTC is the same instant as 21:00 in Manila and 17:00 in
+      // Dubai — still the 4th in both. Six hours later it is the 5th in
+      // Manila and not yet in Dubai, and that is the disagreement.
+      final evening = DateTime.utc(2026, 6, 4, 13);
+      final laterThatNight = DateTime.utc(2026, 6, 4, 19);
+      expect(isSameDayIn('Asia/Manila', evening, now: laterThatNight), isFalse);
+      expect(isSameDayIn('Asia/Dubai', evening, now: laterThatNight), isTrue);
     });
 
     test('a mood with no timestamp is not trusted', () {
