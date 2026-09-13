@@ -62,11 +62,11 @@ test('export draws every flower and wrapping, omits editing marks, and fits long
     const b = { ...makeBouquet(), paper, message };
     const { canvas, calls } = recordingCanvas();
     renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
-    assert.equal(canvas.width, 720); assert.equal(canvas.height, 960);
+    assert.equal(canvas.width, 840); assert.equal(canvas.height, 1120);
     assert.equal(calls.filter(c => c[0] === 'drawImage').length, b.stems.length + (paper < 2 ? 1 : 0));
     assert.equal(calls.filter(c => c[0] === 'arc').length, 0);
     for (const call of calls) for (const arg of call.slice(1)) if (typeof arg === 'number') assert.ok(Number.isFinite(arg));
-    for (const [, text, x, y] of calls.filter(c => c[0] === 'fillText')) { assert.ok(x >= 0 && x <= 720); assert.ok(y >= 0 && y <= 960, `Text outside image: ${text}`); }
+    for (const [, text, x, y] of calls.filter(c => c[0] === 'fillText')) { assert.ok(x >= 0 && x <= 840); assert.ok(y >= 0 && y <= 1120, `Text outside image: ${text}`); }
   }
   const { canvas, calls } = recordingCanvas();
   renderBouquet(canvas, makeBouquet(), { naturalWidth: 1536, naturalHeight: 1024 }, 1);
@@ -113,5 +113,28 @@ test('illustrated reveals use the selected artwork without exposing the note', (
     renderVessel(canvas, { ...makeBouquet(), vessel, to: 'Alex', message: 'The surprise inside' }, null, assets);
     assert.equal(calls.find(c => c[0] === 'drawImage')[1], assets[REVEAL_ART[vessel]]);
     assert.ok(!calls.some(c => c[0] === 'fillText' && c[1].includes('The surprise inside')));
+  }
+});
+
+
+test('extreme rotated flowers, photos and wrappers fit all four canvas edges', () => {
+  const { fitScale, stemGeometry, photoGeometry, WRAP_PIVOT: pivot, ARRANGEMENT_OFFSET: offset } = model.exports;
+  for (const angle of [-45, 45]) for (const x of [110, 610]) for (const wrapAngle of [-20, 20]) {
+    const b = { ...makeBouquet(), wrapAngle, wrapScale: 1.3 };
+    b.stems = b.stems.map(stem => ({ ...stem, x: x === 110 ? 220 : 500, y: 490, scale: 1.15, angle }));
+    b.photos = [{ x, y: 190, scale: 1.5, angle, frame: 0 }];
+    const boxes = b.stems.map(stem => { const g = stemGeometry(stem); return [stem.x, stem.y, -g.w / 2, -g.h * .94, g.w, g.h, g.angle]; });
+    const g = photoGeometry(b.photos[0]); boxes.push([x, 190, -g.w / 2, -g.h / 2, g.w, g.h, g.angle]);
+    boxes.push([360, 690, (104 - 360) * 1.3, (130 - 690) * 1.3, 512 * 1.3, 600 * 1.3, wrapAngle * Math.PI / 180]);
+    const fit = fitScale(b);
+    assert.ok(fit > 0 && fit <= 1);
+    for (const [cx, cy, left, top, w, h, radians] of boxes) for (const dx of [left, left + w]) for (const dy of [top, top + h]) {
+      const px = cx + dx * Math.cos(radians) - dy * Math.sin(radians);
+      const py = cy + dx * Math.sin(radians) + dy * Math.cos(radians);
+      const renderedX = offset.x + pivot.x + (px - pivot.x) * fit;
+      const renderedY = offset.y + pivot.y + (py - pivot.y) * fit;
+      assert.ok(renderedX >= 24 - 1e-6 && renderedX <= 816 + 1e-6);
+      assert.ok(renderedY >= 112 - 1e-6 && renderedY <= 887 + 1e-6);
+    }
   }
 });

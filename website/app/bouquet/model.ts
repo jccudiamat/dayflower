@@ -92,46 +92,39 @@ export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: st
 /** The wrapper turns and grows about its tie, not its middle, so it leans the way a held bouquet does. */
 export const WRAP_PIVOT = { x: 360, y: 690 };
 
-/**
- * The highest a bloom may reach before the card starts cutting it.
- *
- * ⚠️ Must stay **below both** the card clip and the taper, which are the two
- * things that actually cut. They were 100 and 112 while this was 108, so the
- * fit aimed at a height the taper then shaved. All three move together. Stems are allowed as high as y=490 at scale 1.15, which puts a
- * bloom tip well off the top of the card — raising the header cannot buy back
- * anything like enough room, so the arrangement is scaled instead.
- */
-export const FIT_CEILING = 112;
+/** Extra room around the original coordinates keeps existing gifts editable. */
+export const ARRANGEMENT_OFFSET = { x: 60, y: 100 };
+export const FIT_CEILING = 12;
+export const ARRANGEMENT_AREA = { left: -36, right: 756, top: FIT_CEILING, bottom: 787 };
 
-/**
- * How much the whole arrangement has to shrink so nothing is clipped.
- *
- * Render-time only: it never touches stored values, so a gift made before
- * this simply stops being cut rather than being rewritten. Scaled about the
- * tie, so a too-tall bouquet settles toward its own wrapping instead of
- * drifting off-centre.
- *
- * ⚠️ `point()` in the editor applies the inverse, or dragging would be offset
- * from the art by exactly this factor.
- */
+/** Fit every rotated corner, including the wrapper, within the arrangement area. */
 export function fitScale(bouquet: Bouquet) {
-  let top = Infinity;
-  const raise = (x: number, y: number, lx: number, ly: number, angle: number) =>
-    { top = Math.min(top, y + lx * Math.sin(angle) + ly * Math.cos(angle)); };
+  let fit = 1;
+  const corner = (x: number, y: number) => {
+    const dx = x - WRAP_PIVOT.x, dy = y - WRAP_PIVOT.y;
+    if (dx < 0) fit = Math.min(fit, (ARRANGEMENT_AREA.left - WRAP_PIVOT.x) / dx);
+    if (dx > 0) fit = Math.min(fit, (ARRANGEMENT_AREA.right - WRAP_PIVOT.x) / dx);
+    if (dy < 0) fit = Math.min(fit, (ARRANGEMENT_AREA.top - WRAP_PIVOT.y) / dy);
+    if (dy > 0) fit = Math.min(fit, (ARRANGEMENT_AREA.bottom - WRAP_PIVOT.y) / dy);
+  };
+  const box = (x: number, y: number, left: number, top: number, w: number, h: number, angle: number) => {
+    for (const lx of [left, left + w]) for (const ly of [top, top + h])
+      corner(x + lx * Math.cos(angle) - ly * Math.sin(angle), y + lx * Math.sin(angle) + ly * Math.cos(angle));
+  };
   for (const stem of bouquet.stems) {
     const { w, h, angle } = stemGeometry(stem);
-    // The art fills a w × h box hanging from (-w/2, -h*.94) in the stem's own
-    // frame; tilted, either upper corner can be the highest point.
-    raise(stem.x, stem.y, -w / 2, -h * .94, angle);
-    raise(stem.x, stem.y, w / 2, -h * .94, angle);
+    box(stem.x, stem.y, -w / 2, -h * .94, w, h, angle);
   }
   for (const photo of bouquet.photos ?? []) {
     const { w, h, angle } = photoGeometry(photo);
-    raise(photo.x, photo.y, -w / 2, -h / 2, angle);
-    raise(photo.x, photo.y, w / 2, -h / 2, angle);
+    // Include the frame shadow and selection border in the safe area.
+    box(photo.x, photo.y, -w / 2 - 12, -h / 2 - 12, w + 24, h + 24, angle);
   }
-  if (!Number.isFinite(top) || top >= FIT_CEILING) return 1;
-  return (WRAP_PIVOT.y - FIT_CEILING) / (WRAP_PIVOT.y - top);
+  if (papers[bouquet.paper].sprite >= 0 && hasContents(bouquet)) {
+    const k = bouquet.wrapScale ?? 1;
+    box(WRAP_PIVOT.x, WRAP_PIVOT.y, (104 - WRAP_PIVOT.x) * k, (130 - WRAP_PIVOT.y) * k, 512 * k, 600 * k, (bouquet.wrapAngle ?? 0) * Math.PI / 180);
+  }
+  return fit;
 }
 
 /**
@@ -239,8 +232,8 @@ export function singleStem(b: Bouquet) {
   return b.stems[0]?.flower ?? 0;
 }
 export function hasContents(b: Bouquet) { return b.stems.length > 0 || photoCount(b) > 0; }
-export const WIDTH = 720;
-export const HEIGHT = 960;
+export const WIDTH = 840;
+export const HEIGHT = 1120;
 
 const arrangements = [ [4, 0, 5, 2, 0, 5, 2], [4, 1, 5, 1, 0, 5, 1], [4, 3, 2, 3, 2, 0, 2] ];
 export function arrange(types: readonly number[]): Stem[] {
@@ -516,7 +509,8 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.font = 'italic 32px Georgia, serif';
   ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 86, 620);
   ctx.save();
-  ctx.beginPath(); ctx.rect(12, 100, WIDTH - 24, 627); ctx.clip();
+  ctx.beginPath(); ctx.rect(24, 112, WIDTH - 48, 775); ctx.clip();
+  ctx.translate(ARRANGEMENT_OFFSET.x, ARRANGEMENT_OFFSET.y);
   const wrapper = assets[bouquet.paper >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL];
   const wrapIndex = bouquet.paper >= 5 ? (bouquet.paper - 5) * 2 : bouquet.paper === 0 ? 0 : bouquet.paper === 1 ? 2 : bouquet.paper === 3 ? 4 : 6;
   // Both halves of the paper and the taper below share one transform, or the
@@ -550,27 +544,15 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   drawWrapper(false);
   ctx.save();
   if (paper.sprite >= 0 && wrapper) {
-    // The opening stays broad; below it the foliage tapers into the tied paper.
-    // This prevents leaves and stem ends from sticking through the wrapper's sides.
-    //
-    // The path is laid down under the wrapper's transform so it follows the
-    // paper, then the transform is undone before clipping — the current path
-    // is not part of the state save/restore touches, so it survives with its
-    // points already resolved, and the flowers that follow draw untransformed.
-    // 🔴 The *sides* of the taper must follow the wrapper — that is the whole
-    // point of drawing it under the same transform. Its **opening must not**.
-    // A fixed top edge gets dragged down with the paper: at wrapScale .81 it
-    // fell from y=100 to y=212 and started eating blooms that shrink-to-fit
-    // had already made room for, which is invisible until someone resizes
-    // their wrapper. So the mouth is placed wherever it must sit *before* the
-    // transform in order to land off the card *after* it — the card's own
-    // rect clip is what bounds the top, and it does not move.
-    const k = bouquet.wrapScale ?? 1;
-    const pre = (target: number, axis: "x" | "y") => WRAP_PIVOT[axis] + (target - WRAP_PIVOT[axis]) / k;
-    const mouthY = pre(-400, "y"), mouthL = pre(-400, "x"), mouthR = pre(WIDTH + 400, "x");
+    // Clip at the front paper's V-shaped opening, not its outer silhouette.
+    // A small underlap hides seams; lower leaves cannot escape beside the bow.
+    // Apply exactly the same rotation and scale as both paper layers.
+    const special = bouquet.paper >= 5;
+    const left = special ? 148 : 182, right = special ? 572 : 538;
+    const shoulder = special ? 357 : 402;
     ctx.save(); wrapTransform();
-    ctx.beginPath(); ctx.moveTo(mouthL, mouthY); ctx.lineTo(mouthR, mouthY); ctx.lineTo(656, 390);
-    ctx.lineTo(500, 530); ctx.lineTo(402, 658); ctx.lineTo(318, 658); ctx.lineTo(220, 530); ctx.lineTo(64, 390); ctx.closePath();
+    ctx.beginPath(); ctx.moveTo(-5000, -5000); ctx.lineTo(5000, -5000);
+    ctx.lineTo(right, shoulder); ctx.lineTo(360, 510); ctx.lineTo(left, shoulder); ctx.closePath();
     ctx.restore();
     ctx.clip();
   }
@@ -613,18 +595,18 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.restore();   // end shrink-to-fit
   ctx.restore();
   ctx.fillStyle = "#ffffffcf";
-  ctx.beginPath(); ctx.roundRect(42, 743, WIDTH - 84, 166, 12); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(42, 903, WIDTH - 84, 166, 12); ctx.fill();
   ctx.fillStyle = bouquet.background === 6 ? "#5b425c" : colors.ink;
   let size = 23;
   let lines: string[] = [];
   do { ctx.font = `italic ${size}px Georgia, serif`; lines = wrappedLines(ctx, bouquet.message, WIDTH - 144); if (lines.length * (size + 6) <= 100) break; size--; } while (size > 10);
   const lineHeight = size + 6;
-  lines.forEach((line, i) => ctx.fillText(line, WIDTH / 2, 767 + (100 - lines.length * lineHeight) / 2 + i * lineHeight + size));
+  lines.forEach((line, i) => ctx.fillText(line, WIDTH / 2, 927 + (100 - lines.length * lineHeight) / 2 + i * lineHeight + size));
   ctx.font = "16px sans-serif";
-  ctx.fillText(bouquet.from.trim() ? `With love, ${bouquet.from.trim()}` : "With love", WIDTH / 2, 889, 590);
+  ctx.fillText(bouquet.from.trim() ? `With love, ${bouquet.from.trim()}` : "With love", WIDTH / 2, 1049, 590);
   ctx.font = "13px sans-serif";
   ctx.fillStyle = colors.ink;
-  ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, 938);
+  ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, 1098);
 }
 
 function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: string) {
@@ -632,13 +614,13 @@ function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: stri
   ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .5; ctx.lineWidth = 1.5;
   if (border === 3) ctx.setLineDash([3, 7]);
   if (border === 4) {
-    for (const [x, y, dx, dy] of [[20, 20, 1, 1], [700, 20, -1, 1], [20, 940, 1, -1], [700, 940, -1, -1]]) {
+    for (const [x, y, dx, dy] of [[20, 20, 1, 1], [WIDTH - 20, 20, -1, 1], [20, HEIGHT - 20, 1, -1], [WIDTH - 20, HEIGHT - 20, -1, -1]]) {
       ctx.beginPath(); ctx.moveTo(x + dx * 50, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * 50); ctx.stroke();
     }
   } else if (border === 5) {
     ctx.beginPath();
-    for (let x = 20; x <= 700; x += 20) { ctx.moveTo(x - 10, 17); ctx.quadraticCurveTo(x, 29, x + 10, 17); ctx.moveTo(x - 10, 943); ctx.quadraticCurveTo(x, 931, x + 10, 943); }
-    for (let y = 20; y <= 940; y += 20) { ctx.moveTo(17, y - 10); ctx.quadraticCurveTo(29, y, 17, y + 10); ctx.moveTo(703, y - 10); ctx.quadraticCurveTo(691, y, 703, y + 10); } ctx.stroke();
+    for (let x = 20; x <= WIDTH - 20; x += 20) { ctx.moveTo(x - 10, 17); ctx.quadraticCurveTo(x, 29, x + 10, 17); ctx.moveTo(x - 10, HEIGHT - 17); ctx.quadraticCurveTo(x, HEIGHT - 29, x + 10, HEIGHT - 17); }
+    for (let y = 20; y <= HEIGHT - 20; y += 20) { ctx.moveTo(17, y - 10); ctx.quadraticCurveTo(29, y, 17, y + 10); ctx.moveTo(WIDTH - 17, y - 10); ctx.quadraticCurveTo(WIDTH - 29, y, WIDTH - 17, y + 10); } ctx.stroke();
   } else { ctx.strokeRect(18, 18, WIDTH - 36, HEIGHT - 36); if (border === 2) ctx.strokeRect(24, 24, WIDTH - 48, HEIGHT - 48); }
   ctx.restore();
 }

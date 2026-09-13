@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from "react";
-import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { ARRANGEMENT_OFFSET, ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import { SPECIAL_WRAPPER_URL, REVEAL_ART, backgrounds, borders, bouquetColors } from "./model";
 import "./bouquet.css";
@@ -246,8 +246,8 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   }
   function point(event: PointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) * WIDTH / rect.width;
-    const y = (event.clientY - rect.top) * HEIGHT / rect.height;
+    const x = (event.clientX - rect.left) * WIDTH / rect.width - ARRANGEMENT_OFFSET.x;
+    const y = (event.clientY - rect.top) * HEIGHT / rect.height - ARRANGEMENT_OFFSET.y;
     // renderBouquet shrinks a too-tall arrangement about the tie so nothing is
     // clipped; undo exactly that here, or every drag lands offset from the
     // flower the finger is actually on.
