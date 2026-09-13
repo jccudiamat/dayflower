@@ -1,0 +1,272 @@
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
+
+import '../../../../core/models/user_profile.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/ios_back_button.dart';
+import '../../../../core/widgets/progress_ring.dart';
+import '../../../../core/widgets/user_avatar.dart';
+import '../../../calls/data/call_usage.dart';
+import '../../../calls/domain/call.dart';
+import '../../../onboarding/data/user_repository.dart';
+import '../../data/flower_repository.dart';
+
+/// What sits behind the two of you: how much calling is left this month, and
+/// everything either of you has sent.
+///
+/// Reached by tapping their name in the chat header, because that is where
+/// people press when they want to know about the person rather than the
+/// conversation.
+class ChatSettingsScreen extends ConsumerWidget {
+  const ChatSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    final name = partner?.petName ?? partner?.displayName ?? 'Them';
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.background,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        leading: IosBackButton(onTap: () => Navigator.of(context).maybePop()),
+        title: Text('Chat settings', style: AppText.title()),
+        centerTitle: false,
+      ),
+      body: ListView(
+        padding: AppSpace.screen,
+        children: [
+          _PartnerCard(partner: partner, name: name),
+          const SizedBox(height: AppSpace.md),
+          const _CallUsage(),
+          const SizedBox(height: AppSpace.md),
+          const _SharedMedia(),
+          const SizedBox(height: AppSpace.lg),
+        ],
+      ),
+    );
+  }
+}
+
+/* ── Who this conversation is with ──────────────────── */
+class _PartnerCard extends StatelessWidget {
+  const _PartnerCard({required this.partner, required this.name});
+
+  final UserProfile? partner;
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpace.sm),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      child: Row(
+        children: [
+          UserAvatar(partner, size: 54),
+          const SizedBox(width: AppSpace.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(name, style: AppText.hero()),
+                Text('Just the two of you', style: AppText.caption()),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ── Calling ────────────────────────────────────────── */
+class _CallUsage extends ConsumerWidget {
+  const _CallUsage();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final usage = ref.watch(callUsageProvider);
+
+    return _Section(
+      label: 'CALLING THIS MONTH',
+      child: usage.when(
+        loading: () => const Padding(
+          padding: EdgeInsets.symmetric(vertical: AppSpace.sm),
+          child: Center(child: CupertinoActivityIndicator()),
+        ),
+        error: (_, __) => Text('Couldn’t read your calling minutes.',
+            style: AppText.body(AppColors.muted)),
+        data: (data) {
+          // ⚠️ An unmetered build has nothing to run out of, and a ring
+          // reading 0% of infinity measures nothing. Show the time spent and
+          // stop — see CallUsage.isMetered for why this is not `allowance != null`.
+          if (!data.isMetered) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_spent(data.total), style: AppText.stat()),
+                Text('together on calls this month',
+                    style: AppText.body(AppColors.muted)),
+              ],
+            );
+          }
+          final left = data.left(CallMode.voice);
+          return Row(
+            children: [
+              ProgressRing(
+                fraction: data.fraction,
+                color: AppColors.brand,
+                trackColor: AppColors.surfaceSubtle,
+                size: 74,
+                center: Text(
+                  '${(data.fraction * 100).round()}%',
+                  style: AppText.caption(AppColors.ink)
+                      .copyWith(fontWeight: FontWeight.w700),
+                ),
+              ),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_spent(data.total), style: AppText.title()),
+                    Text('used of your shared minutes',
+                        style: AppText.caption()),
+                    if (left != null) ...[
+                      const SizedBox(height: AppSpace.xxs),
+                      Text('${_spent(left)} left',
+                          style: AppText.body(AppColors.body)),
+                    ],
+                    const SizedBox(height: AppSpace.xxs),
+                    Text(
+                      'Resets ${DateFormat('d MMMM').format(CallUsage.resetsOn)}',
+                      style: AppText.caption(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  /// Hours only once there are any — "0h 7m" reads like a broken clock.
+  static String _spent(Duration d) {
+    final hours = d.inHours, minutes = d.inMinutes % 60;
+    if (hours == 0) return '$minutes min';
+    return '${hours}h ${minutes}m';
+  }
+}
+
+/* ── Everything either of you has sent ──────────────── */
+class _SharedMedia extends ConsumerWidget {
+  const _SharedMedia();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final messages = ref.watch(flowerMessagesProvider);
+
+    return messages.when(
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => _Section(
+        label: 'SHARED',
+        child: Text('Couldn’t load your photos.',
+            style: AppText.body(AppColors.muted)),
+      ),
+      data: (all) {
+        // Everything ever sent, not just what is still live on the widget:
+        // this is the album, and the 24-hour rule belongs to the home screen.
+        final photos = [
+          for (final m in all)
+            if (m.isPhoto) m,
+        ];
+        return _Section(
+          label: 'SHARED · ${photos.length} ${photos.length == 1 ? 'photo' : 'photos'}',
+          child: photos.isEmpty
+              ? Text('Photos you send each other collect here.',
+                  style: AppText.body(AppColors.muted))
+              : GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  padding: EdgeInsets.zero,
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 6,
+                    crossAxisSpacing: 6,
+                  ),
+                  itemCount: photos.length,
+                  itemBuilder: (context, i) => _Thumb(path: photos[i].imagePath!),
+                ),
+        );
+      },
+    );
+  }
+}
+
+class _Thumb extends ConsumerWidget {
+  const _Thumb({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final url = ref.watch(dayPhotoUrlProvider(path));
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: Container(
+        color: AppColors.surfaceSubtle,
+        child: url.maybeWhen(
+          // Null and error both mean "draw the empty panel", which is the
+          // right answer to a dead connection and to an object that is gone.
+          data: (link) => link == null
+              ? const SizedBox.shrink()
+              : Image.network(link, fit: BoxFit.cover),
+          orElse: () => const SizedBox.shrink(),
+        ),
+      ),
+    );
+  }
+}
+
+/* ── Section shell ──────────────────────────────────── */
+class _Section extends StatelessWidget {
+  const _Section({required this.label, required this.child});
+
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: AppText.label()),
+        const SizedBox(height: AppSpace.xs),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppSpace.sm),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            border: Border.all(color: AppColors.border),
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+          ),
+          child: child,
+        ),
+      ],
+    );
+  }
+}

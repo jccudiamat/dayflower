@@ -601,9 +601,17 @@ class _ChatHeader extends ConsumerWidget {
             icon:
                 const Icon(CupertinoIcons.chevron_back, color: AppColors.muted),
           ),
-          UserAvatar(partner, size: 40),
-          const SizedBox(width: AppSpace.xs),
+          // Their face and their name are one tap target, not two: people
+          // press the person when they want to know about the person, and
+          // splitting it means half the presses land on nothing.
           Expanded(
+            child: InkWell(
+              onTap: () => context.push(Routes.chatSettings),
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Row(children: [
+                UserAvatar(partner, size: 40),
+                const SizedBox(width: AppSpace.xs),
+                Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -623,6 +631,9 @@ class _ChatHeader extends ConsumerWidget {
                   style: AppText.caption(),
                 ),
               ],
+            ),
+                ),
+              ]),
             ),
           ),
           // A live call re-labels both icons and tints them: during a call

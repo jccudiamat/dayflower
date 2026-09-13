@@ -52,12 +52,17 @@ class AppBottomNav extends ConsumerWidget {
                 // Cupertino set (see the icon-set note in PROGRESS.md).
                 icon: Icons.local_florist_rounded,
                 label: 'Flowers',
-                // Goes straight to the conversation now that the camera has
-                // a tab of its own — the inbox it used to open was one row
-                // deep and existed only to hold the camera above it.
-                selected: location == Routes.chat,
+                // Opens the Flowers page, not the thread. Going straight to
+                // the conversation left nowhere to look back at what the two
+                // of you had sent — the tab named after the flowers never
+                // showed you any.
+                //
+                // Stays lit inside the conversation too: the thread is a
+                // child of this tab even though its path is not.
+                selected:
+                    location.startsWith(Routes.blooms) || location == Routes.chat,
                 badge: location == Routes.chat ? 0 : unread,
-                onTap: () => context.go(Routes.chat),
+                onTap: () => context.go(Routes.blooms),
               ),
               _NavItem(
                 icon: CupertinoIcons.camera_fill,

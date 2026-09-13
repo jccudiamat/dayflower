@@ -38,6 +38,8 @@ import 'features/reminders/presentation/screens/alarm_screen.dart';
 import 'features/reminders/presentation/screens/reminders_screen.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
 import 'features/tulip/data/flower_repository.dart';
+import 'features/tulip/presentation/screens/blooms_screen.dart';
+import 'features/tulip/presentation/screens/chat_settings_screen.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
@@ -59,7 +61,17 @@ class Routes {
   /// deep links keep resolving.
   static const flowers = '/app/flowers';
 
-  /// The Flowers tab — the conversation itself.
+  /// The Flowers tab.
+  ///
+  /// ⚠️ **Not `/app/flowers`** — that path is the Camera and has to stay put
+  /// for the widget deep links that name it by string. The tab used to open
+  /// the conversation directly, which meant there was nowhere to see what
+  /// the two of you had actually sent each other; this is that place, and
+  /// the thread is one tap from it.
+  static const blooms = '/app/blooms';
+
+  /// The conversation itself. Still nested under `flowers` for deep-link
+  /// compatibility.
   ///
   /// Still a path under `flowers` for deep-link compatibility, but no longer
   /// a sub-route of anything: `flowers` is the Camera tab now and these two
@@ -100,6 +112,11 @@ class Routes {
   static const chapter = '/app/activities/chapters/:year/:month';
   static String chapterFor(int year, int month) =>
       '/app/activities/chapters/$year/$month';
+
+  /// What is between the two of you: how much calling is left this month,
+  /// and everything either of you has sent. Reached by tapping their name in
+  /// the chat header, which is where people look for it.
+  static const chatSettings = '/app/flowers/chat/settings';
 
   static const settings = '/app/settings';
 
@@ -401,7 +418,12 @@ final routerProvider = Provider<GoRouter>((ref) {
               builder: (_, __) => const ActivityFeedScreen()),
           GoRoute(
               path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
+          GoRoute(
+              path: Routes.blooms, builder: (_, __) => const BloomsScreen()),
           GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
+          GoRoute(
+              path: Routes.chatSettings,
+              builder: (_, __) => const ChatSettingsScreen()),
           GoRoute(
               path: Routes.events, builder: (_, __) => const EventsScreen()),
           GoRoute(

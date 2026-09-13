@@ -11,6 +11,18 @@
 
 ---
 
+## Recent app work
+
+### Flowers tab, and chat settings (2026-09-13)
+
+- **The Flowers tab opens a Flowers page now, not the conversation.** `Routes.blooms = '/app/blooms'`, `BloomsScreen`. The tab named after the flowers never showed you any — every bloom was buried in a thread you had to scroll. It shows the newest one large, the rest as a garden grid, and the thread one tap away.
+  - ⚠️ **Not `/app/flowers`** — that path is the *Camera* and must stay put: `widget_sync.dart` names `dayflower://flowers` by string, and the manifest matches it. Renaming it kills widget taps silently. The chat likewise stays at `/app/flowers/chat`.
+  - The tab stays lit inside the conversation (`startsWith(blooms) || == chat`): the thread is a child of this tab even though its path is not.
+- **Tapping the partner in the chat header opens chat settings** (`Routes.chatSettings`, `ChatSettingsScreen`). Avatar and name are **one** tap target, not two — people press the person, and splitting it means half the presses land on nothing.
+- **Chat settings shows calling this month and every photo either of you has sent.** Call usage reuses `callUsageProvider`; ⚠️ it must handle `!isMetered`, where a ring reading 0% of infinity measures nothing — see `CallUsage.isMetered` for why that is not `allowance != null`. Media is every message with `isPhoto`, *not* `isFreshForWidget`: this is the album, and the 24-hour rule belongs to the home screen.
+- **Verified against real data** in the web preview: 23 blooms with Hubby, call ring at 15% (5h used, 36h 39m left, resets 1 October), 31 shared photos.
+- ⚠️ **The web preview signs in as the real test partner account.** A live call from the other account rang during testing; answering or declining it would have acted on a real conversation, so neither was touched and the server was stopped instead. Navigate by URL (`/#/app/blooms`) rather than tapping through when something live is on screen.
+
 ## Feature status
 
 | # | Feature | Status |
