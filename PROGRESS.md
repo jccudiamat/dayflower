@@ -3538,3 +3538,95 @@ album.
 
 ⚠️ **Not published.** This is committed on `calls` and has not gone out as a
 build — see the retention notes above for why publishing is not free.
+
+## How they feel, whether they are there, and a single stem (2026-09-13)
+
+### The mood was arriving and nobody could see it
+
+`users` has been in the realtime publication since 0024 so a mood lands on
+the other phone while they are looking at it. The only place it surfaced was
+the chat header — which you had to open the thread to read. It is on the
+conversation card now: **"Hubby is feeling loved 🥰"**, name in the heavier
+style so the row still scans as a conversation rather than a status.
+
+- ⚠️ **No mood is the bare name.** Not "is feeling nothing", and not a
+  placeholder inviting them to set one. A mood is theirs to volunteer, and a
+  card that nags about an empty one is the app taking a side.
+- Both test accounts had `mood` set and `mood_at` a week old, which is
+  exactly the case `freshMood` exists for — a good reminder that the empty
+  branch is the common one, not the edge case.
+
+### The chat header answers the question you actually have
+
+Not a flower count, not a stale mood: are they there. "Active now", "Active
+5 minutes ago", "Active yesterday at 10:15 PM".
+
+- ⚠️ **Coarse past the first hour, deliberately.** A chat header is not a
+  log. "Active at 2:31 PM" is useful; "Active 4 hours and 12 minutes ago" is
+  surveillance, and the difference cost nothing to get right.
+- 🔴 **No heartbeat at all shows nothing.** A partner on an older build is
+  not "away" — we do not know, and a header must never turn an absence of
+  data into a claim about a person.
+- A clock a minute fast must not read as active *in the future*; negative
+  gaps clamp to "Active now". Pinned, along with the midnight case where
+  "30 minutes ago" has to beat "yesterday".
+
+### 🔴 Presence is its own table, and is not realtime
+
+Migration 0043. The obvious implementation — a `last_active_at` column on
+`users` — would have been wrong in a way that only shows up on the bill:
+that row **is** in the realtime publication, so a once-a-minute heartbeat
+would broadcast the entire profile to the partner's phone every minute of
+every day, for a value nobody reads unless the chat is open.
+
+- Polled instead, by an `autoDispose` provider whose timer is created by the
+  read and cancelled with its last watcher. Closing the conversation stops
+  the cost dead; a backgrounded app makes no presence requests at all.
+- The beat is owned by the **root widget**, not the chat screen: being
+  active means having the app open, not having this one screen open.
+- 🔴 Presence is the most privacy-sensitive thing here — it says when
+  somebody is awake and holding their phone. Readable by exactly one other
+  person, under the same rule as the profile, and it stores one timestamp.
+  Never a location, never what they are doing. `anon` has no read at all;
+  the grants were checked against the live table rather than assumed.
+
+### The website's 54 stems are sendable from the chat
+
+New **Stems** tab in the picker, drawn from the same artwork the bouquet
+builder uses — cut out of the same four sprite sheets by
+`tool/slice_stems.py`.
+
+- ⚠️ **The generator reads the names out of the website's own list** rather
+  than keeping a second copy. That list is frozen (gift links store a
+  flower's *index*), and a hand-maintained duplicate is a second thing to
+  get wrong. `test/stem_catalog_test.dart` checks the two still agree in
+  both directions — a stem the website gained and we never sliced, and an id
+  we have that the website no longer backs.
+- 🔴 Cut-outs draw `contain`ed, never `cover`ed. A stem is tall, narrow and
+  transparent; `cover` in a square box scales it until the bloom is outside
+  the frame. That is what `Flower.cutout` is for — it decides how the
+  artwork is *drawn*, not just how it looks.
+- The picker's category row is scrollable now that there are four chips.
+
+### 🔴 "Wrote 54 stems" and 25 of them were zero bytes
+
+The slicer's first run reported success and left 25 files empty. Nothing
+failed loudly: `Image.asset` falls back to the emoji glyph, so the app would
+have shipped 25 flowers that quietly are not flowers — the exact silent
+class of bug the emoji fallback was added to soften, working against us.
+
+`verify()` now reads back every file it writes and stops the run if it does
+not decode. **A write is not done until it reads back.** The existing
+`flower_art_bundle_test` would also have caught it at test time, which is
+the second net and the reason it exists.
+
+### Verified
+
+`flutter analyze` clean of anything new; `flutter test` **292 passing**.
+Walked on device preview against the live pair: the card read the mood, the
+header read a seeded heartbeat back as "Active 5 minutes ago", this phone's
+own beat landed through RLS, and the Stems tab drew the website's blooms.
+Seeded values were restored afterwards.
+
+⚠️ **Not published.** Committed on `calls`. The partner's phone shows no
+presence until it runs a build carrying the heartbeat.
