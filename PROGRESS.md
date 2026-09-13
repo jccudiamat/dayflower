@@ -3630,3 +3630,74 @@ Seeded values were restored afterwards.
 
 ⚠️ **Not published.** Committed on `calls`. The partner's phone shows no
 presence until it runs a build carrying the heartbeat.
+
+## A mood you can take back, that ends with the day (2026-09-13)
+
+The chip was already a toggle — tapping the mood you have clears it — but
+nothing about it expired, so the two halves of one fact disagreed: your own
+chip stayed lit from Tuesday while your partner had stopped seeing that same
+mood after a day.
+
+### ⚠️ A calendar day, not a rolling 24 hours
+
+Under the old rule a mood set at 9pm Monday was still being reported at 8pm
+Tuesday. Under a day old, and about a day nobody was living in any more —
+so nobody was ever asked again and "how are you feeling?" quietly stopped
+being a question. Each morning starts blank now, which is the entire reason
+to ask.
+
+- 🔴 **The day is the setter's**, judged in their profile's zone. This is a
+  long-distance app: the two phones are routinely on different dates, and
+  both have to reach the same answer or the conversation card and the chat
+  header disagree about whether anything was said today.
+- The cost is a mood set at 11pm lasting an hour. That is the honest meaning
+  of "how I am today"; carrying it into a day it was never about is the bug
+  this replaced.
+- The local copy stores *when* it was set. An undated mood — which is every
+  mood already on a phone — is not trusted, so the first launch after this
+  starts clean rather than carrying something of unknown age.
+- Cleared on resume, not by a midnight timer. The realistic way a day turns
+  under somebody is that the phone was asleep, and waking a device to blank
+  a chip nobody is looking at is a wakeup for nothing.
+
+### 🔴 A race that emptied the chip on its own
+
+Found while pinning the above. `MoodPrefs._load()` runs off the constructor
+and lands a frame or two later; a tap inside that window was overwritten by
+whatever was on disk — usually nothing, so the chip filled and then emptied
+by itself. Rare by hand, **constant on a cold start**, which is exactly when
+somebody opens the app to say how they are. The notifier now knows whether
+it has been tapped and lets the tap win.
+
+`safeLocation`/`zoneCity` moved to `core/time/zones.dart` so a plain model
+can ask what day it is somewhere without importing a widget file. The picker
+re-exports them, so every existing import is untouched.
+
+### 🔴 The 50 MB ceiling, hit for real
+
+The APK built at **51.6 MB** and Supabase Storage refuses any object over
+50. The 54 stems were the straw, not the cause.
+
+- ⚠️ **`gift-products-sample.png` was 2.5 MB of nothing** — a reference
+  picture committed in b795f5d, never referenced from a line of Dart, and
+  shipping inside every APK since. The `assets/images/` line in pubspec
+  takes the *whole directory*, so an unused file there costs every phone on
+  every update and **nothing ever says so**. Worth auditing that directory
+  the next time this bites.
+- Stems re-cut at quality 80 instead of 88: 0.2 MB, no visible difference. A
+  stem never renders above 96pt, so ~300px was already generous. The quality
+  is a named constant in the generator now, beside the reason.
+- 48.9 MB, shipped.
+- 🔴 **This will be hit again, and it will be assets again.**
+  `assets/images/gifts/` is ~4 MB of product photography whose catalogue
+  already moved to the server in 0038. The bundled copies are still the
+  primary artwork so they stay — but they are the obvious next candidate if
+  they can be served instead.
+
+### Published
+
+**Build 67**, eight release notes, one old build pruned past the keep-5
+window. 301 tests pass. Migration 0043 (presence) is applied.
+
+⚠️ The website was **not** deployed as part of this — see the note in the
+handoff about work from a parallel session sitting on `calls`.
