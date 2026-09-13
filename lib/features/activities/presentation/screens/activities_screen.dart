@@ -322,6 +322,11 @@ class _Activity {
 /// moved up rather than being duplicated as a SOON tile.
 const _soon = <_Activity>[
   _Activity(
+      emoji: '💪',
+      title: 'Fitness',
+      blurb: 'Move more, together',
+      color: AppColors.sage),
+  _Activity(
       emoji: '🎲',
       title: 'Async games',
       blurb: 'Take your turn whenever',
