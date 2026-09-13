@@ -38,6 +38,13 @@ MAIN, MAIN_ROWS = "botanical-sprites.webp", 2
 EXTRA, EXTRA_ROWS = ["flowers-a.webp", "flowers-b.webp", "flowers-c.webp", "flowers-d.webp"], 3
 COLS = 4
 
+# A stem never renders above ~96pt (the Flowers grid; the picker uses 72), so
+# roughly 300px is already generous on a 3x screen. The quality is what is
+# worth spending here, not the pixels -- and the APK sits close enough to
+# Supabase Storage's hard 50 MB object cap that 54 files of it is a real
+# constraint. See PROGRESS.md on the storage quota.
+QUALITY = 80
+
 ENTRY = re.compile(r'\{\s*name:\s*"([^"]+)",\s*detail:\s*"([^"]+)",\s*color:\s*"(#[0-9a-fA-F]{6})"\s*\}')
 
 
@@ -124,7 +131,7 @@ def main():
 
         if images:
             out = OUT / f"stem_{slug(name)}.webp"
-            art.save(out, "WEBP", quality=88, method=6, exact=True)
+            art.save(out, "WEBP", quality=QUALITY, method=5, exact=True)
             verify(out, name)
             written += 1
         lines.append(
