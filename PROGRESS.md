@@ -3456,3 +3456,85 @@ egress, and two phones pulling ~40 MB per build across 60-odd builds is the
 same order as the 5 GB monthly allowance. Retention does not shrink egress;
 **publishing less often does.** Worth remembering that every `publish_update`
 run costs both quotas.
+
+## The Flowers tab is a page now, and photos go where you sent them (2026-09-13)
+
+Four things, one commit, all of them in the gap between what the app said it
+was doing and what it did.
+
+### The tab named after flowers never showed you any
+
+Tapping Flowers opened the chat. Every bloom either of you had ever sent was
+buried in a thread you had to scroll, and the one row at the top said "Your
+conversation" — true, and useless. You had to open the thread to find out
+whether anything had happened in it.
+
+`/app/blooms` is its own screen now, with the garden laid out as a grid and
+the conversation **previewed** rather than announced: their face, their name,
+when they last wrote, and what was said.
+
+- ⚠️ **The read receipt only appears on your own last message.** Whether
+  *they* have read *yours* is news. Whether you have read theirs is a fact
+  about you, and putting a tick on it is noise dressed as information.
+- The preview line is written from the reader's side — `previewFor(mine:)` —
+  so your own message never reads "Sent you a photo". This is pinned by a
+  test because it is the kind of string that gets refactored into one shared
+  sentence and quietly starts lying to one of the two people.
+- ⚠️ `Routes.blooms` is `/app/blooms`, **not** `/app/flowers` — that path was
+  already taken by the camera. The bottom nav treats `blooms` *or* `chat` as
+  the Flowers tab being selected, so opening the conversation does not make
+  the tab look unselected.
+
+### A website bouquet is a pasted link, not a flower row
+
+The site has no idea who anyone's partner is, so a bouquet arrives in chat as
+`mydayflower.com/g/<id>` and nothing more. Those are now recognised and shown
+as cards in the Flowers tab, using the website's own `opengraph-image` as the
+artwork — one drawing of a bouquet, rendered in one place.
+
+- 🔴 **The link match is deliberately narrow**: our host, our `/g/` path, our
+  id shape. An ordinary link someone sent must stay an ordinary link, and
+  `notmydayflower.com.evil.test/g/...` must not pass — dressing a stranger's
+  URL up as a gift from your partner is worse than leaving it alone. That
+  hostile case is in the tests.
+
+### 🔴 The photo destination did nothing
+
+Choosing "Chat" as a photo's destination had no effect. The photo still
+landed on My Day, on their story ring, and in the widget rotation — and the
+chat bubble then counted down to it leaving a place it had never been.
+
+Root cause: `isFreshForWidget` was a plain age check that never looked at
+`toWidget`. Four call sites asked `isPhoto && isFreshForWidget` and all four
+got the wrong answer.
+
+- ⚠️ **Fixed in the getter, not at the four call sites.** The fifth one would
+  have had the bug too. A predicate whose name contains "ForWidget" has to
+  read the field that says whether it went to the widget.
+- The Camera tab now sets its own destination on tap. `dayPhotoTargetProvider`
+  is global and sticky, so whatever was chosen last was silently deciding
+  where the next photo went — arriving at the camera from the tab bar meant
+  inheriting a choice made minutes ago for a different photo.
+- This is the class of bug that never throws. Nothing fails; a photo simply
+  turns up somewhere nobody asked for it, which is exactly the kind of thing
+  a couples app must not do.
+
+### The screen went dark mid-call
+
+`wakelock_plus`, held by `CallNotifier` and bound to the **session**, not to a
+widget. A call outlives whatever happens to be on screen; releasing the lock
+in a widget's `dispose` is precisely how the screen went out while two people
+were still talking. Released when the session reaches a terminal status, and
+again in `dispose()` so a torn-down notifier cannot leave the screen pinned on
+forever.
+
+### Verified
+
+`flutter analyze lib` clean of anything new; `flutter test` 276 passing,
+including 11 new in `test/day_photo_target_test.dart`. Walked in device
+preview: the tab opens a page instead of the chat, the row previews the
+thread with its receipt, and chat settings reads out calling and the shared
+album.
+
+⚠️ **Not published.** This is committed on `calls` and has not gone out as a
+build — see the retention notes above for why publishing is not free.
