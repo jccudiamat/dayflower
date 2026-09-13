@@ -1,8 +1,8 @@
 import { MAX_PHOTO_LENGTH, type Photo } from "./model";
+import { checkImageFile } from "../lib/image-file";
 
 export async function readPhoto(file: File): Promise<string> {
-  if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Choose a JPG, PNG, or WebP image. Export HEIC photos as JPG first.");
-  if (file.size > 15 * 1024 * 1024) throw new Error("Choose an image smaller than 15 MB.");
+  await checkImageFile(file, 15 * 1024 * 1024);
   const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
   try {
     if (!bitmap.width || !bitmap.height) throw new Error("This image could not be opened.");

@@ -5,6 +5,7 @@ import { ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import { SPECIAL_WRAPPER_URL, REVEAL_ART, backgrounds, borders, bouquetColors } from "./model";
 import "./bouquet.css";
+import { emailAddress, textInput } from "../lib/input";
 
 const DRAFT_KEY = "dayflower-bouquet-v1";
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
@@ -198,7 +199,11 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     if (opened) revealRef.current?.focus();
   }, [opened]);
 
-  function update(next: Bouquet) { setBouquet(next); setShareUrl(""); setNotice(""); }
+  function update(next: Bouquet) {
+    setBouquet({ ...next, to: textInput(next.to, 40), from: textInput(next.from, 40), message: textInput(next.message, 280, true),
+      ...(next.photos ? { photos: next.photos.map(photo => ({ ...photo, caption: textInput(photo.caption, 35) })) } : {}) });
+    setShareUrl(""); setNotice("");
+  }
   function updateStem(values: Partial<Stem>) {
     update({ ...bouquet, stems: bouquet.stems.map(stem => stem.id === selected ? { ...stem, ...values } : stem) });
   }
@@ -381,6 +386,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   async function sendByEmail(event: FormEvent) {
     event.preventDefault();
     if (emailState === "sending") return;
+    if (!emailAddress(email)) { setNotice("Please enter a valid email address."); return; }
     setEmailState("sending"); setNotice("");
     // The link has to exist before it can be mailed, and makeLink reuses the
     // one already made rather than storing the same bouquet twice.
@@ -572,7 +578,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
               ? <p className="bouquet-email-sent" role="status"><span aria-hidden="true">✉</span> On its way to {email}. They&rsquo;ll see only that you made them something.</p>
               : <><label htmlFor="bouquet-email-field">Or send it straight to their inbox</label>
                 <div className="bouquet-email-row">
-                  <input id="bouquet-email-field" type="email" required value={email} placeholder="them@example.com" autoComplete="email"
+                  <input id="bouquet-email-field" type="email" maxLength={254} required value={email} placeholder="them@example.com" autoComplete="email"
                     disabled={emailState === "sending"} onChange={e => { setEmail(e.target.value); setNotice(""); }} />
                   <button type="submit" className="bouquet-button primary" disabled={emailState === "sending" || !email.trim()}>{emailState === "sending" ? "Sending…" : "Send"}</button>
                 </div>

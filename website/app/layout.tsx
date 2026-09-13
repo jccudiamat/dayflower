@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Quicksand, Lora } from "next/font/google";
 import "./globals.css";
+import { connection } from "next/server";
 
 const quicksand = Quicksand({
   variable: "--font-quicksand",
@@ -20,11 +21,13 @@ export const metadata: Metadata = {
     "A private app for exactly two people. Somewhere to land on each other every day when you can't be in the same room. Join the waitlist.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Nonces are unique to a request, so HTML must never be prerendered/cached.
+  await connection();
   return (
     <html lang="en" className={`${quicksand.variable} ${lora.variable} antialiased`}>
       <body>{children}</body>

@@ -254,12 +254,21 @@ export function makeBouquet(preset = 0): Bouquet {
 function finiteIn(value: unknown, min: number, max: number): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= min && value <= max;
 }
-export function validateBouquet(value: unknown): Bouquet | null {
+function validText(value: unknown, max: number, multiline = false): value is string {
+  return typeof value === "string" && value.length <= max && !new RegExp(multiline ? "[\\u0000-\\u0008\\u000b-\\u001f\\u007f\\u202a-\\u202e\\u2066-\\u2069]" : "[\\u0000-\\u001f\\u007f\\u202a-\\u202e\\u2066-\\u2069]").test(value);
+}
+export function validateBouquet(value: unknown, strict = false): Bouquet | null {
   if (!value || typeof value !== "object") return null;
   const b = value as Record<string, unknown>;
   if (b.v !== 1 || !Number.isInteger(b.paper) || !finiteIn(b.paper, 0, papers.length - 1) ||
-      typeof b.to !== "string" || b.to.length > 40 || typeof b.from !== "string" || b.from.length > 40 ||
-      typeof b.message !== "string" || b.message.length > 280 || !Array.isArray(b.stems) || b.stems.length > MAX_STEMS) return null;
+      !validText(b.to, 40) || !validText(b.from, 40) || !validText(b.message, 280, true) || !Array.isArray(b.stems) || b.stems.length > MAX_STEMS) return null;
+  if (strict) {
+    if (Object.keys(b).some(k => !["v", "stems", "paper", "to", "from", "message", "photos", "vessel", "print", "printOpacity", "wrapScale", "wrapAngle", "stemFlower", "background", "border"].includes(k))) return null;
+    for (const [key, max] of [["vessel", vessels.length - 1], ["print", prints.length - 1], ["stemFlower", flowers.length - 1], ["background", backgrounds.length - 1], ["border", borders.length - 1]] as const) {
+      if (b[key] !== undefined && (!Number.isInteger(b[key]) || !finiteIn(b[key], 0, max))) return null;
+    }
+    if (b.printOpacity !== undefined && !finiteIn(b.printOpacity, 0, 100) || b.wrapScale !== undefined && !finiteIn(b.wrapScale, .75, 1.3) || b.wrapAngle !== undefined && !finiteIn(b.wrapAngle, -20, 20)) return null;
+  }
   const stems: Stem[] = [];
   for (const item of b.stems) {
     if (!item || typeof item !== "object") return null;
@@ -279,7 +288,7 @@ export function validateBouquet(value: unknown): Bouquet | null {
       if (typeof p.src !== "string" || p.src.length > MAX_PHOTO_LENGTH || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(p.src) ||
           !Number.isInteger(p.frame) || !finiteIn(p.frame, 0, photoFrames.length - 1) || !finiteIn(p.x, 110, 610) || !finiteIn(p.y, 190, 570) ||
           !finiteIn(p.angle, -45, 45) || !finiteIn(p.scale, .55, 1.5) || !finiteIn(p.zoom, 1, 3) || !finiteIn(p.cropX, 0, 100) || !finiteIn(p.cropY, 0, 100) ||
-          typeof p.caption !== "string" || p.caption.length > 35 || (p.layer !== "back" && p.layer !== "front")) return null;
+          !validText(p.caption, 35) || (p.layer !== "back" && p.layer !== "front")) return null;
       total += p.src.length;
       // Must match what the editor can actually produce, or a full bouquet is
       // rejected on reload and the saved draft vanishes without a word.

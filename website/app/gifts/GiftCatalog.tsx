@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState } from "react";
+import { textInput } from "../lib/input";
 import products from "./products.json";
 
 const categories = ["All types", ...new Set(products.map(p => p.category))];
@@ -21,10 +22,10 @@ export default function GiftCatalog() {
 
   return <section aria-label="Gift collection" className="mt-10">
     <div className="grid gap-4 rounded-3xl border border-border-soft bg-surface p-5 sm:grid-cols-2 lg:grid-cols-4">
-      <label className="text-sm font-semibold">Search gifts<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Flowers, mugs, coffee…" className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal" /></label>
-      <label className="text-sm font-semibold">Gift type<select value={category} onChange={e => setCategory(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal">{categories.map(c => <option key={c}>{c}</option>)}</select></label>
-      <label className="text-sm font-semibold">For whom<select value={recipient} onChange={e => setRecipient(e.target.value)} className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal">{["All", "Partner", "Family", "Friends"].map(r => <option key={r}>{r}</option>)}</select></label>
-      <label className="text-sm font-semibold">Budget<select value={budget} onChange={e => setBudget(Number(e.target.value))} className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal"><option value={0}>Any budget</option>{[200,500,1000].map(b => <option key={b} value={b}>Up to {pesos(b)}</option>)}</select></label>
+      <label className="text-sm font-semibold">Search gifts<input type="search" maxLength={100} value={query} onChange={e => setQuery(textInput(e.target.value, 100))} placeholder="Flowers, mugs, coffee…" className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal" /></label>
+      <label className="text-sm font-semibold">Gift type<select value={category} onChange={e => setCategory(categories.includes(e.target.value) ? e.target.value : "All types")} className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal">{categories.map(c => <option key={c}>{c}</option>)}</select></label>
+      <label className="text-sm font-semibold">For whom<select value={recipient} onChange={e => setRecipient(["All", "Partner", "Family", "Friends"].includes(e.target.value) ? e.target.value : "All")} className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal">{["All", "Partner", "Family", "Friends"].map(r => <option key={r}>{r}</option>)}</select></label>
+      <label className="text-sm font-semibold">Budget<select value={budget} onChange={e => setBudget([0, 200, 500, 1000].includes(Number(e.target.value)) ? Number(e.target.value) : 0)} className="mt-2 min-h-12 w-full rounded-xl border border-border-soft bg-background px-3 text-base font-normal"><option value={0}>Any budget</option>{[200,500,1000].map(b => <option key={b} value={b}>Up to {pesos(b)}</option>)}</select></label>
     </div>
     <div className="my-6 flex items-center justify-between gap-4"><p role="status" className="text-sm text-body">{filtered.length} {filtered.length === 1 ? "gift idea" : "gift ideas"}</p><button onClick={reset} className="min-h-11 text-sm font-semibold text-brand-dark underline underline-offset-4">Clear filters</button></div>
     {filtered.length === 0 ? <div className="rounded-3xl bg-surface-subtle p-8 text-center"><h2 className="text-xl font-bold">No gifts match just yet.</h2><p className="mt-3 text-body">Try another gift type, search, or budget.</p></div> :

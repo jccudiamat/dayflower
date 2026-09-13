@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { emailAddress } from "../lib/input";
 
 type Status = "idle" | "loading" | "success" | "error";
 
@@ -13,6 +14,7 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (status === "loading") return;
+    if (!emailAddress(email)) { setStatus("error"); setMessage("Please enter a valid email address."); return; }
     setStatus("loading");
     setMessage("");
     try {
@@ -62,6 +64,7 @@ export default function WaitlistForm({ dark = false }: { dark?: boolean }) {
       <div className={`waitlist-row ${dark ? "waitlist-row-dark" : ""}`}>
         <input
           type="email"
+          maxLength={254}
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}

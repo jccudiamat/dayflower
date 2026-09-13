@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import SiteHeader from "../components/SiteHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
@@ -18,7 +19,8 @@ const faqs = [
   ["How do I save or share my strip?", "Fill every slot and select Create my image, then Download PNG. Share image opens supported devices’ share menus. On other devices, download the image and share it from your files or photos app."],
 ];
 function AdSpace({ id }: { id: string }) { return <aside id={id} className="ad-reservation" aria-label="Reserved advertising space">ADVERTISEMENT<small>Reserved space</small></aside>; }
-export default function PhotoboothPage() {
+export default async function PhotoboothPage() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return <>
     <SiteHeader photobooth />
     <main className="mx-auto max-w-6xl px-5 py-10">
@@ -33,6 +35,6 @@ export default function PhotoboothPage() {
       <section className="rounded-3xl bg-dark-canvas p-8 text-on-dark sm:p-12"><h2 className="text-3xl font-bold">Keep the little things going.</h2><p className="my-5 max-w-xl leading-relaxed text-on-dark-muted">Dayflower is also a private app for two, with home-screen widgets, flowers, calls, and shared moments. Get a little closer, every day.</p><Link href="/#waitlist" className="gradient-button">Explore Dayflower</Link></section>
     </main>
     <footer className="mx-auto flex max-w-6xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebApplication", name: "Dayflower Photo Booth", url: "https://mydayflower.com/photobooth", applicationCategory: "MultimediaApplication", operatingSystem: "Web browser", browserRequirements: "Requires JavaScript. Camera access requires HTTPS and permission.", offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }, featureList: "Eight collage and photo strip templates, story and feed formats, camera capture, local image processing, PNG download" }) }} />
+    <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebApplication", name: "Dayflower Photo Booth", url: "https://mydayflower.com/photobooth", applicationCategory: "MultimediaApplication", operatingSystem: "Web browser", browserRequirements: "Requires JavaScript. Camera access requires HTTPS and permission.", offers: { "@type": "Offer", price: "0", priceCurrency: "USD" }, featureList: "Eight collage and photo strip templates, story and feed formats, camera capture, local image processing, PNG download" }) }} />
   </>;
 }

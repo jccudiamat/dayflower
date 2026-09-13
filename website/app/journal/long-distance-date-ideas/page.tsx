@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import SiteHeader from "../../components/SiteHeader";
 
 const title = "7 long-distance date ideas for a quiet night in";
@@ -42,7 +43,8 @@ const ideas = [
   ], prompt: "What would you have pointed out to me if we had been together today?" },
 ];
 
-export default function Article() {
+export default async function Article() {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return <><SiteHeader />
     <main className="mx-auto max-w-3xl px-5 py-12 sm:py-20">
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-brand-dark"><Link href="/journal" className="underline underline-offset-4">Dayflower Journal</Link><span aria-hidden="true"> / </span><span>Date ideas</span></nav>
@@ -74,6 +76,6 @@ export default function Article() {
       </article>
     </main>
     <footer className="mx-auto flex max-w-3xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/journal">Journal</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>
-    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "BlogPosting", headline: title, description, datePublished: "2026-09-08", dateModified: "2026-09-08", mainEntityOfPage: url, author: { "@type": "Organization", name: "Dayflower", url: "https://mydayflower.com" }, publisher: { "@type": "Organization", name: "Dayflower", logo: { "@type": "ImageObject", url: "https://mydayflower.com/mark.png" } } }) }} />
+    <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "BlogPosting", headline: title, description, datePublished: "2026-09-08", dateModified: "2026-09-08", mainEntityOfPage: url, author: { "@type": "Organization", name: "Dayflower", url: "https://mydayflower.com" }, publisher: { "@type": "Organization", name: "Dayflower", logo: { "@type": "ImageObject", url: "https://mydayflower.com/mark.png" } } }) }} />
   </>;
 }

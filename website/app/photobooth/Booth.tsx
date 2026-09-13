@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import "./booth.css";
+import { textInput } from "../lib/input";
+import { checkImageFile } from "../lib/image-file";
 
 import { themes, templates, renderTemplate, type Shot, type Template } from "./templates";
 
@@ -76,8 +78,7 @@ export default function Booth() {
   }
 
   async function loadFile(file: File): Promise<Shot> {
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw new Error("Choose a JPG, PNG, or WebP photo. Convert HEIC photos to JPG first.");
-    if (file.size > 20 * 1024 * 1024) throw new Error("Please choose photos smaller than 20 MB each.");
+    await checkImageFile(file, 20 * 1024 * 1024);
     const url = URL.createObjectURL(file);
     try {
       const im = new Image(); im.src = url; await im.decode();
@@ -130,6 +131,8 @@ export default function Booth() {
     setSelected(Math.min(selected + 1, count - 1)); setMessage("Photo captured. Choose another slot or take the next photo.");
   }
   function crop(key: "zoom" | "x" | "y", value: number) {
+    if (!Number.isFinite(value)) return;
+    value = Math.max(key === "zoom" ? 1 : 0, Math.min(key === "zoom" ? 3 : 100, value));
     setShots(old => old.map((s, i) => s && i === selected ? { ...s, [key]: value } : s));
   }
   async function prepare() {
@@ -170,7 +173,7 @@ export default function Booth() {
       </fieldset>
       {camera && <div className="booth-camera"><video ref={video} autoPlay playsInline muted aria-label="Camera preview" />{countdown > 0 && <strong className="booth-countdown" aria-live="assertive">{countdown}</strong>}<div className="booth-options"><button onClick={capture} disabled={!!countdown || busy}>Take photo (3s)</button><button onClick={stopCamera}>Turn camera off</button></div></div>}
       {current && <fieldset disabled={busy || !!countdown}><legend>Adjust selected photo</legend>{([['zoom', 'Zoom', 1, 3, .05], ['x', 'Horizontal position', 0, 100, 1], ['y', 'Vertical position', 0, 100, 1]] as const).map(([key, label, min, max, step]) => <label className="booth-slider" key={key}>{label}<input type="range" min={min} max={max} step={step} value={current[key]} onChange={e => crop(key, Number(e.target.value))} /></label>)}<button className="booth-secondary" onClick={() => setShots(old => old.map((s, i) => i === selected ? null : s))}>Remove selected photo</button></fieldset>}
-      <fieldset disabled={busy || !!countdown}><legend>2. Make it yours</legend><div className="booth-options">{themes.map((t, i) => <button key={t.name} aria-pressed={theme === i} onClick={() => setTheme(i)}><span style={{ background: t.paper }} className="booth-swatch" />{t.name}</button>)}</div><label className="booth-caption">Caption<input maxLength={48} value={caption} onChange={e => setCaption(e.target.value)} /></label><label className="booth-check"><input type="checkbox" checked={mono} onChange={e => setMono(e.target.checked)} />Black & white photos</label></fieldset>
+      <fieldset disabled={busy || !!countdown}><legend>2. Make it yours</legend><div className="booth-options">{themes.map((t, i) => <button key={t.name} aria-pressed={theme === i} onClick={() => setTheme(i)}><span style={{ background: t.paper }} className="booth-swatch" />{t.name}</button>)}</div><label className="booth-caption">Caption<input maxLength={48} value={caption} onChange={e => setCaption(textInput(e.target.value, 48))} /></label><label className="booth-check"><input type="checkbox" checked={mono} onChange={e => setMono(e.target.checked)} />Black & white photos</label></fieldset>
       <p className="booth-status" role="status">{message || `${filled} of ${count} photos added. Your photos stay in this browser.`}</p>
       <button className="gradient-button" disabled={filled !== count || busy || !!countdown} onClick={prepare}>{busy ? "Working…" : "Create my image"}</button>
       {exportUrl && exportValid && <div className="booth-options booth-export"><a className="gradient-button" href={exportUrl} download="dayflower-collage.png">Download PNG</a><button onClick={share}>Share image</button></div>}
