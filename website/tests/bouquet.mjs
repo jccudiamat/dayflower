@@ -62,11 +62,11 @@ test('export draws every flower and wrapping, omits editing marks, and fits long
     const b = { ...makeBouquet(), paper, message };
     const { canvas, calls } = recordingCanvas();
     renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
-    assert.equal(canvas.width, 840); assert.equal(canvas.height, 1120);
+    assert.equal(canvas.width, 1120); assert.equal(canvas.height, 1120);
     assert.equal(calls.filter(c => c[0] === 'drawImage').length, b.stems.length + (paper < 2 ? 1 : 0));
     assert.equal(calls.filter(c => c[0] === 'arc').length, 0);
     for (const call of calls) for (const arg of call.slice(1)) if (typeof arg === 'number') assert.ok(Number.isFinite(arg));
-    for (const [, text, x, y] of calls.filter(c => c[0] === 'fillText')) { assert.ok(x >= 0 && x <= 840); assert.ok(y >= 0 && y <= 1120, `Text outside image: ${text}`); }
+    for (const [, text, x, y] of calls.filter(c => c[0] === 'fillText')) { assert.ok(x >= 0 && x <= 1120); assert.ok(y >= 0 && y <= 1120, `Text outside image: ${text}`); }
   }
   const { canvas, calls } = recordingCanvas();
   renderBouquet(canvas, makeBouquet(), { naturalWidth: 1536, naturalHeight: 1024 }, 1);
@@ -133,8 +133,35 @@ test('extreme rotated flowers, photos and wrappers fit all four canvas edges', (
       const py = cy + dx * Math.sin(radians) + dy * Math.cos(radians);
       const renderedX = offset.x + pivot.x + (px - pivot.x) * fit;
       const renderedY = offset.y + pivot.y + (py - pivot.y) * fit;
-      assert.ok(renderedX >= 24 - 1e-6 && renderedX <= 816 + 1e-6);
+      assert.ok(renderedX >= 24 - 1e-6 && renderedX <= 1096 + 1e-6);
       assert.ok(renderedY >= 112 - 1e-6 && renderedY <= 887 + 1e-6);
     }
   }
+});
+
+
+test('note stationery and lettering round-trip and reject untrusted choices', () => {
+  const { notePapers, letterings, stationerySets } = model.exports;
+  for (let notePaper = 0; notePaper < notePapers.length; notePaper++) for (let lettering = 0; lettering < letterings.length; lettering++) {
+    const b = { ...makeBouquet(), ...(notePaper ? { notePaper } : {}), ...(lettering ? { lettering } : {}) };
+    assert.deepEqual(decodeBouquet(encodeBouquet(b)), b);
+  }
+  for (const key of ['notePaper', 'lettering']) for (const value of [-1, 99, .5, '<script>', Infinity]) assert.equal(validateBouquet({ ...makeBouquet(), [key]: value }, true), null);
+  for (const { name, ...style } of stationerySets) {
+    const b = { ...makeBouquet(), ...style };
+    assert.ok(validateBouquet(b, true), name);
+    const { canvas } = recordingCanvas(); renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
+    assert.equal(canvas.width, canvas.height);
+  }
+});
+
+test('gift email never reveals the private note in HTML or plain text', () => {
+  const source = ts.transpileModule(readFileSync(new URL('../emails/bouquet-gift.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const mail = { exports: {} }; new Function('module', 'exports', source)(mail, mail.exports);
+  const gift = { to: 'Alex', from: 'Sam', note: 'PRIVATE NOTE <script>alert(1)</script>', url: 'https://mydayflower.com/g/test', imageUrl: 'https://mydayflower.com/g/test/opengraph-image' };
+  for (const result of [mail.exports.htmlFor(gift), mail.exports.textFor(gift)]) {
+    assert.ok(!result.includes('PRIVATE NOTE')); assert.ok(!result.includes('<script>'));
+    assert.ok(result.includes(gift.url));
+  }
+  assert.ok(mail.exports.htmlFor(gift).includes(gift.imageUrl));
 });

@@ -13,7 +13,7 @@
 .bouquet-free span { font-size: 23px; }
 .bouquet-studio { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; gap: 32px; }
 .bouquet-preview { position: sticky; top: 88px; min-width: 0; }
-.bouquet-artwork { position: relative; overflow: hidden; border: 1px solid #e8dfe8; border-radius: 24px; box-shadow: 0 16px 55px #45314909; }
+.bouquet-artwork { position: relative; overflow: hidden; border: 1px solid #e8dfe8; border-radius: 8px; box-shadow: 0 16px 55px #45314909; }
 .bouquet-artwork canvas { width: 100%; height: auto; display: block; }
 .bouquet-artwork canvas.is-editable { touch-action: none; cursor: grab; }
 .bouquet-artwork canvas.is-editable:active { cursor: grabbing; }
@@ -266,3 +266,26 @@
 .bouquet-search-clear:hover { background: #f3ecf6; }
 /* Reachable by a screen reader, invisible on screen. */
 .bouquet-visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* Compact stationery drawers keep the arrangement in reach. */
+.bouquet-fold { border-top: 1px solid #e5dce4; margin-top: 18px; padding-top: 14px; }
+.bouquet-fold > summary, .bouquet-adjust > summary, .bouquet-note-ideas > summary { cursor: pointer; font-size: 14px; font-weight: 600; color: #70536c; padding: 4px 0; }
+.bouquet-fold[open] > summary { margin-bottom: 14px; }
+.bouquet-fold .bouquet-print, .bouquet-fold .bouquet-background { margin-top: 14px; padding-top: 12px; }
+.bouquet-print-list button:has(canvas) { display: flex; flex-direction: column; align-items: center; gap: 6px; border-radius: 10px; width: 82px; padding: 6px; font-size: 11px; }
+.bouquet-print-list canvas { width: 60px; height: 60px; border-radius: 4px; }
+.bouquet-note-swatches, .bouquet-letterings, .bouquet-style-sets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
+.bouquet-note-swatches button, .bouquet-letterings button, .bouquet-style-sets button { padding: 12px 8px; border: 1px solid #dfd3dd; border-radius: 8px; font-size: 12px; }
+.bouquet-note-swatches span { display: block; font: italic 17px Georgia, serif; margin-bottom: 8px; }
+.bouquet-letterings button { font-size: 15px; background: #fffcf8; }
+.bouquet-style-sets button { background: #f7f1eb; color: #70536c; }
+.bouquet-note-swatches button[aria-pressed=true], .bouquet-letterings button[aria-pressed=true] { outline: 2px solid #976787; outline-offset: 1px; }
+@media (min-width: 901px) { .bouquet-controls { max-height: calc(100dvh - 110px); overflow-y: auto; overscroll-behavior: contain; padding-right: 8px; } }
+@media (max-width: 680px) {
+ .bouquet-heading { margin-bottom: 16px; }
+ .bouquet-heading p:last-child, .bouquet-eyebrow { display: none; }
+ .bouquet-preview { position: sticky; top: 0; z-index: 5; background: #faf7fc; padding-bottom: 6px; }
+ .bouquet-preview .bouquet-artwork { width: min(100%, 42dvh); }
+ .bouquet-preview-hint { display: none; }
+ .bouquet-artwork { border-radius: 8px; }
+}

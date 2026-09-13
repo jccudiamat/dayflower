@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const resendKey = process.env.RESEND_API_KEY;
     const from = process.env.BOUQUET_EMAIL_FROM ?? process.env.WAITLIST_EMAIL_FROM;
     if (!resendKey || !from) throw new Error("Email unavailable.");
-    const content = { url: `${SITE}/g/${id}`, imageUrl: `${SITE}/g/${id}/opengraph-image`, to: bouquet.to, from: bouquet.from, note: bouquet.message };
+    const content = { url: `${SITE}/g/${id}`, imageUrl: `${SITE}/g/${id}/opengraph-image`, to: bouquet.to, from: bouquet.from };
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json", "Idempotency-Key": `bouquet-gift-v1/${id}/${email}` },

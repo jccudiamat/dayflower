@@ -79,7 +79,7 @@ export const backgrounds = [
   { name: "Blue sky", color: "#eaf2f9", ink: "#496680" }, { name: "Midnight", color: "#292333", ink: "#ead9e3" },
   { name: "Peach", color: "#fbefdf", ink: "#8a5e4f" }, { name: "Parchment", color: "#f7f2e9", ink: "#746146" },
 ] as const;
-export const borders = ["None", "Fine line", "Double line", "Postage", "Photo corners", "Scalloped"] as const;
+export const borders = ["None", "Fine line", "Double line", "Postage", "Photo corners", "Scalloped", "Botanical corners", "Gilded heirloom", "Lace trim", "Airmail", "Gallery frame"] as const;
 export function bouquetColors(b: Bouquet) {
   return b.background ? backgrounds[b.background] : { color: papers[b.paper].background, ink: papers[b.paper].ink };
 }
@@ -87,15 +87,42 @@ export function bouquetColors(b: Bouquet) {
 export type Stem = { id: number; flower: number; x: number; y: number; angle: number; scale: number; z?: number };
 export const photoFrames = ["Polaroid", "Sticker", "Cutout", "Heart", "Circle", "Arch", "Postage stamp"] as const;
 export type Photo = { id: number; src: string; frame: number; x: number; y: number; angle: number; scale: number; zoom: number; cropX: number; cropY: number; caption: string; layer: "back" | "front"; z?: number };
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number; background?: number; border?: number };
+export const notePapers = [
+  { name: "Soft ivory", color: "#fffdf5", ink: "#59483d" },
+  { name: "Antique parchment", color: "#efe0c4", ink: "#59422f" },
+  { name: "Blush love note", color: "#f8e7e9", ink: "#754857" },
+  { name: "Botanical vellum", color: "#e9eee3", ink: "#475740" },
+  { name: "Notebook scrap", color: "#fffdf3", ink: "#4c5360" },
+  { name: "Midnight ink", color: "#303341", ink: "#f4e6c9" },
+  { name: "Lilac wash", color: "#ede7f4", ink: "#655274" },
+  { name: "Clean cotton", color: "#ffffff", ink: "#343434" },
+] as const;
+export const letterings = [
+  { name: "Romantic italic", family: "Georgia, serif", style: "italic" },
+  { name: "Classical serif", family: "Georgia, serif", style: "normal" },
+  { name: "Vintage typewriter", family: "Courier New, monospace", style: "normal" },
+  { name: "Handwritten", family: "Segoe Print, Comic Sans MS, cursive", style: "normal" },
+  { name: "Calligraphic", family: "Palatino Linotype, Book Antiqua, serif", style: "italic" },
+  { name: "Modern minimal", family: "Arial, sans-serif", style: "normal" },
+  { name: "Editorial", family: "Times New Roman, serif", style: "normal" },
+] as const;
+export const stationerySets = [
+  { name: "Antique letter", print: 9, border: 7, notePaper: 1, lettering: 2, background: 3 },
+  { name: "Botanical romance", print: 12, border: 6, notePaper: 3, lettering: 0, background: 1 },
+  { name: "Classical ivory", print: 10, border: 8, notePaper: 0, lettering: 4, background: 3 },
+  { name: "Love in lilac", print: 11, border: 6, notePaper: 6, lettering: 3, background: 2 },
+  { name: "Found in a journal", print: 9, border: 9, notePaper: 4, lettering: 2, background: 3 },
+  { name: "Modern muse", print: 10, border: 10, notePaper: 7, lettering: 5, background: 1 },
+] as const;
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number; background?: number; border?: number; notePaper?: number; lettering?: number };
 
 /** The wrapper turns and grows about its tie, not its middle, so it leans the way a held bouquet does. */
 export const WRAP_PIVOT = { x: 360, y: 690 };
 
 /** Extra room around the original coordinates keeps existing gifts editable. */
-export const ARRANGEMENT_OFFSET = { x: 60, y: 100 };
+export const ARRANGEMENT_OFFSET = { x: 200, y: 100 };
 export const FIT_CEILING = 12;
-export const ARRANGEMENT_AREA = { left: -36, right: 756, top: FIT_CEILING, bottom: 787 };
+export const ARRANGEMENT_AREA = { left: -176, right: 896, top: FIT_CEILING, bottom: 787 };
 
 /** Fit every rotated corner, including the wrapper, within the arrangement area. */
 export function fitScale(bouquet: Bouquet) {
@@ -204,6 +231,10 @@ export const prints = [
   { name: "Vines", kind: "border" },
   { name: "Petals", kind: "border" },
   { name: "Scalloped", kind: "border" },
+  { name: "Handmade paper", kind: "texture" },
+  { name: "Woven linen", kind: "texture" },
+  { name: "Watercolor petals", kind: "texture" },
+  { name: "Pressed botanicals", kind: "texture" },
 ] as const;
 
 export const DEFAULT_PRINT_OPACITY = 30;
@@ -232,7 +263,7 @@ export function singleStem(b: Bouquet) {
   return b.stems[0]?.flower ?? 0;
 }
 export function hasContents(b: Bouquet) { return b.stems.length > 0 || photoCount(b) > 0; }
-export const WIDTH = 840;
+export const WIDTH = 1120;
 export const HEIGHT = 1120;
 
 const arrangements = [ [4, 0, 5, 2, 0, 5, 2], [4, 1, 5, 1, 0, 5, 1], [4, 3, 2, 3, 2, 0, 2] ];
@@ -256,8 +287,8 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
   if (b.v !== 1 || !Number.isInteger(b.paper) || !finiteIn(b.paper, 0, papers.length - 1) ||
       !validText(b.to, 40) || !validText(b.from, 40) || !validText(b.message, 280, true) || !Array.isArray(b.stems) || b.stems.length > MAX_STEMS) return null;
   if (strict) {
-    if (Object.keys(b).some(k => !["v", "stems", "paper", "to", "from", "message", "photos", "vessel", "print", "printOpacity", "wrapScale", "wrapAngle", "stemFlower", "background", "border"].includes(k))) return null;
-    for (const [key, max] of [["vessel", vessels.length - 1], ["print", prints.length - 1], ["stemFlower", flowers.length - 1], ["background", backgrounds.length - 1], ["border", borders.length - 1]] as const) {
+    if (Object.keys(b).some(k => !["v", "stems", "paper", "to", "from", "message", "photos", "vessel", "print", "printOpacity", "wrapScale", "wrapAngle", "stemFlower", "background", "border", "notePaper", "lettering"].includes(k))) return null;
+    for (const [key, max] of [["vessel", vessels.length - 1], ["print", prints.length - 1], ["stemFlower", flowers.length - 1], ["background", backgrounds.length - 1], ["border", borders.length - 1], ["notePaper", notePapers.length - 1], ["lettering", letterings.length - 1]] as const) {
       if (b[key] !== undefined && (!Number.isInteger(b[key]) || !finiteIn(b[key], 0, max))) return null;
     }
     if (b.printOpacity !== undefined && !finiteIn(b.printOpacity, 0, 100) || b.wrapScale !== undefined && !finiteIn(b.wrapScale, .75, 1.3) || b.wrapAngle !== undefined && !finiteIn(b.wrapAngle, -20, 20)) return null;
@@ -302,6 +333,8 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
   const stemFlower = Number.isInteger(b.stemFlower) && finiteIn(b.stemFlower, 0, flowers.length - 1) ? b.stemFlower as number : undefined;
   const background = Number.isInteger(b.background) && finiteIn(b.background, 0, backgrounds.length - 1) ? b.background as number : 0;
   const border = Number.isInteger(b.border) && finiteIn(b.border, 0, borders.length - 1) ? b.border as number : 0;
+  const notePaper = Number.isInteger(b.notePaper) && finiteIn(b.notePaper, 0, notePapers.length - 1) ? b.notePaper as number : 0;
+  const lettering = Number.isInteger(b.lettering) && finiteIn(b.lettering, 0, letterings.length - 1) ? b.lettering as number : 0;
   return {
     v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message,
     ...(photos.length ? { photos } : {}),
@@ -310,6 +343,7 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
     ...(print && printOpacity !== DEFAULT_PRINT_OPACITY ? { printOpacity } : {}),
     ...(wrapScale !== 1 ? { wrapScale } : {}), ...(wrapAngle !== 0 ? { wrapAngle } : {}),
     ...(stemFlower !== undefined ? { stemFlower } : {}),
+    ...(notePaper ? { notePaper } : {}), ...(lettering ? { lettering } : {}),
     ...(background ? { background } : {}), ...(border ? { border } : {}),
   };
 }
@@ -506,7 +540,8 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.fillStyle = colors.ink;
   ctx.font = '16px sans-serif';
   ctx.fillText("A LITTLE SOMETHING, JUST FOR YOU", WIDTH / 2, 42);
-  ctx.font = 'italic 32px Georgia, serif';
+  const lettering = letterings[bouquet.lettering ?? 0];
+  ctx.font = `${lettering.style} 40px ${lettering.family}`;
   ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 86, 620);
   ctx.save();
   ctx.beginPath(); ctx.rect(24, 112, WIDTH - 48, 775); ctx.clip();
@@ -594,12 +629,23 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   }
   ctx.restore();   // end shrink-to-fit
   ctx.restore();
-  ctx.fillStyle = "#ffffffcf";
-  ctx.beginPath(); ctx.roundRect(42, 903, WIDTH - 84, 166, 12); ctx.fill();
-  ctx.fillStyle = bouquet.background === 6 ? "#5b425c" : colors.ink;
-  let size = 23;
+  const note = notePapers[bouquet.notePaper ?? 0];
+  ctx.fillStyle = "#44332612";
+  ctx.beginPath(); ctx.roundRect(67, 909, WIDTH - 128, 166, 8); ctx.fill();
+  ctx.fillStyle = note.color;
+  ctx.beginPath(); ctx.roundRect(64, 903, WIDTH - 128, 166, 8); ctx.fill();
+  ctx.save(); ctx.strokeStyle = note.ink; ctx.globalAlpha = .15;
+  if (bouquet.notePaper === 4) {
+    for (let y = 937; y < 1040; y += 26) { ctx.beginPath(); ctx.moveTo(84, y); ctx.lineTo(WIDTH - 84, y); ctx.stroke(); }
+    ctx.strokeStyle = "#ad6974"; ctx.beginPath(); ctx.moveTo(105, 910); ctx.lineTo(105, 1062); ctx.stroke();
+  } else if (bouquet.notePaper === 1 || bouquet.notePaper === 5) {
+    ctx.strokeRect(73, 912, WIDTH - 146, 148);
+  }
+  ctx.restore();
+  ctx.fillStyle = note.ink;
+  let size = 30;
   let lines: string[] = [];
-  do { ctx.font = `italic ${size}px Georgia, serif`; lines = wrappedLines(ctx, bouquet.message, WIDTH - 144); if (lines.length * (size + 6) <= 100) break; size--; } while (size > 10);
+  do { ctx.font = `${lettering.style} ${size}px ${lettering.family}`; lines = wrappedLines(ctx, bouquet.message, WIDTH - 144); if (lines.length * (size + 6) <= 100) break; size--; } while (size > 10);
   const lineHeight = size + 6;
   lines.forEach((line, i) => ctx.fillText(line, WIDTH / 2, 927 + (100 - lines.length * lineHeight) / 2 + i * lineHeight + size));
   ctx.font = "16px sans-serif";
@@ -609,9 +655,36 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, 1098);
 }
 
-function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: string) {
+export function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: string) {
   if (!border) return;
   ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .5; ctx.lineWidth = 1.5;
+  if (border >= 6) {
+    if (border === 6 || border === 7) {
+      ctx.strokeStyle = border === 7 ? "#aa8850" : ink;
+      ctx.strokeRect(28, 28, WIDTH - 56, HEIGHT - 56);
+      for (const [x, y, rotation] of [[50, 50, .7], [WIDTH - 50, 50, -.7], [50, HEIGHT - 50, 2.4], [WIDTH - 50, HEIGHT - 50, -2.4]]) {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
+        ctx.fillStyle = ctx.strokeStyle;
+        motifSprig(ctx, border === 7 ? 22 : 32);
+        if (border === 7) { ctx.beginPath(); ctx.arc(0, 0, 35, 0, Math.PI * 2); ctx.stroke(); }
+        ctx.restore();
+      }
+    } else if (border === 8) {
+      ctx.strokeRect(34, 34, WIDTH - 68, HEIGHT - 68);
+      for (let n = 46; n < WIDTH - 40; n += 16) {
+        for (const y of [23, HEIGHT - 23]) { ctx.beginPath(); ctx.arc(n, y, 5, 0, Math.PI * 2); ctx.stroke(); }
+        for (const x of [23, WIDTH - 23]) { ctx.beginPath(); ctx.arc(x, n, 5, 0, Math.PI * 2); ctx.stroke(); }
+      }
+    } else if (border === 9) {
+      ctx.lineWidth = 5;
+      for (let n = 35; n < WIDTH - 35; n += 32) {
+        ctx.strokeStyle = n % 64 < 32 ? "#a9606b" : "#6c8296";
+        for (const y of [22, HEIGHT - 22]) { ctx.beginPath(); ctx.moveTo(n, y); ctx.lineTo(n + 12, y); ctx.stroke(); }
+        for (const x of [22, WIDTH - 22]) { ctx.beginPath(); ctx.moveTo(x, n); ctx.lineTo(x, n + 12); ctx.stroke(); }
+      }
+    } else { ctx.strokeRect(32, 32, WIDTH - 64, HEIGHT - 64); ctx.lineWidth = 3; ctx.strokeRect(39, 39, WIDTH - 78, HEIGHT - 78); }
+    ctx.restore(); return;
+  }
   if (border === 3) ctx.setLineDash([3, 7]);
   if (border === 4) {
     for (const [x, y, dx, dy] of [[20, 20, 1, 1], [WIDTH - 20, 20, -1, 1], [20, HEIGHT - 20, 1, -1], [WIDTH - 20, HEIGHT - 20, -1, -1]]) {
@@ -736,7 +809,22 @@ export function drawPrint(ctx: CanvasRenderingContext2D, index: number, opacity:
   ctx.save();
   ctx.globalAlpha = Math.max(0, Math.min(1, opacity / 100));
   ctx.fillStyle = ink; ctx.strokeStyle = ink;
-  if (print.kind === "pattern") drawPattern(ctx, print.name); else drawBorder(ctx, print.name);
+  if (print.kind === "texture") {
+    ctx.globalAlpha *= .3;
+    if (index === 9) {
+      for (let i = 0; i < 2200; i++) { const x = Math.abs(jitter(i + 1)) * WIDTH, y = Math.abs(jitter(i + 6000)) * HEIGHT; ctx.fillRect(x, y, 1.4, .7); }
+    } else if (index === 10) {
+      ctx.lineWidth = .35;
+      for (let n = 0; n < WIDTH; n += 7) { ctx.beginPath(); ctx.moveTo(n, 0); ctx.lineTo(n, HEIGHT); ctx.moveTo(0, n); ctx.lineTo(WIDTH, n); ctx.stroke(); }
+    } else {
+      for (const [x, y, r] of [[88, 140, -.5], [WIDTH - 90, HEIGHT - 250, 2.6]]) {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(r);
+        if (index === 12) motifSprig(ctx, 90);
+        else for (let i = 0; i < 7; i++) { ctx.rotate(Math.PI / 3.5); ctx.beginPath(); ctx.ellipse(45, 0, 85, 28, 0, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      }
+    }
+  } else if (print.kind === "pattern") drawPattern(ctx, print.name); else drawBorder(ctx, print.name);
   ctx.restore();
 }
 
