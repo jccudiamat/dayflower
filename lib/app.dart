@@ -9,6 +9,9 @@ import 'app_router.dart';
 import 'core/models/avatar_flower.dart';
 import 'core/services/app_notifications.dart';
 import 'core/services/partner_alerts.dart';
+import 'core/services/pulse_alerts.dart';
+import 'features/heartbeat/data/incoming_heartbeats.dart';
+import 'features/heartbeat/data/pulse_alert_prefs.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_prefs.dart';
@@ -50,6 +53,7 @@ class DayflowerApp extends ConsumerStatefulWidget {
 class _DayflowerAppState extends ConsumerState<DayflowerApp>
     with WidgetsBindingObserver {
   StreamSubscription<Uri?>? _widgetTaps;
+  final _incomingHeartbeats = IncomingHeartbeats();
 
   /// Whether the app is actually on screen.
   ///
@@ -92,8 +96,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       if (mounted) {
         _syncWidget(ref.read(widgetFlowerProvider));
         _syncReminders(ref.read(pairOpenRemindersProvider));
-        HeartbeatNudge.sync(
-            sentToday: ref.read(todayHeartbeatCountsProvider).mine > 0);
+        _syncHeartbeatNudge();
         ref.read(updateControllerProvider.notifier).check();
         _maybeAskForNotifications(ref.read(currentPairProvider));
       }
@@ -107,10 +110,14 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // immediately on the way back rather than up to a minute later.
     if (lifecycle == AppLifecycleState.resumed) {
       ref.read(presencePingerProvider).start();
+      // The hearts waiting in the shade have now been seen. Clears the
+      // notification and the running count behind it — see PulseAlerts.seen.
+      unawaited(PulseAlerts.seen());
       // Yesterday's mood is not today's. Checked on the way back in, which
       // is when a day has actually turned under somebody — see
       // MoodPrefs.refresh for why this is not a midnight timer.
       ref.read(moodProvider.notifier).refresh();
+      _syncHeartbeatNudge();
     } else {
       ref.read(presencePingerProvider).stop();
     }
@@ -293,20 +300,49 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       todayHeartbeatCountsProvider,
       (prev, counts) => _settled(() {
         _syncHeartbeat(prev, counts);
-        // Sending cancels today's nudge and arms tomorrow's; the count also
-        // drops back to zero at midnight, which re-arms today's.
-        if (prev?.mine != counts.mine) {
-          HeartbeatNudge.sync(sentToday: counts.mine > 0);
-        }
       }),
     );
+
+    // Listen to rows, not daily totals: loading or reconnecting isn't a tap.
+    ref.listen<AsyncValue<List<Heartbeat>>>(heartbeatsProvider, (_, next) {
+      _settled(() {
+        final pair = ref.read(currentPairProvider).valueOrNull;
+        final userId = ref.read(currentUserIdProvider);
+        final beats = ref.read(heartbeatsProvider).asData?.value;
+        if (pair?.isLinked != true || userId == null || beats == null) return;
+        final partnerId = pair!.partnerIdFor(userId);
+        if (partnerId == null) return;
+        final incoming = _incomingHeartbeats.take(
+          pairId: pair.id,
+          userId: userId,
+          partnerId: partnerId,
+          beats: beats,
+          now: DateTime.now(),
+        );
+        if (incoming > 0 && ref.read(pulseAlertsEnabledProvider)) {
+          unawaited(PulseAlerts.handleIncoming(
+            from: _partnerName,
+            pulses: incoming,
+            // ⚠️ Was never passed. Watching the home screen ripple and
+            // getting a tray notification about the ripple is the app
+            // telling you what you are looking at.
+            foreground: _foreground,
+          ));
+        }
+        _syncHeartbeatNudge();
+      });
+    });
 
     // The pair resolving is the cue to ask for notification permission —
     // and the post-frame read in initState covers the case where it had
     // already resolved before this listener existed.
     ref.listen<AsyncValue<Pair?>>(
       currentPairProvider,
-      (_, next) => _settled(() => _maybeAskForNotifications(next)),
+      (_, next) => _settled(() {
+        _maybeAskForNotifications(next);
+        _syncHeartbeatNudge();
+        if (next.valueOrNull?.isLinked != true) _incomingHeartbeats.reset();
+      }),
     );
 
     // A message or a photo landing while the app is in the background is
@@ -317,16 +353,14 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // reaches: a killed process hears nothing.
     ref.listen<AsyncValue<List<FlowerMessage>>>(
       flowerMessagesProvider,
-      (_, next) =>
-          _settled(() => _alertMessages(next.valueOrNull ?? const [])),
+      (_, next) => _settled(() => _alertMessages(next.valueOrNull ?? const [])),
     );
 
     // Same idea, quieter channel: a reminder set, a goal ticked off, half a
     // photo strip waiting on you.
     ref.listen<AsyncValue<List<Activity>>>(
       activityFeedProvider,
-      (_, next) =>
-          _settled(() => _alertActivity(next.valueOrNull ?? const [])),
+      (_, next) => _settled(() => _alertActivity(next.valueOrNull ?? const [])),
     );
 
     // Reminders my partner sets for me arrive over realtime and have to be
@@ -346,7 +380,8 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // the next reinstall rotated the token.
     ref.listen<String?>(currentUserIdProvider, (previous, userId) {
       if (userId != null && userId != previous) {
-        _settled(() => PushService.registerFor(ref.read(pushRepositoryProvider)));
+        _settled(
+            () => PushService.registerFor(ref.read(pushRepositoryProvider)));
       }
     });
 
@@ -605,6 +640,23 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // countdown frozen on the home screen counting to a date nobody has.
       happensAt: reunion?.happensAt,
     );
+  }
+
+  void _syncHeartbeatNudge() {
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    final beats = ref.read(heartbeatsProvider).asData?.value;
+    final userId = ref.read(currentUserIdProvider);
+    final now = DateTime.now();
+    final sentToday = beats?.any((beat) =>
+            beat.senderId == userId &&
+            beat.sentAt.year == now.year &&
+            beat.sentAt.month == now.month &&
+            beat.sentAt.day == now.day) ??
+        false;
+    unawaited(HeartbeatNudge.sync(
+      sentToday: sentToday,
+      eligible: pair?.isLinked == true && userId != null && beats != null,
+    ));
   }
 
   void _syncHeartbeat(

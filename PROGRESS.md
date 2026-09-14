@@ -3841,3 +3841,49 @@ both bubble sides, and a cold start that comes up dark with no flash.
 
 ⚠️ **Not published.** Build 68 was cut by the parallel session before any of
 this, so none of it is on either phone yet.
+
+## The heartbeat notification, made to mean one thing (2026-09-14)
+
+The home screen says what this feature is, in as many words: *"'Haptic'
+because that is the whole feature: the tap arrives on their phone as a
+buzz, not as a notification to read."* The implementation did not agree
+with it. Four faults, and together they made this the least sensible
+notification in the app.
+
+- 🔴 **It announced itself to people already watching it.** Every other
+  alert takes a `foreground` flag — `PartnerAlerts` spells out the rule,
+  that a heads-up over something you can see is the app telling you what
+  you are looking at — and this one never took one. You sat on the home
+  screen, the card rippled, your phone buzzed, *and* a notification
+  appeared saying "Open Dayflower", which was already open.
+- 🔴 **The count went down as more arrived.** `_notificationId` is reused
+  so a burst rewrites one row rather than stacking a column — but the copy
+  reported the size of the *latest batch*. Five taps said "5 heartbeats";
+  three more rewrote the same notification to **"3"**. It is now the total
+  since you last had the app open.
+- 🔴 **A burst was a jackhammer.** `onlyAlertOnce: false` with a reused id
+  meant ten taps were ten rounds of lub-dub and ten buzzes. There is a
+  30-second floor now: inside it the count still climbs, silently.
+  ⚠️ `onlyAlertOnce` is the flag that does this, not `playSound` — from
+  Android 8 the channel owns the sound and a per-notification `playSound`
+  is ignored on an update.
+- 🔴 **Nothing ever cleared it.** You opened the app, watched the hearts
+  land, and "Wifey sent you 3 heartbeats" stayed in the shade until you
+  swiped it — and the next tap counted from one again underneath a
+  notification you had already read. Resume calls `PulseAlerts.seen()`.
+
+The net: a buzz when you are in the app, a buzz **and** a notification when
+you are not — which is the only case where "Open Dayflower to send one
+back" was ever a sensible thing to read.
+
+- ⚠️ **In the app but on another tab, you get a buzz and no visual.** The
+  ripple only lives on the Home card. That is the feature working as
+  named, but it is the one case worth revisiting.
+- ⚠️ **A killed app still misses the pulse entirely, and that is on
+  purpose.** 0031 excluded heartbeats from the push trigger with numbers —
+  316 heartbeat rows against 124 messages for the one real pair — and left
+  the condition for changing its mind: *debounce to at most one per pair
+  per hour*. Turning it on needs a `heartbeat` kind in the edge function
+  and a redeploy, so it is a decision with a cost attached, not a fix.
+
+360 tests pass.

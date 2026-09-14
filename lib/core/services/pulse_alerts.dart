@@ -1,13 +1,14 @@
-import 'dart:math';
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 
 import 'app_notifications.dart';
 
 /// Vibration + sound + notification for an incoming heartbeat.
+///
+/// ⚠️ **This is the love-tap heartbeat, not presence.** `features/presence`
+/// pings once a minute and nobody is ever told about it; see the note at the
+/// top of its repository.
 ///
 /// There is no push backend — this only fires while the app is alive (
 /// foreground or backgrounded) and the Supabase realtime stream is connected.
@@ -25,25 +26,24 @@ class PulseAlerts {
   static const _channelId = 'heartbeat_pulse_v1';
   static const _notificationId = 4201;
 
-  static const _kLastLine = 'pulse_alert_last_line';
-
-  /// Written as if it were them talking, because that's what a heartbeat is
-  /// standing in for. Kept short — this has to read well on a lock screen.
-  static const messages = <String>[
-    'I miss you 💗',
-    'Thinking of you',
-    'Wish you were here',
-    "You're on my mind",
-    'Miss you like crazy',
-    'Just thinking about us',
-    'Sending you a squeeze',
-    'Counting down to seeing you',
-    'Hope your day is being kind to you',
-    'Nothing important — just you',
-  ];
-
   static final _plugin = AppNotifications.plugin;
-  static final _random = Random();
+
+  static ({String title, String body}) copy({
+    required String from,
+    required int pulses,
+  }) {
+    final name = from.trim().isEmpty ? 'Your partner' : from.trim();
+    return (
+      title: pulses == 1
+          ? '$name sent you a heartbeat 💗'
+          : '$name sent you $pulses heartbeats 💗',
+      // Only ever read by somebody who does *not* have the app in front of
+      // them — see handleIncoming. It used to be shown to people staring at
+      // the home screen, where "Open Dayflower" is nonsense.
+      body: 'Open Dayflower to send one back.',
+    );
+  }
+
   static bool _initialised = false;
 
   /// Vibration + local notifications only exist on the phones. Everywhere else
@@ -113,44 +113,80 @@ class PulseAlerts {
     }
   }
 
-  /// Handles [pulses] heartbeats that just arrived from [from].
+  /// How long before a burst is allowed to make noise again.
   ///
-  /// ⚠️ **Every one of them alerts.** There used to be a cooldown here — a
-  /// second heartbeat inside ten minutes rewrote the notification silently
-  /// with a running count — and a setting to choose the window. It is gone:
-  /// a heartbeat is one tap that means one thing, and a person who has asked
-  /// to feel them has asked to feel all of them. Deciding on their behalf
-  /// that the fourth one in an hour was not worth a buzz was answering a
-  /// question they had already answered.
+  /// 🔴 A heart is one tap and people send them in fives. The id is reused
+  /// so the text updates in place, but every rewrite re-sounded and
+  /// re-buzzed — ten taps was ten rounds of lub-dub for the gentlest thing
+  /// in the app. Inside this window the count still climbs; the phone just
+  /// stays quiet about it.
+  static const reAlertAfter = Duration(seconds: 30);
+
+  /// Taps that have landed since the app was last in front of you.
   ///
-  /// The single switch in Settings is the whole choice: all of them, or none.
+  /// 🔴 Cumulative, because [_notificationId] is reused. Reporting the size
+  /// of the latest batch meant five taps said "5 heartbeats" and the next
+  /// three **rewrote the same notification to "3"** — the number fell while
+  /// more were arriving.
+  static int _waiting = 0;
+  static DateTime? _lastAlertAt;
+
+  @visibleForTesting
+  static int get waiting => _waiting;
+
+  /// One alert per incoming batch, with factual copy and no invented message.
+  ///
+  /// [foreground] is the app being on screen right now.
   static Future<void> handleIncoming({
     required String from,
     required int pulses,
+    required bool foreground,
+    DateTime? now,
   }) async {
     if (!supported || pulses <= 0) return;
     await init();
 
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final line = _pickLine(prefs.getString(_kLastLine));
-      await prefs.setString(_kLastLine, line);
-      await Future.wait([
-        _vibrate(),
-        // More than one when several land in the same realtime batch, which
-        // is a burst of taps rather than a burst of notifications.
-        _notify(from: from, line: line, extra: pulses - 1),
-      ]);
-    } catch (e) {
-      debugPrint('pulse alert failed: $e');
+    // 🔴 Buzz, but post nothing. The home screen is already rippling and
+    // the phone is in their hand; a tray entry is the app telling somebody
+    // about something they are watching happen. Every other alert in this
+    // app takes a `foreground` flag for exactly this reason — PartnerAlerts
+    // says it in as many words — and this one simply never did.
+    //
+    // ⚠️ The sound goes with it: it comes from the notification channel,
+    // there being no audio player in the project. The lub-dub is still in
+    // your hand, which is where a heartbeat belongs.
+    if (foreground) {
+      await _vibrate();
+      return;
     }
+
+    _waiting += pulses;
+    final clock = now ?? DateTime.now();
+    final loud =
+        _lastAlertAt == null || clock.difference(_lastAlertAt!) >= reAlertAfter;
+    if (loud) _lastAlertAt = clock;
+
+    await Future.wait([
+      if (loud) _vibrate(),
+      _notify(from: from, pulses: _waiting, loud: loud),
+    ]);
   }
 
-  /// Never the same line twice running — repetition is what makes a canned
-  /// message feel canned.
-  static String _pickLine(String? previous) {
-    final pool = messages.where((m) => m != previous).toList();
-    return pool[_random.nextInt(pool.length)];
+  /// They have been seen — the app is open.
+  ///
+  /// 🔴 Nothing used to do this. You opened Dayflower, watched the hearts
+  /// land, and "Wifey sent you 3 heartbeats" sat in the shade until you
+  /// swiped it away — and the next tap counted from one again underneath a
+  /// notification you had already read.
+  static Future<void> seen() async {
+    _waiting = 0;
+    _lastAlertAt = null;
+    if (!supported) return;
+    try {
+      await _plugin.cancel(id: _notificationId);
+    } catch (e) {
+      debugPrint('pulse notification cancel failed: $e');
+    }
   }
 
   static Future<void> _vibrate() async {
@@ -168,34 +204,38 @@ class PulseAlerts {
 
   static Future<void> _notify({
     required String from,
-    required String line,
-    required int extra,
+    required int pulses,
+    required bool loud,
   }) async {
-    final body = extra > 0 ? '$line  ·  +$extra more' : line;
+    final text = copy(from: from, pulses: pulses);
     try {
       await _plugin.show(
         id: _notificationId, // reused, so a burst rewrites one notification
-        title: '$from sent you a heartbeat 💗',
-        body: body,
-        notificationDetails: const NotificationDetails(
+        title: text.title,
+        body: text.body,
+        payload: AppNotifications.payloadForRoute('/app/home'),
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
             'Heartbeats',
             channelDescription: "Your partner's pulses.",
             importance: Importance.high,
             priority: Priority.high,
-            sound: RawResourceAndroidNotificationSound('heartbeat'),
+            sound: const RawResourceAndroidNotificationSound('heartbeat'),
+            playSound: loud,
             enableVibration: false,
             category: AndroidNotificationCategory.message,
-            // ⚠️ Deliberately not onlyAlertOnce. The id is reused so a
-            // burst rewrites one notification rather than stacking a
-            // column of them — but each rewrite still sounds, because
-            // each one is a heartbeat that was actually sent.
-            onlyAlertOnce: false,
+            // ⚠️ **`onlyAlertOnce` is the load-bearing one here, not
+            // `playSound`.** From Android 8 the channel owns the sound, and
+            // a per-notification `playSound: false` is ignored on an update
+            // — `onlyAlertOnce` is what actually stops Android
+            // re-announcing a notification it has already announced.
+            // `playSound` still covers the phones below that.
+            onlyAlertOnce: !loud,
           ),
           // No custom sound on iOS: the file would have to be added to the
           // Runner target in Xcode, which hasn't been done. Default chime.
-          iOS: DarwinNotificationDetails(presentSound: true),
+          iOS: DarwinNotificationDetails(presentSound: loud),
         ),
       );
     } catch (e) {

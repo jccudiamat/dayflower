@@ -34,8 +34,8 @@ void main() {
       // The gradient is the one thing on screen that says "Dayflower". A
       // brand that changes colour when the lights go out is not a brand.
       AppColors.use(AppMode.light);
-      final brand = AppColors.brand;
-      final pink = AppColors.gradientPink;
+      const brand = AppColors.brand;
+      const pink = AppColors.gradientPink;
       AppColors.use(AppMode.dark);
       expect(AppColors.brand, brand);
       expect(AppColors.gradientPink, pink);
