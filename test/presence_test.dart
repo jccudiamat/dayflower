@@ -71,7 +71,7 @@ void main() {
   test('the beat is well inside the window it has to keep alive', () {
     // 🔴 If these ever cross, a phone that is plainly in use blinks offline
     // between beats. The window must leave room for one missed beat.
-    expect(beatEvery * 2, lessThanOrEqualTo(activeWindow));
+    expect(pingEvery * 2, lessThanOrEqualTo(activeWindow));
   });
 
   /// What a beat is allowed to mean.
@@ -84,15 +84,15 @@ void main() {
         shouldClaimPresence(
             signedIn: signedIn, onWeb: onWeb, deviceAwake: awake);
 
-    test('a phone that is awake and signed in beats', () {
+    test('a phone that is awake and signed in pings', () {
       expect(claim(), isTrue);
     });
 
-    test('a browser tab never beats, however alive it looks', () {
+    test('a browser tab never pings, however alive it looks', () {
       // 🔴 A dev preview signed in as the test partner reported "Active
       // now" for nineteen hours after its server was stopped: the page
       // was still loaded, and browsers throttle a hidden tab's timers to
-      // about once a minute — which is exactly beatEvery, so it never
+      // about once a minute — which is exactly pingEvery, so it never
       // looked idle either.
       expect(claim(onWeb: true), isFalse);
       expect(claim(onWeb: true, awake: true, signedIn: true), isFalse);
@@ -110,7 +110,7 @@ void main() {
       expect(claim(signedIn: false), isFalse);
     });
 
-    test('every reason to stay quiet outranks every reason to beat', () {
+    test('every reason to stay quiet outranks every reason to ping', () {
       // The rule is an AND, not a vote: one "no" is the answer.
       expect(claim(signedIn: false, onWeb: true, awake: false), isFalse);
       expect(claim(signedIn: true, onWeb: true, awake: false), isFalse);

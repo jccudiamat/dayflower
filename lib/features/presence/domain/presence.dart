@@ -1,24 +1,24 @@
 import 'package:intl/intl.dart';
 
-/// How recent a heartbeat has to be to count as "now".
+/// How recent a ping has to be to count as "now".
 ///
-/// The app beats once a minute, so anything inside two minutes is someone
-/// who is holding their phone. Tighter than that and a missed beat on a bad
+/// The app pings once a minute, so anything inside two minutes is someone
+/// who is holding their phone. Tighter than that and a missed ping on a bad
 /// connection would flicker them offline while they are typing to you.
 const activeWindow = Duration(minutes: 2);
 
 /// How often a phone says it is here.
 ///
 /// 🔴 Must stay well inside [activeWindow] — at least twice as often, so one
-/// beat lost to a bad connection does not blink somebody offline while they
+/// ping lost to a bad connection does not blink somebody offline while they
 /// are typing to you. Pinned by a test, because the two numbers live one
 /// line apart and will still drift.
-const beatEvery = Duration(minutes: 1);
+const pingEvery = Duration(minutes: 1);
 
 /// The one line under their name in the chat header.
 ///
 /// Null means say nothing at all. That is the honest answer to a partner on
-/// a build that has never written a heartbeat, and it is a better header
+/// a build that has never written a ping, and it is a better header
 /// than "Active a long time ago" — which reads as a fact when it is really
 /// an absence of one.
 ///
@@ -56,17 +56,17 @@ String? activeLabel(DateTime? lastActive, {DateTime? now}) {
 /// Whether this device may claim its owner is in the app right now.
 ///
 /// 🔴 "The app is running" and "a person is in the app" are different
-/// claims, and the heartbeat used to make the first one while the header
+/// claims, and the ping used to make the first one while the header
 /// said the second. Two ways they came apart, both seen:
 ///
 ///  - **A browser tab.** The dev preview signs in as a real account, and a
 ///    hidden tab keeps its timers alive; browsers throttle background
-///    timers to about once a minute, which is exactly [beatEvery]. A
+///    timers to about once a minute, which is exactly [pingEvery]. A
 ///    preview left open on a desktop reported a partner as "Active now"
 ///    for nineteen hours after its server had been stopped.
 ///  - **A phone that rang.** MainActivity is `showWhenLocked`, and an
 ///    incoming call or a ringing reminder launches it with a full-screen
-///    intent — so the app came up, beat, and told the caller their partner
+///    intent — so the app came up, pinged, and told the caller their partner
 ///    was active, when what actually happened is that their partner's
 ///    phone lit up on a bedside table. Calling somebody made them look
 ///    present, which is worse than saying nothing.

@@ -78,7 +78,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // "Active now" in the chat header. Started here rather than by the chat
     // screen: being active means having the app open, not having this one
     // screen open, and a partner reading your photos is plainly around.
-    ref.read(heartbeatProvider).start();
+    ref.read(presencePingerProvider).start();
     // Native tells us when the floating window opens and closes.
     wirePipMode(ref);
     _wireWidgetLaunches();
@@ -101,16 +101,16 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState lifecycle) {
     _lifecycle = lifecycle;
-    // Stop claiming to be here the moment the app leaves the screen, and beat
+    // Stop claiming to be here the moment the app leaves the screen, and ping
     // immediately on the way back rather than up to a minute later.
     if (lifecycle == AppLifecycleState.resumed) {
-      ref.read(heartbeatProvider).start();
+      ref.read(presencePingerProvider).start();
       // Yesterday's mood is not today's. Checked on the way back in, which
       // is when a day has actually turned under somebody — see
       // MoodPrefs.refresh for why this is not a midnight timer.
       ref.read(moodProvider.notifier).refresh();
     } else {
-      ref.read(heartbeatProvider).stop();
+      ref.read(presencePingerProvider).stop();
     }
     // Throttled inside the controller — coming back to the app twenty times
     // an hour must not mean twenty manifest fetches.

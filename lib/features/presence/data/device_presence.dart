@@ -42,7 +42,7 @@ class DevicePresence {
   }
 }
 
-/// The seam the heartbeat asks through, so a test can answer for it.
+/// The seam the pinger asks through, so a test can answer for it.
 typedef DeviceAwakeCheck = Future<bool> Function();
 
 final deviceAwakeProvider = Provider<DeviceAwakeCheck>(

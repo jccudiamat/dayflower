@@ -11,6 +11,12 @@ import 'device_presence.dart';
 
 /// Who is around, and when they last were.
 ///
+/// ⚠️ Nothing here is a *heartbeat*, and the word is avoided on purpose.
+/// `features/heartbeat` is the other thing entirely — the heart you tap to
+/// make their phone buzz. This is a silent once-a-minute ping nobody sees.
+/// The two classes were both called `Heartbeat`, both imported by app.dart,
+/// and only compiled because neither was named there.
+///
 /// See migration 0043 for why this is its own table and not a column on
 /// `users`: a once-a-minute write to a row that is in the realtime
 /// publication would push the whole profile to the other phone every minute
@@ -21,7 +27,7 @@ class PresenceRepository {
   final SupabaseClient _client;
 
   /// Records that this person is using the app, right now.
-  Future<void> beat(String userId) async {
+  Future<void> markActive(String userId) async {
     await _client.from('presence').upsert(
       {
         'user_id': userId,
@@ -75,19 +81,19 @@ final partnerLastActiveProvider =
   }
 });
 
-/// Beats while somebody is actually in the app.
+/// Pings while somebody is actually in the app.
 ///
 /// Owned by the root widget rather than by the chat screen: "active" has to
 /// mean using the app, not sitting on this one screen, or the header would
 /// say a partner who is looking at your photos is not there.
 ///
-/// ⚠️ Being resumed is necessary and **not sufficient** — every beat is
+/// ⚠️ Being resumed is necessary and **not sufficient** — every ping is
 /// gated on [shouldClaimPresence], which is where the two ways this lied
 /// are written down. The timer deliberately keeps running through a refused
-/// beat rather than stopping: unlocking the phone raises no lifecycle event
+/// ping rather than stopping: unlocking the phone raises no lifecycle event
 /// to restart it, so the next tick has to be the thing that notices.
-class Heartbeat {
-  Heartbeat(this._ref);
+class PresencePinger {
+  PresencePinger(this._ref);
 
   final Ref _ref;
   Timer? _timer;
@@ -96,20 +102,20 @@ class Heartbeat {
   /// twenty timers running.
   void start() {
     if (_timer != null) return;
-    _beat();
-    _timer = Timer.periodic(beatEvery, (_) => _beat());
+    _ping();
+    _timer = Timer.periodic(pingEvery, (_) => _ping());
   }
 
-  /// One beat, now. The whole of [start] minus the timer, for tests.
+  /// One ping, now. The whole of [start] minus the timer, for tests.
   @visibleForTesting
-  Future<void> beatNow() => _beat();
+  Future<void> pingNow() => _ping();
 
   void stop() {
     _timer?.cancel();
     _timer = null;
   }
 
-  Future<void> _beat() async {
+  Future<void> _ping() async {
     final userId = _ref.read(currentUserIdProvider);
     final awake = await _ref.read(deviceAwakeProvider)();
     if (!shouldClaimPresence(
@@ -120,16 +126,16 @@ class Heartbeat {
       return;
     }
     try {
-      await _ref.read(presenceRepositoryProvider).beat(userId!);
+      await _ref.read(presenceRepositoryProvider).markActive(userId!);
     } catch (_) {
-      // A missed beat costs one minute of accuracy on a header. It is never
-      // worth an error in front of somebody, and the next beat fixes it.
+      // A missed ping costs one minute of accuracy on a header. It is never
+      // worth an error in front of somebody, and the next one fixes it.
     }
   }
 }
 
-final heartbeatProvider = Provider<Heartbeat>((ref) {
-  final beat = Heartbeat(ref);
-  ref.onDispose(beat.stop);
-  return beat;
+final presencePingerProvider = Provider<PresencePinger>((ref) {
+  final pinger = PresencePinger(ref);
+  ref.onDispose(pinger.stop);
+  return pinger;
 });

@@ -15,10 +15,10 @@ import 'package:flutter_test/flutter_test.dart';
 /// Stands in for the table, so a refused beat is visibly a write that never
 /// happened rather than one that failed.
 class Recorder implements PresenceRepository {
-  final beats = <String>[];
+  final pings = <String>[];
 
   @override
-  Future<void> beat(String userId) async => beats.add(userId);
+  Future<void> markActive(String userId) async => pings.add(userId);
 
   @override
   Future<DateTime?> lastActive(String userId) async => null;
@@ -36,13 +36,13 @@ ProviderContainer containerWith(
     ]);
 
 void main() {
-  test('an awake phone with a session writes a beat', () async {
+  test('an awake phone with a session writes a ping', () async {
     final repo = Recorder();
     final container = containerWith(repo);
     addTearDown(container.dispose);
 
-    await container.read(heartbeatProvider).beatNow();
-    expect(repo.beats, ['u1']);
+    await container.read(presencePingerProvider).pingNow();
+    expect(repo.pings, ['u1']);
   });
 
   test('a phone that only lit up for a notification writes nothing', () async {
@@ -53,38 +53,38 @@ void main() {
     final container = containerWith(repo, awake: false);
     addTearDown(container.dispose);
 
-    await container.read(heartbeatProvider).beatNow();
-    expect(repo.beats, isEmpty);
+    await container.read(presencePingerProvider).pingNow();
+    expect(repo.pings, isEmpty);
   });
 
-  test('no session, no beat', () async {
+  test('no session, no ping', () async {
     final repo = Recorder();
     final container = containerWith(repo, userId: null);
     addTearDown(container.dispose);
 
-    await container.read(heartbeatProvider).beatNow();
-    expect(repo.beats, isEmpty);
+    await container.read(presencePingerProvider).pingNow();
+    expect(repo.pings, isEmpty);
   });
 
-  test('the timer keeps going after a refused beat', () async {
+  test('the timer keeps going after a refused ping', () async {
     // ⚠️ Unlocking a phone raises no lifecycle event, so nothing calls
     // start() again. If a refusal stopped the timer, a phone that rang at
     // 3am would stay silent until the app was next reopened by hand.
     final repo = Recorder();
     final container = containerWith(repo, awake: false);
     addTearDown(container.dispose);
-    final heart = container.read(heartbeatProvider);
+    final heart = container.read(presencePingerProvider);
 
     heart.start();
-    await heart.beatNow();
-    expect(repo.beats, isEmpty);
+    await heart.pingNow();
+    expect(repo.pings, isEmpty);
 
     heart.stop();
     // Restarting is the same object, and it beats again once the answer
     // changes — the gate is asked per beat, not once at start.
     final awake = containerWith(repo);
     addTearDown(awake.dispose);
-    await awake.read(heartbeatProvider).beatNow();
-    expect(repo.beats, ['u1']);
+    await awake.read(presencePingerProvider).pingNow();
+    expect(repo.pings, ['u1']);
   });
 }
