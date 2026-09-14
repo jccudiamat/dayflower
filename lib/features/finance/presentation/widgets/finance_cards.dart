@@ -18,6 +18,8 @@
 /// with one option pretending to be a picker.
 library;
 
+import 'package:dayflower/core/widgets/app_icon.dart';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -192,7 +194,7 @@ class _AddCard extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(CupertinoIcons.add,
+                const AppIcon(CupertinoIcons.add,
                     size: 20, color: AppColors.secondary),
                 const SizedBox(height: 4),
                 Text('Add', style: AppText.caption(AppColors.secondary)),
@@ -326,7 +328,7 @@ class _DeltaChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
+          AppIcon(
             down ? CupertinoIcons.arrow_down : CupertinoIcons.arrow_up,
             size: 11,
             color: down ? AppColors.success : AppColors.brandLight,

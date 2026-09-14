@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 
 import '../theme/app_colors.dart';
@@ -37,7 +38,7 @@ class AppErrorNotice extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(CupertinoIcons.exclamationmark_triangle,
+          const AppIcon(CupertinoIcons.exclamationmark_triangle,
               size: 16, color: AppColors.danger),
           const SizedBox(width: AppSpace.xs),
           Expanded(

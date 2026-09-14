@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -420,7 +421,7 @@ class _FailureView extends ConsumerWidget {
                 ),
               ),
               alignment: Alignment.center,
-              child: const Icon(
+              child: const AppIcon(
                 CupertinoIcons.exclamationmark_triangle_fill,
                 color: AppColors.danger,
                 size: 30,
@@ -658,7 +659,7 @@ class _CallHeader extends StatelessWidget {
                     shape: BoxShape.circle,
                     color: AppColors.darkCanvas.withValues(alpha: .5),
                   ),
-                  child: const Icon(
+                  child: const AppIcon(
                     CupertinoIcons.chevron_back,
                     size: 20,
                     color: AppColors.onDark,
@@ -950,7 +951,7 @@ class _SelfViewState extends State<_SelfView> {
                 // An eye, deliberately — this hides the *view*, it does
                 // not turn the camera off. A camera glyph here would read
                 // as a second, contradictory camera button.
-                child: const Icon(
+                child: const AppIcon(
                   CupertinoIcons.eye_slash_fill,
                   size: 14,
                   color: AppColors.onDark,
@@ -999,7 +1000,7 @@ class _SelfViewState extends State<_SelfView> {
           border: Border.all(color: AppColors.onDark.withValues(alpha: .18)),
         ),
         alignment: Alignment.center,
-        child: const Icon(
+        child: const AppIcon(
           CupertinoIcons.eye_fill,
           size: 20,
           color: AppColors.onDark,
@@ -1038,7 +1039,7 @@ class _TileButton extends StatelessWidget {
             color: AppColors.darkCanvas.withValues(alpha: enabled ? .6 : .3),
           ),
           alignment: Alignment.center,
-          child: Icon(
+          child: AppIcon(
             icon,
             size: 14,
             color: AppColors.onDark.withValues(alpha: enabled ? 1 : .4),
@@ -1191,7 +1192,7 @@ class _ControlButton extends StatelessWidget {
             // the glyph off-centre even inside a Center.
             alignment: Alignment.center,
             child: emoji == null
-                ? Icon(icon, color: foreground, size: 22)
+                ? AppIcon(icon, color: foreground, size: 22)
                 : Text(
                     emoji!,
                     textAlign: TextAlign.center,
@@ -1238,7 +1239,7 @@ class _AnswerButton extends StatelessWidget {
                 gradient: gradient,
                 boxShadow: gradient != null ? AppElevation.glow : null,
               ),
-              child: Icon(icon, color: Colors.white, size: 27),
+              child: AppIcon(icon, color: Colors.white, size: 27),
             ),
             const SizedBox(height: AppSpace.xs),
             Text(label, style: AppText.caption(AppColors.onDarkMuted)),

@@ -1,16 +1,18 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/services/legal_links.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/otp_field.dart';
 import '../../domain/auth_notifier.dart';
 
 /// Option-A style auth card: email + password, forgot-password (code based),
-/// create-account toggle, reserved social buttons.
+/// create-account toggle, and working legal links.
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
 
@@ -47,8 +49,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           child: Center(
             child: SingleChildScrollView(
               padding: AppSpace.screen,
-              keyboardDismissBehavior:
-                  ScrollViewKeyboardDismissBehavior.onDrag,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               child: Container(
                 padding: const EdgeInsets.all(AppSpace.md),
                 decoration: BoxDecoration(
@@ -94,7 +95,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ],
         ),
         const SizedBox(height: AppSpace.md),
-
         _IconField(
           controller: _emailController,
           hint: 'Email address',
@@ -111,16 +111,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               notifier.submit(_emailController.text, _passwordController.text),
           trailing: IconButton(
             onPressed: () => setState(() => _obscure = !_obscure),
-            icon: Icon(
-              _obscure
-                  ? CupertinoIcons.eye_slash
-                  : CupertinoIcons.eye,
+            icon: AppIcon(
+              _obscure ? CupertinoIcons.eye_slash : CupertinoIcons.eye,
               size: 20,
               color: AppColors.muted,
             ),
           ),
         ),
-
         if (isSignIn) ...[
           const SizedBox(height: AppSpace.xs),
           GestureDetector(
@@ -132,12 +129,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ],
-
         if (auth.errorMessage != null) ...[
           const SizedBox(height: AppSpace.sm),
           _Banner(message: auth.errorMessage!, danger: true),
         ],
-
         const SizedBox(height: AppSpace.sm),
         GradientButton(
           label: isSignIn ? 'Login' : 'Create Account',
@@ -145,49 +140,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           onPressed: () =>
               notifier.submit(_emailController.text, _passwordController.text),
         ),
-
-        const SizedBox(height: AppSpace.sm),
-        Row(
-          children: [
-            const Expanded(child: Divider()),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text('or', style: AppText.caption()),
-            ),
-            const Expanded(child: Divider()),
-          ],
-        ),
-        const SizedBox(height: AppSpace.sm),
-
-        _SocialButton(
-          label: 'Continue with Google',
-          icon: _GoogleGlyph(),
-          onTap: _comingSoon,
-        ),
-        const SizedBox(height: AppSpace.xs),
-        _SocialButton(
-          label: 'Continue with Facebook',
-          icon: const Icon(
-            Icons.facebook,
-            size: 22,
-            color: Color(0xFF1877F2),
-          ),
-          onTap: _comingSoon,
-        ),
-        const SizedBox(height: AppSpace.xs),
-        _SocialButton(
-          label: 'Continue with Apple',
-          icon: const Icon(Icons.apple, size: 22, color: AppColors.ink),
-          onTap: _comingSoon,
-        ),
-
         const SizedBox(height: AppSpace.sm),
         Center(
-          child: Text(
-            'By continuing you agree to our Terms & Privacy Policy',
-            textAlign: TextAlign.center,
-            style: AppText.caption().copyWith(fontSize: 11),
-          ),
+          child: Column(children: [
+            Text('By continuing you agree to our', style: AppText.caption()),
+            Wrap(alignment: WrapAlignment.center, children: [
+              TextButton(
+                  onPressed: () => openLegalPage(context, ref, LegalPage.terms),
+                  child: const Text('Terms of Service')),
+              TextButton(
+                  onPressed: () =>
+                      openLegalPage(context, ref, LegalPage.privacy),
+                  child: const Text('Privacy Policy')),
+            ]),
+          ]),
         ),
       ],
     );
@@ -201,7 +167,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       children: [
         GestureDetector(
           onTap: notifier.backToForm,
-          child: const Icon(
+          child: AppIcon(
             CupertinoIcons.chevron_back,
             color: AppColors.muted,
           ),
@@ -250,12 +216,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ],
     );
   }
-
-  void _comingSoon() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Coming soon — email works great for now 🌷')),
-    );
-  }
 }
 
 /* ── Field with leading icon (option A style) ────── */
@@ -289,76 +249,8 @@ class _IconField extends StatelessWidget {
       style: AppText.body(AppColors.ink),
       decoration: InputDecoration(
         hintText: hint,
-        prefixIcon: Icon(icon, size: 20, color: AppColors.muted),
+        prefixIcon: AppIcon(icon, size: 20, color: AppColors.muted),
         suffixIcon: trailing,
-      ),
-    );
-  }
-}
-
-/* ── Social button (reserved) ────────────────────── */
-class _SocialButton extends StatelessWidget {
-  const _SocialButton({
-    required this.label,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final Widget icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-        onTap: onTap,
-        child: Container(
-          height: 48,
-          decoration: BoxDecoration(
-            color: AppColors.background,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              icon,
-              const SizedBox(width: AppSpace.xs),
-              Text(
-                label,
-                style:
-                    AppText.body(AppColors.ink).copyWith(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Simple neutral "G" glyph — replaced with the real logo asset when
-/// Google sign-in is actually configured.
-class _GoogleGlyph extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 22,
-      height: 22,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Text(
-        'G',
-        style: AppText.caption(AppColors.ink).copyWith(
-          fontWeight: FontWeight.w700,
-          fontSize: 13,
-        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -38,7 +39,7 @@ class _MonthsaryEnvelopeState extends ConsumerState<MonthsaryEnvelope> {
       clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         Align(alignment: Alignment.centerRight, child: IconButton(
-          tooltip: 'Close greeting', onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close))),
+          tooltip: 'Close greeting', onPressed: () => Navigator.pop(context), icon: const AppIcon(Icons.close))),
         if (card['artwork'] == 'monthsary_53')
           Semantics(label: card['title'] as String, image: true,
             child: Image.asset('assets/images/monthsary_53.png', excludeFromSemantics: true)),
@@ -74,8 +75,8 @@ class _MonthsaryEnvelopeState extends ConsumerState<MonthsaryEnvelope> {
         padding: const EdgeInsets.all(20),
         child: Row(children: [
           Stack(alignment: Alignment.center, children: [
-            Icon(_opened ? Icons.drafts_rounded : Icons.mail_rounded, size: 66, color: const Color(0xffe7a0b4)),
-            const Icon(Icons.favorite_rounded, size: 23, color: Color(0xffae3457)),
+            AppIcon(_opened ? Icons.drafts_rounded : Icons.mail_rounded, size: 66, color: const Color(0xffe7a0b4)),
+            const AppIcon(Icons.favorite_rounded, size: 23, color: Color(0xffae3457)),
           ]),
           const SizedBox(width: 16),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -85,7 +86,7 @@ class _MonthsaryEnvelopeState extends ConsumerState<MonthsaryEnvelope> {
             Text(_opened ? 'Open our greeting again' : 'Our 53rd monthsary • Tap to open',
               style: const TextStyle(fontSize: 13, height: 1.4, color: Color(0xff743441))),
           ])),
-          if (!_opened) const Padding(padding: EdgeInsets.only(left: 8), child: Icon(Icons.circle, size: 9, color: Color(0xffae3457))),
+          if (!_opened) const Padding(padding: EdgeInsets.only(left: 8), child: AppIcon(Icons.circle, size: 9, color: Color(0xffae3457))),
         ]),
       )),
     ));

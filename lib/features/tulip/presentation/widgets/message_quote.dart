@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -48,7 +49,7 @@ class MessageQuote extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           if (quoted != null && quoted.isPhoto) ...[
-            Icon(CupertinoIcons.photo,
+            AppIcon(CupertinoIcons.photo,
                 size: 13, color: tint.withValues(alpha: .7)),
             const SizedBox(width: 5),
           ] else if (quoted != null && quoted.flower != null) ...[

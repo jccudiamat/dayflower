@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:dayflower/core/theme/app_typography.dart';
 
 import 'app_colors.dart';
 
@@ -64,89 +64,90 @@ class AppMotion {
   static const Duration emotional = Duration(milliseconds: 500);
 }
 
-/// Typography — Quicksand carries the whole UI (rounded, friendly,
-/// premium through discipline). Lora italic remains the single emotional
-/// accent, reserved for partner notes and quotes.
+/// TikTok Sans throughout the UI, with italic emphasis for partner notes.
+///
+/// ⚠️ The colour defaults are resolved in the body, not in the signature.
+/// They used to be `[Color color = AppColors.ink]`, and a default value has
+/// to be a compile-time constant — which the neutrals stopped being when the
+/// palette learned to swap. Resolving here is also what makes
+/// `AppText.title()` follow the mode rather than freezing whichever ink
+/// happened to be loaded first.
 class AppText {
   // ── Display hierarchy ────────────────────────────────────────
-  static TextStyle display([Color color = AppColors.ink]) =>
-      GoogleFonts.quicksand(
+  static TextStyle display([Color? color]) =>
+      AppTypography.style(
         fontSize: 30,
         height: 1.12,
         fontWeight: FontWeight.w700,
-        color: color,
+        color: color ?? AppColors.ink,
       );
 
   /// Step titles / page headers. Pair with [TwoToneHeading] for the
   /// signature accent-keyword pattern.
-  static TextStyle hero([Color color = AppColors.ink]) =>
-      GoogleFonts.quicksand(
+  static TextStyle hero([Color? color]) => AppTypography.style(
         fontSize: 25,
         height: 1.2,
         fontWeight: FontWeight.w600,
-        color: color,
+        color: color ?? AppColors.ink,
       );
 
-  static TextStyle title([Color color = AppColors.ink]) =>
-      GoogleFonts.quicksand(
+  static TextStyle title([Color? color]) => AppTypography.style(
         fontSize: 19,
         height: 1.25,
         fontWeight: FontWeight.w600,
-        color: color,
+        color: color ?? AppColors.ink,
       );
 
-  static TextStyle subtitle([Color color = AppColors.ink]) =>
-      GoogleFonts.quicksand(
+  static TextStyle subtitle([Color? color]) =>
+      AppTypography.style(
         fontSize: 16,
         height: 1.3,
         fontWeight: FontWeight.w600,
-        color: color,
+        color: color ?? AppColors.ink,
       );
 
   // ── Reading sizes ────────────────────────────────────────────
-  static TextStyle body([Color color = AppColors.body]) =>
-      GoogleFonts.quicksand(
+  static TextStyle body([Color? color]) => AppTypography.style(
         fontSize: 14.5,
         height: 1.45,
         fontWeight: FontWeight.w500,
-        color: color,
+        color: color ?? AppColors.body,
       );
 
-  static TextStyle caption([Color color = AppColors.muted]) =>
-      GoogleFonts.quicksand(
+  static TextStyle caption([Color? color]) =>
+      AppTypography.style(
         fontSize: 12.5,
         height: 1.35,
         fontWeight: FontWeight.w500,
-        color: color,
+        color: color ?? AppColors.muted,
       );
 
   /// Overline label — uppercase section headers, pills, nav labels.
-  static TextStyle label([Color color = AppColors.muted]) =>
-      GoogleFonts.quicksand(
+  static TextStyle label([Color? color]) =>
+      AppTypography.style(
         fontSize: 11,
         height: 1.2,
         fontWeight: FontWeight.w600,
         letterSpacing: 0.6,
-        color: color,
+        color: color ?? AppColors.muted,
       );
 
-  // ── Emotional accent (the only serif in the app) ────────────
+  // ── Personal notes ─────────────────────────────────────────
   /// Partner notes, flower meanings, quotes. Sacred — nowhere else.
-  static TextStyle note([Color color = AppColors.body]) => GoogleFonts.lora(
+  static TextStyle note([Color? color]) => AppTypography.style(
         fontSize: 16,
         height: 1.5,
         fontWeight: FontWeight.w500,
         fontStyle: FontStyle.italic,
-        color: color,
+        color: color ?? AppColors.body,
       );
 
   /// Big expressive numbers — countdowns, invite codes, stats.
-  static TextStyle stat([Color color = AppColors.ink]) =>
-      GoogleFonts.quicksand(
+  static TextStyle stat([Color? color]) => AppTypography.style(
         fontSize: 32,
         height: 1.05,
         fontWeight: FontWeight.w700,
-        color: color,
+        color: color ?? AppColors.ink,
         fontFeatures: const [FontFeature.tabularFigures()],
       );
 }

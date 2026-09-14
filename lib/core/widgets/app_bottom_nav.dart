@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,8 +50,6 @@ class AppBottomNav extends ConsumerWidget {
                 onTap: () => context.go(Routes.home),
               ),
               _NavItem(
-                // Material, not Cupertino: there is no flower in the
-                // Cupertino set (see the icon-set note in PROGRESS.md).
                 icon: Icons.local_florist_rounded,
                 label: 'Flowers',
                 // Opens the Flowers page, not the thread. Going straight to
@@ -145,7 +144,7 @@ class _NavItem extends StatelessWidget {
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      Icon(icon, size: 22, color: color),
+                      AppIcon(icon, size: 24, color: color, selected: selected),
                       if (badge > 0)
                         Positioned(
                           top: -3,

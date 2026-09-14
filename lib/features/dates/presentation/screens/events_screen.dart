@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -6,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app_router.dart';
+import '../../data/event_repository.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -45,23 +47,26 @@ class _KindStyle {
   final Color color;
 }
 
-const Map<_EventKind, _KindStyle> _kindStyles = {
-  _EventKind.reunion: _KindStyle(
+// ⚠️ `final`, not `const`. One of these tints is a palette neutral, and the
+// neutrals are getters now so the mode can swap under them — see AppColors.
+// A const map would freeze whichever palette was loaded first.
+final Map<_EventKind, _KindStyle> _kindStyles = {
+  _EventKind.reunion: const _KindStyle(
       label: 'Reunion',
       icon: CupertinoIcons.airplane,
       emoji: '✈️',
       color: AppColors.secondary),
-  _EventKind.anniversary: _KindStyle(
+  _EventKind.anniversary: const _KindStyle(
       label: 'Anniversary',
       icon: CupertinoIcons.heart_fill,
       emoji: '💞',
       color: AppColors.brand),
-  _EventKind.birthday: _KindStyle(
+  _EventKind.birthday: const _KindStyle(
       label: 'Birthday',
       icon: CupertinoIcons.gift_fill,
       emoji: '🎂',
       color: AppColors.amber),
-  _EventKind.monthsary: _KindStyle(
+  _EventKind.monthsary: const _KindStyle(
       label: 'Monthsary',
       icon: CupertinoIcons.calendar,
       emoji: '🌷',
@@ -87,6 +92,27 @@ class _Event {
   final int id;
   _EventKind kind;
   String emoji, title, date, location, note;
+
+  factory _Event.fromMap(Map<String, dynamic> row) => _Event(
+        id: (row['id'] as num).toInt(),
+        kind: _EventKind.values.firstWhere((k) => k.name == row['kind'],
+            orElse: () => _EventKind.custom),
+        emoji: row['emoji'] as String,
+        title: row['title'] as String,
+        date: row['date'] as String,
+        location: row['location'] as String? ?? '',
+        note: row['note'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'kind': kind.name,
+        'emoji': emoji,
+        'title': title,
+        'date': date,
+        'location': location,
+        'note': note,
+      };
 
   DateTime? get when => DateTime.tryParse(date);
   _KindStyle get style => _kindStyles[kind]!;
@@ -203,13 +229,11 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   // Home; that pair was a mock duplicate of the real ClocksCard, which reads
   // actual profile timezones.
 
-  // Mock seed data, anchored relative to today so the countdown is always
-  // live rather than expiring against hardcoded 2026 dates.
-  //
-  // 🔴 Still mock, and still not persisted anywhere — see the note in
-  // PROGRESS.md. `_derived` below is the only part of this screen backed by
-  // real data.
-  late List<_Event> _manual;
+  // Custom events are pair-scoped server data. Profile milestones stay derived.
+  List<_Event> get _manual =>
+      (ref.watch(customEventsProvider).valueOrNull ?? const [])
+          .map(_Event.fromMap)
+          .toList();
 
   /// Everything the list shows: the couple's real milestones first, then
   /// whatever has been added by hand.
@@ -295,21 +319,6 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   @override
   void initState() {
     super.initState();
-    // The mock anniversary and monthsary that used to sit here are gone:
-    // both are derived from the pair's start date now, and keeping the
-    // fakes would have shown each of them twice, on two different days.
-    //
-    // ⚠️ Empty, and no longer seeded with anything.
-    //
-    // "Sunshine's Birthday" went when birthdays became derived from the two
-    // profiles, and "Tokyo Reunion" went when the countdown became the real
-    // `reunions` row — a mock reunion sitting in this list under a card
-    // counting down to a different, real one is the kind of thing that
-    // makes somebody distrust every date on the screen.
-    //
-    // Events added through the + sheet still land here, and still only for
-    // as long as the screen is open. That is pre-existing and unchanged.
-    _manual = [];
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
@@ -364,29 +373,33 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
           title: '',
           date: '',
         );
-    final result = await showModalBottomSheet<(bool, _Event)>(
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    if (pair == null || !pair.isLinked) return;
+    final repository = ref.read(eventRepositoryProvider);
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => _EditEventSheet(event: draft, isNew: isNew),
+      builder: (_) => _EditEventSheet(
+        event: draft,
+        isNew: isNew,
+        onCommit: (deleted, saved) async {
+          if (deleted) {
+            await repository.delete(pair.id, saved.id);
+          } else {
+            await repository.save(pair.id, saved.toMap());
+          }
+          if (mounted) ref.invalidate(customEventsProvider);
+        },
+      ),
     );
-    if (result == null) return;
-    final (deleted, saved) = result;
-    setState(() {
-      if (deleted) {
-        _manual = _manual.where((e) => e.id != saved.id).toList();
-      } else if (isNew) {
-        _manual = [..._manual, saved];
-      } else {
-        _manual = _manual.map((e) => e.id == saved.id ? saved : e).toList();
-      }
-    });
   }
 
   // ── Build ──────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final customEvents = ref.watch(customEventsProvider);
     final next = _next;
     final alsoComing = _upcoming.skip(1).toList();
 
@@ -452,7 +465,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton.icon(
-                          icon: const Icon(CupertinoIcons.gift, size: 18),
+                          icon: const AppIcon(CupertinoIcons.gift, size: 18),
                           label: const Text('Find a gift'),
                           onPressed: () => context.push(Uri(
                             path: Routes.gifts,
@@ -480,8 +493,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                         place: reunion.destination,
                         when: reunion.happensAt,
                         now: _now,
-                        onTap: () =>
-                            showReunionEditor(context, ref, reunion),
+                        onTap: () => showReunionEditor(context, ref, reunion),
                       ),
                       const SizedBox(height: AppSpace.md),
                     ] else ...[
@@ -510,6 +522,14 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                       const SizedBox(height: AppSpace.sm),
                     ],
 
+                    if (customEvents.isLoading) const LinearProgressIndicator(),
+                    if (customEvents.hasError) ...[
+                      Text('Could not load your saved events.',
+                          style: AppText.body()),
+                      TextButton(
+                          onPressed: () => ref.invalidate(customEventsProvider),
+                          child: const Text('Retry events')),
+                    ],
                     _AddEventRow(onTap: () => _openEventSheet(null)),
                   ],
                 ),
@@ -580,7 +600,7 @@ class _AddReunionCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Icon(CupertinoIcons.airplane,
+            const AppIcon(CupertinoIcons.airplane,
                 color: AppColors.brand, size: 20),
             const SizedBox(width: AppSpace.sm),
             Expanded(
@@ -596,7 +616,7 @@ class _AddReunionCard extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(CupertinoIcons.chevron_right,
+            AppIcon(CupertinoIcons.chevron_right,
                 size: 16, color: AppColors.muted),
           ],
         ),
@@ -654,7 +674,8 @@ class _NextUpCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(CupertinoIcons.add, size: 15, color: Colors.white),
+                const AppIcon(CupertinoIcons.add,
+                    size: 15, color: Colors.white),
                 const SizedBox(width: 6),
                 Text('Add your first event',
                     style: AppText.caption(Colors.white)
@@ -874,7 +895,7 @@ class _AddEventRow extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(CupertinoIcons.add_circled,
+            AppIcon(CupertinoIcons.add_circled,
                 color: AppColors.muted, size: 18),
             const SizedBox(width: AppSpace.xs),
             Text('Add event',
@@ -904,7 +925,7 @@ class _AddButton extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: AppElevation.glow,
         ),
-        child: const Icon(CupertinoIcons.add, color: Colors.white, size: 20),
+        child: const AppIcon(CupertinoIcons.add, color: Colors.white, size: 20),
       ),
     );
   }
@@ -915,7 +936,9 @@ class _AddButton extends StatelessWidget {
 // ═══════════════════════════════════════════════════
 
 class _EditEventSheet extends StatefulWidget {
-  const _EditEventSheet({required this.event, required this.isNew});
+  const _EditEventSheet(
+      {required this.event, required this.isNew, required this.onCommit});
+  final Future<void> Function(bool deleted, _Event event) onCommit;
   final _Event event;
   final bool isNew;
 
@@ -925,6 +948,8 @@ class _EditEventSheet extends StatefulWidget {
 
 class _EditEventSheetState extends State<_EditEventSheet> {
   late _Event _draft;
+  bool _saving = false;
+  String? _error;
   late TextEditingController _titleCtrl, _emojiCtrl, _locationCtrl, _noteCtrl;
 
   @override
@@ -956,25 +981,38 @@ class _EditEventSheetState extends State<_EditEventSheet> {
     });
   }
 
-  void _save() {
+  Future<void> _commit(bool deleted) async {
+    if (_saving) return;
     final title = _titleCtrl.text.trim();
-    if (title.isEmpty || _draft.date.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Give it a name and a date first.')),
-      );
+    if (!deleted && (title.isEmpty || _draft.date.isEmpty)) {
+      setState(() => _error = 'Give it a name and a date first.');
       return;
     }
-    Navigator.pop(context, (
-      false,
-      _draft.copyWith(
-        title: title,
-        emoji: _emojiCtrl.text.trim().isEmpty
-            ? _draft.style.emoji
-            : _emojiCtrl.text.trim(),
-        location: _locationCtrl.text.trim(),
-        note: _noteCtrl.text.trim(),
-      )
-    ));
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    try {
+      await widget.onCommit(
+          deleted,
+          _draft.copyWith(
+            title: title,
+            emoji: _emojiCtrl.text.trim().isEmpty
+                ? _draft.style.emoji
+                : _emojiCtrl.text.trim(),
+            location: _locationCtrl.text.trim(),
+            note: _noteCtrl.text.trim(),
+          ));
+      if (mounted) Navigator.pop(context);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _error = deleted
+            ? 'Could not delete this event. Please try again.'
+            : 'Could not save this event. Your draft is still here. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   @override
@@ -1009,7 +1047,7 @@ class _EditEventSheetState extends State<_EditEventSheet> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(entry.value.icon,
+                        AppIcon(entry.value.icon,
                             color: sel ? AppColors.brand : AppColors.muted,
                             size: 20),
                         const SizedBox(height: AppSpace.xxs),
@@ -1082,6 +1120,10 @@ class _EditEventSheetState extends State<_EditEventSheet> {
               controller: _noteCtrl,
               placeholder: "Can't wait to hold you again..."),
           const SizedBox(height: AppSpace.md),
+          if (_error != null)
+            Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(_error!, style: AppText.body(AppColors.danger))),
           Row(
             children: [
               if (!widget.isNew) ...[
@@ -1089,7 +1131,7 @@ class _EditEventSheetState extends State<_EditEventSheet> {
                     child: _SheetBtn(
                         label: 'Delete',
                         variant: 'danger',
-                        onTap: () => Navigator.pop(context, (true, _draft)))),
+                        onTap: () => _commit(true))),
                 const SizedBox(width: AppSpace.xs),
               ],
               Expanded(
@@ -1101,9 +1143,9 @@ class _EditEventSheetState extends State<_EditEventSheet> {
               Expanded(
                   flex: 2,
                   child: _SheetBtn(
-                      label: 'Save',
+                      label: _saving ? 'Saving...' : 'Save',
                       icon: CupertinoIcons.checkmark_alt,
-                      onTap: _save)),
+                      onTap: () => _commit(false))),
             ],
           ),
         ],
@@ -1158,9 +1200,9 @@ class _BottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -1245,7 +1287,7 @@ class _GhostEditBtn extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(CupertinoIcons.pencil, size: 13, color: fg),
+            AppIcon(CupertinoIcons.pencil, size: 13, color: fg),
             const SizedBox(width: 5),
             Text('Edit', style: AppText.label(fg).copyWith(letterSpacing: 0)),
           ],
@@ -1364,7 +1406,7 @@ class _DateInput extends StatelessWidget {
                     value.isEmpty ? AppColors.muted : AppColors.ink),
               ),
             ),
-            const Icon(CupertinoIcons.calendar,
+            AppIcon(CupertinoIcons.calendar,
                 size: 16, color: AppColors.muted),
           ],
         ),
@@ -1424,7 +1466,7 @@ class _SheetBtn extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: fg, size: 15),
+              AppIcon(icon, color: fg, size: 15),
               const SizedBox(width: 5),
             ],
             Flexible(

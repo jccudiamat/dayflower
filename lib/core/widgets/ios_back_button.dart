@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -29,7 +30,7 @@ class IosBackButton extends StatelessWidget {
             boxShadow: AppElevation.card,
           ),
           alignment: Alignment.center,
-          child: const Icon(
+          child: const AppIcon(
             CupertinoIcons.chevron_back,
             size: 16,
             color: Color(0xFF1D2333),

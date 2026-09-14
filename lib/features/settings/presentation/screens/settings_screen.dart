@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show compute;
@@ -9,11 +10,15 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
+import '../../../../core/services/legal_links.dart';
 import '../../../../core/services/pulse_alerts.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/models/avatar_flower.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/theme/theme_mode_prefs.dart';
+import '../../../../core/widgets/flower_image.dart';
+import '../../../tulip/domain/flower_catalog.dart';
 import '../../../../core/services/avatar_image.dart';
 import '../../../../core/widgets/flower_avatar.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -49,7 +54,8 @@ class SettingsScreen extends ConsumerWidget {
         leading: IconButton(
           onPressed: () =>
               context.canPop() ? context.pop() : context.go(Routes.home),
-          icon: const Icon(CupertinoIcons.chevron_back, color: AppColors.muted),
+          icon: AppIcon(CupertinoIcons.chevron_back,
+              color: AppColors.muted),
         ),
       ),
       body: SafeArea(
@@ -206,6 +212,12 @@ class SettingsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpace.md),
 
+            // ── Appearance ───────────────────────────
+            Text('APPEARANCE', style: AppText.label()),
+            const SizedBox(height: AppSpace.xs),
+            const _AppearanceRow(),
+            const SizedBox(height: AppSpace.md),
+
             // ── Alerts ───────────────────────────────
             Text('ALERTS', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
@@ -241,21 +253,21 @@ class SettingsScreen extends ConsumerWidget {
               style: AppText.caption(),
             ),
             const SizedBox(height: AppSpace.xs),
-            _Card(
+            const _Card(
               children: [
                 _WidgetModeRow(
                   title: "Today's Flower",
                   subtitle: 'Their flower and note',
                   mode: WidgetMode.flower,
                 ),
-                const _Line(),
+                _Line(),
                 _WidgetModeRow(
                   title: 'Heartbeat',
                   subtitle: 'Tap it to send a pulse',
                   mode: WidgetMode.heartbeat,
                 ),
-                const _Line(),
-                const _WidgetModeRow(
+                _Line(),
+                _WidgetModeRow(
                   title: 'Reunion',
                   subtitle: 'Days until you are in the same place',
                   mode: WidgetMode.reunion,
@@ -320,12 +332,12 @@ class SettingsScreen extends ConsumerWidget {
                 const _Line(),
                 _Row(
                   title: 'Terms of Service',
-                  onTap: () => _showLegalNote(context),
+                  onTap: () => openLegalPage(context, ref, LegalPage.terms),
                 ),
                 const _Line(),
                 _Row(
                   title: 'Privacy Policy',
-                  onTap: () => _showLegalNote(context),
+                  onTap: () => openLegalPage(context, ref, LegalPage.privacy),
                 ),
               ],
             ),
@@ -377,14 +389,6 @@ class SettingsScreen extends ConsumerWidget {
     await ref.read(pairRepositoryProvider).disconnect(pairId);
     ref.invalidate(currentPairProvider);
     // Gate chain sends the user back to pairing.
-  }
-
-  void _showLegalNote(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opens at dayflower.app once the site is live'),
-      ),
-    );
   }
 
   Future<void> _editText(
@@ -480,7 +484,7 @@ class _TextEditSheetState extends State<_TextEditSheet> {
               Expanded(child: Text(widget.title, style: AppText.title())),
               IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(
+                icon: AppIcon(
                   CupertinoIcons.xmark,
                   color: AppColors.muted,
                 ),
@@ -570,7 +574,7 @@ class _ProfileHeader extends StatelessWidget {
                       // rather than a smudge on the edge of a face.
                       border: Border.all(color: AppColors.surface, width: 2),
                     ),
-                    child: const Icon(
+                    child: const AppIcon(
                       CupertinoIcons.camera_fill,
                       size: 13,
                       color: Colors.white,
@@ -671,8 +675,8 @@ class _ReunionBackgroundRowState extends ConsumerState<_ReunionBackgroundRow> {
         maxHeight: 2400,
       );
       if (picked == null) return;
-      final saved =
-          await DayflowerWidgets.setReunionBackground(await picked.readAsBytes());
+      final saved = await DayflowerWidgets.setReunionBackground(
+          await picked.readAsBytes());
       if (mounted) setState(() => _path = saved ?? '');
     } catch (e) {
       debugPrint('reunion background pick failed: $e');
@@ -748,7 +752,8 @@ class _WidgetRotationRow extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: enabled
-            ? () => ref.read(widgetRotationProvider.notifier).setSeconds(seconds)
+            ? () =>
+                ref.read(widgetRotationProvider.notifier).setSeconds(seconds)
             : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(
@@ -971,7 +976,7 @@ class _Row extends StatelessWidget {
                 ),
               if (chevron && onTap != null) ...[
                 const SizedBox(width: 4),
-                const Icon(
+                AppIcon(
                   CupertinoIcons.chevron_forward,
                   size: 20,
                   color: AppColors.muted,
@@ -1165,10 +1170,10 @@ Future<void> _pickAvatar(
         final current = profile?.flower ?? AvatarFlower.fallback;
 
         return Container(
-          decoration: const BoxDecoration(
+          decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius:
-                BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+                const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
           ),
           padding: EdgeInsets.fromLTRB(AppSpace.md, AppSpace.sm, AppSpace.md,
               AppSpace.lg + MediaQuery.paddingOf(sheetContext).bottom),
@@ -1377,7 +1382,7 @@ class _AvatarAction extends StatelessWidget {
                 horizontal: AppSpace.sm, vertical: 10),
             child: Row(
               children: [
-                Icon(icon, size: 16, color: AppColors.secondary),
+                AppIcon(icon, size: 16, color: AppColors.secondary),
                 const SizedBox(width: AppSpace.xs),
                 Text(
                   label,
@@ -1387,6 +1392,94 @@ class _AvatarAction extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ── Appearance ───────────────────────────────────── */
+
+/// Light or dark, chosen by picking a flower.
+///
+/// Two cards rather than a switch, because "Dark mode ●—" tells you what the
+/// setting is called and a sunflower beside a jasmine tells you what it
+/// does. Both are real entries in the catalogue drawn with the same artwork
+/// the conversation sends, so the control is made of the app rather than
+/// borrowed from a settings screen.
+class _AppearanceRow extends ConsumerWidget {
+  const _AppearanceRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final current = ref.watch(themeModeProvider);
+    return Row(
+      children: [
+        for (final mode in AppMode.values) ...[
+          Expanded(
+            child: _ModeCard(
+              mode: mode,
+              selected: mode == current,
+              onTap: () => ref.read(themeModeProvider.notifier).use(mode),
+            ),
+          ),
+          if (mode != AppMode.values.last) const SizedBox(width: AppSpace.xs),
+        ],
+      ],
+    );
+  }
+}
+
+class _ModeCard extends StatelessWidget {
+  const _ModeCard({
+    required this.mode,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AppMode mode;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    // Falls back to the classic tulip for an id the catalogue does not know,
+    // the same as everywhere else — a missing asset must not be a blank card.
+    final flower = FlowerCatalog.byId(mode.flowerId);
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: AnimatedContainer(
+        duration: AppMotion.micro,
+        curve: AppMotion.easeOut,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.xs,
+          vertical: AppSpace.sm,
+        ),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.blush : AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          border: Border.all(
+            // The chosen one is outlined in the brand pink at full weight;
+            // the other keeps the ordinary hairline every card has.
+            color: selected ? AppColors.brand : AppColors.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            FlowerImage(flower: flower, size: 56),
+            const SizedBox(height: AppSpace.xs),
+            Text(mode.title, style: AppText.subtitle()),
+            const SizedBox(height: 2),
+            Text(
+              mode.line,
+              style: AppText.caption(),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
       ),
     );

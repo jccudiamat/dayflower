@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,16 +76,16 @@ class UsScreen extends ConsumerWidget {
                     color: AppColors.surface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(AppRadius.lg),
-                      side: const BorderSide(color: AppColors.border),
+                      side: BorderSide(color: AppColors.border),
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: ListTile(
-                      leading: const Icon(CupertinoIcons.calendar,
+                      leading: const AppIcon(CupertinoIcons.calendar,
                           color: AppColors.secondary),
                       title: Text('Events', style: AppText.subtitle()),
                       subtitle: Text('Your dates, countdowns & clocks',
                           style: AppText.caption()),
-                      trailing: const Icon(CupertinoIcons.chevron_right,
+                      trailing: AppIcon(CupertinoIcons.chevron_right,
                           size: 16, color: AppColors.muted),
                       onTap: () => context.push(Routes.events),
                     ),
@@ -124,15 +125,15 @@ class _GearButton extends StatelessWidget {
       label: 'Your settings',
       child: Material(
         color: AppColors.surface,
-        shape: const CircleBorder(
+        shape: CircleBorder(
           side: BorderSide(color: AppColors.border),
         ),
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
-          child: const Padding(
-            padding: EdgeInsets.all(9),
-            child: Icon(CupertinoIcons.gear_alt_fill,
+          child: Padding(
+            padding: const EdgeInsets.all(9),
+            child: AppIcon(CupertinoIcons.gear_alt_fill,
                 size: 20, color: AppColors.body),
           ),
         ),
@@ -232,7 +233,7 @@ class _TogetherSinceCardState extends ConsumerState<_TogetherSinceCard> {
               child: CircularProgressIndicator(strokeWidth: 2),
             )
           else
-            const Icon(CupertinoIcons.chevron_forward,
+            AppIcon(CupertinoIcons.chevron_forward,
                 size: 16, color: AppColors.muted),
         ],
       ),
@@ -262,8 +263,8 @@ class _MilestonesCard extends StatelessWidget {
             title: '${monthsBetween(start, monthsary)} month monthsary',
             date: monthsary,
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpace.xs),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
             child: Divider(height: 1, color: AppColors.border),
           ),
           _MilestoneRow(
@@ -363,8 +364,8 @@ class _WhereYouAreCard extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpace.xs),
           _PersonRow(profile: me, isMe: true),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: AppSpace.xs),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
             child: Divider(height: 1, color: AppColors.border),
           ),
           _PersonRow(profile: partner, isMe: false),

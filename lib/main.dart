@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'core/theme/theme_mode_prefs.dart';
 import 'package:timezone/data/latest.dart' as tzdata;
 import 'app.dart';
 import 'core/dev/dev_login.dart';
@@ -85,6 +87,10 @@ Future<void> main() async {
   await UpdateAlerts.init();
 
   // Debug-only shortcut past the login screen. No-op in release builds.
+  // ⚠️ Before runApp. Restoring the palette after the first frame means a
+  // white flash on every cold start for anyone using Jasmine.
+  await ThemeModePrefs.restore();
+
   await maybeDevAutoLogin();
 
   // ⚠️ Before runApp, so it is in place for a failure during the very first

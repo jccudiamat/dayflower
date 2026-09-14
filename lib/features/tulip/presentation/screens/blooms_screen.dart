@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -238,7 +239,7 @@ class _Conversation extends StatelessWidget {
                         // Only your own message carries a receipt. Whether
                         // you have read theirs is a fact about you, not news.
                         if (message != null && mine) ...[
-                          Icon(
+                          AppIcon(
                             message.seenAt != null
                                 ? CupertinoIcons.checkmark_alt_circle_fill
                                 : CupertinoIcons.checkmark_alt_circle,

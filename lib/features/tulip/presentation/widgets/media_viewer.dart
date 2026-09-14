@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -122,7 +123,7 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(CupertinoIcons.xmark,
+                    icon: const AppIcon(CupertinoIcons.xmark,
                         color: Colors.white, size: 20),
                   ),
                   Expanded(
@@ -226,7 +227,7 @@ class _SaveButton extends StatelessWidget {
         disabledForegroundColor: AppColors.success,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       ),
-      icon: Icon(
+      icon: AppIcon(
         saved
             ? CupertinoIcons.checkmark_alt
             : CupertinoIcons.arrow_down_to_line,

@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -193,7 +194,7 @@ class _BoothCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Icon(CupertinoIcons.chevron_forward,
+                const AppIcon(CupertinoIcons.chevron_forward,
                     size: 15, color: AppColors.onDarkMuted),
               ],
             ),
@@ -295,7 +296,7 @@ class _FeatureRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpace.xs),
-              const Icon(CupertinoIcons.chevron_forward,
+              AppIcon(CupertinoIcons.chevron_forward,
                   size: 14, color: AppColors.muted),
             ],
           ),

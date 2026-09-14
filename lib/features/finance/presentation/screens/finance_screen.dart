@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -540,7 +541,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                       ownerId: owner, accounts: accounts, budgets: budgets),
               backgroundColor: AppColors.brand,
               foregroundColor: Colors.white,
-              child: const Icon(CupertinoIcons.add),
+              child: const AppIcon(CupertinoIcons.add),
             ),
       bottomNavigationBar: const AppBottomNav(),
     );
@@ -1096,7 +1097,7 @@ class _Arrow extends StatelessWidget {
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
-      icon: Icon(icon, size: 16, color: AppColors.body),
+      icon: AppIcon(icon, size: 16, color: AppColors.body),
       splashRadius: 20,
     );
   }
@@ -1155,7 +1156,7 @@ class _NetWorthCard extends StatelessWidget {
                     children: [
                       Text(currency, style: AppText.label(AppColors.onDark)),
                       const SizedBox(width: 3),
-                      const Icon(CupertinoIcons.chevron_down,
+                      const AppIcon(CupertinoIcons.chevron_down,
                           size: 10, color: AppColors.onDarkMuted),
                     ],
                   ),
@@ -1313,7 +1314,7 @@ class _Tile extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(icon, size: 11, color: color),
+              AppIcon(icon, size: 11, color: color),
               const SizedBox(width: 3),
               Text(label.toUpperCase(), style: AppText.label(color)),
             ],
@@ -1369,7 +1370,7 @@ class _InsightsLink extends StatelessWidget {
                   ],
                 ),
               ),
-              const Icon(CupertinoIcons.chevron_forward,
+              AppIcon(CupertinoIcons.chevron_forward,
                   size: 16, color: AppColors.muted),
             ],
           ),
@@ -1399,7 +1400,7 @@ class _SectionHeader extends StatelessWidget {
             onTap: onAction,
             child: Row(
               children: [
-                const Icon(CupertinoIcons.add, size: 13, color: AppColors.brand),
+                const AppIcon(CupertinoIcons.add, size: 13, color: AppColors.brand),
                 const SizedBox(width: 3),
                 Text(action!, style: AppText.label(AppColors.brand)),
               ],
@@ -1490,7 +1491,7 @@ class _EntryRow extends StatelessWidget {
                   color: entry.kind.color.withValues(alpha: .12),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
+                child: AppIcon(
                   switch (entry.kind) {
                     EntryKind.income => CupertinoIcons.arrow_down_left,
                     EntryKind.expense => CupertinoIcons.arrow_up_right,
@@ -1951,7 +1952,7 @@ class _GoalSheetState extends State<_GoalSheet> {
                         style: AppText.caption(AppColors.brandDark)),
                   )
                 else
-                  const Icon(CupertinoIcons.calendar,
+                  AppIcon(CupertinoIcons.calendar,
                       size: 16, color: AppColors.muted),
               ],
             ),
@@ -2691,7 +2692,7 @@ class _EntrySheetState extends State<_EntrySheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(CupertinoIcons.calendar,
+                  const AppIcon(CupertinoIcons.calendar,
                       size: 15, color: AppColors.brand),
                   const SizedBox(width: AppSpace.xs),
                   Text(DateFormat('EEE d MMM yyyy').format(_date),
@@ -3662,7 +3663,7 @@ class _RecurringSheetState extends State<_RecurringSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(CupertinoIcons.calendar,
+                  AppIcon(CupertinoIcons.calendar,
                       size: 16, color: AppColors.muted),
                   const SizedBox(width: AppSpace.xs),
                   Text(DateFormat('EEEE, d MMMM y').format(_nextDue),

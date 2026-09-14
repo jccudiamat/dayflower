@@ -9,7 +9,9 @@ import 'app_router.dart';
 import 'core/models/avatar_flower.dart';
 import 'core/services/app_notifications.dart';
 import 'core/services/partner_alerts.dart';
+import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/theme_mode_prefs.dart';
 import 'core/providers/supabase_provider.dart';
 import 'features/activity/data/activity_models.dart';
 import 'features/activity/data/activity_repository.dart';
@@ -413,10 +415,21 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       },
     );
 
+    // 🔴 **Set before the tree is described, and the key is what makes it
+    // land.** The palette lives in global state so ~950 `AppColors.x` call
+    // sites did not have to learn about a BuildContext — the cost is that a
+    // colour already baked into a `const` widget deeper down is not
+    // reconsidered on rebuild. Changing the key throws that element tree
+    // away, so every widget is inflated afresh and reads the new palette.
+    // Without it the mode changes and half the screen keeps the old one.
+    final mode = ref.watch(themeModeProvider);
+    AppColors.use(mode);
+
     return MaterialApp.router(
+      key: ValueKey(mode),
       title: 'Dayflower',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      theme: AppTheme.current,
       // 🔴 **Spelled out rather than `routerConfig: router`, and it has to
       // be.** `MaterialApp.router` asserts that `routerConfig` is the *only*
       // router argument — passing `backButtonDispatcher` beside it trips

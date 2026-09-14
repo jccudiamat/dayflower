@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -136,7 +137,7 @@ class _CountdownContentState extends State<_CountdownContent> {
                 style: AppText.label(AppColors.onDarkMuted),
               ),
             ),
-            const Icon(
+            const AppIcon(
               CupertinoIcons.pencil,
               size: 16,
               color: AppColors.onDarkMuted,

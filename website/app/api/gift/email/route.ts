@@ -4,16 +4,19 @@ import { emailAddress, giftId, onlyKeys } from "../../../lib/input";
 import { checkRequest, failure, InputError, readJson } from "../../../lib/request";
 import { rateLimit } from "../../../lib/rate-limit";
 
+import { verifyDelivery } from "../../../lib/turnstile";
+
 const SITE = "https://mydayflower.com";
 
 export async function POST(request: Request) {
   try {
     checkRequest(request);
-    const body = await readJson(request, 2048);
+    const body = await readJson(request, 4096);
     const email = emailAddress(body.email);
-    if (!onlyKeys(body, ["id", "email"]) || !giftId(body.id) || !email) throw new InputError("Please check the gift link and email address.");
+    if (!onlyKeys(body, ["id", "email", "token"]) || !giftId(body.id) || !email) throw new InputError("Please check the gift link and email address.");
     const id = body.id;
     await rateLimit(request, "gift-email", email, id);
+    await verifyDelivery(body.token);
     const bouquet = await loadGift(id);
     if (!bouquet) throw new InputError("This gift link has expired. Make a new link and try again.", 404);
     const resendKey = process.env.RESEND_API_KEY;

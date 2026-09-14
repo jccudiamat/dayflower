@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -397,7 +398,7 @@ class _SectionHeader extends StatelessWidget {
           onTap: onAdd,
           child: Row(
             children: [
-              const Icon(CupertinoIcons.add, size: 13, color: AppColors.brand),
+              const AppIcon(CupertinoIcons.add, size: 13, color: AppColors.brand),
               const SizedBox(width: 3),
               Text('Add', style: AppText.label(AppColors.brand)),
             ],
@@ -490,7 +491,7 @@ class _GoalRow extends StatelessWidget {
                         : Border.all(color: AppColors.blushMid, width: 1.5),
                   ),
                   child: goal.isDone
-                      ? const Icon(Icons.done_rounded,
+                      ? const AppIcon(Icons.done_rounded,
                           size: 14, color: Colors.white)
                       : null,
                 ),
@@ -651,7 +652,7 @@ class _ReviewCard extends StatelessWidget {
             const SizedBox(height: AppSpace.sm),
             Row(
               children: [
-                Icon(
+                AppIcon(
                   chapter!.isClosed
                       ? CupertinoIcons.checkmark_seal_fill
                       : CupertinoIcons.pencil,
@@ -714,7 +715,7 @@ class _Hearts extends StatelessWidget {
         5,
         (i) => Padding(
           padding: const EdgeInsets.only(right: 3),
-          child: Icon(
+          child: AppIcon(
             i < rating
                 ? CupertinoIcons.heart_fill
                 : CupertinoIcons.heart,
@@ -1085,7 +1086,7 @@ class _MomentSheetState extends State<_MomentSheet> {
               ),
               child: Row(
                 children: [
-                  const Icon(CupertinoIcons.calendar,
+                  const AppIcon(CupertinoIcons.calendar,
                       size: 15, color: AppColors.brand),
                   const SizedBox(width: AppSpace.xs),
                   Expanded(
@@ -1101,7 +1102,7 @@ class _MomentSheetState extends State<_MomentSheet> {
                   if (_happenedOn != null)
                     GestureDetector(
                       onTap: () => setState(() => _happenedOn = null),
-                      child: const Icon(CupertinoIcons.clear_circled,
+                      child: AppIcon(CupertinoIcons.clear_circled,
                           size: 16, color: AppColors.muted),
                     ),
                 ],
@@ -1208,7 +1209,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                     setState(() => _rating = _rating == i + 1 ? 0 : i + 1),
                 child: Padding(
                   padding: const EdgeInsets.only(right: AppSpace.xxs),
-                  child: Icon(
+                  child: AppIcon(
                     filled ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
                     size: 28,
                     color: filled ? AppColors.brand : AppColors.blushMid,
@@ -1231,7 +1232,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
             behavior: HitTestBehavior.opaque,
             child: Row(
               children: [
-                Icon(
+                AppIcon(
                   _closed
                       ? CupertinoIcons.checkmark_seal_fill
                       : CupertinoIcons.circle,

@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -363,7 +364,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
@@ -473,10 +474,10 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
           GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _replyingTo = null),
-            child: const Padding(
-              padding: EdgeInsets.all(6),
+            child: Padding(
+              padding: const EdgeInsets.all(6),
               child:
-                  Icon(CupertinoIcons.xmark, size: 15, color: AppColors.muted),
+                  AppIcon(CupertinoIcons.xmark, size: 15, color: AppColors.muted),
             ),
           ),
         ],
@@ -551,7 +552,7 @@ class _ComposerIcon extends StatelessWidget {
       // below the text's optical centre. Equal heights = equal centres.
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
       constraints: const BoxConstraints(),
-      icon: Icon(icon, color: color ?? AppColors.muted),
+      icon: AppIcon(icon, color: color ?? AppColors.muted),
     );
   }
 }
@@ -584,7 +585,7 @@ class _ChatHeader extends ConsumerWidget {
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
@@ -602,7 +603,7 @@ class _ChatHeader extends ConsumerWidget {
             padding: const EdgeInsets.only(right: AppSpace.xs),
             constraints: const BoxConstraints(),
             icon:
-                const Icon(CupertinoIcons.chevron_back, color: AppColors.muted),
+                AppIcon(CupertinoIcons.chevron_back, color: AppColors.muted),
           ),
           // Their face and their name are one tap target, not two: people
           // press the person when they want to know about the person, and
@@ -687,7 +688,7 @@ class _HeaderAction extends StatelessWidget {
       iconSize: 22,
       padding: const EdgeInsets.all(8),
       constraints: const BoxConstraints(),
-      icon: Icon(icon, color: color ?? AppColors.secondary),
+      icon: AppIcon(icon, color: color ?? AppColors.secondary),
     );
   }
 }
@@ -761,7 +762,7 @@ class _SendButton extends StatelessWidget {
                         strokeWidth: 2.2,
                       ),
                     )
-                  : const Icon(
+                  : const AppIcon(
                       CupertinoIcons.paperplane_fill,
                       color: Colors.white,
                       size: 19,

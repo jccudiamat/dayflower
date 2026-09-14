@@ -120,3 +120,62 @@ test('limiter outage fails closed and spoofed forwarding is ignored off Vercel',
     for (const [name, value] of [['SUPABASE_SERVICE_ROLE_KEY', old.key], ['SUPABASE_URL', old.url], ['VERCEL', old.vercel]]) { if (value === undefined) delete process.env[name]; else process.env[name] = value; }
   }
 });
+
+
+test('email CAPTCHA fails closed on missing, forged, replayed, wrong-host and wrong-action tokens', async () => {
+  const old = { secret: process.env.TURNSTILE_SECRET_KEY, node: process.env.NODE_ENV, fetch: global.fetch };
+  const { verifyDelivery } = load('app/lib/turnstile.ts');
+  try {
+    process.env.NODE_ENV = 'production'; process.env.TURNSTILE_SECRET_KEY = 'test-secret';
+    let requests = 0;
+    global.fetch = async () => { requests++; throw new Error('unexpected network'); };
+    for (const token of [undefined, null, {}, '', 'x'.repeat(2049), 'two words']) await assert.rejects(verifyDelivery(token), e => e.status === 403);
+    assert.equal(requests, 0);
+    delete process.env.TURNSTILE_SECRET_KEY;
+    await assert.rejects(verifyDelivery('token'), e => e.status === 503);
+    process.env.TURNSTILE_SECRET_KEY = 'test-secret';
+    for (const result of [null, {}, { success: false, 'error-codes': ['timeout-or-duplicate'] }, { success: true, hostname: 'attacker.example', action: 'gift-email' }, { success: true, hostname: 'localhost', action: 'gift-email' }, { success: true, hostname: 'mydayflower.com', action: 'login' }]) {
+      global.fetch = async () => Response.json(result);
+      await assert.rejects(verifyDelivery('token'), e => e.status === 403);
+    }
+    global.fetch = async () => new Response('unavailable', { status: 503 });
+    await assert.rejects(verifyDelivery('token'), e => e.status === 503);
+    global.fetch = async () => { throw new Error('timeout'); };
+    await assert.rejects(verifyDelivery('token'), e => e.status === 503);
+    global.fetch = async (url, options) => {
+      assert.equal(url, 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
+      assert.deepEqual(JSON.parse(options.body), { secret: 'test-secret', response: 'token' });
+      return Response.json({ success: true, hostname: 'mydayflower.com', action: 'gift-email' });
+    };
+    await assert.doesNotReject(verifyDelivery('token'));
+  } finally {
+    global.fetch = old.fetch;
+    for (const [key, value] of [['TURNSTILE_SECRET_KEY', old.secret], ['NODE_ENV', old.node]]) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});
+
+test('email endpoint verifies before accessing the gift or sending mail', async () => {
+  const old = { fetch: global.fetch, secret: process.env.TURNSTILE_SECRET_KEY, resend: process.env.RESEND_API_KEY, from: process.env.BOUQUET_EMAIL_FROM };
+  try {
+    process.env.TURNSTILE_SECRET_KEY = 'test-secret'; process.env.RESEND_API_KEY = 'test-resend'; process.env.BOUQUET_EMAIL_FROM = 'test@example.com';
+    let gifts = 0, mails = 0, claims = 0, valid = false;
+    const route = load('app/api/gift/email/route.ts', {
+      '../../../lib/rate-limit': { rateLimit: async () => { claims++; } },
+      '../../../lib/gift': { loadGift: async () => { gifts++; return model.makeBouquet(); } },
+    });
+    global.fetch = async url => {
+      if (url.includes('siteverify')) return Response.json({ success: valid, hostname: 'mydayflower.com', action: 'gift-email' });
+      assert.equal(url, 'https://api.resend.com/emails'); mails++; return Response.json({ id: 'test-mail' });
+    };
+    const body = { id: 'abcdefghijkl', email: 'test@example.com' };
+    assert.equal((await route.POST(makeRequest(body))).status, 403);
+    assert.equal((await route.POST(makeRequest({ ...body, token: 'replayed' }))).status, 403);
+    assert.equal(gifts, 0); assert.equal(mails, 0);
+    valid = true;
+    assert.equal((await route.POST(makeRequest({ ...body, token: 'valid' }))).status, 200);
+    assert.equal(gifts, 1); assert.equal(mails, 1); assert.equal(claims, 3);
+  } finally {
+    global.fetch = old.fetch;
+    for (const [key, value] of [['TURNSTILE_SECRET_KEY', old.secret], ['RESEND_API_KEY', old.resend], ['BOUQUET_EMAIL_FROM', old.from]]) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
+});

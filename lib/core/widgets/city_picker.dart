@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -91,7 +92,7 @@ class _CityPickerSheetState extends State<CityPickerSheet> {
               Expanded(child: Text('Where you are', style: AppText.title())),
               IconButton(
                 onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(CupertinoIcons.xmark, color: AppColors.muted),
+                icon: AppIcon(CupertinoIcons.xmark, color: AppColors.muted),
               ),
             ],
           ),
@@ -109,9 +110,9 @@ class _CityPickerSheetState extends State<CityPickerSheet> {
               _debounce?.cancel();
               _run(v);
             },
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               hintText: 'e.g. Tuguegarao City',
-              prefixIcon: Icon(CupertinoIcons.search, color: AppColors.muted),
+              prefixIcon: AppIcon(CupertinoIcons.search, color: AppColors.muted),
             ),
           ),
           const SizedBox(height: AppSpace.xs),

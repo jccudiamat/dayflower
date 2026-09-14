@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:typed_data';
 import 'dart:io';
 
@@ -697,7 +698,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
               ? Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(CupertinoIcons.camera,
+                    const AppIcon(CupertinoIcons.camera,
                         color: AppColors.onDarkMuted, size: 30),
                     const SizedBox(height: AppSpace.xs),
                     Text('Tap to take a photo',
@@ -855,7 +856,7 @@ class _ShutterButton extends StatelessWidget {
               // control reads as the same button doing the next step
               // rather than a different button appearing.
               child: sending
-                  ? const Icon(CupertinoIcons.paperplane_fill,
+                  ? const AppIcon(CupertinoIcons.paperplane_fill,
                       color: Colors.white, size: 26)
                   : null,
             ),
@@ -898,7 +899,7 @@ class _GlassButton extends StatelessWidget {
           child: SizedBox(
             width: size,
             height: size,
-            child: Icon(icon, color: Colors.white, size: big ? 24 : 18),
+            child: AppIcon(icon, color: Colors.white, size: big ? 24 : 18),
           ),
         ),
       ),
@@ -1000,7 +1001,7 @@ class _AddDayPage extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: AppGradients.cta,
               ),
-              child: const Icon(CupertinoIcons.camera_fill,
+              child: const AppIcon(CupertinoIcons.camera_fill,
                   color: Colors.white, size: 34),
             ),
           ),
@@ -1138,7 +1139,7 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                   IconButton(
                     onPressed: () => _confirmDelete(message),
                     tooltip: 'Delete this day',
-                    icon: const Icon(CupertinoIcons.delete,
+                    icon: const AppIcon(CupertinoIcons.delete,
                         color: Colors.white, size: 19),
                   ),
                 // One close button, owned by the pager. A per-page one would
@@ -1146,7 +1147,7 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                 if (!widget.embedded)
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(CupertinoIcons.xmark,
+                    icon: const AppIcon(CupertinoIcons.xmark,
                         color: Colors.white, size: 20),
                   ),
               ],
@@ -1415,7 +1416,7 @@ class _ReplyBar extends StatelessWidget {
               _BarButton(
                 busy: busy,
                 onTap: onSend,
-                child: const Icon(CupertinoIcons.paperplane,
+                child: const AppIcon(CupertinoIcons.paperplane,
                     color: Colors.white, size: 24),
               ),
             ],
@@ -1642,7 +1643,7 @@ class _TargetPill extends StatelessWidget {
                 Text(t.label, style: AppText.body(AppColors.onDark)),
                 if (t == target) ...[
                   const SizedBox(width: AppSpace.xs),
-                  const Icon(CupertinoIcons.checkmark_alt,
+                  const AppIcon(CupertinoIcons.checkmark_alt,
                       size: 14, color: AppColors.brandLight),
                 ],
               ],
@@ -1663,7 +1664,7 @@ class _TargetPill extends StatelessWidget {
             const SizedBox(width: 6),
             Text(target.label, style: AppText.caption(Colors.white)),
             const SizedBox(width: 3),
-            const Icon(CupertinoIcons.chevron_down,
+            const AppIcon(CupertinoIcons.chevron_down,
                 size: 11, color: Colors.white),
           ],
         ),

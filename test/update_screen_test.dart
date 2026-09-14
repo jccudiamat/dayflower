@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'package:dayflower/features/updates/data/app_release.dart';
 import 'package:dayflower/features/updates/data/update_repository.dart';
@@ -44,18 +43,11 @@ Future<void> _pump(WidgetTester tester, UpdateState state) async {
     ),
   );
   await tester.pump();
-  // google_fonts cannot fetch Quicksand in a test and throws asynchronously.
-  // Irrelevant to what these assert, and it must not be mistaken for the
-  // widget's own failure.
-  tester.takeException();
 }
 
 void main() {
-  setUpAll(() => GoogleFonts.config.allowRuntimeFetching = false);
-
   group('it builds in every stage it can be shown in', () {
-    // ⚠️ The point is the absence of a thrown exception. `_pump` swallows
-    // exactly one — the font — so anything else fails the test.
+    // Any rendering exception fails the smoke test.
     for (final (name, state) in <(String, UpdateState)>[
       (
         'available',

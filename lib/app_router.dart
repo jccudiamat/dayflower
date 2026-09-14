@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -661,7 +662,7 @@ class _CallMiniBarState extends ConsumerState<_CallMiniBar> {
                   const DecoratedBox(
                     decoration: BoxDecoration(gradient: AppGradients.hero),
                     child: Center(
-                      child: Icon(CupertinoIcons.phone_fill,
+                      child: AppIcon(CupertinoIcons.phone_fill,
                           color: AppColors.onDark, size: 28),
                     ),
                   ),

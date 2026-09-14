@@ -10,6 +10,9 @@ import 'package:dayflower/features/activity/data/activity_repository.dart';
 import 'package:dayflower/features/calls/data/call_usage.dart';
 import 'package:dayflower/features/dates/presentation/screens/events_screen.dart';
 import 'package:dayflower/features/gifts/presentation/screens/gifts_screen.dart';
+import 'package:dayflower/features/gifts/data/gift_favorites_repository.dart';
+import 'package:dayflower/features/dates/data/event_repository.dart';
+import 'support/trust_fakes.dart';
 import 'package:dayflower/features/gifts/presentation/widgets/gift_occasion_card.dart';
 import 'package:dayflower/features/heartbeat/data/heartbeat_repository.dart';
 import 'package:dayflower/features/home/presentation/screens/home_screen.dart';
@@ -24,7 +27,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/data/latest.dart' as tz;
 
@@ -62,6 +64,8 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
   });
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      giftFavoritesRepositoryProvider.overrideWithValue(MemoryFavorites()),
+      eventRepositoryProvider.overrideWithValue(MemoryEvents()),
       currentUserIdProvider.overrideWithValue('preview-a'),
       currentPairProvider.overrideWith((ref) async => Pair(
             id: 'preview',
@@ -89,7 +93,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
         key: _boundary,
         child: MaterialApp.router(
             debugShowCheckedModeBanner: false,
-            theme: AppTheme.light,
+            theme: AppTheme.current,
             routerConfig: router)),
   ));
   await tester.pump();
@@ -116,18 +120,8 @@ void main() {
   setUpAll(() async {
     tz.initializeTimeZones();
     SharedPreferences.setMockInitialValues({});
-    final fontCache =
-        await Directory('build/review/fonts').create(recursive: true);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(
-            const MethodChannel('plugins.flutter.io/path_provider'),
-            (_) async => fontCache.absolute.path);
-    HttpOverrides.global = null;
-    GoogleFonts.config.allowRuntimeFetching = true;
-    AppTheme.light;
-    GoogleFonts.lora(fontStyle: FontStyle.italic, fontWeight: FontWeight.w500);
-    await GoogleFonts.pendingFonts();
     for (final (family, asset) in [
+      ('TikTokSans', 'assets/fonts/tiktok/TikTokSans.ttf'),
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
       (
         'packages/cupertino_icons/CupertinoIcons',
@@ -138,7 +132,7 @@ void main() {
     }
     final emoji = File('C:/Windows/Fonts/seguiemj.ttf');
     if (_capture && await emoji.exists()) {
-      await (FontLoader('Quicksand')
+      await (FontLoader('TikTokSans')
             ..addFont(emoji.readAsBytes().then((b) => ByteData.sublistView(b))))
           .load();
     }

@@ -166,9 +166,17 @@ enum ActivityKind {
   /// A kind this build has never heard of — a newer app wrote it. Renders
   /// as a plain, untappable card rather than throwing, which is the whole
   /// reason `activities.kind` carries no CHECK constraint.
-  unknown('', 'Activity', 'did something', AppColors.muted);
+  unknown('', 'Activity', 'did something', null);
 
-  const ActivityKind(this.id, this.label, this.verb, this.tint);
+  const ActivityKind(this.id, this.label, this.verb, Color? tint)
+      : _tint = tint;
+
+  final Color? _tint;
+
+  /// ⚠️ Resolved on read, not stored. Enum values are const, and the muted
+  /// ink stopped being a constant when the palette learned to swap — so the
+  /// one kind that wants a neutral holds null and asks here instead.
+  Color get tint => _tint ?? AppColors.muted;
 
   /// Matches `activities.kind` in Postgres.
   final String id;
@@ -181,7 +189,6 @@ enum ActivityKind {
 
   /// Drives the card's wash and its pill. Used at low alpha — these are
   /// full-strength palette colours, not fills.
-  final Color tint;
 
   static ActivityKind fromId(String? id) => ActivityKind.values.firstWhere(
         (k) => k.id == id && k != ActivityKind.unknown,

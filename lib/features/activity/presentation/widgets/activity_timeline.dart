@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -417,7 +418,7 @@ class _ViewAllButton extends StatelessWidget {
                 .copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 2),
-          const Icon(CupertinoIcons.chevron_forward,
+          const AppIcon(CupertinoIcons.chevron_forward,
               size: 12, color: AppColors.secondary),
         ],
       ),

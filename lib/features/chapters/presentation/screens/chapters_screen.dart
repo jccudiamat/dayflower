@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -152,7 +153,7 @@ class _YearBar extends StatelessWidget {
       children: [
         IconButton(
           onPressed: () => onShift(-1),
-          icon: const Icon(CupertinoIcons.chevron_back,
+          icon: AppIcon(CupertinoIcons.chevron_back,
               size: 16, color: AppColors.body),
           splashRadius: 20,
         ),
@@ -162,7 +163,7 @@ class _YearBar extends StatelessWidget {
         ),
         IconButton(
           onPressed: () => onShift(1),
-          icon: const Icon(CupertinoIcons.chevron_forward,
+          icon: AppIcon(CupertinoIcons.chevron_forward,
               size: 16, color: AppColors.body),
           splashRadius: 20,
         ),
@@ -241,7 +242,7 @@ class _CurrentChapterCard extends StatelessWidget {
                     style: AppText.body(AppColors.onDark)
                         .copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(width: 4),
-                const Icon(CupertinoIcons.chevron_forward,
+                const AppIcon(CupertinoIcons.chevron_forward,
                     size: 13, color: AppColors.onDark),
               ],
             ),
@@ -317,7 +318,7 @@ class _ReviewNudge extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(CupertinoIcons.chevron_forward,
+            const AppIcon(CupertinoIcons.chevron_forward,
                 size: 14, color: AppColors.brand),
           ],
         ),
@@ -379,10 +380,10 @@ class _MonthTile extends StatelessWidget {
                     ),
                   ),
                   if (closed)
-                    const Icon(CupertinoIcons.checkmark_seal_fill,
+                    const AppIcon(CupertinoIcons.checkmark_seal_fill,
                         size: 13, color: AppColors.brand)
                   else if (written)
-                    const Icon(CupertinoIcons.book,
+                    const AppIcon(CupertinoIcons.book,
                         size: 12, color: AppColors.secondary),
                 ],
               ),

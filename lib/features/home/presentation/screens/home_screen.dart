@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -36,9 +37,9 @@ class HomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const Scaffold(
+    return Scaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: AppBottomNav(),
+      bottomNavigationBar: const AppBottomNav(),
       body: SafeArea(
         // CustomScrollView rather than ListView so the top bar can be a
         // sliver: `floating` lets it slide away as you read down the page
@@ -55,12 +56,12 @@ class HomeScreen extends ConsumerWidget {
               titleSpacing: 0,
               toolbarHeight: 56,
               automaticallyImplyLeading: false,
-              title: Padding(
+              title: const Padding(
                 padding: AppSpace.screen,
                 child: _HomeBar(),
               ),
             ),
-            SliverPadding(
+            const SliverPadding(
               padding: AppSpace.screen,
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
@@ -403,7 +404,7 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
                         shape: BoxShape.circle,
                         boxShadow: AppElevation.glow,
                       ),
-                      child: const Icon(
+                      child: const AppIcon(
                         CupertinoIcons.heart_fill,
                         color: Colors.white,
                         size: 38,
@@ -1130,7 +1131,7 @@ class _CouplePill extends ConsumerWidget {
                 ),
               ],
               const SizedBox(width: 2),
-              const Icon(CupertinoIcons.chevron_down,
+              AppIcon(CupertinoIcons.chevron_down,
                   size: 12, color: AppColors.muted),
             ],
           ),

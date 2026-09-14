@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
@@ -67,7 +68,7 @@ class _AppCtaButtonState extends State<AppCtaButton> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (widget.icon != null) ...[
-                    Icon(widget.icon, color: Colors.white, size: 18),
+                    AppIcon(widget.icon, color: Colors.white, size: 18),
                     const SizedBox(width: AppSpace.xs),
                   ],
                   Text(

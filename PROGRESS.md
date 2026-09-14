@@ -13,6 +13,14 @@
 
 ## Recent app work
 
+### TikTok Sans and Instagram-style icons (2026-09-14)
+
+- **Published as build 68 (1.0.0+68)** through the optional Android updater. Public manifest and APK verified (HTTP 200, 52,206,339 bytes); TikTok Sans registration and font bytes verified inside the APK. Three release notes included; normal retention kept builds 64–68.
+
+- The Flutter app now uses bundled TikTok Sans throughout, including notes and OTP fields. Font and OFL license are under `assets/fonts/tiktok/`; shared family/styles live in `AppTypography` and `AppText`.
+- `AppIcon` renders original Instagram-style outline artwork for the existing icon identifiers, with filled selected navigation icons. Apple/Facebook brand marks remain unchanged. Use `AppIcon` for new controls; this supersedes the historical Cupertino-only guidance below.
+- The offline screen-review test loads the bundled font directly, and updater smoke tests no longer swallow font-download exceptions.
+
 ### Flowers tab, and chat settings (2026-09-13)
 
 - **The Flowers tab opens a Flowers page now, not the conversation.** `Routes.blooms = '/app/blooms'`, `BloomsScreen`. The tab named after the flowers never showed you any — every bloom was buried in a thread you had to scroll. It shows the newest one large, the rest as a garden grid, and the thread one tap away.
@@ -801,7 +809,7 @@ The tab used to open the conversation directly. It now opens an **inbox** (`mess
 - **The nav badge is suppressed only on `Routes.chat`**, not on the inbox — seeing the list is not the same as having read anything, and `markThreadSeen` only fires in the thread.
 - The inbox preview names a flower rather than rendering it (`🌷 Red Tulips · caption`), prefixes `You:` for your own last message, and uses the standard time → "Yesterday" → weekday → date ladder.
 
-## Icon set = Cupertino (2026-08-01)
+## Historical icon set = Cupertino (2026-08-01; superseded 2026-09-14)
 
 Icons were a mix of Material `_rounded` and `_outlined` glyphs; they are now **`CupertinoIcons`** throughout for a rounder, iOS-like feel. The swap was scripted across 14 files, so keep new icons Cupertino unless there is a reason not to.
 
@@ -3701,3 +3709,135 @@ window. 301 tests pass. Migration 0043 (presence) is applied.
 
 ⚠️ The website was **not** deployed as part of this — see the note in the
 handoff about work from a parallel session sitting on `calls`.
+
+## "Active now" was a browser tab (2026-09-14)
+
+The chat header had been calling the partner present for nineteen hours
+without a break. Presence itself was not broken — the beats were real,
+once a minute, on time — so the question was whose they were.
+
+`presence` stores one timestamp per person, and the fractional seconds gave
+it away: one row wrote microseconds, the other only ever milliseconds.
+Dart has microsecond resolution everywhere it runs natively; **JavaScript's
+clock stops at milliseconds.** One of those rows was a web build.
+
+It was the dev preview from the previous session. `preview_stop` had been
+run on its server the day before, but stopping a server does not stop a
+page: the tab still had the compiled app in memory, a Supabase session from
+`maybeDevAutoLogin` (a *real* account — the test partner), and a live
+`Timer.periodic`. Browsers throttle a hidden tab's timers to roughly once a
+minute, which is exactly `beatEvery`, so it did not even look degraded.
+Closing the tab stopped the row on its next beat and never resumed.
+
+- 🔴 **A dev preview writes to the same production row every phone reads.**
+  That is the actual defect, not the tab. `kIsWeb`, and anything that is
+  not an Android install, is now refused before the write.
+- 🔴 **The same mistake had a second shape on real phones.** MainActivity is
+  `showWhenLocked`, so an incoming call or a ringing reminder launches it
+  with a full-screen intent; `initState` started the heartbeat and it beat
+  before anybody had touched the phone. Ringing somebody made them look
+  like they had just picked up — the worst direction for this to be wrong
+  in, because the person who sees it is the one who rang.
+
+### The rule
+
+`shouldClaimPresence` — signed in, not a preview build, and the device
+awake and past its lock screen. Three inputs, one AND, pinned by tests
+with both incidents written into them.
+
+The last input is twelve lines of Kotlin (`PowerManager.isInteractive` and
+`KeyguardManager.isKeyguardLocked`) behind `dayflower/presence`, because
+Android exposes neither half to Flutter. `isInteractive` alone is not
+enough: `turnScreenOn` on the Activity means the full-screen intent has
+already woken the screen by the time anyone asks. The keyguard is the half
+that says nobody has arrived.
+
+- ⚠️ **Asked per beat, not once at `start()`.** Unlocking a phone raises no
+  lifecycle event, so nothing else would ever restart it. A refused beat
+  leaves the timer running on purpose.
+- ⚠️ **Fails open on Android, closed off it.** A phone that will not answer
+  is not evidence of absence, and a wrong "no" makes somebody invisible to
+  their partner with nothing on screen to explain it. A platform that is
+  not a phone install is a preview, and gets no benefit of the doubt. An
+  iOS build would be silent here until it answers the same two questions.
+- ⚠️ **A phone with no lock screen at all** has no keyguard to be showing,
+  so an alarm can still produce a single beat there. Closing that properly
+  means the ring screens telling Dart they are unanswered.
+
+320 tests pass. Not published — the fix is in `calls`, unreleased.
+
+## A name back, a reaction, and a second palette (2026-09-14)
+
+Three things in one pass. The first two are small; the third touched every
+screen without touching almost any screen's code.
+
+### The presence ping stops being a "heartbeat"
+
+There were **two classes named `Heartbeat`** — `features/heartbeat` and
+`features/presence` — and `app.dart` imported both. It compiled only
+because nothing in that file named the bare type; one more reference and it
+would have been an ambiguous import.
+
+They are unrelated. A heartbeat is the heart you tap to make their phone
+buzz: a gesture, one row per tap, kept forever. Presence is a silent
+once-a-minute write nobody sees, one row per person, overwritten every
+time. Sharing a word made "Active now" look like it was driven by the
+hearts you send, which is exactly the question it prompted. Presence gives
+the word back: `PresencePinger`, `pingEvery`, `markActive`.
+
+### React to a message
+
+Long-press any bubble, six emoji, one per person per message — so at most
+two marks here, his and hers. Tapping the one you already chose takes it
+back, the same toggle the mood chip uses.
+
+- 🔴 **Long-press used to be gated on `onDelete`**, which is null on their
+  messages — so *their* bubbles had no long-press at all. Reacting is the
+  one thing you do to something somebody else said.
+- Its own table, not a column on `flower_messages`: 0004 lets only the
+  recipient update a message, and widening that would hand them the note,
+  the flower and the timestamp too. RLS grants a row, not a column.
+- 🔴 **`replica identity full`, and it is load-bearing.** Realtime checks
+  the SELECT policy against the *old* tuple, which by default is only the
+  primary key — so `pair_id` was null, "am I in this pair" could not be
+  true, and every removal was dropped as an event this client may not see.
+  The row really was deleted and the emoji stayed on screen. Caught on the
+  first toggle; see the header of 0045.
+- ⚠️ Calls take no reactions — a call row returns early to `CallBubble`.
+
+### Dark mode, chosen by flower
+
+Two cards in Settings: **Sunflower — follows the sun**, **Jasmine — opens
+after dark**, drawn with the same stem artwork the conversation sends.
+
+- 🔴 **The neutrals became getters.** ~950 `AppColors.x` references across
+  ~60 files; threading `Theme.of(context)` through all of them was never a
+  real option, so the palette swaps underneath the name and **not one call
+  site changed**. The brand — gradient, pink, purple — is identical in both
+  modes on purpose.
+- ⚠️ The price, both parts small. ~50 `const` expressions had to drop their
+  `const` (a `const` colour cannot come from a getter), and two enum values
+  that held `AppColors.muted` now hold null and resolve on read, because an
+  enum value is always const. And the mode change has to **re-inflate** the
+  tree, not just repaint it — hence `key: ValueKey(mode)` on MaterialApp.
+  Without that, a colour already baked into a `const` widget keeps the old
+  palette and half the screen stays light.
+- ⚠️ `AppTheme.light` is now `AppTheme.current`. Every colour in it already
+  read through `AppColors`, so one getter produces both modes and there is
+  no second ThemeData to drift.
+- 🔴 Restored **before `runApp`**, not after the first frame — otherwise
+  every cold start flashes white at somebody who chose Jasmine.
+- ⚠️ Device-local, not synced. Sharing a mood is the point of this app;
+  sharing a screen brightness is not, and two people in two timezones are
+  in daylight at different hours.
+- Pinned by tests that would otherwise fail silently: ink clears the canvas
+  by a real margin in **both** modes, no neutral is accidentally shared
+  between the palettes, your own bubble never equals the card surface, and
+  both flower ids resolve to the flower they name (`byId` falls back to a
+  tulip, so a typo would just put two identical tulips on the setting).
+
+338 tests pass. Verified in the browser: the toggle, Home, the thread with
+both bubble sides, and a cold start that comes up dark with no flash.
+
+⚠️ **Not published.** Build 68 was cut by the parallel session before any of
+this, so none of it is on either phone yet.

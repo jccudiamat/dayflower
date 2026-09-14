@@ -29,9 +29,9 @@ class AppBottomSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).viewInsets.bottom;
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       // Capped so a long form scrolls inside the sheet instead of pushing
       // its own save button off the bottom of the screen.
@@ -111,7 +111,7 @@ class AppSheetField extends StatelessWidget {
   final TextAlign textAlign;
   final bool autofocus;
 
-  /// Lora italic — for the one field per sheet that is prose rather than
+  /// TikTok Sans italic — for the one field per sheet that is prose rather than
   /// data (a review, a note). design.md keeps the serif rare on purpose.
   final bool serif;
 

@@ -5,6 +5,7 @@ import { drawWrapperLayer, notePapers, letterings, stationerySets, drawPrint, dr
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import { SPECIAL_WRAPPER_URL, REVEAL_ART, backgrounds, borders, bouquetColors } from "./model";
 import "./bouquet.css";
+import DeliveryCheck from "../components/DeliveryCheck";
 import { emailAddress, textInput } from "../lib/input";
 
 const DRAFT_KEY = "dayflower-bouquet-v1";
@@ -108,6 +109,8 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   const [notice, setNotice] = useState("");
   const [shareUrl, setShareUrl] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deliveryToken, setDeliveryToken] = useState("");
+  const [deliveryCheck, setDeliveryCheck] = useState(0);
   const [email, setEmail] = useState("");
   const [emailState, setEmailState] = useState<"idle" | "sending" | "sent">("idle");
   useEffect(() => {
@@ -425,7 +428,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   }
   async function sendByEmail(event: FormEvent) {
     event.preventDefault();
-    if (emailState === "sending") return;
+    if (emailState === "sending" || !deliveryToken) return;
     if (!emailAddress(email)) { setNotice("Please enter a valid email address."); return; }
     setEmailState("sending"); setNotice("");
     // The link has to exist before it can be mailed, and makeLink reuses the
@@ -436,7 +439,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
       const res = await fetch("/api/gift/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: url.split("/g/")[1], email }),
+        body: JSON.stringify({ id: url.split("/g/")[1], email, token: deliveryToken }),
       });
       const data = await res.json().catch(() => null);
       if (res.ok) { setEmailState("sent"); setNotice(""); }
@@ -444,7 +447,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     } catch {
       setEmailState("idle");
       setNotice("Couldn’t reach the flower shop. Check your connection and try again.");
-    }
+    } finally { setDeliveryToken(""); setDeliveryCheck(n => n + 1); }
   }
 
   /**
@@ -620,10 +623,11 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
             {emailState === "sent"
               ? <p className="bouquet-email-sent" role="status"><span aria-hidden="true">✉</span> On its way to {email}. They&rsquo;ll see only that you made them something.</p>
               : <><label htmlFor="bouquet-email-field">Or send it straight to their inbox</label>
+                <DeliveryCheck key={deliveryCheck} onToken={setDeliveryToken} />
                 <div className="bouquet-email-row">
                   <input id="bouquet-email-field" type="email" maxLength={254} required value={email} placeholder="them@example.com" autoComplete="email"
                     disabled={emailState === "sending"} onChange={e => { setEmail(e.target.value); setNotice(""); }} />
-                  <button type="submit" className="bouquet-button primary" disabled={emailState === "sending" || !email.trim()}>{emailState === "sending" ? "Sending…" : "Send"}</button>
+                  <button type="submit" className="bouquet-button primary" disabled={emailState === "sending" || !deliveryToken || !email.trim()}>{emailState === "sending" ? "Sending…" : "Send"}</button>
                 </div>
                 <p className="bouquet-email-note">We send it once and don&rsquo;t keep the address.</p></>}
           </form>

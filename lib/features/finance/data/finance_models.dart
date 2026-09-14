@@ -44,13 +44,19 @@ enum AccountKind {
   investment('Investment', '📈', AppColors.lavender, AccountClass.asset),
   loan('Loan', '🏚️', AppColors.danger, AccountClass.liability),
   receivable('Owed to me', '🤝', AppColors.sage, AccountClass.asset),
-  other('Other', '📦', AppColors.muted, AccountClass.asset);
+  other('Other', '📦', null, AccountClass.asset);
 
-  const AccountKind(this.label, this.emoji, this.color, this.defaultClass);
+  const AccountKind(this.label, this.emoji, Color? color, this.defaultClass)
+      : _color = color;
+
+  final Color? _color;
+
+  /// See ActivityKind.tint — an enum value cannot hold a palette neutral
+  /// now that the neutrals are getters.
+  Color get color => _color ?? AppColors.muted;
 
   final String label;
   final String emoji;
-  final Color color;
 
   /// What this kind usually is. A starting point for the form, never a
   /// constraint — the user can flip a card to an asset if theirs is debit.

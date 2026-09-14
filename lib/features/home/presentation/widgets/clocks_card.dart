@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
@@ -170,7 +171,7 @@ class _Clock extends StatelessWidget {
               ),
               if (editable) ...[
                 const SizedBox(width: 4),
-                const Icon(
+                AppIcon(
                   CupertinoIcons.pencil,
                   size: 12,
                   color: AppColors.muted,

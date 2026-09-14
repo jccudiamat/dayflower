@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -134,7 +135,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
         onPressed: () => _openEditor(partner: partner),
         backgroundColor: AppColors.brand,
         foregroundColor: Colors.white,
-        child: const Icon(CupertinoIcons.add),
+        child: const AppIcon(CupertinoIcons.add),
       ),
       bottomNavigationBar: const AppBottomNav(),
     );
@@ -432,7 +433,7 @@ class _NudgeButton extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
+                AppIcon(
                   spent
                       ? CupertinoIcons.checkmark_alt
                       : CupertinoIcons.bell_fill,
@@ -479,7 +480,7 @@ class _TickCircle extends StatelessWidget {
                 : Border.all(color: AppColors.blushMid, width: 1.5),
           ),
           child: done
-              ? const Icon(Icons.done_rounded, size: 15, color: Colors.white)
+              ? const AppIcon(Icons.done_rounded, size: 15, color: Colors.white)
               : null,
         ),
       ),
@@ -498,7 +499,7 @@ class _Chip extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 11, color: color),
+        AppIcon(icon, size: 11, color: color),
         const SizedBox(width: 3),
         Text(label, style: AppText.label(color)),
       ],
@@ -890,7 +891,7 @@ class _PickerField extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 15, color: AppColors.brand),
+            AppIcon(icon, size: 15, color: AppColors.brand),
             const SizedBox(width: AppSpace.xs),
             Expanded(
               child: Text(label,

@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,7 +36,7 @@ class GiftOccasionCard extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(children: [
-            const Icon(CupertinoIcons.gift,
+            const AppIcon(CupertinoIcons.gift,
                 color: AppColors.secondary, size: 20),
             const SizedBox(width: AppSpace.xs),
             Text(
@@ -66,7 +67,7 @@ class GiftOccasionCard extends ConsumerWidget {
                   queryParameters:
                       monthsary == null ? null : {'occasion': occasion},
                 ).toString()),
-                icon: const Icon(CupertinoIcons.gift, size: 17),
+                icon: const AppIcon(CupertinoIcons.gift, size: 17),
                 label: const Text('Gift ideas'),
               ),
               TextButton(

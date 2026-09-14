@@ -1,26 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:dayflower/core/theme/app_typography.dart';
 
 import 'app_colors.dart';
 import 'design_tokens.dart';
 
 class AppTheme {
-  static ThemeData get light {
-    final base = ThemeData(useMaterial3: true);
+  /// The theme for whichever palette is loaded.
+  ///
+  /// ⚠️ Not `light` any more, and the rename is the point: every colour
+  /// below already reads through `AppColors`, so this one getter produces
+  /// both modes and there is no second `dark` ThemeData to drift from it.
+  /// Read *after* `AppColors.use()` — see app.dart.
+  static ThemeData get current {
+    final dark = AppColors.isDark;
+    final base = ThemeData(
+      useMaterial3: true,
+      fontFamily: AppTypography.family,
+      // Tells Material what to assume for everything this file does not
+      // name — cursor colours, ripple opacity, the default icon theme.
+      brightness: dark ? Brightness.dark : Brightness.light,
+    );
 
     return base.copyWith(
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.brand,
+        brightness: dark ? Brightness.dark : Brightness.light,
         primary: AppColors.brand,
         secondary: AppColors.secondary,
         surface: AppColors.surface,
+        // 🔴 Without this, `fromSeed` derives its own on-surface ink from
+        // the pink seed and Material widgets that do not take an explicit
+        // colour — menu items, date pickers — render near-black text on a
+        // plum sheet.
+        onSurface: AppColors.ink,
         error: AppColors.danger,
       ),
       scaffoldBackgroundColor: AppColors.background,
       splashFactory: InkSparkle.splashFactory,
 
-      textTheme: GoogleFonts.quicksandTextTheme().copyWith(
+      textTheme: base.textTheme.copyWith(
         displayLarge: AppText.display(),
         displayMedium: AppText.hero(),
         displaySmall: AppText.title(),
@@ -29,11 +48,11 @@ class AppTheme {
         headlineSmall: AppText.subtitle(),
         titleLarge: AppText.title(),
         titleMedium: AppText.subtitle(),
-        titleSmall: _qs(14, FontWeight.w600, AppColors.ink),
+        titleSmall: _text(14, FontWeight.w600, AppColors.ink),
         bodyLarge: AppText.body(AppColors.ink),
         bodyMedium: AppText.body(),
         bodySmall: AppText.caption(),
-        labelLarge: _qs(15, FontWeight.w600, AppColors.ink),
+        labelLarge: _text(15, FontWeight.w600, AppColors.ink),
         labelMedium: AppText.label(AppColors.body),
         labelSmall: AppText.label(),
       ),
@@ -45,7 +64,10 @@ class AppTheme {
         scrolledUnderElevation: 0,
         centerTitle: true,
         titleTextStyle: AppText.title(),
-        systemOverlayStyle: SystemUiOverlayStyle.dark,
+        // The *icons* in the status bar, so they are readable against the
+        // canvas behind them: dark glyphs on a light app, light on a dark.
+        systemOverlayStyle:
+            dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       ),
 
       inputDecorationTheme: InputDecorationTheme(
@@ -69,7 +91,7 @@ class AppTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.lg),
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
         ),
         margin: EdgeInsets.zero,
       ),
@@ -91,7 +113,7 @@ class AppTheme {
             horizontal: AppSpace.md,
             vertical: 13,
           ),
-          textStyle: _qs(15, FontWeight.w600, Colors.white),
+          textStyle: _text(15, FontWeight.w600, Colors.white),
         ),
       ),
 
@@ -106,27 +128,27 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.pill),
           ),
-          textStyle: _qs(15, FontWeight.w600, AppColors.ink),
+          textStyle: _text(15, FontWeight.w600, AppColors.ink),
         ),
       ),
 
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.secondary,
-          textStyle: _qs(14, FontWeight.w600, AppColors.secondary),
+          textStyle: _text(14, FontWeight.w600, AppColors.secondary),
         ),
       ),
 
-      dividerTheme: const DividerThemeData(
+      dividerTheme: DividerThemeData(
         color: AppColors.border,
         thickness: 1,
         space: 1,
       ),
 
-      bottomSheetTheme: const BottomSheetThemeData(
+      bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: AppColors.surface,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(
+        shape: const RoundedRectangleBorder(
           borderRadius:
               BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
         ),
@@ -144,8 +166,11 @@ class AppTheme {
       ),
 
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: AppColors.darkSurface,
-        contentTextStyle: _qs(14, FontWeight.w500, AppColors.onDark),
+        // On light this is the plum slab it has always been. On dark that
+        // colour *is* the card surface, so it steps up instead — a snackbar
+        // that matches the cards behind it reads as part of the page.
+        backgroundColor: dark ? AppColors.darkRaised : AppColors.darkSurface,
+        contentTextStyle: _text(14, FontWeight.w500, AppColors.onDark),
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
@@ -173,8 +198,8 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surface,
         selectedColor: AppColors.blush,
-        labelStyle: _qs(13, FontWeight.w500, AppColors.body),
-        side: const BorderSide(color: AppColors.border),
+        labelStyle: _text(13, FontWeight.w500, AppColors.body),
+        side: BorderSide(color: AppColors.border),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
@@ -192,6 +217,6 @@ class AppTheme {
         borderSide: BorderSide(color: color, width: width),
       );
 
-  static TextStyle _qs(double size, FontWeight weight, Color color) =>
-      GoogleFonts.quicksand(fontSize: size, fontWeight: weight, color: color);
+  static TextStyle _text(double size, FontWeight weight, Color color) =>
+      AppTypography.style(fontSize: size, fontWeight: weight, color: color);
 }

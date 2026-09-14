@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -41,7 +42,7 @@ class _FlowerCatalogPanelState extends State<FlowerCatalogPanel> {
 
     return Container(
       height: widget.height,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
@@ -358,7 +359,7 @@ class _FlowerSendSheetState extends State<_FlowerSendSheet> {
                   ),
                   child: Row(
                     children: [
-                      Icon(
+                      AppIcon(
                         CupertinoIcons.device_phone_portrait,
                         size: 20,
                         color: _toWidget ? AppColors.brand : AppColors.muted,

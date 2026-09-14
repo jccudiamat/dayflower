@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -42,7 +43,7 @@ Future<bool> showConfirmDialog(
                 ),
                 IconButton(
                   onPressed: () => Navigator.of(context).pop(false),
-                  icon: const Icon(
+                  icon: AppIcon(
                     CupertinoIcons.xmark,
                     color: AppColors.muted,
                     size: 20,

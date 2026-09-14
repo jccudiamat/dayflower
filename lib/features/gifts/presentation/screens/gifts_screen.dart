@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:async';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -8,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../data/gift_catalog.dart';
 import '../../data/gift_repository.dart';
+import '../../data/gift_favorites_repository.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
@@ -27,7 +29,7 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
   /// 🔴 Keyed by product **id**, not by position. The catalogue is loaded from
   /// the server now and can reorder or shrink between builds; a set of indices
   /// would quietly start pointing at different gifts.
-  final _saved = <String>{};
+  final _savingFavorites = <String>{};
   String _recipient = 'All';
   String _category = 'All types';
   int? _budget;
@@ -36,6 +38,21 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
   void dispose() {
     _search.dispose();
     super.dispose();
+  }
+
+  Future<void> _toggleFavorite(String id) async {
+    if (!_savingFavorites.add(id)) return;
+    try {
+      await ref.read(giftFavoritesProvider.notifier).toggle(id);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Could not update your saved gifts. Please try again.'),
+        ));
+      }
+    } finally {
+      _savingFavorites.remove(id);
+    }
   }
 
   Future<void> _openProduct(GiftProduct product) async {
@@ -72,6 +89,8 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final favorites = ref.watch(giftFavoritesProvider);
+    final savedIds = favorites.valueOrNull ?? const <String>{};
     final query = _search.text.trim().toLowerCase();
     // ⚠️ `.valueOrNull ?? giftProducts` rather than a spinner. The catalogue
     // is a list of shopping links, not the user's own data: showing the
@@ -86,7 +105,7 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
                 recipient: _recipient,
                 category: _category,
                 budget: _budget) &&
-            (!_savedOnly || _saved.contains(p.id)))
+            (!_savedOnly || savedIds.contains(p.id)))
           p
     ];
     return Scaffold(
@@ -103,7 +122,7 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
             IconButton(
                 tooltip: _savedOnly ? 'Show all gifts' : 'Show saved gifts',
                 onPressed: () => setState(() => _savedOnly = !_savedOnly),
-                icon: Icon(
+                icon: AppIcon(
                     _savedOnly
                         ? CupertinoIcons.heart_fill
                         : CupertinoIcons.heart,
@@ -118,21 +137,21 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
               decoration: InputDecoration(
                 hintText: 'Find something thoughtful',
                 hintStyle: AppText.caption(),
-                prefixIcon: const Icon(CupertinoIcons.search, size: 20),
+                prefixIcon: const AppIcon(CupertinoIcons.search, size: 20),
                 filled: true,
                 fillColor: AppColors.surface,
                 suffixIcon: query.isEmpty
                     ? null
                     : IconButton(
                         tooltip: 'Clear search',
-                        icon: const Icon(Icons.close),
+                        icon: const AppIcon(Icons.close),
                         onPressed: () => setState(_search.clear)),
                 border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(color: AppColors.border)),
+                    borderSide: BorderSide(color: AppColors.border)),
                 enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(18),
-                    borderSide: const BorderSide(color: AppColors.border)),
+                    borderSide: BorderSide(color: AppColors.border)),
               )),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 4, children: [
@@ -170,7 +189,7 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
                     child: Chip(
                         label: Text(
                             _budget == null ? 'Budget' : 'Up to ₱$_budget'),
-                        avatar: const Icon(CupertinoIcons.tag, size: 16))),
+                        avatar: const AppIcon(CupertinoIcons.tag, size: 16))),
                 Text('Shopee Philippines', style: AppText.caption()),
               ]),
           SingleChildScrollView(
@@ -217,12 +236,19 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
               'Prices checked $giftCatalogChecked. Prices, options and availability may change on Shopee.',
               style: AppText.caption()),
           const SizedBox(height: 12),
-          if (products.isEmpty)
+          if (favorites.isLoading) const LinearProgressIndicator(),
+          if (favorites.hasError) ...[
+            Text('Could not load your saved gifts.', style: AppText.caption()),
+            TextButton(
+                onPressed: () => ref.invalidate(giftFavoritesProvider),
+                child: const Text('Retry saved gifts')),
+          ],
+          if (products.isEmpty && (!_savedOnly || favorites.hasValue))
             Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
                 child: Text(
                     _savedOnly
-                        ? 'No saved gifts match yet. Tap a heart to keep an idea here for this visit.'
+                        ? 'No saved gifts match yet. Tap a heart to keep an idea for later.'
                         : 'No gifts match. Try another search or budget.',
                     style: AppText.body())),
           // Natural row heights accommodate large text without clipped grid cells.
@@ -239,19 +265,15 @@ class _GiftsScreenState extends ConsumerState<GiftsScreen> {
                                 ? const SizedBox()
                                 : _ProductCard(
                                     product: products[j],
-                                    saved: _saved.contains(products[j].id),
+                                    saved: savedIds.contains(products[j].id),
                                     onView: () => _openProduct(products[j]),
-                                    onSave: () => setState(() {
-                                          final id = products[j].id;
-                                          if (!_saved.add(id)) {
-                                            _saved.remove(id);
-                                          }
-                                        }))),
+                                    onSave: () =>
+                                        _toggleFavorite(products[j].id))),
                       ]
                     ])),
           const SizedBox(height: 8),
           Text(
-              'Favourites are kept for this visit. Product photos belong to the sellers. Orders and delivery are handled on Shopee.',
+              'Favorites are saved to your account. Product photos belong to the sellers. Orders and delivery are handled on Shopee.',
               style: AppText.caption(),
               textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -270,7 +292,7 @@ class _GiftUsCard extends StatelessWidget {
         Row(children: [
           Expanded(
               child: Text('Gift us', style: AppText.hero(AppColors.onDark))),
-          const Icon(CupertinoIcons.gift_fill,
+          const AppIcon(CupertinoIcons.gift_fill,
               color: AppColors.gradientPink, size: 32)
         ]),
         const SizedBox(height: 8),
@@ -340,7 +362,8 @@ class _GiftImage extends StatelessWidget {
   const _GiftImage({required this.product});
   final GiftProduct product;
 
-  static const _fallback = Center(child: Icon(CupertinoIcons.gift, size: 40));
+  static const _fallback =
+      Center(child: AppIcon(CupertinoIcons.gift, size: 40));
 
   @override
   Widget build(BuildContext context) {
@@ -403,7 +426,7 @@ class _ProductCard extends StatelessWidget {
                             backgroundColor: Colors.white,
                             foregroundColor: AppColors.secondary),
                         onPressed: onSave,
-                        icon: Icon(
+                        icon: AppIcon(
                             saved
                                 ? CupertinoIcons.heart_fill
                                 : CupertinoIcons.heart,

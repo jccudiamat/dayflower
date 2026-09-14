@@ -7,7 +7,7 @@ Server environment: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and existing em
 ## Input and output rules
 
 - Public POST endpoints accept JSON objects only, reject unknown request fields, cross-site browser submissions and compressed bodies, and enforce streaming byte limits, UTF-8 validity, nesting limits, and a five-second body deadline.
-- Gift creation accepts up to 1.8 MB; email and waitlist requests accept up to 2 KB. Names, notes, captions, addresses, identifiers, enum selections, array counts, and numeric coordinates are bounded. Old gift styles retain safe defaults on reads; newly submitted styles are strictly validated.
+- Gift creation accepts up to 1.8 MB; email requests accept up to 4 KB (including the CAPTCHA token), and waitlist requests up to 2 KB. Names, notes, captions, addresses, identifiers, enum selections, array counts, and numeric coordinates are bounded. Old gift styles retain safe defaults on reads; newly submitted styles are strictly validated.
 - User prose remains plain text. React escapes HTML; canvas renders it as text; email templates explicitly escape it. Do not render user input with `dangerouslySetInnerHTML` or use it as a script, URL, SQL fragment, or provider header.
 - Both editors inspect image file signatures and dimensions before browser decoding: JPEG, PNG, or WebP, at most 24 MP and 12,000 pixels per side. Animated PNG/WebP is rejected. Existing file-byte ceilings remain 15 MB for bouquets and 20 MB for the booth.
 - Shared photo data receives a second server validation and sequential re-encoding with a four-megapixel decoder limit, 2,048-pixel input side limit, 640-pixel output, three-second decoder timeout, and 180 KB encoded-photo ceiling. Metadata is stripped. Booth photos remain local.
@@ -37,3 +37,12 @@ The global budgets intentionally cap cost during distributed abuse and may tempo
 ## Verification
 
 Run `node --test tests/*.mjs emails/send-confirmation.test.mjs`, `npm audit`, lint, and the production build. Verify CSP nonces match emitted scripts, ordinary photo gifts still render, anonymous database scans/inserts are denied, and limiter outages stop side effects. Exercise limits against a test database or a rolled-back transaction; do not burst-send real email. Maintain provider idempotency keys across deployments.
+
+
+## Cloudflare Turnstile for email only
+
+Before deploying this change, create a Managed Turnstile widget restricted to `mydayflower.com` and `www.mydayflower.com`. Add `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` to the Vercel production environment, then rebuild. The public site key is embedded at build time; the secret must remain server-only. Never use Cloudflare's dummy test keys in production.
+
+The email button stays disabled until verification completes. `/api/gift/email` also requires a token, validates it through Cloudflare Siteverify, and checks the returned hostname and `gift-email` action before reading the gift or calling the email provider. Missing configuration, failed checks, reused/expired tokens, and provider outages fail closed. Existing email quotas remain active. Browser tokens clear on expiry and reset after each attempted email request. Copy/share links and the Dayflower app handoff do not require CAPTCHA.
+
+The CSP retains nonce/strict-dynamic script protection and allows only `https://challenges.cloudflare.com` for challenge frames. No bouquet, recipient email, or message is sent to Siteverify. Live widget verification needs the actual configured domain and keys; automated tests mock Cloudflare and the mail provider and send no real email.

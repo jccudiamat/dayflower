@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -457,7 +458,7 @@ class _ShareButton extends StatelessWidget {
                     child: CircularProgressIndicator(
                         strokeWidth: 2, color: Colors.white),
                   )
-                : const Icon(CupertinoIcons.share,
+                : const AppIcon(CupertinoIcons.share,
                     size: 18, color: Colors.white),
           ),
         ),
@@ -482,7 +483,7 @@ class _MonthPicker extends StatelessWidget {
       children: [
         IconButton(
           onPressed: () => onShift(-1),
-          icon: const Icon(CupertinoIcons.chevron_left, size: 16),
+          icon: const AppIcon(CupertinoIcons.chevron_left, size: 16),
           color: AppColors.muted,
         ),
         Text(DateFormat('MMMM y').format(month), style: AppText.subtitle()),
@@ -490,7 +491,7 @@ class _MonthPicker extends StatelessWidget {
           // No forward past the current month: there is nothing recorded in
           // the future, and a chart of it is an empty chart.
           onPressed: isThisMonth ? null : () => onShift(1),
-          icon: const Icon(CupertinoIcons.chevron_right, size: 16),
+          icon: const AppIcon(CupertinoIcons.chevron_right, size: 16),
           color: isThisMonth ? AppColors.border : AppColors.muted,
         ),
       ],

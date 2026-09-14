@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:dayflower/core/theme/app_typography.dart';
 import '../theme/app_colors.dart';
 
 class OtpField extends StatefulWidget {
@@ -130,7 +130,7 @@ class _OtpFieldState extends State<OtpField> {
                 textAlign: TextAlign.center,
                 maxLength: 2, // allow 2 so we can detect new char
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: GoogleFonts.quicksand(
+                style: AppTypography.style(
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                   color: widget.dark ? AppColors.onDark : AppColors.ink,

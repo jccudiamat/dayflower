@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -77,7 +78,7 @@ class CallBubble extends ConsumerWidget {
                         gradient: AppGradients.cta,
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
-                      child: Icon(mode.icon, color: Colors.white, size: 18),
+                      child: AppIcon(mode.icon, color: Colors.white, size: 18),
                     ),
                     const SizedBox(width: AppSpace.xs),
                     Expanded(
@@ -177,7 +178,7 @@ class CallBubble extends ConsumerWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            AppIcon(
               unanswered ? CupertinoIcons.phone_down : mode.icon,
               size: 12,
               color: AppColors.muted,

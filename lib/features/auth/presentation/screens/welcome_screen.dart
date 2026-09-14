@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -37,7 +38,7 @@ class WelcomeScreen extends StatelessWidget {
                       'assets/images/logo.png',
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Center(
-                        child: Icon(
+                        child: AppIcon(
                           Icons.local_florist_rounded,
                           size: 48,
                           color: AppColors.petalDeep,

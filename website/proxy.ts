@@ -38,7 +38,7 @@ export async function proxy(request: NextRequest) {
   const policy = [
     "default-src 'self'", `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${dev ? " 'unsafe-eval'" : ""}`,
     "script-src-attr 'none'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
-    "font-src 'self'", `connect-src 'self'${dev ? " ws: wss:" : ""}`, "media-src 'self' blob:",
+    "frame-src https://challenges.cloudflare.com", "font-src 'self'", `connect-src 'self'${dev ? " ws: wss:" : ""}`, "media-src 'self' blob:",
     "object-src 'none'", "base-uri 'none'", "form-action 'self'", "frame-ancestors 'none'",
     ...(!dev ? ["upgrade-insecure-requests"] : []),
   ].join("; ");

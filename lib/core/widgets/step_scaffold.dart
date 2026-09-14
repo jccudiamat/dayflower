@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -60,7 +61,7 @@ class StepScaffold extends StatelessWidget {
                             onPressed: onBack,
                             padding: EdgeInsets.zero,
                             constraints: const BoxConstraints(),
-                            icon: const Icon(
+                            icon: const AppIcon(
                               CupertinoIcons.chevron_back,
                               color: AppColors.onDarkMuted,
                             ),

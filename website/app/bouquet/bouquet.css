@@ -297,3 +297,6 @@
 @media (max-width: 680px) {
  .bouquet-preview::before { content: ""; position: absolute; inset: -1px -16px 0; background: #faf7fc; z-index: -1; }
 }
+
+.bouquet-delivery-check { margin: 18px 0 8px; min-width: 0; text-align: left; }
+.bouquet-delivery-check p { font-size: 13px; color: #75546a; line-height: 1.5; }

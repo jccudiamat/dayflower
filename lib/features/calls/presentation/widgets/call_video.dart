@@ -1,3 +1,4 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 // `firstOrNull` resolves through livekit_client's own exports without this,
 // which would make these widgets break on an unrelated SDK bump.
 import 'package:collection/collection.dart';
@@ -162,7 +163,7 @@ class _SelfPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Icon(
+      child: AppIcon(
         Icons.videocam_off_rounded,
         size: 22,
         color: AppColors.onDark.withValues(alpha: .35),

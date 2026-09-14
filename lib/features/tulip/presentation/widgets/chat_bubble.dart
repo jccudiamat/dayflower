@@ -489,8 +489,8 @@ class _SwipeToReplyState extends State<_SwipeToReply> {
           // than appearing all at once.
           Opacity(
             opacity: (_dx / _trigger).clamp(0.0, 1.0),
-            child: const Padding(
-              padding: EdgeInsets.only(left: 6),
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
               child:
                   AppIcon(CupertinoIcons.reply, size: 17, color: AppColors.muted),
             ),
