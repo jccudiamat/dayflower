@@ -16,6 +16,7 @@ import 'core/util/clamp_offset.dart';
 import 'core/theme/design_tokens.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/welcome_screen.dart';
+import 'features/auth/presentation/widgets/startup_brand.dart';
 import 'features/activities/presentation/screens/activities_screen.dart';
 import 'features/activity/presentation/screens/activity_feed_screen.dart';
 import 'features/booth/presentation/screens/booth_screen.dart';
@@ -480,33 +481,7 @@ class SplashScreen extends ConsumerWidget {
     // Watching this is enough — router redirect fires automatically
     ref.watch(authStateProvider);
 
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppGradients.splash),
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text('Dayflower', style: AppText.display(Colors.white)),
-              const SizedBox(height: AppSpace.xs),
-              Text(
-                'two lips, one garden',
-                style: AppText.note(Colors.white.withValues(alpha: .85)),
-              ),
-              const SizedBox(height: AppSpace.lg),
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.white.withValues(alpha: .8),
-                  strokeWidth: 2,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return const StartupLoadingView();
   }
 }
 
