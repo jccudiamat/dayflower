@@ -87,8 +87,9 @@ void main() {
         });
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        if (capture && config.$1 == 390)
+        if (capture && config.$1 == 390) {
           await _image(tester, boundary, 'welcome-${mode.name}');
+        }
         await tester.ensureVisible(find.text('Privacy Policy'));
         await tester.tap(find.text('Privacy Policy'));
         await tester.pumpAndSettle();
@@ -103,8 +104,9 @@ void main() {
         expect(find.text('Opening your space'), findsOneWidget);
         expect(find.text('two lips, one garden'), findsNothing);
         expect(tester.takeException(), isNull);
-        if (capture && config.$1 == 390)
+        if (capture && config.$1 == 390) {
           await _image(tester, boundary, 'loading-${mode.name}');
+        }
         await tester.pumpWidget(const SizedBox());
       });
     }
