@@ -1,7 +1,7 @@
 name: dayflower
 description: Connecting hearts, one kiss at a time.
 publish_to: none
-version: 1.0.0+67
+version: 1.0.0+68
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
@@ -102,11 +102,15 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  fonts:
+    - family: TikTokSans
+      fonts:
+        - asset: assets/fonts/tiktok/TikTokSans.ttf
   assets:
     - assets/images/
     - assets/images/flowers/
     - assets/images/gifts/
-    - assets/fonts/
+    - assets/fonts/tiktok/OFL.txt
     - .env
 
 # App launcher icon. Sources live in assets/icon/, which is deliberately NOT
