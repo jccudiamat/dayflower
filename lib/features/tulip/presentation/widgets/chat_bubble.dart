@@ -1,12 +1,16 @@
+import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
+import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
+import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
+import '../../data/reaction_repository.dart';
 import 'media_viewer.dart';
 import 'message_quote.dart';
 import 'call_bubble.dart';
@@ -121,15 +125,26 @@ class ChatBubble extends StatelessWidget {
   /// ⚠️ Long-press stays, for Delete. It is the destructive one, so it keeps
   /// the deliberate gesture: nothing should be deletable by a flick.
   Widget _pressable(BuildContext context, Widget child) {
-    if (onReply == null && onDelete == null) return child;
-
+    // 🔴 Long-press is on **every** message now, not only your own. It used
+    // to be gated on `onDelete`, which is null on theirs — so their
+    // messages had no long-press at all, and reacting is the one thing you
+    // do to something somebody else said.
     final body = GestureDetector(
-      onLongPress: onDelete == null ? null : () => _showActions(context),
+      onLongPress: () => _showActions(context),
       child: child,
     );
 
-    if (onReply == null) return body;
-    return _SwipeToReply(onReply: onReply!, child: body);
+    // Marks hang under the bubble on the speaker's side, so they read as
+    // belonging to that message rather than to the one below it.
+    final marked = Column(
+      crossAxisAlignment:
+          isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [body, _ReactionPill(messageId: message.id)],
+    );
+
+    if (onReply == null) return marked;
+    return _SwipeToReply(onReply: onReply!, child: marked);
   }
 
   void _showActions(BuildContext context) {
@@ -139,12 +154,20 @@ class ChatBubble extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // First, because it is what this gesture is mostly for now.
+            // Delete is rare and destructive; a reaction is the everyday
+            // reason to press a message.
+            _ReactionRow(
+              messageId: message.id,
+              onPicked: () => Navigator.pop(sheetContext),
+            ),
+            if (onDelete != null) const Divider(height: 1),
             // ⚠️ Yours only, and the only thing left in here — Reply moved to
             // a swipe. Deleting a message is taking back something you said;
             // nobody gets to take back what somebody else said.
             if (onDelete != null)
               ListTile(
-                leading: const Icon(CupertinoIcons.delete,
+                leading: const AppIcon(CupertinoIcons.delete,
                     size: 20, color: AppColors.danger),
                 title: Text('Delete', style: AppText.body(AppColors.danger)),
                 subtitle: Text('Removes it for both of you',
@@ -344,7 +367,7 @@ class ChatBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Lora italic — the app's one handwriting-adjacent face,
+                // TikTok Sans italic — the italic style for personal notes,
                 // kept for what a person wrote or chose.
                 Text(
                   flower.name,
@@ -357,7 +380,7 @@ class ChatBubble extends StatelessWidget {
                 // somebody's message is the app talking over them.
                 if (hasNote) ...[
                   const SizedBox(height: 4),
-                  // Plain text, not the Lora italic the app uses for
+                  // Plain text, not the TikTok Sans italic the app uses for
                   // quotes. This is a message somebody typed, and setting
                   // it in the quoting face made it read as something the
                   // app had decided to italicise on their behalf.
@@ -368,7 +391,7 @@ class ChatBubble extends StatelessWidget {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      const AppIcon(
                         CupertinoIcons.device_phone_portrait,
                         size: 13,
                         color: AppColors.secondary,
@@ -469,7 +492,7 @@ class _SwipeToReplyState extends State<_SwipeToReply> {
             child: const Padding(
               padding: EdgeInsets.only(left: 6),
               child:
-                  Icon(CupertinoIcons.reply, size: 17, color: AppColors.muted),
+                  AppIcon(CupertinoIcons.reply, size: 17, color: AppColors.muted),
             ),
           ),
           Transform.translate(
@@ -506,7 +529,7 @@ class _MetaRow extends StatelessWidget {
         ),
         if (isMine) ...[
           const SizedBox(width: 4),
-          Icon(
+          AppIcon(
             message.isSeen ? Icons.done_all_rounded : Icons.done_rounded,
             size: 14,
             color: message.isSeen ? AppColors.secondary : AppColors.muted,
@@ -546,6 +569,136 @@ class ChatDateDivider extends StatelessWidget {
           borderRadius: BorderRadius.circular(AppRadius.pill),
         ),
         child: Text(_label, style: AppText.label(AppColors.body)),
+      ),
+    );
+  }
+}
+
+/* ── Reactions ───────────────────────────────────── */
+
+/// Your own mark on [messageId], or null.
+///
+/// Pulled out because both halves below need it and they must never
+/// disagree — the row highlights what the pill is showing.
+String? _myReaction(WidgetRef ref, String messageId) {
+  final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return null;
+  final marks = ref.watch(reactionsProvider).valueOrNull?[messageId];
+  if (marks == null) return null;
+  for (final mark in marks) {
+    if (mark.userId == userId) return mark.emoji;
+  }
+  return null;
+}
+
+/// The marks on one message, under its bubble.
+///
+/// ⚠️ Renders nothing at all when there are none — not an empty chip, not a
+/// reserved gap. A thread where most messages have no reaction would
+/// otherwise grow a column of blank space down one side.
+class _ReactionPill extends ConsumerWidget {
+  const _ReactionPill({required this.messageId});
+
+  final String messageId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final marks = ref.watch(reactionsProvider).valueOrNull?[messageId];
+    if (marks == null || marks.isEmpty) return const SizedBox.shrink();
+
+    // Two people, so at most two marks — but they can be the same one, and
+    // "❤️❤️" reads as a rendering bug. Collapse and count instead.
+    final counts = <String, int>{};
+    for (final mark in marks) {
+      counts.update(mark.emoji, (n) => n + 1, ifAbsent: () => 1);
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final entry in counts.entries) ...[
+            Text(entry.key, style: const TextStyle(fontSize: 13)),
+            if (entry.value > 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 2),
+                child: Text('${entry.value}', style: AppText.caption()),
+              ),
+            const SizedBox(width: 2),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The six choices, in the long-press sheet.
+class _ReactionRow extends ConsumerWidget {
+  const _ReactionRow({required this.messageId, required this.onPicked});
+
+  final String messageId;
+
+  /// Closes the sheet. Called *before* the write, so the sheet does not sit
+  /// there waiting on the network for something that is going to succeed.
+  final VoidCallback onPicked;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final userId = ref.watch(currentUserIdProvider);
+    final pair = ref.watch(currentPairProvider).valueOrNull;
+    if (userId == null || pair == null) return const SizedBox.shrink();
+    final mine = _myReaction(ref, messageId);
+
+    Future<void> tap(String emoji) async {
+      HapticFeedback.selectionClick();
+      onPicked();
+      final reactions = ref.read(reactionRepositoryProvider);
+      try {
+        if (tapRemoves(mine: mine, tapped: emoji)) {
+          await reactions.clear(messageId: messageId, userId: userId);
+        } else {
+          await reactions.set(
+            pairId: pair.id,
+            messageId: messageId,
+            userId: userId,
+            emoji: emoji,
+          );
+        }
+      } catch (_) {
+        // The stream is the source of truth and never took the change, so
+        // nothing on screen is now lying. An error banner over a failed
+        // emoji is worse than the emoji not appearing.
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          for (final emoji in reactionChoices)
+            InkWell(
+              onTap: () => tap(emoji),
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  // The one you already chose is filled, so the sheet says
+                  // what tapping it again will do.
+                  color: mine == emoji ? AppColors.blush : null,
+                ),
+                child: Text(emoji, style: const TextStyle(fontSize: 24)),
+              ),
+            ),
+        ],
       ),
     );
   }
