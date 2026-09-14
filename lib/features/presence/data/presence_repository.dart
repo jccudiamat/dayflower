@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
 import '../../pairing/data/pair_repository.dart';
 import '../domain/presence.dart';
+import 'device_presence.dart';
 
 /// Who is around, and when they last were.
 ///
@@ -73,11 +75,17 @@ final partnerLastActiveProvider =
   }
 });
 
-/// Beats while the app is in the foreground.
+/// Beats while somebody is actually in the app.
 ///
 /// Owned by the root widget rather than by the chat screen: "active" has to
 /// mean using the app, not sitting on this one screen, or the header would
 /// say a partner who is looking at your photos is not there.
+///
+/// ⚠️ Being resumed is necessary and **not sufficient** — every beat is
+/// gated on [shouldClaimPresence], which is where the two ways this lied
+/// are written down. The timer deliberately keeps running through a refused
+/// beat rather than stopping: unlocking the phone raises no lifecycle event
+/// to restart it, so the next tick has to be the thing that notices.
 class Heartbeat {
   Heartbeat(this._ref);
 
@@ -92,6 +100,10 @@ class Heartbeat {
     _timer = Timer.periodic(beatEvery, (_) => _beat());
   }
 
+  /// One beat, now. The whole of [start] minus the timer, for tests.
+  @visibleForTesting
+  Future<void> beatNow() => _beat();
+
   void stop() {
     _timer?.cancel();
     _timer = null;
@@ -99,11 +111,16 @@ class Heartbeat {
 
   Future<void> _beat() async {
     final userId = _ref.read(currentUserIdProvider);
-    // Not signed in, or not through onboarding: nothing to record and the
-    // insert would fail the self-only policy anyway.
-    if (userId == null) return;
+    final awake = await _ref.read(deviceAwakeProvider)();
+    if (!shouldClaimPresence(
+      signedIn: userId != null,
+      onWeb: kIsWeb,
+      deviceAwake: awake,
+    )) {
+      return;
+    }
     try {
-      await _ref.read(presenceRepositoryProvider).beat(userId);
+      await _ref.read(presenceRepositoryProvider).beat(userId!);
     } catch (_) {
       // A missed beat costs one minute of accuracy on a header. It is never
       // worth an error in front of somebody, and the next beat fixes it.

@@ -73,4 +73,47 @@ void main() {
     // between beats. The window must leave room for one missed beat.
     expect(beatEvery * 2, lessThanOrEqualTo(activeWindow));
   });
+
+  /// What a beat is allowed to mean.
+  ///
+  /// 🔴 The rule this pins was missing entirely, and the header lied in two
+  /// directions because of it. Both cases below are things that actually
+  /// happened, not hypotheticals — see [shouldClaimPresence].
+  group('shouldClaimPresence', () {
+    bool claim({bool signedIn = true, bool onWeb = false, bool awake = true}) =>
+        shouldClaimPresence(
+            signedIn: signedIn, onWeb: onWeb, deviceAwake: awake);
+
+    test('a phone that is awake and signed in beats', () {
+      expect(claim(), isTrue);
+    });
+
+    test('a browser tab never beats, however alive it looks', () {
+      // 🔴 A dev preview signed in as the test partner reported "Active
+      // now" for nineteen hours after its server was stopped: the page
+      // was still loaded, and browsers throttle a hidden tab's timers to
+      // about once a minute — which is exactly beatEvery, so it never
+      // looked idle either.
+      expect(claim(onWeb: true), isFalse);
+      expect(claim(onWeb: true, awake: true, signedIn: true), isFalse);
+    });
+
+    test('a locked phone does not become present because it rang', () {
+      // 🔴 MainActivity is showWhenLocked, so an incoming call or a
+      // ringing reminder launches the app over the lock screen and it used
+      // to beat on the way up. Ringing somebody made them look like they
+      // had just picked up their phone.
+      expect(claim(awake: false), isFalse);
+    });
+
+    test('signed out writes nothing', () {
+      expect(claim(signedIn: false), isFalse);
+    });
+
+    test('every reason to stay quiet outranks every reason to beat', () {
+      // The rule is an AND, not a vote: one "no" is the answer.
+      expect(claim(signedIn: false, onWeb: true, awake: false), isFalse);
+      expect(claim(signedIn: true, onWeb: true, awake: false), isFalse);
+    });
+  });
 }

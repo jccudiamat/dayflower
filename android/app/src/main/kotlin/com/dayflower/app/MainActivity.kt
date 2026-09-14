@@ -1,9 +1,12 @@
 package com.dayflower.app
 
+import android.app.KeyguardManager
 import android.app.PictureInPictureParams
+import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
+import android.os.PowerManager
 import android.util.Rational
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -42,6 +45,17 @@ class MainActivity : FlutterActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MediaSaver.CHANNEL)
             .setMethodCallHandler { call, result ->
                 MediaSaver.handle(applicationContext, call, result)
+            }
+
+        // Whether a person is actually here, for the chat header's "Active
+        // now". Its own channel because it has nothing to do with calls --
+        // see DevicePresence.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PRESENCE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "deviceAwake" -> result.success(deviceAwake())
+                    else -> result.notImplemented()
+                }
             }
 
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
@@ -84,6 +98,35 @@ class MainActivity : FlutterActivity() {
             // Staying full-screen is the right failure.
             false
         }
+    }
+
+    /**
+     * Screen on, and nothing in front of the app.
+     *
+     * WARNING: this Activity is showWhenLocked, so "resumed" is not the same
+     * as "somebody is using it". A ringing reminder or an incoming call
+     * launches it with a full-screen intent over the lock screen, on a phone
+     * on a bedside table - and without this the app would beat, and tell the
+     * caller their partner had just become active. Calling somebody must not
+     * be what makes them look present.
+     *
+     * isInteractive alone is not enough: the full-screen intent turns the
+     * screen on itself (turnScreenOn, above), so it would be true by the
+     * time this is asked. The keyguard is the half that says nobody has
+     * arrived yet.
+     *
+     * ! A phone with no lock screen at all has no keyguard to be showing, so
+     *   an alarm can still produce one beat there. Fixing that properly
+     *   means the ring screens telling Dart they are unanswered; this covers
+     *   every phone that locks.
+     */
+    private fun deviceAwake(): Boolean {
+        val power = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        val keyguard = getSystemService(Context.KEYGUARD_SERVICE) as? KeyguardManager
+        // A device that will not answer is not evidence of absence. Same
+        // fail-open rule as the Dart side.
+        if (power == null || keyguard == null) return true
+        return power.isInteractive && !keyguard.isKeyguardLocked
     }
 
     /**
@@ -136,5 +179,6 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "dayflower/pip"
+        private const val PRESENCE_CHANNEL = "dayflower/presence"
     }
 }

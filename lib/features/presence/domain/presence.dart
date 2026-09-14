@@ -52,3 +52,35 @@ String? activeLabel(DateTime? lastActive, {DateTime? now}) {
   }
   return 'Active ${DateFormat('d MMM').format(at)}';
 }
+
+/// Whether this device may claim its owner is in the app right now.
+///
+/// 🔴 "The app is running" and "a person is in the app" are different
+/// claims, and the heartbeat used to make the first one while the header
+/// said the second. Two ways they came apart, both seen:
+///
+///  - **A browser tab.** The dev preview signs in as a real account, and a
+///    hidden tab keeps its timers alive; browsers throttle background
+///    timers to about once a minute, which is exactly [beatEvery]. A
+///    preview left open on a desktop reported a partner as "Active now"
+///    for nineteen hours after its server had been stopped.
+///  - **A phone that rang.** MainActivity is `showWhenLocked`, and an
+///    incoming call or a ringing reminder launches it with a full-screen
+///    intent — so the app came up, beat, and told the caller their partner
+///    was active, when what actually happened is that their partner's
+///    phone lit up on a bedside table. Calling somebody made them look
+///    present, which is worse than saying nothing.
+///
+/// [deviceAwake] is the answer to both: the screen is on and the lock
+/// screen is not in the way. See DevicePresence.
+bool shouldClaimPresence({
+  required bool signedIn,
+  required bool onWeb,
+  required bool deviceAwake,
+}) =>
+    // Nothing to write, and the insert would fail the self-only policy.
+    signedIn &&
+    // The app ships as an APK. A web build is only ever a dev preview, and
+    // it writes to the same production row every phone reads.
+    !onWeb &&
+    deviceAwake;
