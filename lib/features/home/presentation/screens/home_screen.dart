@@ -1,5 +1,4 @@
 import 'package:dayflower/core/widgets/app_icon.dart';
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
@@ -17,9 +16,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../../core/services/pulse_alerts.dart';
 import '../../../heartbeat/data/heartbeat_repository.dart';
-import '../../../heartbeat/data/pulse_alert_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/mood_prefs.dart';
@@ -336,30 +333,13 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
         partner?.petName ?? partner?.displayName ?? 'Your partner';
 
     // Incoming partner beat → big lavender ripple, a double-thump on the
-    // heart, and (opt-in) a buzz + heartbeat sound.
+    // heart. Notification delivery is owned by the app root.
     ref.listen(todayHeartbeatCountsProvider, (prev, next) {
       if (prev == null || next.partner <= prev.partner) return;
       _spawnIncomingRipples();
       _beatCtrl.forward(from: 0);
 
-      // ⚠️ The ripple and the thump stay here — they are this frame's
-      // feedback. The alert does not: reading a provider inside a
-      // `ref.listen` callback re-enters the container in the middle of the
-      // rebuild that fired it, which is how sign-in used to crash the whole
-      // app. See _DayflowerAppState._settled in app.dart.
-      scheduleMicrotask(() {
-        if (!mounted) return;
-        if (ref.read(pulseAlertsEnabledProvider)) {
-          // Every one of them alerts. The service no longer decides that
-          // some are too soon to be worth hearing.
-          PulseAlerts.handleIncoming(
-            from: partnerName,
-            pulses: next.partner - prev.partner,
-          );
-        } else {
-          HapticFeedback.lightImpact();
-        }
-      });
+
     });
 
     return Container(

@@ -20,12 +20,14 @@ void main() {
           sentAt: now.subtract(Duration(minutes: age)));
   late IncomingHeartbeats tracker;
   int take(List<Heartbeat> beats, {String pair = 'pair', String user = 'me'}) =>
-      tracker.take(
-          pairId: pair,
-          userId: user,
-          partnerId: 'partner',
-          beats: beats,
-          now: now);
+      tracker
+          .take(
+              pairId: pair,
+              userId: user,
+              partnerId: 'partner',
+              beats: beats,
+              now: now)
+          .count;
 
   setUp(() {
     debugDefaultTargetPlatformOverride = TargetPlatform.android;
@@ -97,9 +99,11 @@ void main() {
         calls.add(call);
         return null;
       });
-      // ⚠️ The running count is static and outlives a test. Without this,
-      // whichever test ran first decides what the next one counts.
-      await PulseAlerts.seen();
+      // ⚠️ The count and the mark live in storage so a background isolate
+      // can see them, which also means they outlive a test. Clearing the
+      // store is the only reliable reset — seen() deliberately leaves the
+      // mark alone.
+      SharedPreferences.setMockInitialValues({});
       calls.clear();
     });
     tearDown(() {
@@ -111,21 +115,30 @@ void main() {
     test('The app being open posts nothing at all', () async {
       // The home screen is already rippling and the phone is in their hand.
       await PulseAlerts.handleIncoming(
-          from: 'Wifey', pulses: 1, foreground: true, now: at);
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: true,
+          now: at);
       expect(shows(), isEmpty);
       // And nothing is banked, because there is nothing left to tell them.
-      expect(PulseAlerts.waiting, 0);
+      expect(await PulseAlerts.waiting(), 0);
     });
 
     test('The count is everything since you last looked, not the last batch',
         () async {
       await PulseAlerts.handleIncoming(
-          from: 'Wifey', pulses: 5, foreground: false, now: at);
+          from: 'Wifey',
+          pulses: 5,
+          newestAt: at,
+          foreground: false,
+          now: at);
       expect(shows().last.arguments['title'], 'Wifey sent you 5 heartbeats 💗');
 
       await PulseAlerts.handleIncoming(
           from: 'Wifey',
           pulses: 3,
+          newestAt: at.add(const Duration(minutes: 1)),
           foreground: false,
           now: at.add(const Duration(minutes: 1)));
       // 🔴 This said "3" before — the same notification, rewritten to a
@@ -135,13 +148,18 @@ void main() {
 
     test('A burst updates the count without sounding again', () async {
       await PulseAlerts.handleIncoming(
-          from: 'Wifey', pulses: 1, foreground: false, now: at);
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at);
       expect(android(shows().last)['onlyAlertOnce'], isFalse,
           reason: 'the first one announces itself');
 
       await PulseAlerts.handleIncoming(
           from: 'Wifey',
           pulses: 1,
+          newestAt: at.add(const Duration(seconds: 2)),
           foreground: false,
           now: at.add(const Duration(seconds: 2)));
       // ⚠️ onlyAlertOnce is the load-bearing flag on Android 8+, where the
@@ -153,10 +171,15 @@ void main() {
 
     test('A heart after a long gap is allowed to be heard again', () async {
       await PulseAlerts.handleIncoming(
-          from: 'Wifey', pulses: 1, foreground: false, now: at);
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at);
       await PulseAlerts.handleIncoming(
           from: 'Wifey',
           pulses: 1,
+          newestAt: at.add(PulseAlerts.reAlertAfter),
           foreground: false,
           now: at.add(PulseAlerts.reAlertAfter));
       expect(android(shows().last)['onlyAlertOnce'], isFalse);
@@ -165,11 +188,15 @@ void main() {
 
     test('Opening the app clears what was waiting', () async {
       await PulseAlerts.handleIncoming(
-          from: 'Wifey', pulses: 4, foreground: false, now: at);
-      expect(PulseAlerts.waiting, 4);
+          from: 'Wifey',
+          pulses: 4,
+          newestAt: at,
+          foreground: false,
+          now: at);
+      expect(await PulseAlerts.waiting(), 4);
 
       await PulseAlerts.seen();
-      expect(PulseAlerts.waiting, 0);
+      expect(await PulseAlerts.waiting(), 0);
       expect(calls.map((c) => c.method), contains('cancel'));
 
       // And the next one starts from one, not from five on top of a
@@ -178,14 +205,82 @@ void main() {
       await PulseAlerts.handleIncoming(
           from: 'Wifey',
           pulses: 1,
+          newestAt: at.add(const Duration(hours: 1)),
           foreground: false,
           now: at.add(const Duration(hours: 1)));
       expect(shows().last.arguments['title'], 'Wifey sent you a heartbeat 💗');
     });
 
+    test('The same tap down both paths is counted once', () async {
+      // 🔴 A backgrounded-but-alive app gets every tap twice: realtime
+      // delivers it, and migration 0046 pushes it. Without the mark, one
+      // heart read as two and the shade said so.
+      await PulseAlerts.handleIncoming(
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at);
+      expect(await PulseAlerts.waiting(), 1);
+
+      // The push for the same tap, arriving a moment later.
+      await PulseAlerts.handleIncoming(
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at.add(const Duration(seconds: 3)));
+      expect(await PulseAlerts.waiting(), 1);
+      expect(shows().last.arguments['title'], 'Wifey sent you a heartbeat 💗');
+    });
+
+    test('A genuinely newer tap still gets through', () async {
+      await PulseAlerts.handleIncoming(
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at);
+      await PulseAlerts.handleIncoming(
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at.add(const Duration(seconds: 5)),
+          foreground: false,
+          now: at.add(const Duration(seconds: 5)));
+      expect(await PulseAlerts.waiting(), 2);
+    });
+
+    test('Opening the app does not let old taps announce themselves again',
+        () async {
+      // ⚠️ seen() clears the count, never the mark. If it cleared both, the
+      // push for a tap realtime had just handled would arrive after the app
+      // was opened and announce it a second time.
+      await PulseAlerts.handleIncoming(
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at);
+      await PulseAlerts.seen();
+      calls.clear();
+
+      await PulseAlerts.handleIncoming(
+          from: 'Wifey',
+          pulses: 1,
+          newestAt: at,
+          foreground: false,
+          now: at.add(const Duration(minutes: 5)));
+      expect(shows(), isEmpty);
+      expect(await PulseAlerts.waiting(), 0);
+    });
+
     test('Nothing to report stays silent', () async {
       await PulseAlerts.handleIncoming(
-          from: 'Wifey', pulses: 0, foreground: false, now: at);
+          from: 'Wifey',
+          pulses: 0,
+          newestAt: at,
+          foreground: false,
+          now: at);
       expect(shows(), isEmpty);
     });
   });

@@ -28,8 +28,12 @@ interface Payload {
   message_id: string;
   pair_id: string;
   sender_id: string;
-  kind: "call" | "photo" | "flower" | "message";
+  kind: "call" | "photo" | "flower" | "message" | "heartbeat";
   call_mode: "voice" | "video" | null;
+  /// Heartbeats only: when the tap happened, in epoch millis. The app uses
+  /// it to tell a push apart from the same tap arriving over realtime, so
+  /// one heart is never counted twice.
+  sent_at_ms?: number;
 }
 
 // Cached across warm invocations. Google's tokens last an hour; minting one
@@ -114,6 +118,12 @@ function describe(payload: Payload, name: string) {
       return { title: name, body: "shared their day 📷", priority: "normal" as const };
     case "flower":
       return { title: name, body: "sent you a flower 🌷", priority: "normal" as const };
+    // ⚠️ The title and body here are a *fallback*. A heartbeat reaching a
+    // live app is drawn by PulseAlerts, which counts and collapses a burst;
+    // this copy is what a phone shows if it ever renders the payload
+    // directly. Keep it in step with PulseAlerts.copy.
+    case "heartbeat":
+      return { title: name, body: "sent you a heartbeat 💗", priority: "high" as const };
     default:
       return { title: name, body: "sent you a message", priority: "normal" as const };
   }
@@ -185,6 +195,7 @@ Deno.serve(async (req) => {
             messageId: payload.message_id,
             pairId: payload.pair_id,
             callMode: payload.call_mode ?? "",
+            sentAtMs: payload.sent_at_ms ? String(payload.sent_at_ms) : "",
             title,
             body,
           },
@@ -192,7 +203,14 @@ Deno.serve(async (req) => {
             priority: priority === "high" ? "HIGH" : "NORMAL",
             // A call that arrives late is worse than one that never came,
             // so it is not worth storing while the phone is offline.
-            ttl: payload.kind === "call" ? "60s" : "86400s",
+            // A heartbeat is nearly the same: "they were thinking of you"
+            // is worth waking a phone for now, and worth nothing tomorrow
+            // morning, so it is not stored for a day the way a message is.
+            ttl: payload.kind === "call"
+              ? "60s"
+              : payload.kind === "heartbeat"
+              ? "900s"
+              : "86400s",
           },
         },
       }),

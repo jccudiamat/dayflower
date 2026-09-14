@@ -3,16 +3,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:timezone/timezone.dart' as tz;
 
-/// A once-a-day nudge when you haven't sent a heartbeat yet.
-///
-/// **Why this is a cancel-and-rearm one-shot rather than a repeating alarm:**
-/// a local notification cannot evaluate a condition when it fires, so a daily
-/// repeat would tell you to send a heartbeat on days you already had. Instead
-/// exactly one notification is ever pending — today's, or tomorrow's if
-/// today's moment has passed — and sending a heartbeat cancels it.
-///
-/// Device-local, like [PulseAlerts]. Nothing here is scheduled for the
-/// partner; each phone nudges its own owner.
+import '../../../core/services/app_notifications.dart';
+
+/// A device-local reminder. Wording never claims the partner hasn't sent
+/// anything: a scheduled notification cannot check live data when it fires.
 class HeartbeatNudge {
   HeartbeatNudge._();
 
@@ -90,16 +84,33 @@ class HeartbeatNudge {
     } catch (e) {
       debugPrint('heartbeat nudge pref save failed: $e');
     }
-    if (!value) await _cancel();
+    if (!value) await sync(sentToday: false, eligible: false);
   }
 
-  /// Call whenever today's sent-count changes, and once at launch.
-  ///
-  /// [sentToday] true cancels the pending nudge and arms tomorrow's; false
-  /// arms today's if its moment is still ahead, otherwise tomorrow's.
-  static Future<void> sync({required bool sentToday}) async {
+  static const title = 'A little love, in one tap 💗';
+  static const body =
+      'Send your partner a heartbeat from Dayflower or your widget.';
+
+  static Future<void> _pending = Future.value();
+
+  /// Serialize changes so a stale schedule cannot win over a cancellation.
+  static Future<void> sync({
+    required bool sentToday,
+    bool eligible = true,
+  }) {
+    _pending = _pending.then((_) => _sync(
+          sentToday: sentToday,
+          eligible: eligible,
+        ));
+    return _pending;
+  }
+
+  static Future<void> _sync({
+    required bool sentToday,
+    required bool eligible,
+  }) async {
     if (!supported) return;
-    if (!await isEnabled()) {
+    if (!eligible || sentToday || !await isEnabled()) {
       await _cancel();
       return;
     }
@@ -109,15 +120,15 @@ class HeartbeatNudge {
       final at = await hour();
       final now = DateTime.now();
       var when = DateTime(now.year, now.month, now.day, at);
-      // Already tapped today, or today's slot has gone by: aim at tomorrow.
-      if (sentToday || !when.isAfter(now)) {
-        when = when.add(const Duration(days: 1));
+      // No reminder is armed for a day on which we know you already sent one.
+      if (!when.isAfter(now)) {
+        when = DateTime(now.year, now.month, now.day + 1, at);
       }
 
       await _plugin.zonedSchedule(
         id: _id,
-        title: 'No heartbeat yet today 💗',
-        body: 'One tap and they feel it.',
+        title: title,
+        body: body,
         scheduledDate: tz.TZDateTime.from(when, tz.local),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
@@ -134,7 +145,7 @@ class HeartbeatNudge {
         // minutes to save battery has lost nothing, and exact alarms are a
         // permission worth spending only on things the user explicitly set.
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        payload: 'dayflower://heartbeat-nudge',
+        payload: AppNotifications.payloadForRoute('/app/home'),
       );
     } catch (e) {
       debugPrint('heartbeat nudge schedule failed: $e');

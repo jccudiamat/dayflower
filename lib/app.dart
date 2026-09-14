@@ -319,10 +319,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
           beats: beats,
           now: DateTime.now(),
         );
-        if (incoming > 0 && ref.read(pulseAlertsEnabledProvider)) {
+        if (incoming.count > 0 && ref.read(pulseAlertsEnabledProvider)) {
           unawaited(PulseAlerts.handleIncoming(
             from: _partnerName,
-            pulses: incoming,
+            pulses: incoming.count,
+            // Non-null whenever the count is — see IncomingHeartbeats.take.
+            newestAt: incoming.newestAt ?? DateTime.now(),
             // ⚠️ Was never passed. Watching the home screen ripple and
             // getting a tray notification about the ripple is the app
             // telling you what you are looking at.

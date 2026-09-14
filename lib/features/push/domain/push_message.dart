@@ -18,7 +18,13 @@ enum PushKind {
 
   photo,
   flower,
-  message;
+  message,
+
+  /// A love tap. Drawn by PulseAlerts rather than as an ordinary banner —
+  /// it has its own sound, its own vibration waveform, and a count that
+  /// accumulates across a burst. See migration 0046 for why it pushes at
+  /// all, having deliberately not done so since 0031.
+  heartbeat;
 
   static PushKind? byId(String? id) {
     for (final kind in PushKind.values) {
@@ -43,6 +49,7 @@ class PushMessage {
     this.messageId,
     this.pairId,
     this.callMode,
+    this.sentAt,
   });
 
   final PushKind kind;
@@ -57,6 +64,14 @@ class PushMessage {
 
   /// `'voice'` or `'video'`, empty or null for anything else.
   final String? callMode;
+
+  /// When the tap happened, for a heartbeat. Null for everything else.
+  ///
+  /// ⚠️ The app receives a tap twice when it is backgrounded but alive —
+  /// once over realtime, once as this push. PulseAlerts compares this
+  /// against the newest tap it has already announced, so one heart is never
+  /// counted as two. Without it the push path could only ever say "one".
+  final DateTime? sentAt;
 
   bool get isVideoCall => callMode == 'video';
 
@@ -84,6 +99,17 @@ class PushMessage {
       messageId: data['messageId'] as String?,
       pairId: data['pairId'] as String?,
       callMode: data['callMode'] as String?,
+      // Millis as a string, because FCM data values are always strings.
+      // Unparseable or absent is null, and the heartbeat path treats that
+      // as "now" rather than dropping a tap over a formatting problem.
+      sentAt: _millis(data['sentAtMs']),
     );
+  }
+
+  static DateTime? _millis(Object? value) {
+    final ms = int.tryParse('${value ?? ''}');
+    return ms == null || ms <= 0
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(ms);
   }
 }

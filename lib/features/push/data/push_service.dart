@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -5,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import '../../../app_router.dart';
 import '../../../core/services/app_notifications.dart';
 import '../../../core/services/partner_alerts.dart';
+import '../../../core/services/pulse_alerts.dart';
 import '../../calls/data/call_alerts.dart';
 import '../domain/push_message.dart';
 import 'push_repository.dart';
@@ -127,7 +130,19 @@ class PushService {
   /// somebody about something they can see.
   static void _onForeground(RemoteMessage remote) {
     final push = PushMessage.parse(remote.data);
-    if (push == null || !push.isActionableCall) return;
+    if (push == null) return;
+
+    // ⚠️ Heartbeats still go through, unlike everything else here. Realtime
+    // has almost certainly already handled this tap and PulseAlerts will
+    // drop it on the mark — but "almost certainly" is doing work: a phone
+    // whose realtime socket has quietly dropped would otherwise feel
+    // nothing at all while the app is open in front of it.
+    if (push.kind == PushKind.heartbeat) {
+      unawaited(_heartbeat(push, foreground: true));
+      return;
+    }
+
+    if (!push.isActionableCall) return;
     CallAlerts.ring(
       callId: push.messageId!,
       callerName: push.title,
@@ -151,6 +166,22 @@ class PushService {
   }
 }
 
+/// A love tap, down either delivery path.
+///
+/// Reads the toggle from storage rather than from `pulseAlertsEnabledProvider`
+/// — the background isolate has no container to read a provider out of.
+Future<void> _heartbeat(PushMessage push, {required bool foreground}) async {
+  if (!await PulseAlerts.enabled()) return;
+  await PulseAlerts.handleIncoming(
+    from: push.title,
+    pulses: 1,
+    // A push is one row, so one tap. The *count* on screen comes from
+    // PulseAlerts adding these up across a burst, not from this number.
+    newestAt: push.sentAt ?? DateTime.now(),
+    foreground: foreground,
+  );
+}
+
 /// Arrived with the app backgrounded or dead.
 ///
 /// ⚠️ **Top-level and `@pragma('vm:entry-point')`**, because Android spawns a
@@ -163,6 +194,12 @@ Future<void> pushBackgroundHandler(RemoteMessage remote) async {
   if (push == null) return;
 
   try {
+    // Its own sound, its own waveform, and a count that survives a burst —
+    // none of which a PartnerAlerts banner can do. See migration 0046.
+    if (push.kind == PushKind.heartbeat) {
+      await _heartbeat(push, foreground: false);
+      return;
+    }
     if (push.isActionableCall) {
       // The one thing worth waking the screen for.
       await CallAlerts.ring(

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 
 import 'app_notifications.dart';
@@ -10,9 +11,23 @@ import 'app_notifications.dart';
 /// pings once a minute and nobody is ever told about it; see the note at the
 /// top of its repository.
 ///
-/// There is no push backend — this only fires while the app is alive (
-/// foreground or backgrounded) and the Supabase realtime stream is connected.
-/// A killed app misses the pulse; the count still reconciles on next launch.
+/// Reached two ways, and it has to behave the same down both:
+///
+///  - **Realtime**, while the app is alive. `heartbeatsProvider` emits and
+///    the root widget calls [handleIncoming].
+///  - **FCM**, when it is not. Migration 0046 pushes every tap and
+///    `pushBackgroundHandler` calls the same method from a **fresh isolate**
+///    that shares no memory with the running app.
+///
+/// 🔴 That second path is why the running count lives in SharedPreferences
+/// rather than in a static field. A static int is zero in a background
+/// isolate, so every push would have said "a heartbeat" however many had
+/// piled up. Storage is the only thing the two isolates share.
+///
+/// ⚠️ And a backgrounded-but-alive app gets each tap **twice** — once over
+/// realtime, once as a push. [_kMarkMs] is what stops one heart being
+/// counted as two: whichever path arrives first advances the mark, and the
+/// other sees a tap no newer than it and returns.
 ///
 /// Sound comes from a local notification rather than an audio player: it's the
 /// one path that works with the packages already in the project, and it means a
@@ -128,23 +143,61 @@ class PulseAlerts {
   /// of the latest batch meant five taps said "5 heartbeats" and the next
   /// three **rewrote the same notification to "3"** — the number fell while
   /// more were arriving.
-  static int _waiting = 0;
-  static DateTime? _lastAlertAt;
+  static const _kWaiting = 'heartbeat_waiting';
+  static const _kLastAlertMs = 'heartbeat_last_alert_ms';
+
+  /// The newest tap already announced, in epoch millis. See the class doc.
+  static const _kMarkMs = 'heartbeat_alert_mark_ms';
+
+  /// Whether alerts are switched on, read straight from storage.
+  ///
+  /// ⚠️ The provider that owns this key cannot be reached from a background
+  /// isolate — there is no container there — so the push path asks storage
+  /// itself. Same default as PulseAlertPrefs: on.
+  static Future<bool> enabled() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return prefs.getBool('heartbeat_alerts_enabled') ?? true;
+    } catch (_) {
+      return true;
+    }
+  }
 
   @visibleForTesting
-  static int get waiting => _waiting;
+  static Future<int> waiting() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_kWaiting) ?? 0;
+  }
 
   /// One alert per incoming batch, with factual copy and no invented message.
+  ///
+  /// [newestAt] is when the most recent of these taps happened — the value
+  /// both delivery paths compare against, so a tap handled over realtime is
+  /// not counted again when its push lands.
   ///
   /// [foreground] is the app being on screen right now.
   static Future<void> handleIncoming({
     required String from,
     required int pulses,
+    required DateTime newestAt,
     required bool foreground,
     DateTime? now,
   }) async {
     if (!supported || pulses <= 0) return;
     await init();
+
+    final SharedPreferences prefs;
+    try {
+      prefs = await SharedPreferences.getInstance();
+    } catch (e) {
+      debugPrint('pulse alerts storage unavailable: $e');
+      return;
+    }
+
+    // Already announced down the other path.
+    final newest = newestAt.millisecondsSinceEpoch;
+    if (newest <= (prefs.getInt(_kMarkMs) ?? 0)) return;
+    await prefs.setInt(_kMarkMs, newest);
 
     // 🔴 Buzz, but post nothing. The home screen is already rippling and
     // the phone is in their hand; a tray entry is the app telling somebody
@@ -160,15 +213,17 @@ class PulseAlerts {
       return;
     }
 
-    _waiting += pulses;
-    final clock = now ?? DateTime.now();
-    final loud =
-        _lastAlertAt == null || clock.difference(_lastAlertAt!) >= reAlertAfter;
-    if (loud) _lastAlertAt = clock;
+    final waiting = (prefs.getInt(_kWaiting) ?? 0) + pulses;
+    await prefs.setInt(_kWaiting, waiting);
+
+    final clock = (now ?? DateTime.now()).millisecondsSinceEpoch;
+    final last = prefs.getInt(_kLastAlertMs);
+    final loud = last == null || clock - last >= reAlertAfter.inMilliseconds;
+    if (loud) await prefs.setInt(_kLastAlertMs, clock);
 
     await Future.wait([
       if (loud) _vibrate(),
-      _notify(from: from, pulses: _waiting, loud: loud),
+      _notify(from: from, pulses: waiting, loud: loud),
     ]);
   }
 
@@ -178,9 +233,18 @@ class PulseAlerts {
   /// land, and "Wifey sent you 3 heartbeats" sat in the shade until you
   /// swiped it away — and the next tap counted from one again underneath a
   /// notification you had already read.
+  /// ⚠️ Clears the count and the sound floor, never [_kMarkMs]. The mark is
+  /// how the two delivery paths agree on what has already been announced,
+  /// and resetting it would let a push re-announce a tap realtime had just
+  /// dealt with.
   static Future<void> seen() async {
-    _waiting = 0;
-    _lastAlertAt = null;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kWaiting);
+      await prefs.remove(_kLastAlertMs);
+    } catch (e) {
+      debugPrint('pulse alerts reset failed: $e');
+    }
     if (!supported) return;
     try {
       await _plugin.cancel(id: _notificationId);

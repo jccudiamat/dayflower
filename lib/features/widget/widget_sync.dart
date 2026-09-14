@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../tulip/data/flower_repository.dart';
+import '../heartbeat/data/heartbeat_nudge.dart';
 import '../tulip/domain/flower_catalog.dart';
 import '../tulip/domain/day_reactions.dart';
 
@@ -718,6 +719,9 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
       'pair_id': pairId,
       'sender_id': userId,
     });
+
+    // A successful widget tap also cancels this device's pending reminder.
+    await HeartbeatNudge.sync(sentToday: true);
 
     // Bump the count straight away so the widget acknowledges the tap
     // without waiting for the app to next run a sync.

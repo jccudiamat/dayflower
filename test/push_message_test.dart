@@ -57,6 +57,45 @@ void main() {
       expect(PushMessage.parse({'title': 'x'}), isNull);
     });
 
+    group('a heartbeat', () {
+      test('is its own kind, not a generic message', () {
+        // ⚠️ If this ever fell through to PushKind.message it would render
+        // as a plain banner — no lub-dub, no waveform, no count. Silently
+        // the wrong feature.
+        final push =
+            PushMessage.parse({'kind': 'heartbeat', 'title': 'Wifey', 'body': 'x'})!;
+        expect(push.kind, PushKind.heartbeat);
+        expect(push.kind.interrupts, isFalse,
+            reason: 'a heart is not a call — it must never take the screen');
+      });
+
+      test('carries when the tap happened', () {
+        // The value the two delivery paths compare, so one heart sent while
+        // the app is backgrounded but alive is not counted twice.
+        final push = PushMessage.parse({
+          'kind': 'heartbeat',
+          'title': 'Wifey',
+          'body': 'x',
+          'sentAtMs': '1789300936334',
+        })!;
+        expect(push.sentAt, DateTime.fromMillisecondsSinceEpoch(1789300936334));
+      });
+
+      test('survives a timestamp it cannot read', () {
+        // FCM data is all strings and an older sender may send none at all.
+        // Dropping the tap over that would be worse than counting it now.
+        for (final bad in ['', 'soon', '0', '-5']) {
+          final push = PushMessage.parse(
+              {'kind': 'heartbeat', 'title': 'W', 'body': 'x', 'sentAtMs': bad})!;
+          expect(push.sentAt, isNull, reason: bad);
+        }
+        expect(
+          PushMessage.parse({'kind': 'heartbeat', 'title': 'W', 'body': 'x'})!.sentAt,
+          isNull,
+        );
+      });
+    });
+
     test('blank title and body fall back rather than refusing', () {
       // Losing the whole event over a formatting problem would be worse
       // than a generic banner.

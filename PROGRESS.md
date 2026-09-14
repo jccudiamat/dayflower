@@ -3887,3 +3887,64 @@ back" was ever a sensible thing to read.
   and a redeploy, so it is a decision with a cost attached, not a fix.
 
 360 tests pass.
+
+## Heartbeats reach a closed app (2026-09-14)
+
+🔴 **This reverses 0031.** That migration left `heartbeats` out of the push
+trigger on the grounds that they were the highest-volume table in the app
+and a push per tap would be both the loudest thing in it and the largest
+driver of edge function invocations. The consequence was that a heart sent
+to a phone whose app was killed did **nothing at all** — no buzz, no
+notification, ever — and the sender had no way to know.
+
+The volume held up; the conclusion did not. Measured 2026-09-14: **405 taps
+all time** since 2026-07-08, **215 in the last 30 days**, 71 in the last 7,
+for the one real pair. Against the 2M monthly invocations Pro includes that
+is **0.01%**, and a hundred pairs at the same rate would be 1%.
+
+The other half of the objection — that a heart would become the loudest
+thing in the app — was real, and is answered on the phone instead:
+`PulseAlerts` adds taps up into one notification and will not make a sound
+more than once every thirty seconds.
+
+- ⚠️ **No debounce in the trigger, though 0031 suggested one.** A trigger
+  that dropped taps would make the count wrong: the app says "sent you 5
+  heartbeats" by counting what arrived, so a server that swallowed four
+  would report one. Collapsing belongs where the counting happens.
+- 🔴 **The running count moved into SharedPreferences.** `pushBackgroundHandler`
+  runs in a **fresh isolate** that shares no memory with the app, so a
+  static int was always zero there and every push would have said "a
+  heartbeat" however many had piled up. Storage is the only thing the two
+  isolates share.
+- 🔴 **A backgrounded-but-alive app receives every tap twice** — once over
+  realtime, once as a push. `heartbeat_alert_mark_ms` holds the newest tap
+  already announced; whichever path arrives first advances it and the other
+  returns. `seen()` clears the count and the sound floor but deliberately
+  **never the mark**.
+- ⚠️ TTL 900s, not the 86400s a message gets. "They were thinking of you"
+  is worth waking a phone for now and worth nothing tomorrow morning.
+- ⚠️ Older builds degrade rather than break: `PushKind.byId` maps an
+  unknown kind to `message`, so build 69 renders a heartbeat push as a
+  plain banner instead of dropping it.
+
+### Deploying the edge function
+
+There is no Supabase CLI on this machine, and `supabase/functions/push` is
+production — every call, message and now heartbeat goes through it. Editing
+it with no way to ship it means the repo and the running function drift
+silently, so `tool/deploy_function.dart` posts the same multipart body the
+CLI does to the Management API, on the same PAT `run_sql.dart` uses.
+
+⚠️ `verify_jwt` defaults to **false** there, matching how `push` is already
+deployed: its caller is a Postgres trigger with no user JWT. It
+authenticates on `x-push-secret`. The safer-sounding default would take
+production push down.
+
+### Verified against the live project
+
+One tap inserted as the test partner: trigger → `net.http_post` → function
+v4 → `{"sent":1,"failed":0,"removed":0}`, 48ms from insert to FCM accepting
+it. The test row was deleted afterwards so it would not inflate the day's
+count.
+
+366 tests pass. ⚠️ **Not published** — build 69 has none of this.
