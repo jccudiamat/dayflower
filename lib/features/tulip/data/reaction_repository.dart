@@ -23,13 +23,6 @@ class MessageReaction {
       );
 }
 
-/// The six on offer.
-///
-/// ⚠️ Deliberately short. A grid of thirty is a menu to be navigated; six is
-/// a row you hit without reading. They are also the six a couple actually
-/// uses — there is no "thumbs down" here, and that is not an oversight.
-const reactionChoices = <String>['❤️', '🥰', '😂', '😮', '🥺', '🙏'];
-
 /// What tapping [tapped] should do, given the reaction you already have on
 /// this message ([mine], null if none).
 ///

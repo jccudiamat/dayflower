@@ -10,6 +10,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
+import '../../data/reaction_choices.dart';
 import '../../data/reaction_repository.dart';
 import 'media_viewer.dart';
 import 'message_quote.dart';
@@ -130,7 +131,11 @@ class ChatBubble extends StatelessWidget {
     // messages had no long-press at all, and reacting is the one thing you
     // do to something somebody else said.
     final body = GestureDetector(
-      onLongPress: () => _showActions(context),
+      // 🔴 `onLongPressStart`, not `onLongPress`: the bar floats over the
+      // message it belongs to, and the only way to know where that is is
+      // where the finger landed.
+      onLongPressStart: (details) =>
+          _showActions(context, details.globalPosition),
       child: child,
     );
 
@@ -147,39 +152,42 @@ class ChatBubble extends StatelessWidget {
     return _SwipeToReply(onReply: onReply!, child: marked);
   }
 
-  void _showActions(BuildContext context) {
-    showModalBottomSheet<void>(
+  /// The floating bar, over the message that was pressed.
+  ///
+  /// 🔴 Was a modal bottom sheet. A sheet slides up from the far edge of a
+  /// tall phone, which puts the six choices as far from the message as the
+  /// screen allows — you press a bubble at the top and answer it at the
+  /// bottom, having lost sight of which one you pressed. Every messenger
+  /// floats this for the same reason.
+  void _showActions(BuildContext context, Offset at) {
+    HapticFeedback.selectionClick();
+    showGeneralDialog<void>(
       context: context,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // First, because it is what this gesture is mostly for now.
-            // Delete is rare and destructive; a reaction is the everyday
-            // reason to press a message.
-            _ReactionRow(
-              messageId: message.id,
-              onPicked: () => Navigator.pop(sheetContext),
-            ),
-            if (onDelete != null) const Divider(height: 1),
-            // ⚠️ Yours only, and the only thing left in here — Reply moved to
-            // a swipe. Deleting a message is taking back something you said;
-            // nobody gets to take back what somebody else said.
-            if (onDelete != null)
-              ListTile(
-                leading: const AppIcon(CupertinoIcons.delete,
-                    size: 20, color: AppColors.danger),
-                title: Text('Delete', style: AppText.body(AppColors.danger)),
-                subtitle: Text('Removes it for both of you',
-                    style: AppText.caption()),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  onDelete!();
-                },
-              ),
-          ],
-        ),
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      // Light enough that the thread stays readable behind it — the message
+      // you are answering has to stay visible, which is the whole point.
+      barrierColor: Colors.black.withValues(alpha: .16),
+      transitionDuration: AppMotion.micro,
+      pageBuilder: (_, __, ___) => _ReactionOverlay(
+        at: at,
+        isMine: isMine,
+        messageId: message.id,
+        onDelete: onDelete,
       ),
+      transitionBuilder: (_, animation, __, child) {
+        final curved =
+            CurvedAnimation(parent: animation, curve: AppMotion.easeOut);
+        return FadeTransition(
+          opacity: curved,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: .88, end: 1).animate(curved),
+            // Grows out of the message rather than the middle of nowhere.
+            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+            child: child,
+          ),
+        );
+      },
     );
   }
 
@@ -639,26 +647,86 @@ class _ReactionPill extends ConsumerWidget {
   }
 }
 
-/// The six choices, in the long-press sheet.
-class _ReactionRow extends ConsumerWidget {
-  const _ReactionRow({required this.messageId, required this.onPicked});
+/// The bar itself, positioned over the thread.
+class _ReactionOverlay extends StatelessWidget {
+  const _ReactionOverlay({
+    required this.at,
+    required this.isMine,
+    required this.messageId,
+    this.onDelete,
+  });
+
+  /// Where the finger went down, in global coordinates.
+  final Offset at;
+  final bool isMine;
+  final String messageId;
+  final VoidCallback? onDelete;
+
+  /// Roughly the bar's height plus a gap, so it sits clear of the thumb
+  /// that opened it.
+  static const _lift = 76.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    final ceiling = media.padding.top + AppSpace.xs;
+    // Leaves room for the bar and, under it, the Delete card.
+    final floor = media.size.height - media.padding.bottom - 170;
+
+    // ⚠️ Above the finger normally, below it when there is no room — a
+    // message near the top of the screen would otherwise open a bar that is
+    // half off it.
+    var top = at.dy - _lift;
+    if (top < ceiling) top = at.dy + AppSpace.md;
+    top = top.clamp(ceiling, floor > ceiling ? floor : ceiling);
+
+    return Stack(
+      children: [
+        Positioned(
+          top: top,
+          left: AppSpace.sm,
+          right: AppSpace.sm,
+          child: Align(
+            // On the speaker's side, so it reads as belonging to that
+            // message rather than hovering over the whole thread.
+            alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
+            child: Column(
+              crossAxisAlignment: isMine
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ReactionBar(messageId: messageId),
+                if (onDelete != null) ...[
+                  const SizedBox(height: AppSpace.xs),
+                  _DeleteCard(onDelete: onDelete!),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The six choices.
+class _ReactionBar extends ConsumerWidget {
+  const _ReactionBar({required this.messageId});
 
   final String messageId;
-
-  /// Closes the sheet. Called *before* the write, so the sheet does not sit
-  /// there waiting on the network for something that is going to succeed.
-  final VoidCallback onPicked;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userId = ref.watch(currentUserIdProvider);
     final pair = ref.watch(currentPairProvider).valueOrNull;
+    final choices = ref.watch(reactionChoicesProvider);
     if (userId == null || pair == null) return const SizedBox.shrink();
     final mine = _myReaction(ref, messageId);
 
     Future<void> tap(String emoji) async {
       HapticFeedback.selectionClick();
-      onPicked();
+      Navigator.of(context).pop();
       final reactions = ref.read(reactionRepositoryProvider);
       try {
         if (tapRemoves(mine: mine, tapped: emoji)) {
@@ -678,27 +746,77 @@ class _ReactionRow extends ConsumerWidget {
       }
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          for (final emoji in reactionChoices)
-            InkWell(
-              onTap: () => tap(emoji),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  // The one you already chose is filled, so the sheet says
-                  // what tapping it again will do.
-                  color: mine == emoji ? AppColors.blush : null,
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: AppColors.border),
+          boxShadow: AppElevation.lift,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (final emoji in choices)
+              InkWell(
+                onTap: () => tap(emoji),
+                customBorder: const CircleBorder(),
+                child: Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    // The one already chosen is filled, so the bar says what
+                    // tapping it again will do.
+                    color: mine == emoji ? AppColors.blush : null,
+                  ),
+                  child: Text(emoji, style: const TextStyle(fontSize: 24)),
                 ),
-                child: Text(emoji, style: const TextStyle(fontSize: 24)),
               ),
-            ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Yours only. Deleting is taking back something you said; nobody gets to
+/// take back what somebody else said.
+class _DeleteCard extends StatelessWidget {
+  const _DeleteCard({required this.onDelete});
+
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        onTap: () {
+          Navigator.of(context).pop();
+          onDelete();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.sm, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            border: Border.all(color: AppColors.border),
+            boxShadow: AppElevation.card,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const AppIcon(CupertinoIcons.delete,
+                  size: 18, color: AppColors.danger),
+              const SizedBox(width: AppSpace.xs),
+              Text('Delete for both', style: AppText.body(AppColors.danger)),
+            ],
+          ),
+        ),
       ),
     );
   }

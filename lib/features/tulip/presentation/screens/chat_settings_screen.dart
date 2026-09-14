@@ -2,6 +2,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app_router.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
 
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -13,6 +16,8 @@ import '../../../calls/data/call_usage.dart';
 import '../../../calls/domain/call.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
+import '../../data/reaction_choices.dart';
+import '../widgets/media_viewer.dart';
 
 /// What sits behind the two of you: how much calling is left this month, and
 /// everything either of you has sent.
@@ -45,12 +50,33 @@ class ChatSettingsScreen extends ConsumerWidget {
           const SizedBox(height: AppSpace.md),
           const _CallUsage(),
           const SizedBox(height: AppSpace.md),
+          const _ReactionSettings(),
+          const SizedBox(height: AppSpace.md),
           const _SharedMedia(),
           const SizedBox(height: AppSpace.lg),
         ],
       ),
     );
   }
+}
+
+/// The same shared-media grid, accessible directly from Memories.
+class SharedPhotosScreen extends StatelessWidget {
+  const SharedPhotosScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.background,
+    bottomNavigationBar: const AppBottomNav(),
+    appBar: AppBar(
+      backgroundColor: AppColors.background,
+      surfaceTintColor: Colors.transparent,
+      leading: IosBackButton(onTap: () => context.canPop()
+          ? context.pop() : context.go(Routes.memories)),
+      title: Text('Photos', style: AppText.title()),
+    ),
+    body: ListView(padding: AppSpace.screen, children: const [_SharedMedia()]),
+  );
 }
 
 /* ── Who this conversation is with ──────────────────── */
@@ -225,7 +251,12 @@ class _Thumb extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final url = ref.watch(dayPhotoUrlProvider(path));
-    return ClipRRect(
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => MediaViewer(title: 'Your photo', imagePath: path,
+            fileName: 'dayflower-photo.jpg'),
+      )),
+      child: ClipRRect(
       borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
         color: AppColors.surfaceSubtle,
@@ -237,6 +268,7 @@ class _Thumb extends ConsumerWidget {
               : Image.network(link, fit: BoxFit.cover),
           orElse: () => const SizedBox.shrink(),
         ),
+      ),
       ),
     );
   }
@@ -267,6 +299,169 @@ class _Section extends StatelessWidget {
           child: child,
         ),
       ],
+    );
+  }
+}
+
+/* ── Reactions ────────────────────────────────────── */
+
+/// Which six sit on the bar when you press a message.
+///
+/// ⚠️ Yours, not the pair's. It decides what your own thumb reaches for —
+/// the same kind of choice as the theme, and syncing it would mean one
+/// person quietly rearranging the other's bar.
+class _ReactionSettings extends ConsumerWidget {
+  const _ReactionSettings();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final choices = ref.watch(reactionChoicesProvider);
+
+    return _Section(
+      label: 'REACTIONS',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Press and hold any message to use these. Tap one to swap it.',
+            style: AppText.caption(),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              for (var i = 0; i < choices.length; i++)
+                _Slot(
+                  emoji: choices[i],
+                  onTap: () => _swap(context, ref, i, choices),
+                ),
+            ],
+          ),
+          if (!_isDefault(choices)) ...[
+            const SizedBox(height: AppSpace.xs),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () =>
+                    ref.read(reactionChoicesProvider.notifier).reset(),
+                child: const Text('Reset'),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static bool _isDefault(List<String> choices) {
+    if (choices.length != defaultReactions.length) return false;
+    for (var i = 0; i < choices.length; i++) {
+      if (choices[i] != defaultReactions[i]) return false;
+    }
+    return true;
+  }
+
+  Future<void> _swap(
+    BuildContext context,
+    WidgetRef ref,
+    int index,
+    List<String> choices,
+  ) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.sm),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Replace ${choices[index]}', style: AppText.subtitle()),
+              const SizedBox(height: AppSpace.xs),
+              Wrap(
+                spacing: AppSpace.xs,
+                runSpacing: AppSpace.xs,
+                children: [
+                  for (final emoji in reactionPalette)
+                    _Candidate(
+                      emoji: emoji,
+                      // ⚠️ Already on the bar, so it is shown but not
+                      // choosable — two identical slots would mean a button
+                      // that can never be tapped off. Greyed rather than
+                      // hidden, so the palette does not shuffle under the
+                      // finger every time a slot changes.
+                      taken: choices.contains(emoji) && choices[index] != emoji,
+                      selected: choices[index] == emoji,
+                      onTap: () => Navigator.pop(sheetContext, emoji),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (picked != null) {
+      await ref.read(reactionChoicesProvider.notifier).replaceAt(index, picked);
+    }
+  }
+}
+
+class _Slot extends StatelessWidget {
+  const _Slot({required this.emoji, required this.onTap});
+
+  final String emoji;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        padding: const EdgeInsets.all(AppSpace.xs),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: AppColors.surfaceSubtle,
+        ),
+        child: Text(emoji, style: const TextStyle(fontSize: 22)),
+      ),
+    );
+  }
+}
+
+class _Candidate extends StatelessWidget {
+  const _Candidate({
+    required this.emoji,
+    required this.taken,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String emoji;
+  final bool taken;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: taken ? .3 : 1,
+      child: InkWell(
+        onTap: taken ? null : onTap,
+        customBorder: const CircleBorder(),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: selected ? AppColors.blush : AppColors.surfaceSubtle,
+            border: selected
+                ? Border.all(color: AppColors.brand, width: 1.5)
+                : null,
+          ),
+          child: Text(emoji, style: const TextStyle(fontSize: 24)),
+        ),
+      ),
     );
   }
 }
