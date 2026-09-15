@@ -71,8 +71,12 @@ class SharedPhotosScreen extends StatelessWidget {
     appBar: AppBar(
       backgroundColor: AppColors.background,
       surfaceTintColor: Colors.transparent,
+      // ⚠️ Home, not a tab route. This is only ever reached by pushing, so
+      // the fallback is for the case where there is nothing to pop — and
+      // `home` is the one destination that survives the tabs being
+      // rearranged underneath it.
       leading: IosBackButton(onTap: () => context.canPop()
-          ? context.pop() : context.go(Routes.memories)),
+          ? context.pop() : context.go(Routes.home)),
       title: Text('Photos', style: AppText.title()),
     ),
     body: ListView(padding: AppSpace.screen, children: const [_SharedMedia()]),
