@@ -1,7 +1,7 @@
 name: dayflower
 description: Connecting hearts, one kiss at a time.
 publish_to: none
-version: 1.0.0+72
+version: 1.0.0+73
 environment:
   sdk: ">=3.2.0 <4.0.0"
 
@@ -89,6 +89,8 @@ dependencies:
   # looking at someone's face as inactivity and dims them away mid-sentence.
   wakelock_plus: ^1.2.8
   url_launcher: 6.3.2
+  flutter_map: ^8.3.2
+  latlong2: ^0.10.1
 
 dev_dependencies:
   flutter_test:
