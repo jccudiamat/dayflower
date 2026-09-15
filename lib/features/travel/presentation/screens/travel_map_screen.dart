@@ -13,6 +13,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../data/map_pin_repository.dart';
+import '../../domain/journey.dart';
 import '../widgets/add_pin_sheet.dart';
 
 /// Everywhere the two of you have been, and where you are right now.
@@ -43,6 +44,7 @@ class TravelMapScreen extends ConsumerWidget {
       if (me != null && me.hasPlace) me,
       if (partner != null && partner.hasPlace) partner,
     ];
+    final journey = journeyBetween(me, partner);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -85,13 +87,43 @@ class TravelMapScreen extends ConsumerWidget {
                     userAgentPackageName: 'com.dayflower.app',
                     tileProvider: NetworkTileProvider(),
                   ),
+                  // 🔴 Under the markers, deliberately: a dotted line drawn
+                  // over a face reads as a scratch on the photo.
+                  if (journey != null && people.length == 2)
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: [
+                            LatLng(people[0].cityLat!, people[0].cityLon!),
+                            LatLng(people[1].cityLat!, people[1].cityLon!),
+                          ],
+                          color: AppColors.brand,
+                          strokeWidth: 2,
+                          // ⚠️ Straight on screen, not the curve a plane
+                          // actually flies. The great-circle path bends on a
+                          // Mercator projection, and the honest-looking arc
+                          // would need the line subdivided into dozens of
+                          // points — for a picture of "there is a gap", the
+                          // straight line is what people read fastest. The
+                          // *distance* on it is great-circle and true.
+                          pattern: const StrokePattern.dotted(),
+                        ),
+                      ],
+                    ),
                   MarkerLayer(
                     markers: [
+                      if (journey != null && people.length == 2)
+                        Marker(
+                          point: _midpoint(people),
+                          width: 168,
+                          height: 46,
+                          child: _JourneyLabel(journey: journey),
+                        ),
                       for (final person in people)
                         Marker(
                           point: LatLng(person.cityLat!, person.cityLon!),
-                          width: 132,
-                          height: 54,
+                          width: 56,
+                          height: 66,
                           alignment: Alignment.topCenter,
                           child: _PersonMarker(person: person),
                         ),
@@ -116,6 +148,15 @@ class TravelMapScreen extends ConsumerWidget {
       ),
     );
   }
+
+  /// Halfway along the drawn line, which is where the label belongs.
+  ///
+  /// ⚠️ The midpoint of the *straight* line, to match what is drawn — not
+  /// the great-circle midpoint, which would sit off the line it labels.
+  static LatLng _midpoint(List<UserProfile> people) => LatLng(
+        (people[0].cityLat! + people[1].cityLat!) / 2,
+        (people[0].cityLon! + people[1].cityLon!) / 2,
+      );
 
   /// Opens on your pins if there are any, otherwise on the two of you.
   static LatLng _openingCentre(List<MapPin> pins, List<UserProfile> people) {
@@ -174,10 +215,20 @@ class _MissingPlaceNote extends StatelessWidget {
 }
 
 /// One of the two of you, where you actually are.
+///
+/// 🔴 The face and nothing else. It carried the name in a pill before, and
+/// on a world map that is two paragraphs floating over Asia — at the zoom
+/// this opens at, the pins are most of what is on screen. There are exactly
+/// two people here and each of them knows both faces, so the label was
+/// saying something neither of them needed told.
 class _PersonMarker extends StatelessWidget {
   const _PersonMarker({required this.person});
 
   final UserProfile person;
+
+  /// Google's pin shape: a round head over a point, the whole thing
+  /// standing *on* the place rather than beside it.
+  static const _head = 44.0;
 
   @override
   Widget build(BuildContext context) {
@@ -185,31 +236,74 @@ class _PersonMarker extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+          width: _head,
+          height: _head,
           decoration: BoxDecoration(
+            shape: BoxShape.circle,
             color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: AppColors.brand, width: 1.5),
+            border: Border.all(color: AppColors.brand, width: 2.5),
             boxShadow: AppElevation.card,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              UserAvatar(person, size: 24),
-              const SizedBox(width: 6),
-              Flexible(
-                child: Text(
-                  person.petName ?? person.displayName,
-                  style: AppText.caption(AppColors.ink),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
+          // ⚠️ Clipped inside the ring rather than sized to it: a square
+          // avatar behind a circular border shows its corners.
+          child: ClipOval(child: UserAvatar(person, size: _head - 5)),
         ),
-        const _Tail(color: AppColors.brand),
+        // Overlaps the ring by a hair so the two read as one shape rather
+        // than a circle with a triangle parked under it.
+        Transform.translate(
+          offset: const Offset(0, -2),
+          child: const _Point(color: AppColors.brand),
+        ),
       ],
+    );
+  }
+}
+
+/// The spike under a pin. Solid, unlike the hollow tail on a callout —
+/// this one is the pin, not a speech bubble.
+class _Point extends StatelessWidget {
+  const _Point({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size(14, 12),
+      painter: _TailPainter(fill: color, edge: color),
+    );
+  }
+}
+
+/// How far apart, and how long it would take — sitting on the line.
+class _JourneyLabel extends StatelessWidget {
+  const _JourneyLabel({required this.journey});
+
+  final Journey journey;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: AppColors.brand),
+          boxShadow: AppElevation.card,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(journey.distanceLabel, style: AppText.caption(AppColors.ink)),
+            Text(
+              // ⚠️ "about", because it is. See Journey.flight.
+              'about ${journey.flightLabel}',
+              style: AppText.label(),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
