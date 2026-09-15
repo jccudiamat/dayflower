@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sized like a note, not like a card.
+
+     2 x 2 cells — roughly square, which is what makes it read as paper. The
+     other widgets in this app are 4 x 2 postcards because they carry a
+     photograph or a big number; a note carries a sentence, and a wide one
+     would look like a banner.
+
+     ⚠️ resizeMode is horizontal|vertical so several can sit side by side at
+     different sizes, the way notes on a fridge do. minResize is small on
+     purpose: a one-line reminder is legible at 1 x 1.
+
+     updatePeriodMillis is Android's 30-minute floor. The due label is
+     computed on every draw (see StickyNoteWidget.whenLabel), so this only
+     covers a note left alone across midnight — "Tomorrow 9am" has to stop
+     saying tomorrow without the app being opened. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:initialLayout="@layout/sticky_note_widget"
+    android:previewLayout="@layout/sticky_note_widget"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:minResizeWidth="70dp"
+    android:minResizeHeight="70dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="400dp"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:description="@string/sticky_note_widget_description"
+    android:updatePeriodMillis="1800000" />

@@ -145,6 +145,20 @@
                 android:resource="@xml/reunion_widget_info"/>
         </receiver>
 
+        <!-- Sticky note widget — one reminder per instance, pinned from the
+             app by long-pressing a note. Several may sit on one home screen,
+             each holding a different reminder; see StickyNoteWidget. -->
+        <receiver
+            android:name=".StickyNoteWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE"/>
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/sticky_note_widget_info"/>
+        </receiver>
+
         <!-- Adaptive widget — follows Settings → Home screen widget -->
         <receiver
             android:name=".DayflowerWidget"

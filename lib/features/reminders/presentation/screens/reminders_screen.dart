@@ -19,6 +19,9 @@ import '../../../../core/widgets/ios_back_button.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/reminder_repository.dart';
+import '../../data/sticky_note_pinner.dart';
+import '../../domain/sticky_note.dart';
+import '../widgets/sticky_note_card.dart';
 
 /// Reminders you set for each other. Sub-route of the Activities hub.
 ///
@@ -97,33 +100,14 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
                       onAdd: () => _openEditor(partner: partner),
                     );
                   }
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(
-                        AppSpace.sm, 0, AppSpace.sm, AppSpace.xl + AppSpace.md),
-                    itemCount: list.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpace.xs),
-                    itemBuilder: (_, i) {
-                      final reminder = list[i];
-                      return _ReminderCard(
-                        reminder: reminder,
-                        isMine: reminder.isFor(userId),
-                        partnerName: partner?.displayName ?? 'them',
-                        onToggle: () => _toggle(reminder),
-                        // Only on a reminder that is for *them* and still
-                        // open — nudging yourself is a button that does
-                        // nothing, and nudging about something already
-                        // ticked off is noise.
-                        onNudge: reminder.isFor(userId) || reminder.isDone
-                            ? null
-                            : () => _nudge(reminder),
-                        nudged: _isSpent(reminder),
-                        onTap: () => _openEditor(
-                          partner: partner,
-                          existing: reminder,
-                        ),
-                      );
-                    },
+                  return _NoteWall(
+                    notes: list,
+                    userId: userId,
+                    partnerName: partner?.displayName ?? 'them',
+                    onToggle: _toggle,
+                    onOpen: (r) =>
+                        _openEditor(partner: partner, existing: r),
+                    onMore: (r) => _showNoteActions(r, partner),
                   );
                 },
               ),
@@ -203,6 +187,63 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
     }
   }
 
+  /// What a note cannot show on its face.
+  ///
+  /// Long-press rather than controls on the note: sticking something on a
+  /// home screen and reaching into somebody else's pocket are both
+  /// deliberate acts, and a wall of notes has no room to make either of them
+  /// a button without becoming a list of rows again.
+  Future<void> _showNoteActions(Reminder reminder, UserProfile? partner) async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
+    final name = partner?.displayName ?? 'them';
+    // Nudging yourself does nothing, and nudging about something already
+    // ticked off is noise — the same rule the old inline button followed.
+    final canNudge = !reminder.isFor(userId) && !reminder.isDone;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _NoteActionSheet(
+        reminder: reminder,
+        partnerName: name,
+        canNudge: canNudge,
+        nudgeSpent: _isSpent(reminder),
+        onNudge: () {
+          Navigator.of(sheetContext).pop();
+          _nudge(reminder);
+        },
+        onPin: () {
+          Navigator.of(sheetContext).pop();
+          _pin(reminder);
+        },
+      ),
+    );
+  }
+
+  /// Sticks this one note on the home screen.
+  Future<void> _pin(Reminder reminder) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final asked = await StickyNotePinner.pin(reminder);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            asked
+                // The launcher owns the last step, so this cannot promise
+                // the note landed — only that it was offered.
+                ? 'Drag it where you want it.'
+                : 'This launcher cannot pin widgets. Add it from the '
+                    'widget tray instead.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) _showError(context, e);
+    }
+  }
+
   Future<void> _openEditor({
     UserProfile? partner,
     Reminder? existing,
@@ -277,119 +318,207 @@ void _showError(BuildContext context, Object error) {
 
 // ── The list ────────────────────────────────────────
 
-class _ReminderCard extends StatelessWidget {
-  const _ReminderCard({
-    required this.reminder,
-    required this.isMine,
+/// The wall.
+///
+/// Two columns of notes, not one, because a note is roughly as tall as it is
+/// wide — a full-width tilted rectangle is a card with a rotation.
+///
+/// ⚠️ **Masonry by alternating index, not by measured height.** Measuring
+/// would need a layout pass per note and would reshuffle the wall whenever a
+/// title wrapped. Alternating keeps a note in the same place from one open
+/// to the next, which matters more here than perfectly level columns: people
+/// remember where they stuck something.
+///
+/// Not lazily built. A couple has tens of reminders, not thousands, and the
+/// tilt means a note can paint slightly outside its own box — which a
+/// viewport-clipped lazy list would cut off at the edges.
+class _NoteWall extends StatelessWidget {
+  const _NoteWall({
+    required this.notes,
+    required this.userId,
     required this.partnerName,
     required this.onToggle,
-    required this.onTap,
-    this.onNudge,
-    this.nudged = false,
+    required this.onOpen,
+    required this.onMore,
   });
 
-  final Reminder reminder;
-  final bool isMine;
+  final List<Reminder> notes;
+
+  /// Nullable, matching `Reminder.isFor` — a signed-out reader has no
+  /// reminders "for you", which is a real state rather than one to assert
+  /// away with a bang.
+  final String? userId;
   final String partnerName;
-  final VoidCallback onToggle;
-  final VoidCallback onTap;
-
-  /// Null when there is nobody to nudge — the reminder is yours, or done.
-  final VoidCallback? onNudge;
-
-  /// True inside the cooldown after a tap.
-  final bool nudged;
+  final void Function(Reminder) onToggle;
+  final void Function(Reminder) onOpen;
+  final void Function(Reminder) onMore;
 
   @override
   Widget build(BuildContext context) {
-    final overdue = reminder.isOverdue;
+    final left = <Reminder>[];
+    final right = <Reminder>[];
+    for (var i = 0; i < notes.length; i++) {
+      (i.isEven ? left : right).add(notes[i]);
+    }
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.sm, AppSpace.xxs, AppSpace.sm, AppSpace.xl + AppSpace.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _column(left)),
+          const SizedBox(width: AppSpace.xs),
+          Expanded(child: _column(right)),
+        ],
+      ),
+    );
+  }
+
+  Widget _column(List<Reminder> column) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final reminder in column)
+          Padding(
+            // Generous, because the tilt needs somewhere to go: two notes
+            // leaning towards each other with 8pt between them overlap.
+            padding: const EdgeInsets.only(bottom: 14),
+            child: StickyNoteCard(
+              reminder: reminder,
+              isMine: reminder.isFor(userId),
+              partnerName: partnerName,
+              onToggle: () => onToggle(reminder),
+              onTap: () => onOpen(reminder),
+              onMore: () => onMore(reminder),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// What long-pressing a note offers.
+class _NoteActionSheet extends StatelessWidget {
+  const _NoteActionSheet({
+    required this.reminder,
+    required this.partnerName,
+    required this.canNudge,
+    required this.nudgeSpent,
+    required this.onNudge,
+    required this.onPin,
+  });
+
+  final Reminder reminder;
+  final String partnerName;
+  final bool canNudge;
+  final bool nudgeSpent;
+  final VoidCallback onNudge;
+  final VoidCallback onPin;
+
+  @override
+  Widget build(BuildContext context) {
+    final paper = stickyNotePaperFor(reminder.id);
+
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(AppSpace.sm),
+        padding: const EdgeInsets.all(AppSpace.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                // The note's own paper, so the sheet is visibly about *this*
+                // note and not about reminders in general.
+                Container(
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    color: paper.fill,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: paper.edge),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(reminder.emoji,
+                      style: const TextStyle(fontSize: 12)),
+                ),
+                const SizedBox(width: AppSpace.xs),
+                Expanded(
+                  child: Text(
+                    reminder.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.subtitle().copyWith(
+                        fontSize: 15, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.sm),
+            if (StickyNotePinner.supported)
+              _SheetAction(
+                icon: CupertinoIcons.pin_fill,
+                label: 'Stick on home screen',
+                detail: 'Keeps this note where you will see it.',
+                onTap: onPin,
+              ),
+            if (canNudge) ...[
+              const SizedBox(height: AppSpace.xs),
+              _NudgeButton(
+                name: partnerName,
+                spent: nudgeSpent,
+                onTap: onNudge,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SheetAction extends StatelessWidget {
+  const _SheetAction({
+    required this.icon,
+    required this.label,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
     return Material(
-      color: Colors.transparent,
+      color: AppColors.surfaceSubtle,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpace.sm),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-            border: Border.all(
-              color: overdue ? AppColors.brandLight : AppColors.border,
-            ),
-            boxShadow: AppElevation.card,
-          ),
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpace.xs + 2),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _TickCircle(done: reminder.isDone, onTap: onToggle),
+              Icon(icon, size: 18, color: AppColors.secondary),
               const SizedBox(width: AppSpace.xs),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
-                      children: [
-                        Text(reminder.emoji,
-                            style: const TextStyle(fontSize: 15)),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            reminder.title,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppText.body(AppColors.ink).copyWith(
-                              fontWeight: FontWeight.w700,
-                              decoration: reminder.isDone
-                                  ? TextDecoration.lineThrough
-                                  : null,
-                              color: reminder.isDone
-                                  ? AppColors.muted
-                                  : AppColors.ink,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (reminder.note != null &&
-                        reminder.note!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(reminder.note!,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppText.caption()),
-                    ],
-                    const SizedBox(height: AppSpace.xs),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        _Chip(
-                          label: _friendlyWhen(reminder.remindAt),
-                          color: overdue ? AppColors.danger : AppColors.body,
-                          icon: CupertinoIcons.clock,
-                        ),
-                        if (reminder.repeats)
-                          _Chip(
-                            label: reminder.repeat.label,
-                            color: AppColors.secondary,
-                            icon: CupertinoIcons.repeat,
-                          ),
-                        _Chip(
-                          label: isMine ? 'For you' : 'For $partnerName',
-                          color: isMine ? AppColors.brand : AppColors.muted,
-                          icon: CupertinoIcons.person,
-                        ),
-                      ],
-                    ),
-                    if (onNudge != null) ...[
-                      const SizedBox(height: AppSpace.xs),
-                      _NudgeButton(
-                        name: partnerName,
-                        spent: nudged,
-                        onTap: onNudge!,
-                      ),
-                    ],
+                    Text(label,
+                        style: AppText.body(AppColors.ink)
+                            .copyWith(fontWeight: FontWeight.w700)),
+                    Text(detail, style: AppText.caption()),
                   ],
                 ),
               ),
@@ -452,57 +581,6 @@ class _NudgeButton extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _TickCircle extends StatelessWidget {
-  const _TickCircle({required this.done, required this.onTap});
-  final bool done;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.only(top: 2, right: 2),
-        child: AnimatedContainer(
-          duration: AppMotion.micro,
-          width: 24,
-          height: 24,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: done ? AppGradients.cta : null,
-            border: done
-                ? null
-                : Border.all(color: AppColors.blushMid, width: 1.5),
-          ),
-          child: done
-              ? const AppIcon(Icons.done_rounded, size: 15, color: Colors.white)
-              : null,
-        ),
-      ),
-    );
-  }
-}
-
-class _Chip extends StatelessWidget {
-  const _Chip({required this.label, required this.color, required this.icon});
-  final String label;
-  final Color color;
-  final IconData icon;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        AppIcon(icon, size: 11, color: color),
-        const SizedBox(width: 3),
-        Text(label, style: AppText.label(color)),
-      ],
     );
   }
 }
@@ -928,23 +1006,3 @@ class _QuickTime extends StatelessWidget {
   }
 }
 
-/// "Today 8:00 PM" / "Tomorrow 9:00 AM" / "Fri 12 Sep, 9:00 AM".
-///
-/// Shared with nothing else on purpose — the Messages inbox has its own
-/// ladder tuned for a chat, where "yesterday" matters and next month does
-/// not. Here it's the reverse.
-String _friendlyWhen(DateTime when) {
-  final now = DateTime.now();
-  final today = DateTime(now.year, now.month, now.day);
-  final day = DateTime(when.year, when.month, when.day);
-  final diff = day.difference(today).inDays;
-  final time = DateFormat('h:mm a').format(when);
-  if (diff == 0) return 'Today $time';
-  if (diff == 1) return 'Tomorrow $time';
-  if (diff == -1) return 'Yesterday $time';
-  if (diff > 1 && diff < 7) return '${DateFormat('EEEE').format(when)} $time';
-  if (when.year == now.year) {
-    return '${DateFormat('d MMM').format(when)}, $time';
-  }
-  return '${DateFormat('d MMM yyyy').format(when)}, $time';
-}

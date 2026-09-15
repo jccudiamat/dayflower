@@ -31,6 +31,85 @@
 - **Verified against real data** in the web preview: 23 blooms with Hubby, call ring at 15% (5h used, 36h 39m left, resets 1 October), 31 shared photos.
 - ⚠️ **The web preview signs in as the real test partner account.** A live call from the other account rang during testing; answering or declining it would have acted on a real conversation, so neither was touched and the server was stopped instead. Navigate by URL (`/#/app/blooms`) rather than tapping through when something live is on screen.
 
+## Reminders are sticky notes (2026-09-15)
+
+A wall of paper rather than a list of rows, and any one note can be stuck on
+the home screen.
+
+**What makes it a note**: paper colour, a slight tilt, a folded corner, ink
+instead of UI text. The tilt does most of the work — two degrees off square
+is the difference between "rendered" and "put there". Two columns, because a
+note is roughly as tall as it is wide and a full-width tilted rectangle is
+just a card with a rotation.
+
+**Colour and tilt are derived from the reminder id**, not stored. A note has
+to look the same in the app, on the home screen, after a reinstall and on the
+other phone; storing it would mean a migration and a column nobody edits.
+⚠️ **Not `String.hashCode`** — Dart is explicitly allowed to vary it between
+VM launches, so every note would re-paper itself on restart. FNV-1a, pinned
+by `test/sticky_note_test.dart`.
+
+⚠️ **Colour crosses to Kotlin resolved, as an ARGB int.** The widget never
+re-derives it. Two implementations of one hash in two languages drift
+silently, and the failure would be a note that changes colour when you stick
+it on a home screen.
+
+### The home-screen note
+
+**Per widget instance**, unlike every other widget here — each copy holds its
+own reminder, the way a fridge holds several different pieces of paper. A
+widget showing "your next reminder" would be a dashboard, not a note.
+
+`requestPinAppWidget` cannot hand data to the widget it creates, so `pin()`
+parks the note under `pending_note_*` and the first `onUpdate` for a widget
+id with no note of its own adopts it, then clears it. `onDeleted` drops a
+note's keys — without that, removing one leaves its data behind and the next
+widget to get a recycled id would inherit a stranger's reminder.
+
+⚠️ **True from `pin()` means the request was made, never that a note landed.**
+The launcher shows its own confirmation and a person can dismiss it. The
+snackbar says "Drag it where you want it", not "Pinned".
+
+⚠️ The paper is a **white drawable tinted with `setColorFilter`**, not a
+coloured background: `setBackgroundColor` is not on the RemoteViews
+allowlist, and reaching a view's method by name through `setInt` is how
+"Problem loading widget" happened before.
+
+The due label is computed **on every draw**, not baked in Dart — a note can
+sit on a home screen for days, and "Tomorrow 9am" written when the app last
+ran would still say tomorrow all week.
+
+### What moved
+
+The inline nudge button is now behind a long-press, alongside "Stick on home
+screen". It kept its full-width, labelled form inside that sheet — it reaches
+into somebody else's pocket, so it should stay hard to press by accident, and
+a note has no room for it on its face.
+
+## 🔴 The APK is at 49.9 MB against a 50 MB ceiling (2026-09-15)
+
+`flutter build apk --release --target-platform android-arm64` now produces
+**49.9 MB**. `tool/publish_update.dart` refuses anything over 50 MB, which is
+Supabase's per-object limit on this plan — so the OTA path has roughly
+100 KB of headroom and **the next image added breaks publishing entirely**.
+
+It was 39.9 MB on 2026-09-05. Where it went:
+
+| | |
+|---|---|
+| `libapp.so` | 12.1 MB |
+| `libjingle_peerconnection_so.so` (WebRTC) | 11.5 MB |
+| `libflutter.so` | 10.8 MB |
+| `assets/images/gifts` | 4.5 MB |
+| `assets/images/flowers` | 3.6 MB |
+| `monthsary_53.png` | 1.6 MB |
+
+The native libraries are already ABI-filtered and not reducible. The app
+assets are: **9.7 MB of PNGs**, one of which is a single 1.6 MB image.
+Cheapest fixes, in order — re-encode the gift and flower art (WebP at
+quality 85 typically saves 60–70% on this kind of artwork), then decide
+whether every gift image needs to ship in the APK rather than being fetched.
+
 ## Feature status
 
 | # | Feature | Status |

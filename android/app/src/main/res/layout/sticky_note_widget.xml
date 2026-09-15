@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One reminder, as a piece of paper.
+
+     The paper is an ImageView tinted in Kotlin rather than a coloured
+     background, because a RemoteViews background cannot be recoloured at
+     runtime: setBackgroundColor is not on the allowlist, and reaching a
+     view's own method by name through setInt is exactly how "Problem loading
+     widget" happened before (see TodaysTulipWidget.renderPhotos). A white
+     nine-patch tinted with setColorFilter is the supported way to have five
+     paper colours and one layout.
+
+     ⚠️ Every view here is RemoteViews-legal — FrameLayout, LinearLayout,
+     ImageView, TextView — and every call the Kotlin makes on them is a
+     first-class RemoteViews method.
+
+     Ids are the contract with StickyNoteWidget.renderNote; renaming one
+     means changing the Kotlin too. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/note_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- The paper itself. Tinted per note. -->
+    <ImageView
+        android:id="@+id/note_paper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="fitXY"
+        android:src="@drawable/sticky_note_paper"
+        android:contentDescription="@null" />
+
+    <!-- The turned-up corner, which is what stops a coloured rectangle
+         reading as a swatch. Top-right, matching the in-app note. -->
+    <ImageView
+        android:id="@+id/note_fold"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_gravity="top|right"
+        android:scaleType="fitXY"
+        android:src="@drawable/sticky_note_fold"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingLeft="13dp"
+        android:paddingRight="13dp"
+        android:paddingTop="11dp"
+        android:paddingBottom="11dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/note_emoji"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="17sp"
+                android:maxLines="1" />
+
+            <!-- Pushes the two trailing marks to the right edge. -->
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="" />
+
+            <ImageView
+                android:id="@+id/note_repeat"
+                android:layout_width="12dp"
+                android:layout_height="12dp"
+                android:layout_marginRight="6dp"
+                android:src="@drawable/ic_note_repeat"
+                android:visibility="gone"
+                android:contentDescription="@null" />
+
+            <ImageView
+                android:id="@+id/note_done"
+                android:layout_width="15dp"
+                android:layout_height="15dp"
+                android:src="@drawable/ic_note_check"
+                android:visibility="gone"
+                android:contentDescription="@null" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/note_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:text=""
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:lineSpacingMultiplier="1.1"
+            android:maxLines="3"
+            android:ellipsize="end" />
+
+        <TextView
+            android:id="@+id/note_body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:text=""
+            android:textSize="11.5sp"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:visibility="gone" />
+
+        <!-- Bottom-aligned: the due time is the last thing read, and a note
+             with a short title should still show it at the foot rather than
+             floating in the middle. -->
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:text="" />
+
+        <TextView
+            android:id="@+id/note_when"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+    </LinearLayout>
+</FrameLayout>

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The underside of the turned-up corner. White for the same reason as the
+     paper: it is tinted to the note's edge colour at runtime.
+
+     A triangle drawn as a rotated square clipped by the corner — vector so
+     it stays crisp at any widget size. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="18"
+    android:viewportHeight="18">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M18,0 L18,18 L0,0 Z" />
+</vector>

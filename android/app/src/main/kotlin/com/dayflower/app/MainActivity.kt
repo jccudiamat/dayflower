@@ -47,6 +47,28 @@ class MainActivity : FlutterActivity() {
                 MediaSaver.handle(applicationContext, call, result)
             }
 
+        // Sticking one reminder on the home screen. Its own channel for the
+        // same reason as the others: requestPinAppWidget is a method on
+        // AppWidgetManager, so it cannot be reached from Dart, and
+        // home_widget can write a widget's data but cannot ask a launcher to
+        // create one. See StickyNoteWidget.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, STICKY_NOTE_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "pin" -> {
+                        val note = call.arguments as? Map<String, Any?>
+                        if (note == null) {
+                            result.error("bad_args", "expected a note map", null)
+                        } else {
+                            result.success(
+                                StickyNoteWidget.pin(applicationContext, note),
+                            )
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         // Whether a person is actually here, for the chat header's "Active
         // now". Its own channel because it has nothing to do with calls --
         // see DevicePresence.
@@ -180,5 +202,6 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "dayflower/pip"
         private const val PRESENCE_CHANNEL = "dayflower/presence"
+        private const val STICKY_NOTE_CHANNEL = "dayflower/sticky_note"
     }
 }

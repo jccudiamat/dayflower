@@ -12,6 +12,7 @@
 
     <!-- Reunion countdown widget -->
     <string name="reunion_widget_description">How long until you are in the same place.</string>
+    <string name="sticky_note_widget_description">One reminder, stuck where you will see it.</string>
     <string name="reunion_widget_label">NEXT REUNION</string>
     <string name="reunion_widget_empty">No countdown yet — tap to set one</string>
 
