@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'section_scroll_scope.dart';
 
 import 'package:dayflower/app_router.dart';
 import 'package:dayflower/features/tulip/data/flower_repository.dart';
@@ -44,14 +45,14 @@ class AppBottomNav extends ConsumerWidget {
                 icon: CupertinoIcons.house_fill,
                 label: 'Home',
                 selected: section == AppSection.home,
-                onTap: () => context.go(Routes.home),
+                onTap: () => _openSection(context, ref, Routes.home),
               ),
               _NavItem(
                 icon: CupertinoIcons.chat_bubble_2_fill,
                 label: 'Chat',
                 selected: section == AppSection.chat,
                 badge: location == Routes.chat ? 0 : unread,
-                onTap: () => context.go(Routes.chat),
+                onTap: () => _openSection(context, ref, Routes.chat),
               ),
               Expanded(
                   child: Semantics(
@@ -63,30 +64,26 @@ class AppBottomNav extends ConsumerWidget {
                           child: InkWell(
                             borderRadius: BorderRadius.circular(AppRadius.md),
                             onTap: () =>
-                                context.go(Routes.dayflower),
+                                _openSection(context, ref, Routes.dayflower),
                             child: SizedBox(
                                 height: 52,
                                 child: Center(
-                                    child: ClipRRect(
-                                  borderRadius:
-                                      BorderRadius.circular(AppRadius.sm),
-                                  child: Image.asset('assets/images/logo.png',
+                                    child: Image.asset('assets/images/brand_mark.png',
                                       width: 42,
                                       height: 42,
-                                      excludeFromSemantics: true),
-                                ))),
+                                      excludeFromSemantics: true))),
                           )))),
               _NavItem(
                 icon: CupertinoIcons.photo_on_rectangle,
                 label: 'Memories',
                 selected: section == AppSection.memories,
-                onTap: () => context.go(Routes.memories),
+                onTap: () => _openSection(context, ref, Routes.memories),
               ),
               _NavItem(
                 icon: CupertinoIcons.square_grid_2x2_fill,
                 label: 'Together',
                 selected: section == AppSection.together,
-                onTap: () => context.go(Routes.together),
+                onTap: () => _openSection(context, ref, Routes.together),
               ),
             ],
           ),
@@ -94,6 +91,29 @@ class AppBottomNav extends ConsumerWidget {
       ),
     );
   }
+}
+
+void _openSection(BuildContext context, WidgetRef ref, String target) {
+  final current = GoRouterState.of(context).matchedLocation;
+  final reselect = sectionForLocation(current) == sectionForLocation(target);
+  final controller = reselect
+      ? ref.read(sectionScrollControllerProvider(target))
+      : null;
+  final reducedMotion = MediaQuery.disableAnimationsOf(context);
+  if (current != target) context.go(target);
+  if (controller == null) return;
+  // Wait until a nested page has closed and the root scroll view is attached.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    for (final position in controller.positions.toList()) {
+      if (reducedMotion) {
+        position.jumpTo(position.minScrollExtent);
+      } else {
+        position.animateTo(position.minScrollExtent,
+            duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+      }
+    }
+  });
+  WidgetsBinding.instance.ensureVisualUpdate();
 }
 
 class _NavItem extends StatelessWidget {

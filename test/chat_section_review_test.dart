@@ -102,7 +102,7 @@ void main() {
           () async => Future<void>.delayed(const Duration(milliseconds: 400)));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
-      expect(find.text('Chat'), findsOneWidget);
+      expect(find.byType(AppBottomNav), findsNothing);
       expect(find.byTooltip('Voice call'), findsOneWidget);
       expect(find.byTooltip('Video call'), findsOneWidget);
       expect(find.byTooltip('Send a photo'), findsOneWidget);
@@ -128,7 +128,7 @@ void main() {
         expect(find.text('Unsent draft'), findsOneWidget);
         tester.view.resetViewInsets();
         await tester.pumpAndSettle();
-        expect(find.byType(AppBottomNav), findsOneWidget);
+        expect(find.byType(AppBottomNav), findsNothing);
         expect(find.text('Unsent draft'), findsOneWidget);
       }
       await tester.pumpWidget(const SizedBox());

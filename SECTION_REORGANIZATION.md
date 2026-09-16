@@ -9,7 +9,7 @@ The bottom navigation is Home, Chat, the central Dayflower logo, Memories, Toget
 | Destination | Features and previous locations |
 | --- | --- |
 | Home | Approved greeting/My Day, heartbeat, mood, Events preview and widget previews. Bell and Us pill retained. |
-| Chat | Conversation formerly reached through Flowers. Existing calls, messages, quick flower picker, chat camera, replies and reactions retained. Partner header opens existing Chat settings and shared media. Navigation hides while typing or the flower picker is open. |
+| Chat | Conversation formerly reached through Flowers. Existing calls, messages, quick flower picker, chat camera, replies and reactions retained. Partner header opens existing Chat settings and shared media. Chat is full-screen with no bottom navigation, including while typing and using the flower picker. |
 | Dayflower center | Existing Flowers collection, including sent blooms and shared bouquet links. Send a flower opens the working Chat catalog. Create a bouquet opens the existing Dayflower website creator. The former conversation preview is removed because Chat now has its own tab. |
 | Memories | Booth & Strip and Chapters moved from Activities. Shared photos reuses the gallery from Chat settings. My Day photos is the same gallery filtered to photos shared to the widget, with a camera action explicitly targeting My Day. Finished strips remain in the booth history and shared-photo collection. |
 | Together | Events (also still linked by Home and Us), reminders and finances from Activities, Gifts from its old tab, and the existing Travel map screen. Fitness, async games and music retain their explicit Coming soon status. |
@@ -35,4 +35,12 @@ Automated checks cover real screen navigation, tab ownership, old links, return 
 
 Live calls, external bouquet sharing, map tile loading and device camera capture are not simulated as successfully completed by these tests. Their existing integrations remain in place.
 
-Validation completed: 414 tests passed in the full suite. Changed source and tests pass Flutter analysis with no issues. The Chat keyboard/navigation check also passes after verifying the draft remains visible when the keyboard closes. Home source is unchanged from build 77.
+Validation completed: 414 tests passed in the full suite. Changed source and tests pass Flutter analysis with no issues. The Chat keyboard check verifies the draft remains visible when the keyboard closes. Home source is unchanged from build 77.
+
+## Navbar refinements before deployment
+
+- The center uses the existing transparent website brand mark, copied unchanged to `assets/images/brand_mark.png`. There is no rounded-square logo background.
+- Chat never displays the bottom navbar. Its back action and bottom safe-area spacing remain available.
+- Tapping the current section scrolls its existing content to the top. Tapping its tab from a nested screen returns to the section root and scrolls to the top. Controllers are scoped per section and disposed with their provider. Reduced-motion settings skip the animation. This does not refresh network data or reset a form.
+- Home content is unchanged; root route wrappers supply the scroll controllers.
+- Latest validation: 15 focused navigation, layout and interaction tests passed, and analysis reported no issues. Previews were regenerated and visually checked. These refinements are not deployed.

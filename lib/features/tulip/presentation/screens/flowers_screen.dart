@@ -9,7 +9,6 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../calls/data/call_repository.dart';
 import '../../../calls/domain/call.dart';
 import '../../../calls/domain/call_notifier.dart';
@@ -274,7 +273,6 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      bottomNavigationBar: keyboardUp || _panelOpen ? null : const AppBottomNav(),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -293,7 +291,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             // Nothing sits below the composer/drawer any more, so whichever
             // is bottom-most has to clear the gesture bar itself. With the
             // keyboard up the keyboard already covers it.
-            if (!keyboardUp && _panelOpen)
+            if (!keyboardUp)
               SizedBox(height: MediaQuery.paddingOf(context).bottom),
           ],
         ),

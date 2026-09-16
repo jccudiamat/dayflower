@@ -14,6 +14,7 @@ import 'core/theme/app_colors.dart';
 import 'features/calls/data/call_pip.dart';
 import 'core/util/clamp_offset.dart';
 import 'core/theme/design_tokens.dart';
+import 'core/widgets/section_scroll_scope.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/welcome_screen.dart';
 import 'features/auth/presentation/widgets/startup_brand.dart';
@@ -414,7 +415,7 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 /// App destinations shared by the authenticated shell and navigation checks.
 List<RouteBase> appFeatureRoutes() => [
-      GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
+      GoRoute(path: Routes.home, builder: (_, __) => const SectionScrollScope(route: Routes.home, child: HomeScreen())),
       GoRoute(
           path: Routes.notifications,
           builder: (_, __) =>
@@ -428,16 +429,16 @@ List<RouteBase> appFeatureRoutes() => [
           path: Routes.blooms,
           redirect: (_, state) =>
               state.uri.replace(path: Routes.dayflower).toString()),
-      GoRoute(path: Routes.dayflower, builder: (_, __) => const BloomsScreen()),
+      GoRoute(path: Routes.dayflower, builder: (_, __) => const SectionScrollScope(route: Routes.dayflower, child: BloomsScreen())),
       GoRoute(
-          path: Routes.memories, builder: (_, __) => const MemoriesScreen()),
+          path: Routes.memories, builder: (_, __) => const SectionScrollScope(route: Routes.memories, child: MemoriesScreen())),
       GoRoute(
           path: Routes.photos, builder: (_, __) => const SharedPhotosScreen()),
       GoRoute(
           path: Routes.myDays,
           builder: (_, __) => const SharedPhotosScreen(myDaysOnly: true)),
       GoRoute(
-          path: Routes.together, builder: (_, __) => const ActivitiesScreen()),
+          path: Routes.together, builder: (_, __) => const SectionScrollScope(route: Routes.together, child: ActivitiesScreen())),
       GoRoute(path: Routes.travel, builder: (_, __) => const TravelMapScreen()),
       GoRoute(
           path: Routes.chat,

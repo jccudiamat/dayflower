@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:dayflower/app_router.dart';
 import 'package:dayflower/core/widgets/app_bottom_nav.dart';
+import 'package:dayflower/core/widgets/section_scroll_scope.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
 import 'package:dayflower/features/tulip/presentation/screens/chat_settings_screen.dart';
@@ -332,14 +333,59 @@ void main() {
         await tester.runAsync(() async => Future<void>.delayed(const Duration(milliseconds: 400)));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: '$name $width $scale');
-        expect(find.byType(AppBottomNav), findsOneWidget);
-        for (final label in ['Home', 'Chat', 'Dayflower', 'Memories', 'Together']) {
-          expect(tab(label), findsOneWidget);
+        if (route == Routes.chat) {
+          expect(find.byType(AppBottomNav), findsNothing);
+        } else {
+          expect(find.byType(AppBottomNav), findsOneWidget);
+          for (final label in ['Home', 'Chat', 'Dayflower', 'Memories', 'Together']) {
+            expect(tab(label), findsOneWidget);
+          }
         }
         if (width == 390 && scale == 1) await _screenshot(tester, 'sections-$name');
         await tester.pumpWidget(const SizedBox());
       }
     }
+  });
+
+
+  _homeTest('Reselect scrolls each section to the top without replacing it', (tester) async {
+    for (final (route, label) in [
+      (Routes.home, 'Home'), (Routes.dayflower, 'Dayflower'),
+      (Routes.memories, 'Memories'), (Routes.together, 'Together')]) {
+      await _pump(tester, route, height: 500, productionRoutes: true, filled: true);
+      await tester.pumpAndSettle();
+      final scope = find.byType(SectionScrollScope);
+      final container = ProviderScope.containerOf(tester.element(scope));
+      final controller = container.read(sectionScrollControllerProvider(route));
+      expect(controller.hasClients, isTrue, reason: label);
+      expect(controller.position.maxScrollExtent, greaterThan(0), reason: label);
+      await tester.drag(find.descendant(of: scope, matching: find.byType(Scrollable)).first,
+          const Offset(0, -220));
+      await tester.pumpAndSettle();
+      expect(controller.offset, greaterThan(0), reason: label);
+      await tester.tap(tab(label));
+      await tester.pumpAndSettle();
+      expect(controller.offset, closeTo(0, 0.1), reason: label);
+      expect(container.read(sectionScrollControllerProvider(route)), same(controller));
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox());
+    }
+  });
+
+  _homeTest('Parent tab closes a detail and returns to the top', (tester) async {
+    await _pump(tester, Routes.memories, height: 500, productionRoutes: true);
+    await _reveal(tester, find.text('Chapters'));
+    final container = ProviderScope.containerOf(tester.element(find.byType(MemoriesScreen)));
+    expect(container.read(sectionScrollControllerProvider(Routes.memories)).offset, greaterThan(0));
+    await tester.tap(find.text('Chapters'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ChaptersScreen), findsOneWidget);
+    await tester.tap(tab('Memories'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MemoriesScreen), findsOneWidget);
+    expect(find.byType(ChaptersScreen), findsNothing);
+    expect(container.read(sectionScrollControllerProvider(Routes.memories)).offset, closeTo(0, 0.1));
+    expect(tester.takeException(), isNull);
   });
 
   _homeTest('Five tabs and legacy roots reach the correct sections', (tester) async {
@@ -350,7 +396,14 @@ void main() {
       await tester.tap(tab(label));
       await tester.pumpAndSettle();
       expect(router.routeInformationProvider.value.uri.path, path);
-      expect((tester.widget(tab(label)) as Semantics).properties.selected, isTrue);
+      if (label == 'Chat') {
+        expect(find.byType(AppBottomNav), findsNothing);
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        expect(find.byType(HomeScreen), findsOneWidget);
+      } else {
+        expect((tester.widget(tab(label)) as Semantics).properties.selected, isTrue);
+      }
       expect(tester.takeException(), isNull);
     }
     router.go('${Routes.activities}?from=old-link');
