@@ -302,13 +302,16 @@ void main() {
   _homeTest(
       'Home fits phones, wider screens and large text with consistent type',
       (tester) async {
+    final emptyDeckSizes = <String, Size>{};
     for (final (width, scale, filled) in [
       (390.0, 1.0, false),
       (390.0, 1.0, true),
       (320.0, 1.0, false),
       (320.0, 1.0, true),
       (320.0, 2.0, false),
+      (320.0, 2.0, true),
       (390.0, 2.0, false),
+      (390.0, 2.0, true),
       (740.0, 1.0, false),
       (900.0, 1.0, false),
       (900.0, 1.0, true),
@@ -328,11 +331,28 @@ void main() {
       expect(tester.widget(find.byKey(const ValueKey('home-my-day'))),
           isA<Padding>());
       expect(find.byType(MonthsaryEnvelope), findsNothing);
+      expect(find.text('Update yours'), findsNothing);
+      expect(find.text('Share yours'), findsNothing);
+      expect(find.textContaining('Swipe to see'), findsNothing);
+      expect(find.textContaining('photo will appear here too'), findsNothing);
+      expect(find.text('Add your photo to the stack'), findsNothing);
+      expect(
+          find.byWidgetPredicate((widget) =>
+              widget is Semantics &&
+              (widget.properties.label == 'Show your day' ||
+                  widget.properties.label == 'Show partner’s day')),
+          findsNothing);
       expect(find.text('HOW ARE YOU FEELING?'), findsOneWidget);
       final greetingRect =
           tester.getRect(find.byKey(const ValueKey('home-greeting')));
       final photoRect =
           tester.getRect(find.byKey(const ValueKey('home-photo-deck')));
+      final sizeKey = '$width-$scale';
+      if (!filled) {
+        emptyDeckSizes[sizeKey] = photoRect.size;
+      } else if (emptyDeckSizes.containsKey(sizeKey)) {
+        expect(photoRect.size, emptyDeckSizes[sizeKey]);
+      }
       expect(greetingRect.right, lessThan(photoRect.left));
       expect(greetingRect.center.dy, closeTo(photoRect.center.dy, 1));
       expect(photoRect.left - greetingRect.right, lessThanOrEqualTo(16));

@@ -656,22 +656,10 @@ class _DayArchState extends ConsumerState<_DayArch> {
     final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
     final both = mine != null && theirs != null;
     final mineFront = theirs == null || (both && _mineInFront);
-    final compact = MediaQuery.sizeOf(context).width < 540;
     return Column(
         key: const ValueKey('home-photo-deck'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (mine != null || theirs != null)
-            Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => _shareDay(context, ref),
-                  icon: const AppIcon(CupertinoIcons.camera, size: 18),
-                  label: Text(mine == null ? 'Share yours' : 'Update yours',
-                      style: AppText.caption(AppColors.brand)),
-                  style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 4)),
-                )),
           Center(
               child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 440),
@@ -682,12 +670,9 @@ class _DayArchState extends ConsumerState<_DayArch> {
                     final rearWidth = w * .66;
                     final textScale =
                         MediaQuery.textScalerOf(context).scale(14) / 14;
-                    final h = math.max(
-                        cardWidth / .72,
-                        mine == null && theirs == null
-                            ? (compact ? 230.0 : 330.0) *
-                                math.max(1.0, textScale)
-                            : (compact ? 170.0 : 280.0));
+                    final h = math.max(cardWidth / .72,
+                            compact ? 170.0 : 280.0) *
+                        math.pow(math.max(1.0, textScale), 1.5);
                     Widget card({required bool own, required bool front}) {
                       final msg = own ? mine : theirs;
                       final label = own ? 'Your day' : "$name’s day";
@@ -808,53 +793,18 @@ class _DayArchState extends ConsumerState<_DayArch> {
                               card(own: mineFront, front: true),
                             ])));
                   }))),
-          const SizedBox(height: AppSpace.sm),
-          if (both) ...[
-            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-              for (final own in [false, true])
-                Semantics(
-                    button: true,
-                    selected: _mineInFront == own,
-                    label: own ? 'Show your day' : 'Show partner’s day',
-                    child: InkWell(
-                        onTap: () => setState(() => _mineInFront = own),
-                        child: SizedBox(
-                            width: 48,
-                            height: 48,
-                            child: Center(
-                                child: Container(
-                                    width: 8,
-                                    height: 8,
-                                    decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        color: _mineInFront == own
-                                            ? AppColors.brand
-                                            : AppColors.border)))))),
-            ]),
-            Text('Swipe to see ${mineFront ? 'their' : 'your'} day',
-                textAlign: TextAlign.center,
-                style:
-                    AppText.caption().copyWith(fontSize: compact ? 11 : 12.5)),
-          ] else
-            Text(
-                theirs == null
-                    ? '$name’s photo will appear here too'
-                    : 'Add your photo to the stack',
-                textAlign: TextAlign.center,
-                style:
-                    AppText.caption().copyWith(fontSize: compact ? 11 : 12.5)),
         ]);
   }
 
   Widget _empty(String name, bool own, bool compact) => Padding(
         padding: compact
-            ? const EdgeInsets.fromLTRB(8, 20, 8, 14)
+            ? const EdgeInsets.fromLTRB(6, 4, 6, 4)
             : const EdgeInsets.fromLTRB(16, 36, 16, 24),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
           const Spacer(),
           AppIcon(own ? CupertinoIcons.camera : CupertinoIcons.photo,
-              size: compact ? 28 : 44, color: AppColors.brand),
-          SizedBox(height: compact ? 10 : 16),
+              size: compact ? 24 : 44, color: AppColors.brand),
+          SizedBox(height: compact ? 4 : 16),
           Text(own ? 'Your day starts here' : '$name’s day',
               textAlign: TextAlign.center,
               style: compact
@@ -868,7 +818,7 @@ class _DayArchState extends ConsumerState<_DayArch> {
                   ? AppText.caption().copyWith(fontSize: 11)
                   : AppText.body(AppColors.muted)),
           if (own) ...[
-            SizedBox(height: compact ? 12 : 20),
+            SizedBox(height: compact ? 8 : 20),
             Material(
                 color: Colors.transparent,
                 child: Ink(
@@ -892,7 +842,7 @@ class _DayArchState extends ConsumerState<_DayArch> {
                 )),
           ],
           const Spacer(),
-          SizedBox(height: compact ? 10 : 20),
+          SizedBox(height: compact ? 4 : 20),
           Text(own ? 'Your day' : '$name’s day',
               style: AppText.caption().copyWith(fontSize: compact ? 11 : 12.5)),
         ]),
