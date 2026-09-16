@@ -35,8 +35,16 @@ export const ORGANISATION = {
 export const WEBSITE = {
   "@type": "WebSite",
   "@id": url("/#website"),
+  // 🔴 **This `name` is the site name Google prints above the result**, in
+  // place of the bare domain. Falling back to the domain is what it does
+  // when no site-name signal exists, which was the case here until this node
+  // shipped: there was no WebSite markup and no og:site_name at all.
+  //
+  // ⚠️ No `alternateName` here, deliberately, unlike the Organization above.
+  // Google picks between the two, and the alternate we want for query
+  // matching is literally "mydayflower" — offering it on this node would put
+  // the domain straight back in the running for the label it replaces.
   name: SITE_NAME,
-  alternateName: "mydayflower",
   url: SITE,
   publisher: { "@id": ORGANISATION["@id"] },
   inLanguage: "en",
