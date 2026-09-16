@@ -18,8 +18,16 @@ export const ORGANISATION = {
   "@type": "Organization",
   "@id": url("/#organisation"),
   name: SITE_NAME,
+  // People search the domain, not the brand: "mydayflower" is what gets
+  // typed. Naming it here is how the string gets attached to this entity
+  // rather than left to Google to guess.
+  alternateName: "mydayflower",
   url: SITE,
   logo: { "@type": "ImageObject", url: url("/mark.png"), width: 512, height: 512 },
+  // ⚠️ "Dayflower" is also a real plant (Commelina communis), so the brand
+  // competes with Wikipedia and every gardening site for its own name. These
+  // say which Dayflower this is.
+  knowsAbout: ["Long-distance relationships", "Digital bouquets", "Photo booths", "Gift ideas"],
   description:
     "Dayflower makes small, free tools for showing someone you are thinking of them: a digital bouquet, a photo booth, and gift ideas, alongside a private app for two.",
 } as const;
@@ -28,6 +36,7 @@ export const WEBSITE = {
   "@type": "WebSite",
   "@id": url("/#website"),
   name: SITE_NAME,
+  alternateName: "mydayflower",
   url: SITE,
   publisher: { "@id": ORGANISATION["@id"] },
   inLanguage: "en",
