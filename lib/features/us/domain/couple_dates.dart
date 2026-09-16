@@ -66,16 +66,16 @@ DateTime nextMonthsary(DateTime start, DateTime from) {
 /// which keeps it inside the right month.
 DateTime nextAnniversary(DateTime start, DateTime from) {
   final today = DateTime(from.year, from.month, from.day);
-  final thisYear =
-      DateTime(today.year, start.month, _dayOfMonthFor(today.year, start.month, start.day));
+  final thisYear = DateTime(today.year, start.month,
+      _dayOfMonthFor(today.year, start.month, start.day));
   if (!thisYear.isBefore(today)) return thisYear;
   final next = today.year + 1;
-  return DateTime(next, start.month, _dayOfMonthFor(next, start.month, start.day));
+  return DateTime(
+      next, start.month, _dayOfMonthFor(next, start.month, start.day));
 }
 
 /// Which anniversary the one on [date] is — 1st, 2nd, 3rd…
-int anniversaryNumber(DateTime start, DateTime date) =>
-    date.year - start.year;
+int anniversaryNumber(DateTime start, DateTime date) => date.year - start.year;
 
 /// [day], clamped to the last day that exists in that month.
 int _dayOfMonthFor(int year, int month, int day) {
@@ -101,4 +101,12 @@ String togetherLabel(DateTime start, DateTime now) {
     if (rest > 0) rest == 1 ? '1 month' : '$rest months',
   ];
   return parts.join(', ');
+}
+
+/// Leap-day birthdays follow the existing Events policy: March 1 in a common year.
+DateTime nextBirthday(DateTime birthday, DateTime from) {
+  final today = DateTime(from.year, from.month, from.day);
+  final thisYear = DateTime(today.year, birthday.month, birthday.day);
+  if (!thisYear.isBefore(today)) return thisYear;
+  return DateTime(today.year + 1, birthday.month, birthday.day);
 }

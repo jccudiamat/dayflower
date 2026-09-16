@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../app_router.dart';
+import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
@@ -13,14 +14,11 @@ import '../../data/activity_models.dart';
 import '../../data/activity_repository.dart';
 import '../widgets/activity_timeline.dart';
 
-/// Everything that has happened, grouped by day.
-///
-/// Sub-route of Home rather than of the Activities hub, even though the
-/// word overlaps: this is reached from the Home section and the tab under
-/// it should stay lit on the tab you came from. (The Activities hub is a
-/// menu of features — reminders, finance, chapters — not a log.)
+/// Shared history under Us, or partner updates opened from Home's bell.
+/// Both use the existing timeline and per-user read watermark.
 class ActivityFeedScreen extends ConsumerStatefulWidget {
-  const ActivityFeedScreen({super.key});
+  const ActivityFeedScreen({super.key, this.notificationsOnly = false});
+  final bool notificationsOnly;
 
   @override
   ConsumerState<ActivityFeedScreen> createState() => _ActivityFeedScreenState();
@@ -56,7 +54,11 @@ class _ActivityFeedScreenState extends ConsumerState<ActivityFeedScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final feed = ref.watch(activityFeedProvider);
+    final userId = ref.watch(currentUserIdProvider);
+    final feed = ref.watch(activityFeedProvider).whenData((all) =>
+        widget.notificationsOnly
+            ? all.where((a) => a.actorId != null && !a.isMine(userId)).toList()
+            : all);
     // Watched unconditionally, not read inside the branch below. A
     // conditional watch loses its subscription the moment the condition
     // flips, and this provider is autoDispose — the read in initState
@@ -78,10 +80,10 @@ class _ActivityFeedScreenState extends ConsumerState<ActivityFeedScreen> {
                 children: [
                   IosBackButton(onTap: () => context.go(Routes.home)),
                   const SizedBox(width: AppSpace.xs),
-                  const Expanded(
+                  Expanded(
                     child: FeatureScreenHeader(
-                      title: 'Activity',
-                      subtitle: 'Everything the two of you have been up to',
+                      title: widget.notificationsOnly ? 'Notifications' : 'Activity history',
+                      subtitle: widget.notificationsOnly ? 'Updates from your partner' : 'Everything the two of you have been up to',
                     ),
                   ),
                 ],
@@ -98,11 +100,12 @@ class _ActivityFeedScreenState extends ConsumerState<ActivityFeedScreen> {
                   body: '$error',
                 ),
                 data: (all) => all.isEmpty
-                    ? const _Notice(
+                    ? _Notice(
                         emoji: '🌱',
-                        title: 'Nothing yet',
-                        body: 'Set a reminder, add a goal or start a photo '
-                            'strip — it turns up here for both of you.',
+                        title: widget.notificationsOnly ? 'You’re all caught up' : 'Nothing yet',
+                        body: widget.notificationsOnly
+                            ? 'New activity from your partner will appear here.'
+                            : 'Set a reminder, add a goal or start a photo strip. It turns up here for both of you.',
                       )
                     : _GroupedTimeline(
                         activities: all,

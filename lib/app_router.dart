@@ -57,6 +57,7 @@ class Routes {
   static const pair = '/pair';
   static const shell = '/app';
   static const home = '/app/home';
+  static const notifications = '/app/home/notifications';
 
   /// The Camera tab, despite the name — see messages_screen.dart. The path
   /// predates the camera getting a tab of its own and is kept so existing
@@ -414,6 +415,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         builder: (context, state, child) => AppShell(child: child),
         routes: [
           GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
+          GoRoute(path: Routes.notifications, builder: (_, __) => const ActivityFeedScreen(notificationsOnly: true)),
           GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
           GoRoute(
               path: Routes.activityFeed,
@@ -427,7 +429,7 @@ final routerProvider = Provider<GoRouter>((ref) {
               path: Routes.chatSettings,
               builder: (_, __) => const ChatSettingsScreen()),
           GoRoute(
-              path: Routes.events, builder: (_, __) => const EventsScreen()),
+              path: Routes.events, builder: (_, state) => EventsScreen(addOnOpen: state.uri.queryParameters['add'] == '1')),
           GoRoute(
               path: Routes.gifts,
               builder: (_, state) =>

@@ -13,7 +13,6 @@ import 'package:dayflower/features/gifts/presentation/screens/gifts_screen.dart'
 import 'package:dayflower/features/gifts/data/gift_favorites_repository.dart';
 import 'package:dayflower/features/dates/data/event_repository.dart';
 import 'support/trust_fakes.dart';
-import 'package:dayflower/features/gifts/presentation/widgets/gift_occasion_card.dart';
 import 'package:dayflower/features/heartbeat/data/heartbeat_repository.dart';
 import 'package:dayflower/features/home/presentation/screens/home_screen.dart';
 import 'package:dayflower/features/onboarding/data/user_repository.dart';
@@ -138,25 +137,6 @@ void main() {
     }
   });
 
-  testWidgets('Home gift card opens contextual Gifts and back returns Home',
-      (tester) async {
-    final router = await _pump(tester, Routes.home);
-    await tester.scrollUntilVisible(find.byType(GiftOccasionCard), 250,
-        scrollable: find.byType(Scrollable).first);
-    await tester.pumpAndSettle();
-    await _screenshot(tester, 'home');
-    await tester.tap(find.text('Gift ideas'));
-    await tester.pumpAndSettle();
-    final giftState =
-        GoRouterState.of(tester.element(find.byType(GiftsScreen)));
-    expect(giftState.uri.path, Routes.gifts);
-    expect(giftState.uri.queryParameters['occasion'], isNotNull);
-    expect(find.textContaining('A gift for your'), findsOneWidget);
-    router.pop();
-    await tester.pumpAndSettle();
-    expect(find.byType(HomeScreen), findsOneWidget);
-  });
-
   testWidgets(
       'Us opens intact Events with editor, clocks and reunion; back returns Us',
       (tester) async {
@@ -250,17 +230,4 @@ void main() {
         find.text('Could not open Shopee. Please try again.'), findsOneWidget);
   });
 
-  testWidgets('Home without start date still offers Gifts and Events',
-      (tester) async {
-    await _pump(tester, Routes.home, hasStart: false);
-    await tester.scrollUntilVisible(find.byType(GiftOccasionCard), 250,
-        scrollable: find.byType(Scrollable).first);
-    expect(find.text('For someone you love'), findsOneWidget);
-    await tester.ensureVisible(find.text('View events'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('View events'));
-    await tester.pumpAndSettle();
-    expect(find.byType(EventsScreen), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
 }

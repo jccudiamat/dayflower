@@ -15,7 +15,6 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
-import '../../../../core/widgets/user_avatar.dart';
 import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
@@ -25,15 +24,49 @@ import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
-import '../../../activity/presentation/widgets/activity_timeline.dart';
-import '../../../gifts/presentation/widgets/gift_occasion_card.dart';
+import '../../../activity/data/activity_repository.dart';
 import '../../../greetings/presentation/monthsary_envelope.dart';
+import '../widgets/home_upcoming_events.dart';
+import '../widgets/home_widget_gallery.dart';
+import '../../domain/home_moments.dart';
+import '../../../../core/widgets/user_avatar.dart';
+import '../../../../core/widgets/gradient_button.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) ref.invalidate(homeClockProvider);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    ref.listen(homeClockProvider, (previous, next) {
+      if (previous?.hasValue != true || !next.hasValue) return;
+      ref.invalidate(partnerMoodProvider);
+      ref.invalidate(todayHeartbeatCountsProvider);
+      ref.invalidate(myDayPhotoProvider);
+      ref.invalidate(partnerDayPhotoProvider);
+    });
     return Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const AppBottomNav(),
@@ -58,29 +91,28 @@ class HomeScreen extends ConsumerWidget {
                 child: _HomeBar(),
               ),
             ),
-            const SliverPadding(
-              padding: AppSpace.screen,
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
-                  _HomeHeader(),
-                  SizedBox(height: AppSpace.md),
-                  MonthsaryEnvelope(),
-                  // The two things you came to *do*, first: say how you are
-                  // and reach for them. Activity sits under both because it
-                  // is what happened rather than what to do, and the badge
-                  // plus the notification are what make sure it is noticed
-                  // without it having to be at the top.
-                  _MoodCard(),
-                  SizedBox(height: AppSpace.sm),
-                  _HeartbeatCard(),
-                  SizedBox(height: AppSpace.md),
-                  GiftOccasionCard(),
-                  SizedBox(height: AppSpace.md),
-                  // The conversation card used to sit here. It went the same
-                  // way the reunion countdown did: the Flowers tab is one
-                  // tap away and shows the thread properly, so a preview of
-                  // it on Home was a second place saying the same thing.
-                  ActivitySection(),
+                  Center(
+                      child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1040),
+                    child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _HomeHeader(),
+                          SizedBox(height: AppSpace.md),
+                          _HeartbeatCard(),
+                          SizedBox(height: AppSpace.md),
+                          _MoodCard(),
+                          SizedBox(height: AppSpace.md),
+                          MonthsaryEnvelope(),
+                          HomeUpcomingEvents(),
+                          SizedBox(height: AppSpace.lg),
+                          HomeWidgetGallery(),
+                        ]),
+                  )),
                 ]),
               ),
             ),
@@ -114,34 +146,37 @@ class _MoodCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('HOW ARE YOU FEELING?', style: AppText.label()),
-              ),
-              Text(
-                mood?.label ?? 'Tap one',
+          Wrap(spacing: AppSpace.sm, runSpacing: AppSpace.xs, children: [
+            Text('How are you feeling?', style: AppText.subtitle()),
+            Text(mood?.label ?? 'Choose a mood',
                 style: AppText.caption(
-                  mood == null ? AppColors.muted : AppColors.brand,
-                ).copyWith(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+                    mood == null ? AppColors.muted : AppColors.brand)),
+          ]),
           const SizedBox(height: AppSpace.xs),
-          Row(
-            children: [
-              for (final m in Mood.values) ...[
-                Expanded(
-                  child: _MoodChip(
-                    mood: m,
-                    selected: mood == m,
-                    onTap: () => ref.read(moodProvider.notifier).select(m),
-                  ),
-                ),
-                if (m != Mood.values.last) const SizedBox(width: 6),
-              ],
-            ],
-          ),
+          LayoutBuilder(builder: (context, constraints) {
+            final columns = constraints.maxWidth >= 313 ? 6 : 3;
+            final width = math.min(
+                56.0, (constraints.maxWidth - (columns - 1) * 5) / columns);
+            return Column(children: [
+              for (var start = 0; start < Mood.values.length; start += columns)
+                Padding(
+                    padding: EdgeInsets.only(top: start == 0 ? 0 : 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        for (final m in Mood.values.skip(start).take(columns))
+                          SizedBox(
+                              width: width,
+                              child: _MoodChip(
+                                  mood: m,
+                                  selected: mood == m,
+                                  onTap: () => ref
+                                      .read(moodProvider.notifier)
+                                      .select(m))),
+                      ],
+                    )),
+            ]);
+          }),
         ],
       ),
     );
@@ -161,30 +196,34 @@ class _MoodChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AspectRatio(
-        aspectRatio: 1,
-        child: AnimatedContainer(
-          duration: AppMotion.micro,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? AppColors.blush : AppColors.background,
-            shape: BoxShape.circle,
-            // design.md: selection reads as a tinted outline, not a fill swap.
-            border: Border.all(
-              color: selected ? AppColors.brand : AppColors.border,
-              width: selected ? 1.5 : 1,
+    return Semantics(
+        button: true,
+        selected: selected,
+        label: mood.label,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AspectRatio(
+            aspectRatio: 1,
+            child: AnimatedContainer(
+              duration: AppMotion.micro,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.blush : AppColors.background,
+                shape: BoxShape.circle,
+                // design.md: selection reads as a tinted outline, not a fill swap.
+                border: Border.all(
+                  color: selected ? AppColors.brand : AppColors.border,
+                  width: selected ? 1.5 : 1,
+                ),
+              ),
+              child: Text(
+                mood.emoji,
+                style: const TextStyle(fontSize: 19),
+                semanticsLabel: mood.label,
+              ),
             ),
           ),
-          child: Text(
-            mood.emoji,
-            style: const TextStyle(fontSize: 19),
-            semanticsLabel: mood.label,
-          ),
-        ),
-      ),
-    );
+        ));
   }
 }
 
@@ -199,13 +238,13 @@ class _HeartbeatCard extends ConsumerStatefulWidget {
 class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     with TickerProviderStateMixin {
   /// The heart itself. Ripples are sized relative to it.
-  static const double _heartSize = 84;
+  static const double _heartSize = 64;
 
   /// Big enough to hold a fully expanded incoming ripple without clipping —
   /// [Stack] clips by default, so this and [_incomingGrowth] move together.
-  static const double _stageSize = 190;
+  static const double _stageSize = 96;
 
-  static const double _incomingGrowth = 106;
+  static const double _incomingGrowth = 32;
   static const Duration _incomingDuration = Duration(milliseconds: 1200);
 
   late final AnimationController _scaleCtrl;
@@ -280,7 +319,7 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       _Ripple(
         id: _rippleSeed++,
         color: AppColors.brand,
-        growth: 40,
+        growth: 24,
         duration: AppMotion.emotional,
         strokeWidth: 2,
       ),
@@ -320,7 +359,12 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     ref
         .read(heartbeatRepositoryProvider)
         .send(pairId: pair.id, senderId: userId)
-        .catchError((Object e) => debugPrint('heartbeat send failed: $e'));
+        .catchError((Object e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not send the heartbeat. Try again.')));
+      }
+    });
   }
 
   @override
@@ -338,79 +382,90 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       if (prev == null || next.partner <= prev.partner) return;
       _spawnIncomingRipples();
       _beatCtrl.forward(from: 0);
-
-
     });
 
+    ref.watch(homeClockProvider);
+    final mood = ref.watch(partnerMoodProvider);
+    final pair = ref.watch(currentPairProvider).valueOrNull;
+    final enabled = pair?.isLinked == true;
+    final title = !enabled
+        ? 'A heartbeat for your person'
+        : mood == null
+            ? 'Send $partnerName a heartbeat'
+            : '$partnerName is feeling ${mood.label.toLowerCase()} ${mood.emoji}';
+    final text =
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Text(title, style: AppText.title()),
+      const SizedBox(height: AppSpace.xs),
+      Text(
+          !enabled
+              ? 'Connect with your partner on Us'
+              : mood == null
+                  ? 'A little hello, just because'
+                  : 'Send a little love back',
+          style: AppText.body()),
+      const SizedBox(height: AppSpace.sm),
+      Text(
+          counts.mine == 0 && counts.partner == 0
+              ? 'No heartbeats yet today'
+              : 'You sent ${counts.mine} · $partnerName sent ${counts.partner}',
+          style: AppText.caption()),
+    ]);
+    final action = Column(mainAxisSize: MainAxisSize.min, children: [
+      SizedBox(
+          width: _stageSize,
+          height: _stageSize,
+          child: Stack(alignment: Alignment.center, children: [
+            for (final r in _ripples)
+              _RippleRing(key: ValueKey(r.id), ripple: r, baseSize: _heartSize),
+            AnimatedBuilder(
+                animation: Listenable.merge([_scaleCtrl, _beatCtrl]),
+                builder: (context, child) => Transform.scale(
+                    scale: (1 + _scaleCtrl.value) * _beat.value, child: child),
+                child: Semantics(
+                    button: true,
+                    enabled: enabled,
+                    label: 'Send a heartbeat',
+                    child: GestureDetector(
+                        onTap: enabled ? _onTap : null,
+                        child: Opacity(
+                            opacity: enabled ? 1 : .45,
+                            child: Container(
+                              width: _heartSize,
+                              height: _heartSize,
+                              decoration: BoxDecoration(
+                                  gradient: AppGradients.brand,
+                                  shape: BoxShape.circle,
+                                  boxShadow: AppElevation.glow),
+                              child: const AppIcon(CupertinoIcons.heart_fill,
+                                  color: Colors.white, size: 32),
+                            ))))),
+          ])),
+      Text(enabled ? 'Tap to send' : 'Pair first',
+          style: AppText.caption(), textAlign: TextAlign.center),
+    ]);
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpace.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          // "Haptic" because that is the whole feature: the tap arrives
-          // on their phone as a buzz, not as a notification to read.
-          Text('HAPTIC HEARTBEAT', style: AppText.label()),
-          const SizedBox(height: AppSpace.xs),
-          SizedBox(
-            width: _stageSize,
-            height: _stageSize,
-            child: Stack(
-              alignment: Alignment.center,
+      key: const ValueKey('home-heartbeat'),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.md, vertical: AppSpace.lg),
+      decoration: _homeCardDecoration(),
+      child: LayoutBuilder(builder: (context, constraints) {
+        final largeText = MediaQuery.textScalerOf(context).scale(14) / 14 > 1.5;
+        if (constraints.maxWidth < 250 || largeText) {
+          return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                for (final r in _ripples)
-                  _RippleRing(
-                    key: ValueKey(r.id),
-                    ripple: r,
-                    baseSize: _heartSize,
-                  ),
-                AnimatedBuilder(
-                  animation: Listenable.merge([_scaleCtrl, _beatCtrl]),
-                  builder: (context, child) => Transform.scale(
-                    scale: (1 + _scaleCtrl.value) * _beat.value,
-                    child: child,
-                  ),
-                  child: GestureDetector(
-                    onTap: _onTap,
-                    child: Container(
-                      width: _heartSize,
-                      height: _heartSize,
-                      decoration: BoxDecoration(
-                        gradient: AppGradients.brand,
-                        shape: BoxShape.circle,
-                        boxShadow: AppElevation.glow,
-                      ),
-                      child: const AppIcon(
-                        CupertinoIcons.heart_fill,
-                        color: Colors.white,
-                        size: 38,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            counts.mine == 0
-                ? 'Tap to send a pulse'
-                : 'Tapped ${counts.mine}× today',
-            style: AppText.subtitle(),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            counts.partner == 0
-                ? "$partnerName hasn't tapped yet today"
-                : '$partnerName sent ${counts.partner} ${counts.partner == 1 ? "pulse" : "pulses"} today 💗',
-            style: AppText.caption(),
-          ),
-        ],
-      ),
+                text,
+                const SizedBox(height: AppSpace.md),
+                Center(child: action),
+              ]);
+        }
+        return Row(children: [
+          Expanded(child: text),
+          const SizedBox(width: AppSpace.sm),
+          SizedBox(width: 100, child: action)
+        ]);
+      }),
     );
   }
 }
@@ -494,9 +549,7 @@ class _RippleRingState extends State<_RippleRing>
             height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: r.bloom
-                  ? r.color.withValues(alpha: 0.14 * fade)
-                  : null,
+              color: r.bloom ? r.color.withValues(alpha: 0.14 * fade) : null,
               border: Border.all(
                 color: r.color.withValues(alpha: fade),
                 width: r.strokeWidth,
@@ -510,613 +563,422 @@ class _RippleRingState extends State<_RippleRing>
 }
 /* ── Header ──────────────────────────────── */
 
-/// The greeting block: who you are to them, where they are, and how far
-/// away that is — with today's photos standing beside it.
+BoxDecoration _homeCardDecoration() => BoxDecoration(
+    color: AppColors.surface,
+    borderRadius: BorderRadius.circular(AppRadius.xl),
+    border: Border.all(color: AppColors.border));
+
+void _shareDay(BuildContext context, WidgetRef ref) {
+  ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.widget;
+  context.push(Routes.flowers);
+}
+
 class _HomeHeader extends ConsumerWidget {
   const _HomeHeader();
-
-  static String _greetingFor(DateTime now) {
-    final h = now.hour;
-    if (h < 12) return 'Good morning,';
-    if (h < 18) return 'Good afternoon,';
-    return 'Good evening,';
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final now = ref.watch(homeClockProvider).valueOrNull ?? DateTime.now();
     final profile = ref.watch(userProfileProvider).valueOrNull;
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
-
-    // The greeting uses the name they call you — that is the whole point of
-    // a pet name, and "Good morning, Bunny" is the line this screen exists
-    // to open with.
-    final myName = profile?.petName ?? profile?.displayName ?? '…';
-
+    final name = profile?.petName ?? profile?.displayName ?? 'there';
     final partnerName = partner?.petName ?? partner?.displayName;
-    final partnerZone = partner?.timezone;
-    final partnerTime = partnerZone == null
-        ? null
-        : tz.TZDateTime.now(safeLocation(partnerZone));
-
+    final zone = partner?.timezone;
+    final local =
+        zone == null ? null : tz.TZDateTime.from(now, safeLocation(zone));
     final distance = profileDistanceLabel(profile, partner);
-
-    // Bottom-aligned against the arch, not top-aligned: the greeting is the
-    // heavier block and hanging it from the top left it floating above a
-    // tall panel. The padding keeps it off the arch's baseline rather than
-    // sitting flush with it.
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: AppSpace.sm),
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_greetingFor(DateTime.now()), style: AppText.display()),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      myName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.display(AppColors.brandDark),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpace.xxs),
-                  // A different bloom each time the app opens — see
-                  // greetingFlower for why it is picked once per launch
-                  // rather than once per build.
-                  Text(greetingFlower, style: const TextStyle(fontSize: 22)),
-                ],
-              ),
-              const SizedBox(height: AppSpace.xs),
-
-              // Where they are and what time it is there. One line, because
-              // it is one thought.
-              if (partnerName != null && partnerTime != null)
-                Text(
-                  // Their town when they have picked one, the timezone's
-                  // namesake city otherwise — "Manila" for everybody in
-                  // Asia/Manila, which is where this line started.
-                  '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(partnerZone!)} · '
-                  '${DateFormat('h:mm a').format(partnerTime)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.body(AppColors.body),
-                ),
-
-              // Replaces the old "Day N together". A streak counts how long
-              // you have kept a habit; this counts what the app is actually
-              // about. Hidden entirely when a zone is unknown rather than
-              // guessed at.
-              if (distance != null) ...[
-                const SizedBox(height: 2),
-                Text(distance, style: AppText.body(AppColors.body)),
-              ],
-            ],
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSpace.sm),
-        const _DayArch(),
-      ],
-    );
+    final greeting = Column(
+        key: const ValueKey('home-greeting'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+              now.hour < 12
+                  ? 'Good morning,'
+                  : now.hour < 18
+                      ? 'Good afternoon,'
+                      : 'Good evening,',
+              style: AppText.hero()),
+          const SizedBox(height: AppSpace.xs),
+          Text('$name $greetingFlower',
+              style: AppText.hero(AppColors.brandDark)),
+          if (local != null && partnerName != null) ...[
+            const SizedBox(height: AppSpace.md),
+            Wrap(spacing: 8, runSpacing: 4, children: [
+              Text(
+                  '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(zone!)}',
+                  style: AppText.body()),
+              Text(DateFormat('h:mm a').format(local), style: AppText.body()),
+            ]),
+          ],
+          if (distance != null) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(distance, style: AppText.body()),
+          ],
+        ]);
+    return LayoutBuilder(builder: (context, constraints) {
+      final compact = constraints.maxWidth < 600;
+      return Container(
+        key: const ValueKey('home-my-day'),
+        decoration: _homeCardDecoration(),
+        padding: EdgeInsets.symmetric(
+            horizontal: compact ? 16 : AppSpace.md, vertical: AppSpace.lg),
+        child: Row(key: const ValueKey('my-day-side-by-side'), children: [
+          Expanded(child: greeting),
+          SizedBox(width: compact ? 12 : AppSpace.lg),
+          Expanded(child: _DayArch(compact: compact)),
+        ]),
+      );
+    });
   }
 }
 
-/// The arched panel beside the greeting: a two-card deck, theirs in front.
-///
-/// **Why a deck rather than two halves.** Splitting the arch 50/50 gave each
-/// photo a 132×96 box — a *landscape* letterbox. The camera shoots
-/// `ResolutionPreset.high`, which is 720×1280 in portrait, so `BoxFit.cover`
-/// into that kept 41% of the height and threw away 59% of it from the
-/// centre — which on a selfie is the band from the chin down. The best
-/// possible day, where both of you posted, rendered both of you worst.
-///
-/// Whichever card is in front now gets almost the whole arch, where a 9:16
-/// photo loses about 9% off its sides and nothing else. The other sits
-/// behind it, slightly smaller and dimmed, with a band of its arch showing
-/// above — enough to say it is there. A horizontal swipe trades them.
-///
-/// ⚠️ **The peek is carved out of the arch, not added above it.** Both cards
-/// are [_peek] shorter than the panel and the front one is aligned to the
-/// bottom, so the back one's crescent lands inside the same 132×194 box the
-/// arch has always occupied. Lifting the back card out of the box instead
-/// would have painted it over the collapsing top bar, and grown the header
-/// by 22pt to avoid that.
 class _DayArch extends ConsumerStatefulWidget {
-  const _DayArch();
-
-  static const double width = 132;
-  static const double aspect = 0.68; // width ÷ height
-  static double get height => width / aspect;
-
-  /// How much of the back card shows above the front one.
-  static const double peek = 12;
-
-  static const shape = BorderRadius.only(
-    topLeft: Radius.circular(64),
-    topRight: Radius.circular(64),
-    bottomLeft: Radius.circular(AppRadius.lg),
-    bottomRight: Radius.circular(AppRadius.lg),
-  );
-
+  const _DayArch({required this.compact});
+  final bool compact;
   @override
   ConsumerState<_DayArch> createState() => _DayArchState();
 }
 
-class _DayArchState extends ConsumerState<_DayArch>
-    with SingleTickerProviderStateMixin {
-  /// 0 = their day in front, 1 = yours.
-  ///
-  /// Animated rather than toggled: without the movement a swipe just looks
-  /// like the photo changed, and there is nothing to say the other one is
-  /// still there.
-  late final AnimationController _swap;
-
-  @override
-  void initState() {
-    super.initState();
-    // Initialize while mounted, even when neither person has a day photo.
-    // Otherwise the first access can happen in dispose when leaving Home.
-    _swap = AnimationController(vsync: this, duration: AppMotion.standard);
-  }
-
-  /// The back card, relative to the front one.
-  static const double _backScale = 0.95;
-  static const double _backDim = 0.30;
-
-  @override
-  void dispose() {
-    _swap.dispose();
-    super.dispose();
-  }
-
-  /// Their day starts in front and returns there, always. It is what you
-  /// opened the app for; yours is the receipt that you posted.
-  void _bringForward({required bool mine}) =>
-      mine ? _swap.forward() : _swap.reverse();
-
+class _DayArchState extends ConsumerState<_DayArch> {
+  bool _mineInFront = false;
   @override
   Widget build(BuildContext context) {
-    final theirs = ref.watch(partnerDayPhotoProvider);
     final mine = ref.watch(myDayPhotoProvider);
-
+    final theirs = ref.watch(partnerDayPhotoProvider);
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
-    final theirName = partner?.petName ?? partner?.displayName ?? 'Their';
-
-    return SizedBox(
-      width: _DayArch.width,
-      height: _DayArch.height,
-      child: _content(theirs, mine, theirName),
-    );
-  }
-
-  Widget _content(
-    FlowerMessage? theirs,
-    FlowerMessage? mine,
-    String theirName,
-  ) {
-    // Both: a deck. Either direction swaps — with exactly two cards, "left"
-    // and "right" mean the same thing, and honouring the direction would
-    // make half of all swipes silently do nothing.
-    if (theirs != null && mine != null) {
-      return GestureDetector(
-        onHorizontalDragEnd: (_) =>
-            _bringForward(mine: _swap.value < 0.5),
-        child: AnimatedBuilder(
-          animation: _swap,
-          builder: (context, _) {
-            final t = Curves.easeOut.transform(_swap.value);
-            final theirsInFront = t < 0.5;
-
-            final theirCard = _deckCard(
-              key: ValueKey(theirs.id),
-              message: theirs,
-              depth: t,
-              // Tapping the front card opens it; tapping the sliver of the
-              // back one brings it forward, which is the same thing the
-              // swipe does and a much easier target to find.
-              onTap: () => theirsInFront
-                  ? _open(theirs, "$theirName's day")
-                  : _bringForward(mine: false),
-            );
-            final myCard = _deckCard(
-              key: ValueKey(mine.id),
-              message: mine,
-              depth: 1 - t,
-              onTap: () => theirsInFront
-                  ? _bringForward(mine: true)
-                  : _open(mine, 'Your day'),
-            );
-
-            return Stack(
-              children: [
-                // Painted back to front. The keys carry each card's element
-                // through the reorder, so the photo does not get rebuilt —
-                // and its signed URL not re-fetched — every time they trade.
-                if (theirsInFront) ...[myCard, theirCard] else ...[
-                  theirCard,
-                  myCard,
-                ],
-                _DeckDots(mineIsFront: !theirsInFront),
-              ],
-            );
-          },
-        ),
-      );
-    }
-
-    // One: it fills the arch. Half a panel with an empty space under it
-    // would read as something failing to load.
-    final only = theirs ?? mine;
-    if (only != null) {
-      return ClipRRect(
-        borderRadius: _DayArch.shape,
-        child: _DayPhoto(
-          message: only,
-          onTap: () => _open(
-            only,
-            only == mine ? 'Your day' : "$theirName's day",
-          ),
-        ),
-      );
-    }
-
-    // Nothing to look at, so the tap does the only useful thing instead:
-    // opens the camera so there is something here next time.
-    return ClipRRect(
-      borderRadius: _DayArch.shape,
-      child: _DayEmpty(onTap: () => context.go(Routes.flowers)),
-    );
-  }
-
-  /// One card in the deck.
-  ///
-  /// [depth] runs 0 (front: full size, undimmed, sitting at the bottom of
-  /// the panel) to 1 (back: scaled down from its top edge, dimmed, sitting
-  /// at the very top). Everything between is interpolated, so the two cards
-  /// pass through each other rather than popping.
-  Widget _deckCard({
-    required Key key,
-    required FlowerMessage message,
-    required double depth,
-    required VoidCallback onTap,
-  }) {
-    return Positioned(
-      key: key,
-      left: 0,
-      right: 0,
-      top: _DayArch.peek * (1 - depth),
-      height: _DayArch.height - _DayArch.peek,
-      child: Transform.scale(
-        scale: 1 + (_backScale - 1) * depth,
-        // From the top edge, not the centre: scaling about the middle would
-        // pull the back card's top down by as much as its position raises
-        // it, and the crescent would collapse to nothing.
-        alignment: Alignment.topCenter,
-        child: ClipRRect(
-          borderRadius: _DayArch.shape,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _DayPhoto(message: message, onTap: onTap),
-              // A scrim, not opacity. Fading the card would show the one
-              // underneath *through* it, which reads as a rendering fault
-              // rather than as depth.
-              IgnorePointer(
-                child: Opacity(
-                  opacity: _backDim * depth,
-                  child: Container(color: AppColors.ink),
-                ),
+    final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
+    final both = mine != null && theirs != null;
+    final mineFront = theirs == null || (both && _mineInFront);
+    final compact = widget.compact;
+    return Column(
+        key: const ValueKey('home-photo-deck'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (compact && (mine != null || theirs != null))
+            Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                tooltip: mine == null ? 'Share your day' : 'Update yours',
+                onPressed: () => _shareDay(context, ref),
+                icon: const AppIcon(CupertinoIcons.camera,
+                    size: 22, color: AppColors.brand),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          if (!compact && (mine != null || theirs != null))
+            Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => _shareDay(context, ref),
+                  icon: const AppIcon(CupertinoIcons.camera, size: 18),
+                  label: Text(mine == null ? 'Share your day' : 'Update yours',
+                      style: AppText.body(AppColors.brand)),
+                )),
+          Center(
+              child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 390),
+                  child: LayoutBuilder(builder: (context, box) {
+                    final w = box.maxWidth;
+                    final cardWidth = w * .68;
+                    final rearWidth = w * .52;
+                    final textScale =
+                        MediaQuery.textScalerOf(context).scale(14) / 14;
+                    final h = math.max(
+                        cardWidth / .72,
+                        mine == null && theirs == null
+                            ? (compact ? 190.0 : 320.0) *
+                                math.max(1.0, textScale)
+                            : (compact ? 190.0 : 250.0));
+                    Widget card({required bool own, required bool front}) {
+                      final msg = own ? mine : theirs;
+                      final label = own ? 'Your day' : "$name’s day";
+                      final shape = BorderRadius.vertical(
+                          top: Radius.circular(cardWidth / 2),
+                          bottom: const Radius.circular(AppRadius.lg));
+                      return AnimatedPositioned(
+                          key: ValueKey(
+                              own ? 'my-day-photo' : 'partner-day-photo'),
+                          duration: AppMotion.standard,
+                          curve: AppMotion.easeOut,
+                          left: front ? 0 : w - rearWidth - (h - 32) * .055,
+                          top: front ? 0 : 24,
+                          width: front ? cardWidth : rearWidth,
+                          height: front ? h : h - 32,
+                          child: AnimatedRotation(
+                              turns: front ? 0 : 6 / 360,
+                              duration: AppMotion.standard,
+                              curve: AppMotion.easeOut,
+                              child: ClipRRect(
+                                  borderRadius: shape,
+                                  child: CustomPaint(
+                                      foregroundPainter: msg == null
+                                          ? _EmptyArchOutline(
+                                              shape,
+                                              own
+                                                  ? AppColors.brand
+                                                  : AppColors.border)
+                                          : null,
+                                      child: Material(
+                                          color: own
+                                              ? AppColors.blush
+                                              : AppColors.surfaceSubtle,
+                                          child: InkWell(
+                                            onTap: msg == null
+                                                ? (own
+                                                    ? () =>
+                                                        _shareDay(context, ref)
+                                                    : null)
+                                                : () {
+                                                    if (both && !front) {
+                                                      setState(() =>
+                                                          _mineInFront = own);
+                                                    } else {
+                                                      _open(msg, label);
+                                                    }
+                                                  },
+                                            child: msg == null
+                                                ? (front
+                                                    ? _empty(name, own, compact)
+                                                    : const Center(
+                                                        child: AppIcon(
+                                                            CupertinoIcons
+                                                                .photo,
+                                                            size: 32)))
+                                                : Stack(
+                                                    fit: StackFit.expand,
+                                                    children: [
+                                                        HomeDayPhoto(
+                                                            message: msg),
+                                                        if (front)
+                                                          Positioned(
+                                                              left: 0,
+                                                              right: 0,
+                                                              bottom: 0,
+                                                              child: Container(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .fromLTRB(
+                                                                        8,
+                                                                        24,
+                                                                        8,
+                                                                        12),
+                                                                decoration: const BoxDecoration(
+                                                                    gradient: LinearGradient(
+                                                                        begin: Alignment
+                                                                            .topCenter,
+                                                                        end: Alignment.bottomCenter,
+                                                                        colors: [
+                                                                      Colors
+                                                                          .transparent,
+                                                                      Colors
+                                                                          .black54
+                                                                    ])),
+                                                                child: Text(
+                                                                    '${own ? 'You' : name} · ${DateFormat('h:mm a').format(msg.sentAt.toLocal())}',
+                                                                    style: AppText
+                                                                        .caption(
+                                                                            Colors.white)),
+                                                              )),
+                                                      ]),
+                                          ))))));
+                    }
+
+                    return GestureDetector(
+                        onHorizontalDragEnd: both
+                            ? (_) =>
+                                setState(() => _mineInFront = !_mineInFront)
+                            : null,
+                        child: SizedBox(
+                            height: h + 8,
+                            child: Stack(clipBehavior: Clip.none, children: [
+                              card(own: !mineFront, front: false),
+                              card(own: mineFront, front: true),
+                            ])));
+                  }))),
+          const SizedBox(height: AppSpace.sm),
+          if (both) ...[
+            Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+              for (final own in [false, true])
+                Semantics(
+                    button: true,
+                    selected: _mineInFront == own,
+                    label: own ? 'Show your day' : 'Show partner’s day',
+                    child: InkWell(
+                        onTap: () => setState(() => _mineInFront = own),
+                        child: SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Center(
+                                child: Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: _mineInFront == own
+                                            ? AppColors.brand
+                                            : AppColors.border)))))),
+            ]),
+            Text(
+                compact
+                    ? 'Swipe photos'
+                    : 'Swipe to see ${mineFront ? 'their' : 'your'} day',
+                textAlign: TextAlign.center,
+                style: AppText.caption()),
+          ] else
+            Text(
+                theirs == null
+                    ? '$name’s photo will appear here too'
+                    : 'Add your photo to the stack',
+                textAlign: TextAlign.center,
+                style: AppText.caption()),
+        ]);
+  }
+
+  Widget _empty(String name, bool own, bool compact) {
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 20),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          AppIcon(own ? CupertinoIcons.camera : CupertinoIcons.photo,
+              size: 28, color: AppColors.brand),
+          const SizedBox(height: 12),
+          Text(own ? 'Share your day' : '$name’s day',
+              textAlign: TextAlign.center,
+              style: AppText.body(AppColors.brand)),
+        ]),
+      );
+    }
+    return Padding(
+        padding: const EdgeInsets.all(AppSpace.sm),
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          AppIcon(own ? CupertinoIcons.camera : CupertinoIcons.photo,
+              size: 40, color: AppColors.brand),
+          const SizedBox(height: AppSpace.sm),
+          Text(own ? 'Your day starts here' : '$name’s day',
+              textAlign: TextAlign.center, style: AppText.subtitle()),
+          const SizedBox(height: AppSpace.xs),
+          Text(own ? 'Share a little moment' : 'Their photo will appear here',
+              textAlign: TextAlign.center, style: AppText.caption()),
+          if (own) ...[
+            const SizedBox(height: AppSpace.md),
+            GradientButton(
+                label: 'Share your day',
+                onPressed: () => _shareDay(context, ref))
+          ],
+        ]));
   }
 
   void _open(FlowerMessage message, String who) {
-    // ⚠️ My own days open as the **pager**, theirs as the single photo.
-    // There is only ever one of theirs live at a time; mine can be seven,
-    // and opening the newest with no way to reach the other six would hide
-    // them behind a card that looks like one photo.
     final mine = ref.read(myDayPhotosProvider);
     final index = mine.indexWhere((m) => m.id == message.id);
-
-    Navigator.of(context).push(
-      MaterialPageRoute<void>(
+    Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => index >= 0
             ? MyDaysViewer(initialIndex: index)
-            : DayPhotoViewer(message: message, who: who),
-      ),
-    );
+            : DayPhotoViewer(message: message, who: who)));
   }
 }
 
-/// Two dots, because "swipe to see the other one" is otherwise invisible.
-///
-/// Inside the arch rather than under it: the header's height is set by the
-/// arch, so hanging an indicator below would push the whole greeting block
-/// down by a line for the sake of two dots.
-class _DeckDots extends StatelessWidget {
-  const _DeckDots({required this.mineIsFront});
-
-  final bool mineIsFront;
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      left: 0,
-      right: 0,
-      bottom: 10,
-      child: IgnorePointer(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _dot(active: !mineIsFront),
-            const SizedBox(width: 5),
-            _dot(active: mineIsFront),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dot({required bool active}) => Container(
-        width: 5,
-        height: 5,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          // White with a shadow rather than a palette colour: these sit on
-          // an arbitrary photo and have to stay legible on a white one.
-          color: Colors.white.withValues(alpha: active ? 1 : .45),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: .35),
-              blurRadius: 3,
-            ),
-          ],
-        ),
-      );
-}
-
-/// One day photo, filling whatever box it is given.
-class _DayPhoto extends ConsumerWidget {
-  const _DayPhoto({required this.message, this.onTap});
-
+/// Shared by the live photo stack and the noninteractive widget preview.
+class HomeDayPhoto extends ConsumerWidget {
+  const HomeDayPhoto({super.key, required this.message});
   final FlowerMessage message;
-  final VoidCallback? onTap;
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // ⚠️ Watched from a provider, never signed inline. Calling
-    // `signedPhotoUrl` in build hands FutureBuilder a brand new Future on
-    // every rebuild — one signing round-trip per frame once anything here
-    // animates, with the placeholder flashing between each. See
-    // dayPhotoUrlProvider.
-    final url = ref.watch(dayPhotoUrlProvider(message.imagePath!)).valueOrNull;
-
-    return GestureDetector(
-      onTap: onTap,
-      child: url == null
-          ? Container(color: AppColors.surfaceSubtle)
-          : Image.network(
-              url,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              // A failed image inside a decorative panel should look like
-              // the empty state, not like a broken page.
-              errorBuilder: (_, __, ___) =>
-                  Container(color: AppColors.surfaceSubtle),
-            ),
-    );
+    final path = message.imagePath;
+    if (path == null) return const Center(child: AppIcon(CupertinoIcons.photo));
+    final url = ref.watch(dayPhotoUrlProvider(path));
+    Widget unavailable() => Center(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const AppIcon(CupertinoIcons.photo),
+          const SizedBox(height: 8),
+          Text('Photo unavailable', style: AppText.caption()),
+        ]));
+    return url.when(
+        loading: () =>
+            Center(child: Text('Loading photo…', style: AppText.caption())),
+        error: (_, __) => unavailable(),
+        data: (value) => value == null
+            ? unavailable()
+            : Image.network(value,
+                width: double.infinity,
+                height: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => unavailable()));
   }
 }
 
-/// Nothing shared today, by either of them.
-class _DayEmpty extends StatelessWidget {
-  const _DayEmpty({this.onTap});
-
-  final VoidCallback? onTap;
-
+class _HomeBar extends ConsumerWidget {
+  const _HomeBar();
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: CustomPaint(
-      painter: _DashedArchPainter(),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpace.xs),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('📷', style: TextStyle(fontSize: 22)),
-              const SizedBox(height: AppSpace.xxs),
-              Text(
-                'Share your day',
-                textAlign: TextAlign.center,
-                style: AppText.caption(AppColors.brand)
-                    .copyWith(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context, WidgetRef ref) => Row(children: [
+        Expanded(
+            child: Text(AppConstants.appName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppText.title().copyWith(fontWeight: FontWeight.w700))),
+        IconButton(
+            tooltip: 'Notifications',
+            onPressed: () => context.push(Routes.notifications),
+            icon: Badge(
+                isLabelVisible: ref.watch(unseenActivityCountProvider) > 0,
+                backgroundColor: AppColors.brand,
+                child: AppIcon(CupertinoIcons.bell, color: AppColors.ink))),
+        Semantics(
+            label: 'Us, your couple page',
+            button: true,
+            child: Material(
+                color: AppColors.surface,
+                shape: StadiumBorder(side: BorderSide(color: AppColors.border)),
+                child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: () => context.push(Routes.us),
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 8),
+                        child: Row(mainAxisSize: MainAxisSize.min, children: [
+                          SizedBox(
+                              width: 44,
+                              height: 28,
+                              child: Stack(children: [
+                                UserAvatar(
+                                    ref.watch(userProfileProvider).valueOrNull,
+                                    size: 28),
+                                Positioned(
+                                    left: 16,
+                                    child: UserAvatar(
+                                        ref
+                                            .watch(partnerProfileProvider)
+                                            .valueOrNull,
+                                        size: 28)),
+                              ])),
+                          const SizedBox(width: 8),
+                          Text('Us', style: AppText.caption(AppColors.ink)),
+                          const SizedBox(width: 4),
+                          const AppIcon(CupertinoIcons.chevron_down, size: 12),
+                        ]))))),
+      ]);
 }
 
-/// Dashed outline in the arch shape.
-///
-/// Hand-painted because Flutter's border side has no dash support and
-/// `ClipRRect` cannot outline what it clips — a dotted rectangle behind an
-/// arch-shaped hole would show the mismatch at the corners.
-class _DashedArchPainter extends CustomPainter {
-  static const double _dash = 5;
-  static const double _gap = 4;
-
+class _EmptyArchOutline extends CustomPainter {
+  _EmptyArchOutline(this.shape, this.color);
+  final BorderRadius shape;
+  final Color color;
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Offset.zero & size;
     final path = Path()
-      ..addRRect(
-        RRect.fromRectAndCorners(
-          rect.deflate(1),
-          topLeft: const Radius.circular(64),
-          topRight: const Radius.circular(64),
-          bottomLeft: const Radius.circular(AppRadius.lg),
-          bottomRight: const Radius.circular(AppRadius.lg),
-        ),
-      );
-
+      ..addRRect(shape.toRRect((Offset.zero & size).deflate(1)));
     final paint = Paint()
-      ..color = AppColors.blushMid
+      ..color = color.withValues(alpha: .55)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.6;
-
+      ..strokeWidth = 1.2;
     for (final metric in path.computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final end = math.min(distance + _dash, metric.length);
-        canvas.drawPath(metric.extractPath(distance, end), paint);
-        distance = end + _gap;
+      for (double offset = 0; offset < metric.length; offset += 10) {
+        canvas.drawPath(
+            metric.extractPath(offset, math.min(offset + 5, metric.length)),
+            paint);
       }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DashedArchPainter oldDelegate) => false;
-}
-
-/* ── Top bar ─────────────────────────────── */
-
-/// The app's own bar: who this is on the left, who you two are on the right.
-///
-/// Lives in a `floating`/`snap` SliverAppBar, so it gets out of the way as
-/// soon as you start reading and comes back whole on the first flick up.
-class _HomeBar extends ConsumerWidget {
-  const _HomeBar();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return Row(
-      children: [
-        // Wordmark only. The tulip already appears beside the name in the
-        // greeting directly below, and twice in one glance made it read as
-        // decoration rather than as the app's mark.
-        Text(
-          AppConstants.appName,
-          style: AppText.title(AppColors.ink).copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const Spacer(),
-        const _CouplePill(),
-      ],
-    );
-  }
-}
-
-/// Both faces and both names in one control — the "us" of the app, and the
-/// way into the page about the two of you.
-///
-/// Replaces the lone profile avatar the old header carried: a couples app
-/// showing only your own face at the top was always slightly wrong, and the
-/// pair is what the whole screen is about.
-///
-/// It used to open Settings, which was the same mistake one layer down: a
-/// control showing *both* of you led to a screen about one. It opens Us
-/// now, and Settings is the gear in that page's corner.
-class _CouplePill extends ConsumerWidget {
-  const _CouplePill();
-
-  static const double _face = 26;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
-
-    final myName = me?.petName ?? me?.displayName;
-    final theirName = partner?.petName ?? partner?.displayName;
-    // Before pairing there is no "&" to show, so the pill quietly becomes a
-    // single name rather than reading "Bunny & null".
-    final label = [
-      if (myName != null) myName,
-      if (theirName != null) theirName,
-    ].join(' & ');
-
-    return Semantics(
-      button: true,
-      label: 'You and your partner',
-      child: GestureDetector(
-        onTap: () => context.go(Routes.us),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(4, 4, AppSpace.xs, 4),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Overlapped rather than side by side: two touching circles
-              // read as a couple, two spaced ones read as a list.
-              SizedBox(
-                width: partner == null ? _face : _face * 1.62,
-                height: _face,
-                child: Stack(
-                  children: [
-                    UserAvatar(me, size: _face),
-                    if (partner != null)
-                      Positioned(
-                        left: _face * 0.62,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            // A hairline of the bar's own colour behind the
-                            // second face is what separates the two circles
-                            // where they overlap.
-                            border: Border.all(
-                              color: AppColors.surface,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: UserAvatar(partner, size: _face - 3),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (label.isNotEmpty) ...[
-                const SizedBox(width: AppSpace.xs),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 132),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.caption(AppColors.ink)
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-              const SizedBox(width: 2),
-              AppIcon(CupertinoIcons.chevron_down,
-                  size: 12, color: AppColors.muted),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  bool shouldRepaint(covariant _EmptyArchOutline oldDelegate) =>
+      oldDelegate.shape != shape || oldDelegate.color != color;
 }

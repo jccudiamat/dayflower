@@ -1,7 +1,7 @@
 import 'package:dayflower/core/models/user_profile.dart';
 import 'package:dayflower/core/services/city_search.dart';
 import 'package:dayflower/core/utils/zone_distance.dart';
-import 'package:dayflower/features/dates/presentation/screens/events_screen.dart';
+import 'package:dayflower/features/us/domain/couple_dates.dart';
 import 'package:dayflower/features/home/domain/greeting_flower.dart';
 import 'package:flutter_test/flutter_test.dart';
 

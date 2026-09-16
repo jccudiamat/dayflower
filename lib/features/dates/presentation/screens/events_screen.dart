@@ -167,12 +167,6 @@ String _formatDate(DateTime d) => DateFormat('MMMM d, yyyy').format(d);
 /// `DateTime(2027, 2, 29)` normalises to on its own. That is a real choice
 /// and the kinder one: the alternative is a birthday that disappears from
 /// the screen for three years out of four.
-DateTime nextBirthday(DateTime birthday, DateTime from) {
-  final today = _startOfDay(from);
-  final thisYear = DateTime(today.year, birthday.month, birthday.day);
-  if (!thisYear.isBefore(today)) return thisYear;
-  return DateTime(today.year + 1, birthday.month, birthday.day);
-}
 
 class _Countdown {
   const _Countdown({
@@ -206,7 +200,8 @@ _Countdown _countdownTo(DateTime target, DateTime now) {
 // disagree with each other the way hardcoded values did.
 
 class EventsScreen extends ConsumerStatefulWidget {
-  const EventsScreen({super.key});
+  const EventsScreen({super.key, this.addOnOpen = false});
+  final bool addOnOpen;
 
   @override
   ConsumerState<EventsScreen> createState() => _EventsScreenState();
@@ -319,6 +314,11 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.addOnOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _openEventSheet(null);
+      });
+    }
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
@@ -1202,7 +1202,8 @@ class _BottomSheet extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+        borderRadius:
+            const BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
       ),
       child: SingleChildScrollView(
         padding: EdgeInsets.fromLTRB(
@@ -1406,8 +1407,7 @@ class _DateInput extends StatelessWidget {
                     value.isEmpty ? AppColors.muted : AppColors.ink),
               ),
             ),
-            AppIcon(CupertinoIcons.calendar,
-                size: 16, color: AppColors.muted),
+            AppIcon(CupertinoIcons.calendar, size: 16, color: AppColors.muted),
           ],
         ),
       ),
