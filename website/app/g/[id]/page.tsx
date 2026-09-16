@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import SiteHeader from "../../components/SiteHeader";
+import { openGraph } from "../../lib/seo";
 import BouquetStudio from "../../bouquet/BouquetStudio";
 import { loadGift } from "../../lib/gift";
 
@@ -33,7 +34,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     description,
     // A gift is private to the two of them; it should never turn up in search.
     robots: { index: false, follow: false },
-    openGraph: { title, description, url: `https://mydayflower.com/g/${id}`, type: "website" },
+    openGraph: openGraph({ title, description, path: `/g/${id}`, image: null }),
     twitter: { card: "summary_large_image", title, description },
   };
 }

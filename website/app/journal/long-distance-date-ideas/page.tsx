@@ -1,15 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { headers } from "next/headers";
 import SiteHeader from "../../components/SiteHeader";
+import { JsonLd, breadcrumbs, openGraph, ORGANISATION, url as siteUrl } from "../../lib/seo";
 
 const title = "7 long-distance date ideas for a quiet night in";
 const description = "Low-pressure long-distance date ideas with simple plans, conversation prompts, and options for busy schedules or different time zones.";
-const url = "https://mydayflower.com/journal/long-distance-date-ideas";
+const url = siteUrl("/journal/long-distance-date-ideas");
+// ⚠️ Full ISO datetimes, not bare dates. A bare "2026-09-08" is ambiguous
+// about timezone, and Google reads an ambiguous date as no date at all,
+// which costs the article its freshness signal in Top Stories and Discover.
+const published = "2026-09-08T09:00:00+08:00";
+const modified = "2026-09-08T09:00:00+08:00";
 export const metadata: Metadata = {
   title: `${title} | Dayflower Journal`, description,
   alternates: { canonical: url },
-  openGraph: { title, description, url, type: "article", publishedTime: "2026-09-08", authors: ["Dayflower"] },
+  openGraph: openGraph({ title, description, path: "/journal/long-distance-date-ideas", type: "article", publishedTime: published, modifiedTime: modified, authors: ["Dayflower"] }),
 };
 
 const ideas = [
@@ -44,7 +49,6 @@ const ideas = [
 ];
 
 export default async function Article() {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return <><SiteHeader />
     <main className="mx-auto max-w-3xl px-5 py-12 sm:py-20">
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-brand-dark"><Link href="/journal" className="underline underline-offset-4">Dayflower Journal</Link><span aria-hidden="true"> / </span><span>Date ideas</span></nav>
@@ -76,6 +80,9 @@ export default async function Article() {
       </article>
     </main>
     <footer className="mx-auto flex max-w-3xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/journal">Journal</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>
-    <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "BlogPosting", headline: title, description, datePublished: "2026-09-08", dateModified: "2026-09-08", mainEntityOfPage: url, author: { "@type": "Organization", name: "Dayflower", url: "https://mydayflower.com" }, publisher: { "@type": "Organization", name: "Dayflower", logo: { "@type": "ImageObject", url: "https://mydayflower.com/mark.png" } } }) }} />
+    <JsonLd nodes={[
+      { "@type": "BlogPosting", "@id": `${url}#article`, headline: title, description, datePublished: published, dateModified: modified, mainEntityOfPage: url, url, inLanguage: "en", author: { "@id": ORGANISATION["@id"] }, publisher: { "@id": ORGANISATION["@id"] }, about: ["Long-distance relationships", "Date ideas"] },
+      breadcrumbs([["Journal", "/journal"], [title, "/journal/long-distance-date-ideas"]]),
+    ]} />
   </>;
 }
