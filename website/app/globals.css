@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-/* ── Dayflower design tokens (from design.md — Design System v3) ─────────────── */
+/* ── Dayflower design tokens (from design.md, Design System v3) ─────────────── */
 :root {
   --bg: #f8f6fb;
   --surface: #ffffff;
@@ -76,7 +76,7 @@ body {
   font-style: italic;
 }
 
-/* Two-tone headline accent — the one gradient, meaning "primary". */
+/* Two-tone headline accent: the one gradient, meaning "primary". */
 .gradient-text {
   background: var(--gradient-cta);
   -webkit-background-clip: text;

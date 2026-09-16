@@ -73,7 +73,7 @@
   width: 296px;
 }
 
-/* A card in the rail lifts slightly on hover — the only motion it gets. */
+/* A card in the rail lifts slightly on hover: the only motion it gets. */
 .snapshot-item .phone-body {
   transition: transform 250ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }

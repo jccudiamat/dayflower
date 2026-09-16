@@ -22,14 +22,14 @@ export const metadata: Metadata = {
  * is whether it answers the question itself or only funnels: a page built to
  * rank for "long distance relationship" and then punt every visitor
  * elsewhere is precisely what Google's doorway-page policy demotes. So the
- * substance lives here — the time-zone maths, what each idea costs in energy
- * — and the links out are offers rather than the point.
+ * substance lives here (the time-zone maths, what each idea costs in
+ * energy) and the links out are offers rather than the point.
  */
 
 const timeGaps = [
   { hours: "1–3 hours apart", plan: "Share an evening. One of you eats dinner while the other has a late snack; neither has to move a meal.", strain: "Easy to keep up most nights." },
   { hours: "4–8 hours apart", plan: "Trade a morning for an evening. Fix one slot a week that neither of you has to renegotiate, and let the rest be voice notes.", strain: "Nightly calls will cost someone their sleep. Do not plan on them." },
-  { hours: "9+ hours apart", plan: "Stop trying to be awake together. Leave things for each other instead — a photo, a note, a bouquet waiting when they wake up.", strain: "Live calls become a weekend event, not a daily habit." },
+  { hours: "9+ hours apart", plan: "Stop trying to be awake together. Leave things for each other instead: a photo, a note, a bouquet waiting when they wake up.", strain: "Live calls become a weekend event, not a daily habit." },
 ];
 
 const ideas = [
@@ -40,11 +40,11 @@ const ideas = [
 ];
 
 const questions = [
-  ["What can long-distance couples actually do together online?", "The plans that last are the small ones: cooking the same snack on a call, trading three songs with the story behind each, or keeping a call open while you both do your own thing. Making something you can both keep — a photo strip, a bouquet — gives an evening a result, which helps on the nights when neither of you has much to say."],
-  ["How do you handle a big time difference?", "Past roughly eight hours, trying to be awake at the same time every day costs one person their sleep, and that debt tends to show up as irritability neither of you can trace back to it. It usually works better to fix one live slot a week that nobody has to renegotiate, and to leave things for each other the rest of the time — a voice note, a photo, something waiting when they wake up."],
+  ["What can long-distance couples actually do together online?", "The plans that last are the small ones: cooking the same snack on a call, trading three songs with the story behind each, or keeping a call open while you both do your own thing. Making something you can both keep, like a photo strip or a bouquet, gives an evening a result, which helps on the nights when neither of you has much to say."],
+  ["How do you handle a big time difference?", "Past roughly eight hours, trying to be awake at the same time every day costs one person their sleep, and that debt tends to show up as irritability neither of you can trace back to it. It usually works better to fix one live slot a week that nobody has to renegotiate, and to leave things for each other the rest of the time: a voice note, a photo, something waiting when they wake up."],
   ["How can I send flowers to a partner in another country?", "You can send a digital bouquet as a link: free, no address needed, and it arrives instantly wherever they are. For a physical delivery, ordering from a shop in their own country is usually cheaper and faster than going through an international florist."],
-  ["Is there an app just for two people?", "Dayflower is one. It is a private space for a couple rather than a social network — flowers, messages, calls, shared photos and everyday moments, with nobody else in it. It is in private testing, and the waitlist below is how you hear when it opens."],
-  ["Do long-distance relationships work?", "Plenty do, and research generally finds them no less stable than close-distance ones. What tends to matter is a shared sense of when the distance ends, and a routine neither person is quietly resenting — which is a smaller and more boring thing than grand gestures, and easier to build."],
+  ["Is there an app just for two people?", "Dayflower is one. It is a private space for a couple rather than a social network. Flowers, messages, calls, shared photos and everyday moments, with nobody else in it. It is in private testing, and the waitlist below is how you hear when it opens."],
+  ["Do long-distance relationships work?", "Plenty do, and research generally finds them no less stable than close-distance ones. What tends to matter is a shared sense of when the distance ends, and a routine neither person is quietly resenting, which is a smaller and more boring thing than grand gestures, and easier to build."],
 ] as const;
 
 export default async function LongDistancePage() {
@@ -94,7 +94,7 @@ export default async function LongDistancePage() {
 
       <section className="mt-14 rounded-3xl bg-dark-canvas p-8 text-on-dark sm:p-12">
         <h2 className="text-2xl font-bold sm:text-3xl">A private space for the two of you.</h2>
-        <p className="my-5 max-w-xl leading-relaxed text-on-dark-muted">Dayflower is an app for exactly two people — flowers, messages, calls, and the small everyday things, with nobody else in it. It is in private testing. Leave your email and we will tell you when it opens.</p>
+        <p className="my-5 max-w-xl leading-relaxed text-on-dark-muted">Dayflower is an app for exactly two people: flowers, messages, calls, and the small everyday things, with nobody else in it. It is in private testing. Leave your email and we will tell you when it opens.</p>
         <WaitlistForm dark />
         <p className="mt-5 text-sm text-on-dark-muted">A signup confirmation, then a launch email. No newsletter.</p>
       </section>

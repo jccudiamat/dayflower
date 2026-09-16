@@ -21,7 +21,7 @@ export const ORGANISATION = {
   url: SITE,
   logo: { "@type": "ImageObject", url: url("/mark.png"), width: 512, height: 512 },
   description:
-    "Dayflower makes small, free tools for showing someone you are thinking of them — a digital bouquet, a photo booth, and gift ideas — alongside a private app for two.",
+    "Dayflower makes small, free tools for showing someone you are thinking of them: a digital bouquet, a photo booth, and gift ideas, alongside a private app for two.",
 } as const;
 
 export const WEBSITE = {
@@ -37,14 +37,14 @@ export const WEBSITE = {
  * A complete `openGraph` block. Use this instead of writing the object by hand.
  *
  * 🔴 **Metadata merges shallowly, so a page that declares `openGraph` replaces
- * the root layout's entirely** — it does not extend it. Every page that set
+ * the root layout's entirely.** It does not extend it. Every page that set
  * its own Open Graph object was therefore shipping with no `og:site_name`, no
  * `og:locale`, and, worse, no `og:image`: declaring the field also suppresses
  * the inherited `opengraph-image` file from an ancestor segment. The tags
  * simply were not in the HTML, and nothing warns you.
  *
  * Pass `image: null` for a segment that has its own `opengraph-image.tsx`
- * (`/bouquet`, `/photobooth`, `/g/[id]`) — a file in the *same* segment still
+ * (`/bouquet`, `/photobooth`, `/g/[id]`): a file in the *same* segment still
  * applies, and those three deliberately do not use the branded card.
  */
 export function openGraph({ title, description, path, type = "website", image = url("/opengraph-image"), ...rest }: {
@@ -95,7 +95,7 @@ export const breadcrumbs = (trail: readonly (readonly [string, string])[]) => ({
  *
  * ⚠️ The nonce is not optional. Our CSP has no `unsafe-inline` for scripts,
  * and CSP blocks *every* inline `<script>` element by type, including ones
- * the browser never executes — a nonce-less block of JSON-LD is simply
+ * the browser never executes. A nonce-less block of JSON-LD is simply
  * dropped, silently, and the page ships with no structured data at all.
  *
  * Emits a single `@graph` so the nodes can cross-reference by `@id`.

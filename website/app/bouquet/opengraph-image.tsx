@@ -9,7 +9,7 @@ export const contentType = "image/png";
  *
  * A private bouquet link is this very page plus a URL fragment
  * (`/bouquet#…`), so whatever card `/bouquet` produces is the card that
- * lands in the recipient's chat — above the sender's own message, before
+ * lands in the recipient's chat, above the sender's own message, before
  * they have opened anything. Without this file the segment would inherit the
  * homepage card, which names the flowers and the brand and spoils the gift.
  *

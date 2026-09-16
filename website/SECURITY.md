@@ -19,10 +19,10 @@ The server-only `claim_website_request` function serializes quota checks and inc
 
 | Action | Per sender/hour | Per sender/day | Site/hour | Site/day | Additional daily caps |
 | --- | ---: | ---: | ---: | ---: | --- |
-| Create gift | 10 | 40 | 250 | 1,000 | — |
+| Create gift | 10 | 40 | 250 | 1,000 | n/a |
 | Waitlist | 5 | 10 | 100 | 500 | 3 per recipient |
 | Email gift | 5 | 10 | 100 | 300 | 3 per recipient; 3 per gift |
-| Read gift/preview | 300 | 1,000 | 2,000 | 10,000 | — |
+| Read gift/preview | 300 | 1,000 | 2,000 | 10,000 | n/a |
 
 A bounded per-instance guard additionally limits matched dynamic/API routes to 60 requests per IP per minute and 600 per instance per minute before database work. It is not a substitute for the persistent limiter or an edge firewall. Invalid email/waitlist bodies are rejected before database work; attempted gift creates are charged before reading their larger body.
 

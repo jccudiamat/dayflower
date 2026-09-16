@@ -133,7 +133,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   const plain = (text: string) => text.toLowerCase().replace(/[’']/g, "'");
   const matches = useMemo(() => {
     const needle = plain(search.trim());
-    // Meanings are searchable too, so "calm" finds Lavender — people remember
+    // Meanings are searchable too, so "calm" finds Lavender; people remember
     // what a flower is for more often than what it is called.
     return flowers
       .map((flower, i) => ({ flower, i }))
@@ -280,7 +280,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     setPhotoBusy(true); setPhotoError("");
     try {
       const src = await makeCutout(activePhoto.src);
-      // Frame 2 is Cutout — the only frame that keeps transparency and skips
+      // Frame 2 is Cutout, the only frame that keeps transparency and skips
       // the paper card, so the lifted subject sits among the stems.
       updatePhoto({ src, frame: 2 });
     } catch (error) {
@@ -385,7 +385,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
    *
    * It has to be stored. A `#gift=` fragment is never sent to the server, so
    * the crawler behind a chat or mail preview can only ever see the generic
-   * page — every gift got an identical card. Storing it is also what lets a
+   * page, so every gift got an identical card. Storing it is also what lets a
    * bouquet with photos be shared at all, since a data URL was never going to
    * fit in a URL.
    */
@@ -452,7 +452,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
 
   /**
    * Hands the gift to the Dayflower app. The website has no session and no
-   * idea who anyone's partner is, so it cannot post to a chat itself — it
+   * idea who anyone's partner is, so it cannot post to a chat itself; it
    * opens the app and leaves the link on the clipboard to paste in.
    */
   async function openInApp() {
@@ -461,7 +461,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     try { await navigator.clipboard.writeText(url); } catch { /* The link is on screen either way. */ }
     // Honest about the two halves: the copy always happens, the app opening
     // only does if it is installed.
-    setNotice("Link copied. If you have Dayflower, it’s opening now — paste this into your chat.");
+    setNotice("Link copied. If you have Dayflower, it’s opening now. Paste this into your chat.");
     window.location.href = `dayflower://gift/${url.split("/g/")[1]}`;
   }
 
@@ -632,7 +632,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
                 <p className="bouquet-email-note">We send it once and don&rsquo;t keep the address.</p></>}
           </form>
           <button className="bouquet-button bouquet-in-app" onClick={openInApp}>Send in the Dayflower app</button>
-          <div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the link can open your bouquet and read your note. The preview they see says only that you made them something — it never gives away what is inside.</p>
+          <div className="bouquet-send-extras"><button onClick={() => { setPreview(true); setOpened(false); setNotice(""); }}>Preview their surprise</button><button disabled={!art || busy} onClick={download}>{busy ? "Saving…" : "Download image ↓"}</button></div>{shareUrl && <label className="bouquet-link-label">Your gift link<textarea ref={linkRef} readOnly value={shareUrl} rows={2} onFocus={e => e.target.select()} /></label>}<p role="status" className="bouquet-status">{notice}</p><p className="bouquet-link-note">No account needed. Anyone with the link can open your bouquet and read your note. The preview they see says only that you made them something. It never gives away what is inside.</p>
           <details className="bouquet-private"><summary>Rather store nothing?</summary><p>This makes a much longer link that carries the whole bouquet inside it. Nothing is saved on our side, but chat apps show no preview for it, and photos can’t travel this way.</p><button className="bouquet-text-button" onClick={copyPrivateLink}>Copy a private link instead</button></details><button className="bouquet-text-button" onClick={() => setStep(2)}>Back to your note</button></div>}
       </section>
     </div>

@@ -1,12 +1,12 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "Dayflower — free digital bouquets, a photo booth, and gift ideas for the people you love";
+export const alt = "Dayflower: free digital bouquets, a photo booth, and gift ideas for the people you love";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
 /**
  * The card for the homepage, inherited by every route that does not set its
- * own — which is why `/bouquet` and `/g/[id]` each override it. A gift is
+ * own, which is why `/bouquet` and `/g/[id]` each override it. A gift is
  * meant to be a surprise, and a branded card above the message gives it away.
  */
 export default function OpenGraphImage() {

@@ -9,7 +9,7 @@ import { JsonLd, faqPage, ORGANISATION, WEBSITE, url } from "./lib/seo";
 
 export const metadata: Metadata = {
   // ⚠️ Deliberately the umbrella, not a keyword. Each tool page owns its own
-  // head term — /bouquet owns "digital bouquet", /photobooth owns "photo
+  // head term: /bouquet owns "digital bouquet", /photobooth owns "photo
   // booth". Repeating those here would put the homepage in a fight with the
   // page that actually answers the query, and split the signal between them.
   title: "Dayflower | Little ways to make their day",

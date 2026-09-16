@@ -9,14 +9,14 @@ import { useRef, useState } from "react";
  * The frame is the app's own Classic Polaroid, measured off
  * `lib/features/booth/presentation/screens/booth_screen.dart` rather than
  * eyeballed: paper #FFFEF8, a **4px** card radius and a **2px** slot radius
- * (a real polaroid is barely rounded — it reads as rounder here only because
+ * (a real polaroid is barely rounded; it reads as rounder here only because
  * the card is large), caption #3A2A20 at 0.3 letter-spacing, date at 25%
  * black. The app's duo template splits the slot in two; this uses one wide
  * slot, because a bloom is one picture.
  *
  * Interaction: drag the top card and let go past the threshold to send it to
  * the back, or tap/click it, or use the dots. Everything is also reachable
- * from the keyboard — the card is a real button.
+ * from the keyboard: the card is a real button.
  */
 
 export type Polaroid = {
@@ -54,7 +54,7 @@ export default function PolaroidStack({ cards }: { cards: Polaroid[] }) {
     if (start.current === null) return;
     const thrown = Math.abs(drag) > THROW_DISTANCE;
     start.current = null;
-    // A drag that never really moved is a click, and a click also advances —
+    // A drag that never really moved is a click, and a click also advances,
     // so a tap does the obvious thing instead of nothing.
     if (thrown || Math.abs(drag) < 4) advance();
     else setDrag(0);
@@ -84,7 +84,7 @@ export default function PolaroidStack({ cards }: { cards: Polaroid[] }) {
               onPointerUp={top ? onPointerUp : undefined}
               onPointerCancel={top ? onPointerUp : undefined}
               // The top card advances on pointerup, so a mouse click must not
-              // advance it a second time — but Enter/Space on a focused
+              // advance it a second time, but Enter/Space on a focused
               // button fires `click` with no pointer events at all, and
               // `detail === 0` is what tells those two apart.
               onClick={

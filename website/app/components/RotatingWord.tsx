@@ -11,8 +11,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
  * 1. **The words cross-fade in place**, so they are all stacked in a single
  *    grid cell rather than laid out in sequence.
  * 2. **The slot is only as wide as the word in it, and grows to the next
- *    one.** Sizing the cell to the longest word instead — the obvious
- *    CSS-only fix — left a visible hole after "note" and shoved "a day"
+ *    one.** Sizing the cell to the longest word instead, the obvious
+ *    CSS-only fix, left a visible hole after "note" and shoved "a day"
  *    across the line. So the width is measured and animated, which means
  *    measuring in a layout effect and again once the webfont has actually
  *    loaded: Quicksand arrives after first paint and every word gets wider.
@@ -51,7 +51,7 @@ export default function RotatingWord({
   }, [index]);
 
   useEffect(() => {
-    // Someone who asked for less motion gets the first word and nothing else —
+    // Someone who asked for less motion gets the first word and nothing else:
     // a word swapping every two seconds is exactly what that setting is for.
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 

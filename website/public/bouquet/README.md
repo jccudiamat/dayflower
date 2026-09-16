@@ -19,7 +19,7 @@ Original artwork generated for Dayflower, not extracted from any reference site.
 draws the back half, then the photos and stems, then the front half over them,
 which is what puts the flowers *inside* the paper rather than behind it. The
 pairs are indexed `wrapIndex + 0` and `+ 1`, so a colour must stay on an even
-cell — do not insert a single cell anywhere in this sheet.
+cell. Do not insert a single cell anywhere in this sheet.
 
 ⚠️ **Keep the ordering and dimensions stable.** Gift links store the flower
 index, so reordering a cell silently rewrites every bouquet already sent.

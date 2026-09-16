@@ -7,7 +7,7 @@ export const flowers = [
   { name: "Peony", detail: "Something lovely", color: "#d994b1" },
 
   // Indexes 6+ come from flowers-a|b|c|d.webp, 12 to a sheet in this exact
-  // order — `flowerSprite` maps index → sheet by arithmetic, so a sheet is all
+  // order. `flowerSprite` maps index → sheet by arithmetic, so a sheet is all
   // or nothing. **Never reorder or remove:** gift links store the index, and a
   // shuffle here rewrites every bouquet anyone has already sent.
   { name: "Lily", detail: "Pure and true", color: "#e8e2d6" },
@@ -158,14 +158,14 @@ export function fitScale(bouquet: Bouquet) {
  * One stack for flowers and photos together, so either can be moved forward or
  * back past the other.
  *
- * **Everything in this list draws between the wrapper's back and front halves**
- * — reordering can shuffle the contents, but nothing can climb out of the
+ * **Everything in this list draws between the wrapper's back and front halves.**
+ * Reordering can shuffle the contents, but nothing can climb out of the
  * paper or sink behind it. That is a property of where the loop sits in
  * renderBouquet, not a rule enforced here.
  *
  * Old links carry no `z`. The fallbacks reproduce exactly the order that used
- * to be hardcoded — photos marked "back", then stems in array order, then
- * photos marked "front" — so a bouquet sent before this feature renders
+ * to be hardcoded: photos marked "back", then stems in array order, then
+ * photos marked "front", so a bouquet sent before this feature renders
  * unchanged. `layer` is kept for those links and is no longer consulted once
  * an item has a real `z`.
  */
@@ -203,8 +203,8 @@ export function topZ(bouquet: Bouquet) {
 
 /**
  * How the bouquet arrives. The vessel is what the recipient sees *before*
- * anything opens — the preview card in a chat, the image in an email, the
- * bubble in the app — so it is deliberately separate from the paper the
+ * anything opens: the preview card in a chat, the image in an email, the
+ * bubble in the app. It is therefore deliberately separate from the paper the
  * flowers are wrapped in.
  *
  * Drawn in code for now (see renderVessel). Swapping in a sprite sheet later
@@ -254,7 +254,7 @@ export function flowerSprite(index: number) {
 export function photoCount(b: Bouquet) { return b.photos?.length ?? 0; }
 /**
  * The bloom the Single stem vessel shows. Picked on its own, because the
- * vessel is what arrives first and deserves its own choice — but it falls
+ * vessel is what arrives first and deserves its own choice, but it falls
  * back to the bouquet's first flower so it is never empty or arbitrary.
  */
 export function singleStem(b: Bouquet) {
@@ -354,7 +354,7 @@ export function encodeBouquet(bouquet: Bouquet): string {
   const clean = validateBouquet(bouquet);
   if (!clean || !hasContents(clean)) throw new Error("Add at least one flower or photo before sharing.");
   // Only the private link comes through here now. A data URL will not fit in
-  // a URL fragment, so this stays — but the message has to name the link that
+  // a URL fragment, so this stays, but the message has to name the link that
   // actually refused, not imply photos cannot be shared at all.
   if (photoCount(clean)) throw new Error("A private link can’t carry photos. Use the gift link instead, or remove the photos.");
   const bytes = new TextEncoder().encode(JSON.stringify(clean));
@@ -396,7 +396,7 @@ export function bloomPoint(stem: Stem) {
 /**
  * The tilt grip, set *beside* the bloom rather than beyond it. Past the tip
  * would read more naturally, but a tall stem puts the bloom near the top of
- * the card and anything further up lands outside the clip — an invisible
+ * the card and anything further up lands outside the clip: an invisible
  * handle. Perpendicular keeps it in the same band as the flower it turns.
  */
 export function stemHandle(stem: Stem) {
@@ -573,7 +573,7 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     ctx.restore();
   };
   // Everything from here to the matching restore is the bouquet itself, and
-  // it all has to scale together — wrapper, taper, flowers, photos, grips —
+  // it all has to scale together (wrapper, taper, flowers, photos, grips)
   // or the paper and what is in it drift apart.
   const fit = fitScale(bouquet);
   ctx.save();
@@ -957,7 +957,7 @@ export function renderVessel(canvas: HTMLCanvasElement, bouquet: Bouquet, art: H
       ctx.restore();
       break;
     }
-    case 4: { // Single stem — one flower, and nothing tied to it.
+    case 4: { // Single stem: one flower, and nothing tied to it.
       const sprite = flowerSprite(singleStem(bouquet));
       const sheet = sprite.url === ART_URL ? art : assets[sprite.url];
       if (sheet) {
@@ -973,7 +973,7 @@ export function renderVessel(canvas: HTMLCanvasElement, bouquet: Bouquet, art: H
       silk.addColorStop(0, "#f0709f"); silk.addColorStop(1, "#d5568f");
       shadow(); ctx.fillStyle = cream; ctx.fillRect(x, y, w, h); noShadow();
       ctx.fillStyle = ink; ctx.globalAlpha = .06; ctx.fillRect(x, y, w, h); ctx.globalAlpha = 1;
-      // Ribbon down the front of the box only — it disappears under the lid.
+      // Ribbon down the front of the box only. It disappears under the lid.
       ctx.fillStyle = silk; ctx.fillRect(cx - 22, y, 44, h);
       shadow(); ctx.fillStyle = cream; ctx.fillRect(x - 14, lidY, w + 28, lidH); noShadow();
       ctx.fillStyle = ink; ctx.globalAlpha = .16; ctx.fillRect(x - 14, y - 3, w + 28, 3); ctx.globalAlpha = 1;

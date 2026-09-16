@@ -41,7 +41,7 @@ export function TwoToneHeading({
   );
 }
 
-/** Informational surface — soft-square 18, hairline border, flat. */
+/** Informational surface: soft-square 18, hairline border, flat. */
 export function Card({
   children,
   className = "",

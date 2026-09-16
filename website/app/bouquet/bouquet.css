@@ -164,7 +164,7 @@
 
 /* ── Photos ─────────────────────────────────────────────────────────────── */
 /* The real input is driven by a styled button, so it only needs to be
-   reachable — `display: none` would take it out of the tab order. */
+   reachable; `display: none` would take it out of the tab order. */
 .bouquet-file { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .bouquet-photo-add { margin: 16px 0 4px; }
 .bouquet-photo-note { font-size: 13px; line-height: 1.6; color: #6d5f72; background: #faf7fc; border-radius: 12px; padding: 11px 13px; margin-top: 12px; }

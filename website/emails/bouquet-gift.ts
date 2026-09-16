@@ -3,7 +3,7 @@
  *
  * ⚠️ **The subject and the body never say what is inside.** It lands in a
  * notification on a lock screen before it is opened, and the surprise is the
- * whole point — the same rule the link preview follows. No "bouquet", no
+ * whole point, the same rule the link preview follows. No "bouquet", no
  * "flowers".
  *
  * Built the same way as the waitlist confirmation: tables and inline styles,
@@ -12,7 +12,7 @@
  * client that blocks images still gets a complete email from the text alone.
  *
  * ⚠️ `from` is always our own domain. The sender's name goes in the body,
- * never the From header — letting a stranger put any name and address on mail
+ * never the From header; letting a stranger put any name and address on mail
  * we send is how a nice feature becomes a phishing tool.
  */
 
@@ -40,7 +40,7 @@ ${signed}
 Open it here:
 ${url}
 
-This link was sent from Dayflower because someone entered this address to send you a gift. If that wasn't meant for you, you can ignore this email — we don't keep the address.
+This link was sent from Dayflower because someone entered this address to send you a gift. If that wasn't meant for you, you can ignore this email. We don't keep the address.
 
 Dayflower
 https://mydayflower.com

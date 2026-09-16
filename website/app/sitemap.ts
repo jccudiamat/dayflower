@@ -5,7 +5,7 @@ import { url } from "./lib/seo";
  * ⚠️ `lastModified` is a hand-kept date per route, deliberately not
  * `new Date()`. A lastmod that moves every build is a lastmod that lies about
  * every page on every deploy, and crawlers that catch a site doing it stop
- * trusting the field — which costs you the one signal it was there to send.
+ * trusting the field, which costs you the one signal it was there to send.
  * Bump the date here when a page's content actually changes.
  *
  * `changeFrequency` and `priority` are ignored by Google outright; they stay

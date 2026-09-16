@@ -8,7 +8,7 @@ import { loadGift } from "../../lib/gift";
 
 /**
  * A gift someone was sent. Server-rendered so the crawler behind a chat or
- * mail preview can actually read it — which is the whole reason this route
+ * mail preview can actually read it, which is the whole reason this route
  * exists rather than everything living in a `#gift=` fragment.
  *
  * ⚠️ **Nothing on this page may name what is inside.** The title, the

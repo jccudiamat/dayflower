@@ -59,12 +59,12 @@ function Bloom({ id, alt, className = "" }: { id: string; alt: string; className
   );
 }
 
-/* ── 1 · Flowers — the thread ───────────────────────────────────────────── */
+/* ── 1 · Flowers: the thread ───────────────────────────────────────────── */
 
 export function ChatSnapshot() {
   return (
     <Phone>
-      {/* Header — avatar, name, their mood, and the two call buttons. */}
+      {/* Header: avatar, name, their mood, and the two call buttons. */}
       <header className="flex items-center gap-2 border-b border-border-soft bg-surface px-3.5 pb-2.5 pt-8">
         <span className="text-[13px] text-muted" aria-hidden>‹</span>
         <Avatar size={34} />
@@ -76,7 +76,7 @@ export function ChatSnapshot() {
         <span className="text-[13px] text-muted" aria-hidden>▣</span>
       </header>
 
-      {/* Thread — bottom-aligned, the way a conversation sits. */}
+      {/* Thread: bottom-aligned, the way a conversation sits. */}
       <div className="flex flex-1 flex-col justify-end gap-2.5 overflow-hidden px-3.5 pb-3 pt-4">
         <p className="self-center rounded-full bg-surface-subtle px-2.5 py-1 text-[8.5px] font-bold uppercase tracking-[0.16em] text-body">
           Today
@@ -99,7 +99,7 @@ export function ChatSnapshot() {
           </div>
         </div>
 
-        {/* Yours: blush fill, pink hairline — the gradient is spent elsewhere. */}
+        {/* Yours: blush fill, pink hairline; the gradient is spent elsewhere. */}
         <div className="max-w-[80%] self-end rounded-[18px] rounded-br-[4px] border border-blush-mid bg-blush px-3 py-2">
           <p className="text-[11.5px] leading-snug">
             okay that is the cutest thing i have seen all week 🥹
@@ -149,7 +149,7 @@ const MOODS = [
 export function HomeSnapshot() {
   return (
     <Phone>
-      {/* Top bar — the pair pill is the door to the Us page. */}
+      {/* Top bar: the pair pill is the door to the Us page. */}
       <div className="flex items-center justify-between px-4 pb-1 pt-8">
         <span className="flex items-center gap-1.5 rounded-full border border-border-soft bg-surface py-1 pl-1 pr-2.5">
           <span className="flex -space-x-1.5">
@@ -162,7 +162,7 @@ export function HomeSnapshot() {
       </div>
 
       <div className="flex-1 overflow-hidden px-4 pt-2">
-        {/* Greeting, their clock, the distance — and today's photo in the arch. */}
+        {/* Greeting, their clock, the distance, and today's photo in the arch. */}
         <div className="flex items-end gap-2.5">
           <div className="min-w-0 flex-1 pb-1">
             <p className="text-[19px] font-bold leading-tight">Good evening,</p>
@@ -180,7 +180,7 @@ export function HomeSnapshot() {
           </div>
         </div>
 
-        {/* Mood — one tap, and it shows up in their chat header. */}
+        {/* Mood: one tap, and it shows up in their chat header. */}
         <div className="mt-3 rounded-[18px] border border-border-soft bg-surface p-3">
           <div className="flex items-baseline justify-between">
             <Label>How are you feeling?</Label>
@@ -203,7 +203,7 @@ export function HomeSnapshot() {
           </div>
         </div>
 
-        {/* Heartbeat — the only looping animation in the design system. */}
+        {/* Heartbeat: the only looping animation in the design system. */}
         <div className="mt-2 flex items-center gap-3 rounded-[18px] border border-border-soft bg-surface p-3">
           <div className="min-w-0 flex-1">
             <Label>Haptic heartbeat</Label>
@@ -219,7 +219,7 @@ export function HomeSnapshot() {
           </span>
         </div>
 
-        {/* The shared feed — one timeline, both of you in it. */}
+        {/* The shared feed: one timeline, both of you in it. */}
         <div className="mt-3">
           <Label>Today</Label>
           <div className="mt-1.5 space-y-1.5">
@@ -242,7 +242,7 @@ export function HomeSnapshot() {
         </div>
       </div>
 
-      {/* Bottom nav — Home · Camera · Flowers · Events · Activities. */}
+      {/* Bottom nav: Home · Camera · Flowers · Events · Activities. */}
       <div className="mx-3 mb-3 flex items-center justify-around rounded-full bg-surface-subtle py-2.5">
         {["⌂", "◎", "❀", "▤", "✦"].map((icon, i) => (
           <span
@@ -451,7 +451,7 @@ export function ActivitiesSnapshot() {
           </div>
         ))}
 
-        {/* The booth gets the dark card — it is the one that is a bit of fun. */}
+        {/* The booth gets the dark card; it is the one that is a bit of fun. */}
         <div
           className="overflow-hidden rounded-[18px] p-3.5 text-on-dark"
           style={{ background: "linear-gradient(160deg,#171027,#221838 55%,#120C1F)" }}

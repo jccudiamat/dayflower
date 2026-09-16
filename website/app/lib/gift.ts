@@ -4,7 +4,7 @@ import { giftId } from "./input";
 /**
  * Server-side storage for shareable gift links.
  *
- * The `#gift=` link stores nothing and never will — it stays the private
+ * The `#gift=` link stores nothing and never will; it stays the private
  * option. But a URL fragment is never sent to the server, so a link preview
  * (which is a crawler fetching the URL) can only ever see the generic page.
  * Per-gift previews need the bouquet server-readable, which means a row.

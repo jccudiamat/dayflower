@@ -24,7 +24,7 @@ export default async function GiftsPage() {
     </main><footer className="mx-auto flex max-w-5xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/bouquet">Digital bouquet</Link><Link href="/photobooth">Photo booth</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>
     <JsonLd nodes={[
       // ⚠️ ItemList of links, deliberately NOT Product/Offer nodes. We do not
-      // sell any of this — Shopee does. Marking up someone else's inventory
+      // sell any of this; Shopee does. Marking up someone else's inventory
       // with our own prices invites a structured-data manual action, and the
       // prices here are a dated snapshot that will be wrong before long.
       { "@type": "ItemList", "@id": url("/gifts#list"), name: "Dayflower gift guide", numberOfItems: products.length, itemListElement: products.map((product, i) => ({ "@type": "ListItem", position: i + 1, name: product.name, url: product.url })) },

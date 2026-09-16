@@ -8,15 +8,15 @@ export const metadata: Metadata = {
   title: "Free Digital Bouquet Creator | Dayflower",
   description: "Pick your flowers, wrap them with love, and add a personal note. Create and send a free digital bouquet by link, or download it as an image. No account needed.",
   alternates: { canonical: url("/bouquet") },
-  // ⚠️ The <title> and meta description above stay explicit — they are what
+  // ⚠️ The <title> and meta description above stay explicit: they are what
   // search results show. The Open Graph card is what lands in a chat, and a
   // gift is meant to be a surprise, so it must never say bouquet or flowers.
   openGraph: openGraph({ title: "A little something, just for you", description: "Made by hand on Dayflower. Open it when you have a minute.", path: "/bouquet", image: null }),
 };
 
 /**
- * Rendered twice — as <details> for readers and as FAQPage data for crawlers
- * — from one array, so the two can never drift.
+ * Rendered twice, as <details> for readers and as FAQPage data for crawlers,
+ * from one array, so the two can never drift.
  */
 const questions = [
   ["Is it free to make and send a bouquet?", "Yes. Pick your flowers, add a note, and share your bouquet without an account or payment."],

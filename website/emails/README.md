@@ -7,9 +7,9 @@ Preview locally at `/api/email-preview` (404 in production). The template includ
 1. Apply `supabase/migrations/0033_waitlist_confirmation.sql` after the existing waitlist migration. It preserves signups, adds receipt tracking, and restricts public inserts to email/source.
 2. Verify a sending domain in Resend and set these **server-only** environment variables locally and in Vercel Production:
    - `RESEND_API_KEY`
-   - `WAITLIST_EMAIL_FROM` — a verified sender, e.g. `Dayflower <hello@mydayflower.com>` (example, not a configured mailbox).
-   - `SUPABASE_SERVICE_ROLE_KEY` — used only by the server for confirmation claims and receipt updates.
-   - `WAITLIST_EMAIL_REPLY_TO` — optional monitored reply address.
+   - `WAITLIST_EMAIL_FROM`: a verified sender, e.g. `Dayflower <hello@mydayflower.com>` (example, not a configured mailbox).
+   - `SUPABASE_SERVICE_ROLE_KEY`: used only by the server for confirmation claims and receipt updates.
+   - `WAITLIST_EMAIL_REPLY_TO`: optional monitored reply address.
    Existing `SUPABASE_URL` and `SUPABASE_ANON_KEY` remain required for signup insertion.
 3. Deploy the website and photo booth together: the email links to `/photobooth`.
 4. Submit an authorized test address, check the inbox, and verify `confirmation_provider_id` and `confirmation_accepted_at` in Supabase. Resubmit to check it does not send again.
