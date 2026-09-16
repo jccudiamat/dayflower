@@ -1,6 +1,6 @@
-# Home release, build 75
+# Home release, build 76
 
-Based on committed app revision 50fa288, carrying forward the travel map, sticky notes and smaller gift photos. Approved Home implementation was ported from codex/app-reorganization. The main working checkout and its unfinished reorganization are untouched.
+Based on committed app revision 60537d3, carrying forward the travel map, sticky notes and smaller gift photos and the build 75 map markers/distance line. Approved Home implementation was ported from codex/app-reorganization. The main working checkout and its unfinished reorganization are untouched.
 
 Home combines greeting and My Day side by side at all widths, with changing emoji, partner local time and distance. The rear photo tilts six degrees; swapping photos brings the selected photo upright. Heartbeat includes partner feeling and centered send action. Upcoming events use actual saved and derived dates with themed artwork. My Day, Heartbeat and Reunion each have a preview and setup instructions. The notification bell and Us pill open real destinations.
 
