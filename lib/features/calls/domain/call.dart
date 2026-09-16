@@ -106,6 +106,19 @@ enum CallFailure {
     'The connection gave out. Try again, or just send a message.',
   ),
 
+  /// The call was picked up on another of your own devices.
+  ///
+  /// ⚠️ **Not a dropped call, and the difference matters.** LiveKit
+  /// identifies a participant by the token's `sub`, which is `auth.uid()` —
+  /// so two devices signed in as you are one identity, and the second to
+  /// join evicts the first. That is a perfectly good call-transfer
+  /// semantic: answer on the tablet, the phone lets go. It only looked like
+  /// a bug because the phone said "the connection gave out".
+  movedToAnotherDevice(
+    'Moved to your other device',
+    'You picked this call up somewhere else. Nothing was lost.',
+  ),
+
   /// The month's calling is spent.
   ///
   /// The detail line is filled in at render time with the reset date —

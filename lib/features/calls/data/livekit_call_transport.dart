@@ -125,11 +125,15 @@ class LiveKitCallTransport implements CallTransport {
         // A disconnect we asked for is not a failure. `leave()` clears the
         // room first, so a null room here means this is our own teardown.
         if (_room == null) return;
-        _events.add(CallFailed(
-          event.reason == lk.DisconnectReason.clientInitiated
-              ? CallFailure.dropped
-              : CallFailure.unreachable,
-        ));
+        _events.add(CallFailed(switch (event.reason) {
+          // Another of this user's own devices joined and took the call.
+          // One identity per user, so LiveKit evicts the older connection —
+          // see CallFailure.movedToAnotherDevice.
+          lk.DisconnectReason.duplicateIdentity =>
+            CallFailure.movedToAnotherDevice,
+          lk.DisconnectReason.clientInitiated => CallFailure.dropped,
+          _ => CallFailure.unreachable,
+        }));
       })
       ..on<lk.DataReceivedEvent>((event) {
         // Anything on this channel came from the other phone, so it is only

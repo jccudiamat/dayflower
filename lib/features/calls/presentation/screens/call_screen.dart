@@ -462,8 +462,13 @@ class _FailureView extends ConsumerWidget {
             // build and a spent allowance both fail identically every time.
             // A button whose only outcome is the screen you are already on
             // is not an escape, it is a taunt.
+            // ⚠️ movedToAnotherDevice must not offer a retry either.
+            // Rejoining from here would evict the device that just took the
+            // call, which would in turn offer *it* a retry — two phones
+            // batting one call back and forth.
             if (failure != CallFailure.notConfigured &&
-                failure != CallFailure.quotaExhausted) ...[
+                failure != CallFailure.quotaExhausted &&
+                failure != CallFailure.movedToAnotherDevice) ...[
               const SizedBox(height: AppSpace.xs),
               SizedBox(
                 width: double.infinity,
