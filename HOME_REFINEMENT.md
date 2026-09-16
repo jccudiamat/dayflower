@@ -1,6 +1,6 @@
 # Home refinement for review
 
-Branch: codex/home-layout-refinement, based on the published build 76. The original working checkout is untouched. The user approved publication of the final preview. Build 77 is being prepared for the in-app updater.
+Branch: codex/home-layout-refinement, based on the published build 76. The original working checkout is untouched. Published as build 77 through the in-app updater on 2026-09-16. The user approved the final preview.
 
 The latest final user decision supersedes the preceding responsive layout: restore the original greeting at the left, and show the reference's overlapping My Day arches at the right at every screen width. No outer card. No stacking below the greeting or single-arch empty variant. Phone column gaps are 4–6px; larger layouts use 16px. The original display typography is restored (30px, 26px on the narrowest phones). Both arches, the share action, actual photo switching, changing emoji, partner location/time and distance remain. Empty-stack copy and controls use compact, readable sizes on phones rather than shrinking the entire section.
 
@@ -15,3 +15,5 @@ Validation: the final side-by-side layout and actions pass the Home/event tests 
 Latest preview revision: removed the external Share yours / Update yours action, pagination dots, swipe hint and partner-photo footer from My Day. The empty arch still contains Share your day; photo swiping and tapping still work. Removed controls leave no reserved gaps. Approved for publication as build 77.
 
 Empty and filled My Day stacks now use the same width and height at each screen size and text scale. Compact empty content has reduced padding and spacing to fit the existing photo size. Home tests verify matching dimensions on 320px and 390px phones and wider layouts; large-text variants also pass. Approved for publication as build 77.
+
+Publication verified: live manifest points to dayflower-77-arm64-v8a.apk (1.0.0+77, 52,057,325 bytes). Downloaded live APK SHA-256 matches the local release: a99b1e7d97d45bc8d27cb5c9d72f67e3da60b48a79551aa3427d8dd79b62737d. Android package and signing certificate match build 76. Source is on GitHub branch codex/home-layout-refinement; the original checkout remains untouched.
