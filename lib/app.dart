@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:device_preview/device_preview.dart';
 import 'package:flutter/material.dart';
+
+import 'features/settings/presentation/widgets/app_lock_gate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 
@@ -498,9 +500,15 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // everything — the app, the updater, all of it — because the window is
       // a few hundred points wide and a call is the only thing worth putting
       // in one.
+      // ⚠️ AppLockGate is **outermost of the three**, so nothing reaches
+      // around it — not a notification tap, not a widget deep link, not the
+      // updater's own sheet. A gate inside the shell would leak through
+      // exactly those routes.
       builder: (context, child) => DevicePreview.appBuilder(
         context,
-        CallPipGate(child: UpdateGate(child: child)),
+        AppLockGate(
+          child: CallPipGate(child: UpdateGate(child: child)),
+        ),
       ),
     );
   }

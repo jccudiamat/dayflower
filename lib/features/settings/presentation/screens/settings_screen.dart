@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../data/app_lock.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app_router.dart';
@@ -24,6 +26,7 @@ import '../../../../core/widgets/flower_avatar.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
 import '../../../../core/widgets/gradient_button.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/city_picker.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../auth/data/auth_repository.dart';
@@ -53,7 +56,7 @@ class SettingsScreen extends ConsumerWidget {
         title: const Text('Settings'),
         leading: IconButton(
           onPressed: () =>
-              context.canPop() ? context.pop() : context.go(Routes.home),
+              context.canPop() ? context.pop() : context.go(Routes.us),
           icon: AppIcon(CupertinoIcons.chevron_back,
               color: AppColors.muted),
         ),
@@ -244,80 +247,7 @@ class SettingsScreen extends ConsumerWidget {
             const SizedBox(height: AppSpace.md),
 
             // ── Home screen widget ───────────────────
-            Text('HOME SCREEN WIDGET', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              DayflowerWidgets.isSupported
-                  ? 'Long-press your home screen → Widgets → Dayflower. "Today\'s Flower", "Heartbeat" and "Reunion" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
-                  : 'Home screen widgets are only available on the Android and iOS app.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            const _Card(
-              children: [
-                _WidgetModeRow(
-                  title: "Today's Flower",
-                  subtitle: 'Their flower and note',
-                  mode: WidgetMode.flower,
-                ),
-                _Line(),
-                _WidgetModeRow(
-                  title: 'Heartbeat',
-                  subtitle: 'Tap it to send a pulse',
-                  mode: WidgetMode.heartbeat,
-                ),
-                _Line(),
-                _WidgetModeRow(
-                  title: 'Reunion',
-                  subtitle: 'Days until you are in the same place',
-                  mode: WidgetMode.reunion,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.md),
-            Text('REUNION WIDGET', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              'The picture behind the countdown. Somewhere you are going, or '
-              'somewhere you have been.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            const _Card(children: [_ReunionBackgroundRow()]),
-            const SizedBox(height: AppSpace.md),
-            Text('PHOTO ROTATION', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              'How often the widget moves to their next day. Only applies '
-              'when more than one is live.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            const _Card(
-              children: [
-                // ⚠️ "Don't" is first and is the default. A card that moves
-                // on its own is the kind of thing that reads as delightful
-                // for a week and restless after that, so it is opt-in.
-                _WidgetRotationRow(
-                  title: "Don't rotate",
-                  subtitle: 'Only the newest day',
-                  seconds: 0,
-                ),
-                _Line(),
-                _WidgetRotationRow(
-                  title: 'Every 3 seconds',
-                  subtitle: 'Through their live days',
-                  seconds: 3,
-                ),
-                _Line(),
-                _WidgetRotationRow(
-                  title: 'Every 5 seconds',
-                  subtitle: 'A calmer pace',
-                  seconds: 5,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.md),
+            const WidgetSettingsSection(),
 
             // ── About ────────────────────────────────
             Text('ABOUT', style: AppText.label()),
@@ -329,6 +259,8 @@ class SettingsScreen extends ConsumerWidget {
                   const _Line(),
                   const _CheckForUpdatesRow(),
                 ],
+                const _Line(),
+                const _AppLockRows(),
                 const _Line(),
                 _Row(
                   title: 'Terms of Service',
@@ -921,6 +853,103 @@ class _SwitchRow extends StatelessWidget {
 }
 
 /* ── Settings row ────────────────────────────────── */
+/// The app lock, and how long a trip away is allowed before it closes.
+///
+/// ⚠️ Hidden entirely where the phone has no screen lock of its own. A
+/// toggle that can only ever fail is worse than an absent one — and
+/// `isDeviceSupported` is true for a PIN or pattern, not just a fingerprint,
+/// which is most phones.
+class _AppLockRows extends ConsumerStatefulWidget {
+  const _AppLockRows();
+
+  @override
+  ConsumerState<_AppLockRows> createState() => _AppLockRowsState();
+}
+
+class _AppLockRowsState extends ConsumerState<_AppLockRows> {
+  bool? _available;
+
+  @override
+  void initState() {
+    super.initState();
+    AppLockAuth.available().then((value) {
+      if (mounted) setState(() => _available = value);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_available != true) return const SizedBox.shrink();
+    final settings = ref.watch(appLockPrefsProvider);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Row(
+          title: 'App lock',
+          subtitle: settings.enabled
+              // Says what it does NOT do, because the obvious assumption —
+              // that locking signs you out — is the one that would stop
+              // people turning it on.
+              ? 'Stays signed in. Reminders and calls keep working.'
+              : 'Ask for your fingerprint or PIN to open Dayflower.',
+          value: settings.enabled ? 'On' : 'Off',
+          chevron: false,
+          onTap: () async {
+            final wanted = !settings.enabled;
+            final ok =
+                await ref.read(appLockPrefsProvider.notifier).setEnabled(wanted);
+            if (!ok && wanted && context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Could not verify it is you.')),
+              );
+            }
+          },
+        ),
+        if (settings.enabled) ...[
+          const _Line(),
+          _Row(
+            title: 'Lock after',
+            value: settings.delay.label,
+            onTap: () => _pickDelay(settings.delay),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Future<void> _pickDelay(AppLockDelay current) async {
+    final chosen = await showModalBottomSheet<AppLockDelay>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => SafeArea(
+        child: Container(
+          margin: const EdgeInsets.all(AppSpace.sm),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.xl),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final delay in AppLockDelay.values)
+                _Row(
+                  title: delay.label,
+                  chevron: false,
+                  value: delay == current ? '✓' : null,
+                  onTap: () => Navigator.of(sheetContext).pop(delay),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (chosen != null) {
+      await ref.read(appLockPrefsProvider.notifier).setDelay(chosen);
+    }
+  }
+}
+
 class _Row extends StatelessWidget {
   const _Row({
     required this.title,
@@ -1484,4 +1513,111 @@ class _ModeCard extends StatelessWidget {
       ),
     );
   }
+}
+
+class WidgetSettingsSection extends StatelessWidget {
+  const WidgetSettingsSection({super.key});
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+            Text('HOME SCREEN WIDGET', style: AppText.label()),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              DayflowerWidgets.isSupported
+                  ? 'Long-press your home screen → Widgets → Dayflower. "Today\'s Flower", "Heartbeat" and "Reunion" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
+                  : 'Home screen widgets are only available on the Android and iOS app.',
+              style: AppText.caption(),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            const _Card(
+              children: [
+                _WidgetModeRow(
+                  title: "Today's Flower",
+                  subtitle: 'Their flower and note',
+                  mode: WidgetMode.flower,
+                ),
+                _Line(),
+                _WidgetModeRow(
+                  title: 'Heartbeat',
+                  subtitle: 'Tap it to send a pulse',
+                  mode: WidgetMode.heartbeat,
+                ),
+                _Line(),
+                _WidgetModeRow(
+                  title: 'Reunion',
+                  subtitle: 'Days until you are in the same place',
+                  mode: WidgetMode.reunion,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+            Text('REUNION WIDGET', style: AppText.label()),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'The picture behind the countdown. Somewhere you are going, or '
+              'somewhere you have been.',
+              style: AppText.caption(),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            const _Card(children: [_ReunionBackgroundRow()]),
+            const SizedBox(height: AppSpace.md),
+            Text('PHOTO ROTATION', style: AppText.label()),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+              'How often the widget moves to their next day. Only applies '
+              'when more than one is live.',
+              style: AppText.caption(),
+            ),
+            const SizedBox(height: AppSpace.xs),
+            const _Card(
+              children: [
+                // ⚠️ "Don't" is first and is the default. A card that moves
+                // on its own is the kind of thing that reads as delightful
+                // for a week and restless after that, so it is opt-in.
+                _WidgetRotationRow(
+                  title: "Don't rotate",
+                  subtitle: 'Only the newest day',
+                  seconds: 0,
+                ),
+                _Line(),
+                _WidgetRotationRow(
+                  title: 'Every 3 seconds',
+                  subtitle: 'Through their live days',
+                  seconds: 3,
+                ),
+                _Line(),
+                _WidgetRotationRow(
+                  title: 'Every 5 seconds',
+                  subtitle: 'A calmer pace',
+                  seconds: 5,
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpace.md),
+
+
+    ],
+  );
+}
+
+class WidgetSettingsScreen extends StatelessWidget {
+  const WidgetSettingsScreen({super.key});
+  @override
+  Widget build(BuildContext context) => Scaffold(
+    backgroundColor: AppColors.background,
+    bottomNavigationBar: const AppBottomNav(),
+    appBar: AppBar(
+      title: const Text('Home screen widgets'),
+      leading: IconButton(
+        tooltip: 'Back',
+        onPressed: () => context.canPop() ? context.pop() : context.go(Routes.us),
+        icon: AppIcon(CupertinoIcons.chevron_back, color: AppColors.muted),
+      ),
+    ),
+    body: ListView(
+      padding: const EdgeInsets.fromLTRB(20, AppSpace.xs, 20, AppSpace.lg),
+      children: const [WidgetSettingsSection()],
+    ),
+  );
 }

@@ -86,29 +86,41 @@ screen". It kept its full-width, labelled form inside that sheet — it reaches
 into somebody else's pocket, so it should stay hard to press by accident, and
 a note has no room for it on its face.
 
-## 🔴 The APK is at 49.9 MB against a 50 MB ceiling (2026-09-15)
+## 🔴 The APK is ~100 KB under a 50 MB ceiling (2026-09-15)
 
-`flutter build apk --release --target-platform android-arm64` now produces
+`flutter build apk --release --target-platform android-arm64` produces
 **49.9 MB**. `tool/publish_update.dart` refuses anything over 50 MB, which is
-Supabase's per-object limit on this plan — so the OTA path has roughly
-100 KB of headroom and **the next image added breaks publishing entirely**.
+Supabase's per-object limit on this plan — so **the next dependency or large
+asset breaks publishing entirely**.
 
-It was 39.9 MB on 2026-09-05. Where it went:
+⚠️ **An earlier version of this section was wrong** and is corrected here. It
+claimed "9.7 MB of PNGs", with gifts at 4.5 MB and flowers at 3.6 MB. The
+measuring script mis-bucketed APK entries. The truth:
 
 | | |
 |---|---|
 | `libapp.so` | 12.1 MB |
 | `libjingle_peerconnection_so.so` (WebRTC) | 11.5 MB |
 | `libflutter.so` | 10.8 MB |
-| `assets/images/gifts` | 4.5 MB |
-| `assets/images/flowers` | 3.6 MB |
-| `monthsary_53.png` | 1.6 MB |
+| **all** `flutter_assets` | **7.3 MB** |
+| android res | 2.2 MB |
 
-The native libraries are already ABI-filtered and not reducible. The app
-assets are: **9.7 MB of PNGs**, one of which is a single 1.6 MB image.
-Cheapest fixes, in order — re-encode the gift and flower art (WebP at
-quality 85 typically saves 60–70% on this kind of artwork), then decide
-whether every gift image needs to ship in the APK rather than being fetched.
+The flower artwork was **already WebP** and is ~60 KB a file; the gift photos
+are JPG and ~0.7 MB in total. There was no big win hiding in them, and
+anyone acting on the old numbers would have spent a day re-encoding assets
+that were already right.
+
+**The one real saving, taken 2026-09-16:** `monthsary_53.png` was a
+1536×1024 RGB photograph with no transparency stored losslessly — 1.57 MB.
+Re-encoded to WebP q90 it is **94 KB**, a 94% saving, which is the only
+reason there is now room for `local_auth`.
+
+Three-quarters of this APK is native code that cannot be reduced: the Flutter
+engine, the Dart snapshot, and WebRTC. **Assets are not where the next
+megabyte comes from.** If the ceiling is hit again the options are giving up
+`--target-platform` for a proper per-ABI split (see the versionCode trap in
+`publish_update.dart`), or hosting builds somewhere without a 50 MB object
+limit.
 
 ## Feature status
 

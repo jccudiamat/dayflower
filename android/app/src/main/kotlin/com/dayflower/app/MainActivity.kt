@@ -8,12 +8,20 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.PowerManager
 import android.util.Rational
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
  * Picture-in-picture, so a call survives leaving the app.
+ *
+ * WARNING: extends FlutterFragmentActivity, not FlutterActivity. local_auth
+ * shows the system biometric prompt as a Fragment, and on a plain
+ * FlutterActivity it fails at runtime with "no FragmentActivity" rather than
+ * at compile time — so the app lock would build fine and then refuse to
+ * unlock on a real phone. Everything PiP needs is still here:
+ * enterPictureInPictureMode and onUserLeaveHint are Activity members, and
+ * FlutterFragmentActivity is one.
  *
  * WARNING: there is no Flutter API for this and no plugin here doing it.
  * PiP is an Activity capability - enterPictureInPictureMode is a method on
@@ -24,7 +32,7 @@ import io.flutter.plugin.common.MethodChannel
  *
  * The Dart side is lib/features/calls/data/call_pip.dart.
  */
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
 
     private var channel: MethodChannel? = null
 
