@@ -2,6 +2,7 @@ import SiteHeader from "../components/SiteHeader";
 import type { Metadata } from "next";
 import Link from "next/link";
 import Booth from "./Booth";
+import { ExampleStrip } from "../components/Examples";
 import { JsonLd, faqPage, breadcrumbs, openGraph, ORGANISATION, url } from "../lib/seo";
 
 export const metadata: Metadata = {
@@ -28,7 +29,7 @@ export default async function PhotoboothPage() {
       <p className="mt-4 max-w-2xl text-base leading-relaxed text-body">Turn your favorites into a scrapbook, a photo dump, or a keepsake for two. Eight free designs. Ready to save and share. No account needed.</p>
       <Booth />
       <AdSpace id="photobooth-ad-after-editor" />
-      <section className="py-10"><h2 className="text-3xl font-bold">From camera roll to keepsake</h2><ol className="mt-7 grid gap-7 sm:grid-cols-3">{[["01 · Add your moments", "Choose a template with two to nine photos. Use the camera or upload pictures you already love."],["02 · Make it feel like you", "Pick a frame, add a caption, and adjust each crop. Try black and white for a classic booth look."],["03 · Keep it or send it", "Create your PNG, download it, or share it with someone. Your original photos never leave this browser through the booth."]].map(([title, text]) => <li key={title}><h3 className="font-bold">{title}</h3><p className="mt-3 leading-relaxed text-body">{text}</p></li>)}</ol></section>
+      <section className="grid items-start gap-10 py-10 lg:grid-cols-[1fr_auto] lg:gap-14"><div><h2 className="text-3xl font-bold">From camera roll to keepsake</h2><ol className="mt-7 grid gap-7 sm:grid-cols-3 lg:grid-cols-2">{[["01 · Add your moments", "Choose a template with two to nine photos. Use the camera or upload pictures you already love."],["02 · Make it feel like you", "Pick a frame, add a caption, and adjust each crop. Try black and white for a classic booth look."],["03 · Keep it or send it", "Create your PNG, download it, or share it with someone. Your original photos never leave this browser through the booth."]].map(([title, text]) => <li key={title}><h3 className="font-bold">{title}</h3><p className="mt-3 leading-relaxed text-body">{text}</p></li>)}</ol></div><div className="mx-auto pt-4 lg:mx-0"><ExampleStrip /></div></section>
       <section className="max-w-3xl py-10"><h2 className="text-3xl font-bold">Photo booth questions</h2><div className="mt-7 divide-y divide-border-soft">{faqs.map(([q,a]) => <details key={q} className="py-5"><summary className="cursor-pointer font-bold">{q}</summary><p className="mt-3 leading-relaxed text-body">{a}</p></details>)}</div></section>
       <AdSpace id="photobooth-ad-before-footer" />
       <section className="rounded-3xl bg-dark-canvas p-8 text-on-dark sm:p-12"><h2 className="text-3xl font-bold">Keep the little things going.</h2><p className="my-5 max-w-xl leading-relaxed text-on-dark-muted">Dayflower is also a private app for two, with home-screen widgets, flowers, calls, and shared moments. Get a little closer, every day.</p><Link href="/#waitlist" className="gradient-button">Explore Dayflower</Link></section>

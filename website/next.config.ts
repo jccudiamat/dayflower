@@ -5,7 +5,7 @@ const nextConfig: NextConfig = {
   images: {
     dangerouslyAllowSVG: false,
     remotePatterns: [],
-    localPatterns: [{ pathname: "/mark.png", search: "" }, { pathname: "/flowers/**", search: "" }, { pathname: "/gifts/**", search: "" }, { pathname: "/bouquet/**", search: "" }],
+    localPatterns: [{ pathname: "/mark.png", search: "" }, { pathname: "/flowers/**", search: "" }, { pathname: "/gifts/**", search: "" }, { pathname: "/bouquet/**", search: "" }, { pathname: "/models/**", search: "" }],
     qualities: [75],
   },
   async headers() {

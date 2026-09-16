@@ -1,4 +1,4 @@
-import { ChatSnapshot } from "./Snapshots";
+import { HomeSnapshot } from "./Snapshots";
 import Link from "next/link";
 import "./snapshots.css";
 
@@ -11,6 +11,6 @@ export default function ProductTour() {
         <article id="plans"><h3>Plan a little life together</h3><p>Important dates, reunion countdowns, reminders, finances, and monthly Chapters.</p></article>
         <article id="widgets"><h3>Keep the little things nearby</h3><p>Photo keepsakes in the app and Android home-screen widgets for shared moments.</p></article>
       </div><Link href="/#waitlist" className="home-app-link">Join the app waitlist <span aria-hidden="true">↗</span></Link>
-    </div><figure className="home-app-preview"><div aria-hidden="true"><ChatSnapshot /></div><figcaption>App preview · illustrative sample content</figcaption></figure>
+    </div><figure className="home-app-preview"><div aria-hidden="true"><HomeSnapshot /></div><figcaption>App preview · illustrative sample content</figcaption></figure>
   </div></section>;
 }

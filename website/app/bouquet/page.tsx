@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import SiteHeader from "../components/SiteHeader";
 import BouquetStudio from "./BouquetStudio";
+import { ExampleBouquet } from "../components/Examples";
 import { JsonLd, faqPage, breadcrumbs, openGraph, ORGANISATION, url } from "../lib/seo";
 
 export const metadata: Metadata = {
@@ -30,9 +31,9 @@ export default async function BouquetPage() {
     <section className="bouquet-faq" aria-labelledby="bouquet-questions"><h2 id="bouquet-questions">Little things to know</h2>
       {questions.map(([q, a]) => <details key={q}><summary>{q}</summary><p>{a}</p></details>)}
     </section>
-    <section className="bouquet-faq" aria-labelledby="bouquet-about"><h2 id="bouquet-about">Flowers you can send from anywhere</h2>
+    <section className="bouquet-faq bouquet-about" aria-labelledby="bouquet-about"><div><h2 id="bouquet-about">Flowers you can send from anywhere</h2>
       <p>A digital bouquet is flowers that arrive as a link, so there is no florist, no delivery window, and no address to ask for. Choose from 54 illustrated blooms, wrap them in a paper you like, tuck in a photo and a handwritten-looking note, then send it by message or email. It is free, and neither of you needs an account.</p>
-      <p>It suits the days a real delivery cannot reach: a partner in another country, a friend whose address you never got round to asking for, a birthday you remembered an hour before midnight. If you would like something to keep as well, download the bouquet as an image, or make a <Link href="/photobooth">photo strip</Link> to go with it. Looking for something physical instead? Our <Link href="/gifts">gift ideas</Link> are picked from Shopee Philippines.</p>
+      <p>It suits the days a real delivery cannot reach: a partner in another country, a friend whose address you never got round to asking for, a birthday you remembered an hour before midnight. If you would like something to keep as well, download the bouquet as an image, or make a <Link href="/photobooth">photo strip</Link> to go with it. Looking for something physical instead? Our <Link href="/gifts">gift ideas</Link> are picked from Shopee Philippines.</p></div><ExampleBouquet />
     </section>
   </main><footer className="bouquet-footer"><Link href="/">Dayflower</Link><Link href="/photobooth">Make a photo strip</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>
     <JsonLd nodes={[

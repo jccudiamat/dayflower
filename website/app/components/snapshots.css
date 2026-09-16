@@ -36,9 +36,17 @@
   overflow: hidden;
   border-radius: 38px;
   background: var(--bg);
+  /* 🔴 A screen that sets its own background MUST set its own text colour.
+     Without this it inherits from whatever section the phone is dropped
+     into, and the product tour sits on a dark band (#f7eff6 text) — so every
+     element inside with no explicit colour class rendered near-white on the
+     phone's white screen. The greeting, the pair pill and the whole activity
+     feed were invisible. Nothing errors; the text is simply not there. */
+  color: var(--ink);
 }
 .phone-screen-dark {
   background: var(--gradient-hero);
+  color: var(--on-dark);
 }
 
 /* The status-bar cut-out. Purely cosmetic, hence the pointer-events off. */

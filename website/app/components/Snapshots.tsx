@@ -45,6 +45,25 @@ function Label({ children, tone = "muted" }: { children: ReactNode; tone?: "mute
   );
 }
 
+/**
+ * A photograph, where the app would show one someone actually took.
+ *
+ * ⚠️ An AI-generated model, never a real person. These previews are
+ * captioned as illustrative wherever they appear.
+ */
+function Photo({ src, alt }: { src: string; alt: string }) {
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={720}
+      height={960}
+      sizes="140px"
+      className="h-full w-full object-cover"
+    />
+  );
+}
+
 function Bloom({ id, alt, className = "" }: { id: string; alt: string; className?: string }) {
   return (
     <Image
@@ -175,7 +194,7 @@ export function HomeSnapshot() {
           <div className="relative h-[128px] w-[88px] shrink-0">
             <div className="absolute inset-x-2 top-0 h-[116px] rounded-t-[38px] rounded-b-[16px] bg-surface-subtle" />
             <div className="absolute inset-x-0 bottom-0 h-[116px] overflow-hidden rounded-t-[42px] rounded-b-[18px] border border-border-soft">
-              <Bloom id="misty_blossom" alt="Their photo of today" />
+              <Photo src="/models/sunset.webp" alt="Their photo of today" />
             </div>
           </div>
         </div>

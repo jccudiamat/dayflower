@@ -300,3 +300,8 @@
 
 .bouquet-delivery-check { margin: 18px 0 8px; min-width: 0; text-align: left; }
 .bouquet-delivery-check p { font-size: 13px; color: #75546a; line-height: 1.5; }
+
+/* The worked example sits beside the copy that describes it, and drops under
+   it on a phone rather than shrinking both into two unreadable columns. */
+.bouquet-about { display: grid; gap: 40px; align-items: start; }
+@media (min-width: 1000px) { .bouquet-about { grid-template-columns: 1fr auto; gap: 56px; } }
