@@ -28,12 +28,20 @@ class HomeWidgetGallery extends ConsumerWidget {
             Text('Dayflower on your phone’s home screen',
                 style: AppText.body()),
             const SizedBox(height: AppSpace.sm),
-            for (final kind in HomeWidgetKind.values)
-              Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpace.sm),
-                  child: _WidgetFeature(kind: kind)),
-            Text('Widget previews',
-                textAlign: TextAlign.center, style: AppText.caption()),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.xl),
+                  border: Border.all(color: AppColors.border)),
+              child: Column(children: [
+                for (final kind in HomeWidgetKind.values) ...[
+                  if (kind != HomeWidgetKind.myDay)
+                    Divider(height: 1, color: AppColors.border),
+                  _WidgetFeature(kind: kind),
+                ],
+              ]),
+            ),
           ]);
 }
 
@@ -47,51 +55,67 @@ class _WidgetFeature extends StatelessWidget {
       };
   String get description => switch (kind) {
         HomeWidgetKind.myDay => 'Their photos, right on your home screen.',
-        HomeWidgetKind.heartbeat => 'Send a little love with one tap.',
-        HomeWidgetKind.reunion => 'Count down to being together.',
+        HomeWidgetKind.heartbeat => 'Send love in a tap.',
+        HomeWidgetKind.reunion => 'Until your next hug.',
       };
   @override
-  Widget build(BuildContext context) => Container(
-      padding: const EdgeInsets.all(AppSpace.sm),
-      decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.xl),
-          border: Border.all(color: AppColors.border)),
-      child: LayoutBuilder(builder: (context, box) {
-        final content =
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(title, style: AppText.subtitle()),
-          const SizedBox(height: AppSpace.xs),
-          Text(description, style: AppText.body()),
-          const SizedBox(height: AppSpace.sm),
-          Semantics(
-              label: 'Set up $title widget',
-              child: OutlinedButton(
-                  onPressed: () => _setup(context),
-                  child: const Text('Set up'))),
-        ]);
-        final preview = ExcludeSemantics(
-            child: SizedBox(
-                width: 116,
-                height: 132,
-                child: MediaQuery.withNoTextScaling(
-                    child: _WidgetPreview(kind: kind))));
-        if (box.maxWidth < 260 ||
-            MediaQuery.textScalerOf(context).scale(14) > 21) {
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(child: preview),
-                const SizedBox(height: AppSpace.sm),
-                content
-              ]);
-        }
-        return Row(children: [
-          preview,
-          const SizedBox(width: AppSpace.sm),
-          Expanded(child: content)
-        ]);
-      }));
+  Widget build(BuildContext context) => Semantics(
+        label: 'Set up $title widget',
+        button: true,
+        child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              onTap: () => _setup(context),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: LayoutBuilder(builder: (context, box) {
+                  final content = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: AppText.subtitle()),
+                        const SizedBox(height: 6),
+                        Text(description, style: AppText.body()),
+                        const SizedBox(height: 12),
+                        Text('Set up ›',
+                            style: AppText.subtitle(AppColors.brandDark)),
+                      ]);
+                  final preview = ExcludeSemantics(
+                      child: SizedBox(
+                          width: 104,
+                          height: 118,
+                          child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.lg),
+                                  boxShadow: [
+                                    BoxShadow(
+                                        color: AppColors.ink
+                                            .withValues(alpha: .08),
+                                        blurRadius: 12,
+                                        offset: const Offset(0, 4))
+                                  ]),
+                              child: MediaQuery.withNoTextScaling(
+                                  child: _WidgetPreview(kind: kind)))));
+                  if (box.maxWidth < 240 ||
+                      MediaQuery.textScalerOf(context).scale(14) > 21) {
+                    return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Center(child: preview),
+                          const SizedBox(height: 16),
+                          content,
+                        ]);
+                  }
+                  return Row(children: [
+                    preview,
+                    const SizedBox(width: 20),
+                    Expanded(child: content)
+                  ]);
+                }),
+              ),
+            )),
+      );
   void _setup(BuildContext context) {
     final widgetName = kind == HomeWidgetKind.myDay ? "Today's Flower" : title;
     final android = defaultTargetPlatform == TargetPlatform.android;

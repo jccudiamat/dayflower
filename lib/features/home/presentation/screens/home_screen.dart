@@ -25,12 +25,10 @@ import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
 import '../../../activity/data/activity_repository.dart';
-import '../../../greetings/presentation/monthsary_envelope.dart';
 import '../widgets/home_upcoming_events.dart';
 import '../widgets/home_widget_gallery.dart';
 import '../../domain/home_moments.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../../core/widgets/gradient_button.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -107,7 +105,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           SizedBox(height: AppSpace.md),
                           _MoodCard(),
                           SizedBox(height: AppSpace.md),
-                          MonthsaryEnvelope(),
                           HomeUpcomingEvents(),
                           SizedBox(height: AppSpace.lg),
                           HomeWidgetGallery(),
@@ -146,37 +143,34 @@ class _MoodCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Wrap(spacing: AppSpace.sm, runSpacing: AppSpace.xs, children: [
-            Text('How are you feeling?', style: AppText.subtitle()),
-            Text(mood?.label ?? 'Choose a mood',
+          Row(
+            children: [
+              Expanded(
+                child: Text('HOW ARE YOU FEELING?', style: AppText.label()),
+              ),
+              Text(
+                mood?.label ?? 'Tap one',
                 style: AppText.caption(
-                    mood == null ? AppColors.muted : AppColors.brand)),
-          ]),
+                  mood == null ? AppColors.muted : AppColors.brand,
+                ).copyWith(fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpace.xs),
-          LayoutBuilder(builder: (context, constraints) {
-            final columns = constraints.maxWidth >= 313 ? 6 : 3;
-            final width = math.min(
-                56.0, (constraints.maxWidth - (columns - 1) * 5) / columns);
-            return Column(children: [
-              for (var start = 0; start < Mood.values.length; start += columns)
-                Padding(
-                    padding: EdgeInsets.only(top: start == 0 ? 0 : 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        for (final m in Mood.values.skip(start).take(columns))
-                          SizedBox(
-                              width: width,
-                              child: _MoodChip(
-                                  mood: m,
-                                  selected: mood == m,
-                                  onTap: () => ref
-                                      .read(moodProvider.notifier)
-                                      .select(m))),
-                      ],
-                    )),
-            ]);
-          }),
+          Row(
+            children: [
+              for (final m in Mood.values) ...[
+                Expanded(
+                  child: _MoodChip(
+                    mood: m,
+                    selected: mood == m,
+                    onTap: () => ref.read(moodProvider.notifier).select(m),
+                  ),
+                ),
+                if (m != Mood.values.last) const SizedBox(width: 6),
+              ],
+            ],
+          ),
         ],
       ),
     );
@@ -392,10 +386,10 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
         ? 'A heartbeat for your person'
         : mood == null
             ? 'Send $partnerName a heartbeat'
-            : '$partnerName is feeling ${mood.label.toLowerCase()} ${mood.emoji}';
+            : '$partnerName is feeling ${mood.label.toLowerCase()} ${mood.emoji}';
     final text =
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title, style: AppText.title()),
+      Text(title, style: AppText.subtitle()),
       const SizedBox(height: AppSpace.xs),
       Text(
           !enabled
@@ -405,11 +399,13 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
                   : 'Send a little love back',
           style: AppText.body()),
       const SizedBox(height: AppSpace.sm),
-      Text(
-          counts.mine == 0 && counts.partner == 0
-              ? 'No heartbeats yet today'
-              : 'You sent ${counts.mine} · $partnerName sent ${counts.partner}',
-          style: AppText.caption()),
+      if (counts.mine == 0 && counts.partner == 0)
+        Text('No heartbeats yet today', style: AppText.caption())
+      else
+        Wrap(spacing: 10, runSpacing: 4, children: [
+          Text('You sent ${counts.mine}', style: AppText.caption()),
+          Text('$partnerName sent ${counts.partner}', style: AppText.caption()),
+        ]),
     ]);
     final action = Column(mainAxisSize: MainAxisSize.min, children: [
       SizedBox(
@@ -446,8 +442,8 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     ]);
     return Container(
       key: const ValueKey('home-heartbeat'),
-      padding: const EdgeInsets.symmetric(
-          horizontal: AppSpace.md, vertical: AppSpace.lg),
+      padding:
+          const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 28),
       decoration: _homeCardDecoration(),
       child: LayoutBuilder(builder: (context, constraints) {
         final largeText = MediaQuery.textScalerOf(context).scale(14) / 14 > 1.5;
@@ -462,8 +458,8 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
         }
         return Row(children: [
           Expanded(child: text),
-          const SizedBox(width: AppSpace.sm),
-          SizedBox(width: 100, child: action)
+          const SizedBox(width: 12),
+          SizedBox(width: _stageSize, child: action)
         ]);
       }),
     );
@@ -586,54 +582,66 @@ class _HomeHeader extends ConsumerWidget {
     final local =
         zone == null ? null : tz.TZDateTime.from(now, safeLocation(zone));
     final distance = profileDistanceLabel(profile, partner);
-    final greeting = Column(
+    final period = now.hour < 12
+        ? 'morning'
+        : now.hour < 18
+            ? 'afternoon'
+            : 'evening';
+    return LayoutBuilder(builder: (context, box) {
+      final gap = box.maxWidth < 320
+          ? 4.0
+          : box.maxWidth < 500
+              ? 6.0
+              : 16.0;
+      final deckWidth = math.min(360.0, (box.maxWidth - gap) * .52);
+      final heading =
+          AppText.display().copyWith(fontSize: box.maxWidth < 320 ? 26 : 30);
+      final greeting = Column(
         key: const ValueKey('home-greeting'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-              now.hour < 12
-                  ? 'Good morning,'
-                  : now.hour < 18
-                      ? 'Good afternoon,'
-                      : 'Good evening,',
-              style: AppText.hero()),
-          const SizedBox(height: AppSpace.xs),
-          Text('$name $greetingFlower',
-              style: AppText.hero(AppColors.brandDark)),
+          Text('Good $period,',
+              key: const ValueKey('greeting-title'), style: heading),
+          const SizedBox(height: 2),
+          Row(children: [
+            Flexible(
+                child: Text(name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: heading.copyWith(color: AppColors.brandDark))),
+            const SizedBox(width: AppSpace.xxs),
+            Text(greetingFlower, style: const TextStyle(fontSize: 22)),
+          ]),
           if (local != null && partnerName != null) ...[
-            const SizedBox(height: AppSpace.md),
-            Wrap(spacing: 8, runSpacing: 4, children: [
-              Text(
-                  '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(zone!)}',
-                  style: AppText.body()),
-              Text(DateFormat('h:mm a').format(local), style: AppText.body()),
-            ]),
+            const SizedBox(height: AppSpace.xs),
+            Text(
+                '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(zone!)} · ${DateFormat('h:mm a').format(local).replaceAll(' ', '\u00a0')}',
+                style: AppText.body()),
           ],
           if (distance != null) ...[
-            const SizedBox(height: AppSpace.xs),
+            const SizedBox(height: 2),
             Text(distance, style: AppText.body()),
           ],
-        ]);
-    return LayoutBuilder(builder: (context, constraints) {
-      final compact = constraints.maxWidth < 600;
-      return Container(
+        ],
+      );
+      return Padding(
         key: const ValueKey('home-my-day'),
-        decoration: _homeCardDecoration(),
-        padding: EdgeInsets.symmetric(
-            horizontal: compact ? 16 : AppSpace.md, vertical: AppSpace.lg),
-        child: Row(key: const ValueKey('my-day-side-by-side'), children: [
-          Expanded(child: greeting),
-          SizedBox(width: compact ? 12 : AppSpace.lg),
-          Expanded(child: _DayArch(compact: compact)),
-        ]),
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Row(
+            key: const ValueKey('my-day-side-by-side'),
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(child: greeting),
+              SizedBox(width: gap),
+              SizedBox(width: deckWidth, child: const _DayArch()),
+            ]),
       );
     });
   }
 }
 
 class _DayArch extends ConsumerStatefulWidget {
-  const _DayArch({required this.compact});
-  final bool compact;
+  const _DayArch();
   @override
   ConsumerState<_DayArch> createState() => _DayArchState();
 }
@@ -648,45 +656,38 @@ class _DayArchState extends ConsumerState<_DayArch> {
     final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
     final both = mine != null && theirs != null;
     final mineFront = theirs == null || (both && _mineInFront);
-    final compact = widget.compact;
+    final compact = MediaQuery.sizeOf(context).width < 540;
     return Column(
         key: const ValueKey('home-photo-deck'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (compact && (mine != null || theirs != null))
-            Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                tooltip: mine == null ? 'Share your day' : 'Update yours',
-                onPressed: () => _shareDay(context, ref),
-                icon: const AppIcon(CupertinoIcons.camera,
-                    size: 22, color: AppColors.brand),
-              ),
-            ),
-          if (!compact && (mine != null || theirs != null))
+          if (mine != null || theirs != null)
             Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
                   onPressed: () => _shareDay(context, ref),
                   icon: const AppIcon(CupertinoIcons.camera, size: 18),
-                  label: Text(mine == null ? 'Share your day' : 'Update yours',
-                      style: AppText.body(AppColors.brand)),
+                  label: Text(mine == null ? 'Share yours' : 'Update yours',
+                      style: AppText.caption(AppColors.brand)),
+                  style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4)),
                 )),
           Center(
               child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 390),
+                  constraints: const BoxConstraints(maxWidth: 440),
                   child: LayoutBuilder(builder: (context, box) {
                     final w = box.maxWidth;
-                    final cardWidth = w * .68;
-                    final rearWidth = w * .52;
+                    final compact = w < 240;
+                    final cardWidth = w * (compact ? .80 : .76);
+                    final rearWidth = w * .66;
                     final textScale =
                         MediaQuery.textScalerOf(context).scale(14) / 14;
                     final h = math.max(
                         cardWidth / .72,
                         mine == null && theirs == null
-                            ? (compact ? 190.0 : 320.0) *
+                            ? (compact ? 230.0 : 330.0) *
                                 math.max(1.0, textScale)
-                            : (compact ? 190.0 : 250.0));
+                            : (compact ? 170.0 : 280.0));
                     Widget card({required bool own, required bool front}) {
                       final msg = own ? mine : theirs;
                       final label = own ? 'Your day' : "$name’s day";
@@ -699,11 +700,11 @@ class _DayArchState extends ConsumerState<_DayArch> {
                           duration: AppMotion.standard,
                           curve: AppMotion.easeOut,
                           left: front ? 0 : w - rearWidth - (h - 32) * .055,
-                          top: front ? 0 : 24,
+                          top: front ? 0 : (compact ? 16 : 24),
                           width: front ? cardWidth : rearWidth,
-                          height: front ? h : h - 32,
+                          height: front ? h : h - (compact ? 24 : 32),
                           child: AnimatedRotation(
-                              turns: front ? 0 : 6 / 360,
+                              turns: front ? 0 : 3 / 360,
                               duration: AppMotion.standard,
                               curve: AppMotion.easeOut,
                               child: ClipRRect(
@@ -714,11 +715,15 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                               shape,
                                               own
                                                   ? AppColors.brand
-                                                  : AppColors.border)
+                                                  : AppColors.border,
+                                              dashed: own)
                                           : null,
                                       child: Material(
                                           color: own
-                                              ? AppColors.blush
+                                              ? Color.alphaBlend(
+                                                  AppColors.blush
+                                                      .withValues(alpha: .5),
+                                                  AppColors.surface)
                                               : AppColors.surfaceSubtle,
                                           child: InkWell(
                                             onTap: msg == null
@@ -737,11 +742,21 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                             child: msg == null
                                                 ? (front
                                                     ? _empty(name, own, compact)
-                                                    : const Center(
+                                                    : Align(
+                                                        alignment:
+                                                            const Alignment(
+                                                                1, 0),
                                                         child: AppIcon(
                                                             CupertinoIcons
                                                                 .photo,
-                                                            size: 32)))
+                                                            size: compact
+                                                                ? 24
+                                                                : 40,
+                                                            color: AppColors
+                                                                .muted
+                                                                .withValues(
+                                                                    alpha:
+                                                                        .65))))
                                                 : Stack(
                                                     fit: StackFit.expand,
                                                     children: [
@@ -816,55 +831,72 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                             ? AppColors.brand
                                             : AppColors.border)))))),
             ]),
-            Text(
-                compact
-                    ? 'Swipe photos'
-                    : 'Swipe to see ${mineFront ? 'their' : 'your'} day',
+            Text('Swipe to see ${mineFront ? 'their' : 'your'} day',
                 textAlign: TextAlign.center,
-                style: AppText.caption()),
+                style:
+                    AppText.caption().copyWith(fontSize: compact ? 11 : 12.5)),
           ] else
             Text(
                 theirs == null
                     ? '$name’s photo will appear here too'
                     : 'Add your photo to the stack',
                 textAlign: TextAlign.center,
-                style: AppText.caption()),
+                style:
+                    AppText.caption().copyWith(fontSize: compact ? 11 : 12.5)),
         ]);
   }
 
-  Widget _empty(String name, bool own, bool compact) {
-    if (compact) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 20),
+  Widget _empty(String name, bool own, bool compact) => Padding(
+        padding: compact
+            ? const EdgeInsets.fromLTRB(8, 20, 8, 14)
+            : const EdgeInsets.fromLTRB(16, 36, 16, 24),
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          const Spacer(),
           AppIcon(own ? CupertinoIcons.camera : CupertinoIcons.photo,
-              size: 28, color: AppColors.brand),
-          const SizedBox(height: 12),
-          Text(own ? 'Share your day' : '$name’s day',
+              size: compact ? 28 : 44, color: AppColors.brand),
+          SizedBox(height: compact ? 10 : 16),
+          Text(own ? 'Your day starts here' : '$name’s day',
               textAlign: TextAlign.center,
-              style: AppText.body(AppColors.brand)),
+              style: compact
+                  ? AppText.caption(AppColors.ink)
+                      .copyWith(fontWeight: FontWeight.w600)
+                  : AppText.title()),
+          const SizedBox(height: 6),
+          Text(own ? 'Share a little moment' : 'Their photo will appear here',
+              textAlign: TextAlign.center,
+              style: compact
+                  ? AppText.caption().copyWith(fontSize: 11)
+                  : AppText.body(AppColors.muted)),
+          if (own) ...[
+            SizedBox(height: compact ? 12 : 20),
+            Material(
+                color: Colors.transparent,
+                child: Ink(
+                  decoration: BoxDecoration(
+                      gradient: AppGradients.cta,
+                      borderRadius: BorderRadius.circular(AppRadius.pill)),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    onTap: () => _shareDay(context, ref),
+                    child: Padding(
+                        padding: EdgeInsets.symmetric(
+                            horizontal: compact ? 6 : 12,
+                            vertical: compact ? 10 : 14),
+                        child: Center(
+                            child: Text('Share your day',
+                                textAlign: TextAlign.center,
+                                style: compact
+                                    ? AppText.caption(Colors.white)
+                                    : AppText.subtitle(Colors.white)))),
+                  ),
+                )),
+          ],
+          const Spacer(),
+          SizedBox(height: compact ? 10 : 20),
+          Text(own ? 'Your day' : '$name’s day',
+              style: AppText.caption().copyWith(fontSize: compact ? 11 : 12.5)),
         ]),
       );
-    }
-    return Padding(
-        padding: const EdgeInsets.all(AppSpace.sm),
-        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          AppIcon(own ? CupertinoIcons.camera : CupertinoIcons.photo,
-              size: 40, color: AppColors.brand),
-          const SizedBox(height: AppSpace.sm),
-          Text(own ? 'Your day starts here' : '$name’s day',
-              textAlign: TextAlign.center, style: AppText.subtitle()),
-          const SizedBox(height: AppSpace.xs),
-          Text(own ? 'Share a little moment' : 'Their photo will appear here',
-              textAlign: TextAlign.center, style: AppText.caption()),
-          if (own) ...[
-            const SizedBox(height: AppSpace.md),
-            GradientButton(
-                label: 'Share your day',
-                onPressed: () => _shareDay(context, ref))
-          ],
-        ]));
-  }
 
   void _open(FlowerMessage message, String who) {
     final mine = ref.read(myDayPhotosProvider);
@@ -958,7 +990,8 @@ class _HomeBar extends ConsumerWidget {
 }
 
 class _EmptyArchOutline extends CustomPainter {
-  _EmptyArchOutline(this.shape, this.color);
+  _EmptyArchOutline(this.shape, this.color, {this.dashed = true});
+  final bool dashed;
   final BorderRadius shape;
   final Color color;
   @override
@@ -969,6 +1002,10 @@ class _EmptyArchOutline extends CustomPainter {
       ..color = color.withValues(alpha: .55)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2;
+    if (!dashed) {
+      canvas.drawPath(path, paint);
+      return;
+    }
     for (final metric in path.computeMetrics()) {
       for (double offset = 0; offset < metric.length; offset += 10) {
         canvas.drawPath(
@@ -980,5 +1017,7 @@ class _EmptyArchOutline extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _EmptyArchOutline oldDelegate) =>
-      oldDelegate.shape != shape || oldDelegate.color != color;
+      oldDelegate.shape != shape ||
+      oldDelegate.color != color ||
+      oldDelegate.dashed != dashed;
 }

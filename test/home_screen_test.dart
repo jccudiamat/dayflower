@@ -74,7 +74,8 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
   final router = GoRouter(initialLocation: route, routes: [
-    GoRoute(path: Routes.activities, builder: (_, __) => const ActivitiesScreen()),
+    GoRoute(
+        path: Routes.activities, builder: (_, __) => const ActivitiesScreen()),
     GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
     GoRoute(path: Routes.blooms, builder: (_, __) => const BloomsScreen()),
     GoRoute(path: Routes.booth, builder: (_, __) => const BoothScreen()),
@@ -308,6 +309,8 @@ void main() {
       (320.0, 1.0, true),
       (320.0, 2.0, false),
       (390.0, 2.0, false),
+      (740.0, 1.0, false),
+      (900.0, 1.0, false),
       (900.0, 1.0, true),
       (900.0, 2.0, true)
     ]) {
@@ -318,14 +321,23 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('my-day-side-by-side')), findsOneWidget);
       expect(
-          (tester.widget(find.text('Good afternoon,')) as Text).style?.fontSize,
-          25);
+          (tester.widget(find.byKey(const ValueKey('greeting-title'))) as Text)
+              .style
+              ?.fontSize,
+          width - 40 < 320 ? 26 : 30);
+      expect(tester.widget(find.byKey(const ValueKey('home-my-day'))),
+          isA<Padding>());
+      expect(find.byType(MonthsaryEnvelope), findsNothing);
+      expect(find.text('HOW ARE YOU FEELING?'), findsOneWidget);
       final greetingRect =
           tester.getRect(find.byKey(const ValueKey('home-greeting')));
       final photoRect =
           tester.getRect(find.byKey(const ValueKey('home-photo-deck')));
       expect(greetingRect.right, lessThan(photoRect.left));
       expect(greetingRect.center.dy, closeTo(photoRect.center.dy, 1));
+      expect(photoRect.left - greetingRect.right, lessThanOrEqualTo(16));
+      expect(find.byKey(const ValueKey('my-day-photo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('partner-day-photo')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await _screenshot(tester,
           'home-${width.toInt()}-${scale.toInt()}-${filled ? 'filled' : 'empty'}-top');
@@ -412,8 +424,9 @@ void main() {
       (tester) async {
     await _pump(tester, Routes.home, filled: true);
     await _reveal(tester, find.byKey(const ValueKey('my-day-photo')));
-    await tester.drag(
-        find.byKey(const ValueKey('partner-day-photo')), const Offset(-100, 0));
+    await tester.dragFrom(
+        tester.getCenter(find.byKey(const ValueKey('partner-day-photo'))),
+        const Offset(-100, 0));
     await tester.pumpAndSettle();
     expect(
         tester.getTopLeft(find.byKey(const ValueKey('my-day-photo'))).dx,
@@ -433,30 +446,45 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(_beats.sends, 0);
-
   });
 
   _homeTest(
-      'Upcoming card changes event, opens details, and Add a date opens persistent editor',
+      'Events rotate every five seconds, swipe manually and open Events without a popup',
       (tester) async {
-    await _pump(tester, Routes.home, filled: true);
+    final router = await _pump(tester, Routes.home, filled: true);
     await _reveal(tester, find.byKey(const ValueKey('home-upcoming')));
     await tester.pumpAndSettle();
     expect(find.text('Our monthsary'), findsOneWidget);
-    await tester.tap(find.byTooltip('Next event'));
+    expect(find.byTooltip('Next event'), findsNothing);
+    expect(find.byTooltip('Previous event'), findsNothing);
+    expect(find.text('1 of 2'), findsNothing);
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpAndSettle();
     expect(find.text('Our anniversary'), findsOneWidget);
-    await tester.tap(find.text('View details ›'));
+    await tester.drag(
+        find.byKey(const ValueKey('home-upcoming')), const Offset(-200, 0));
     await tester.pumpAndSettle();
-    expect(find.text('Open Events'), findsOneWidget);
-    await tester.tap(find.byTooltip('Close event'));
+    expect(find.text('Our monthsary'), findsOneWidget);
+    await tester.tap(find.text('View events ›'));
     await tester.pumpAndSettle();
+    expect(find.byType(EventsScreen), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    await tester.pump(const Duration(seconds: 6));
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.text('Our monthsary'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pump(const Duration(seconds: 6));
+    expect(find.text('Our monthsary'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, Routes.home, hasStart: false);
     await _reveal(tester, find.text('Add a date ›'));
     await tester.tap(find.text('Add a date ›'));
     await tester.pumpAndSettle();
-    expect(find.text('Save'), findsOneWidget);
+    expect(find.byType(EventsScreen), findsOneWidget);
+    expect(find.byType(BottomSheet), findsNothing);
+    expect(find.text('Add event'), findsOneWidget);
   });
 }
 
