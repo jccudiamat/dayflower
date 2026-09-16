@@ -3,6 +3,7 @@ import { Quicksand, Lora } from "next/font/google";
 import "./globals.css";
 import { connection } from "next/server";
 import { JsonLd, ORGANISATION, WEBSITE, SITE, SITE_NAME } from "./lib/seo";
+import { Analytics } from "@vercel/analytics/next";
 
 const quicksand = Quicksand({
   variable: "--font-quicksand",
@@ -58,6 +59,21 @@ export default async function RootLayout({
             every page carries the same entity rather than each asserting its
             own. Page-level nodes reference these two by `@id`. */}
         <JsonLd nodes={[ORGANISATION, WEBSITE]} />
+        {/* Page views, cookielessly.
+
+            ⚠️ Needs no CSP change and no nonce, which is not obvious given
+            `script-src` here has no `unsafe-inline` and carries
+            `strict-dynamic`. It works because the component injects its tag
+            with `createElement` inside an effect: a script created by an
+            already-trusted script inherits that trust, which is the whole
+            point of `strict-dynamic`. A parser-inserted tag would be
+            dropped. Its beacons go to same-origin `/_vercel/insights/*`, so
+            `connect-src 'self'` already covers them.
+
+            If a future version switches to rendering the tag server-side,
+            this goes silently dead rather than erroring — check for the
+            script in the DOM before trusting an empty dashboard. */}
+        <Analytics />
       </body>
     </html>
   );
