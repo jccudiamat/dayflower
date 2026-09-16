@@ -56,7 +56,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IosBackButton(onTap: () => context.go(Routes.activities)),
+                  IosBackButton(onTap: () => context.canPop() ? context.pop() : context.go(Routes.together)),
                   const SizedBox(width: AppSpace.xs),
                   const Expanded(
                     child: FeatureScreenHeader(

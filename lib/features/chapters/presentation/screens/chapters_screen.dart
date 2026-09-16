@@ -58,7 +58,7 @@ class _ChaptersScreenState extends ConsumerState<ChaptersScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IosBackButton(onTap: () => context.go(Routes.activities)),
+                  IosBackButton(onTap: () => context.canPop() ? context.pop() : context.go(Routes.memories)),
                   const SizedBox(width: AppSpace.xs),
                   const Expanded(
                     child: FeatureScreenHeader(

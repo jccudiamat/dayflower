@@ -18,6 +18,7 @@ import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
 import '../../data/reaction_choices.dart';
 import '../widgets/media_viewer.dart';
+import '../widgets/share_your_day.dart';
 
 /// What sits behind the two of you: how much calling is left this month, and
 /// everything either of you has sent.
@@ -61,25 +62,28 @@ class ChatSettingsScreen extends ConsumerWidget {
 }
 
 /// The same shared-media grid, accessible directly from Memories.
-class SharedPhotosScreen extends StatelessWidget {
-  const SharedPhotosScreen({super.key});
+class SharedPhotosScreen extends ConsumerWidget {
+  const SharedPhotosScreen({super.key, this.myDaysOnly = false});
+  final bool myDaysOnly;
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context, WidgetRef ref) => Scaffold(
     backgroundColor: AppColors.background,
     bottomNavigationBar: const AppBottomNav(),
     appBar: AppBar(
       backgroundColor: AppColors.background,
       surfaceTintColor: Colors.transparent,
-      // ⚠️ Home, not a tab route. This is only ever reached by pushing, so
-      // the fallback is for the case where there is nothing to pop — and
-      // `home` is the one destination that survives the tabs being
-      // rearranged underneath it.
       leading: IosBackButton(onTap: () => context.canPop()
-          ? context.pop() : context.go(Routes.home)),
-      title: Text('Photos', style: AppText.title()),
+          ? context.pop() : context.go(Routes.memories)),
+      title: Text(myDaysOnly ? 'My Day photos' : 'Shared photos', style: AppText.title()),
+      actions: [if (myDaysOnly) IconButton(
+        tooltip: 'Share your day', icon: const Icon(CupertinoIcons.camera),
+        onPressed: () {
+          ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.widget;
+          context.push(Routes.flowers);
+        })],
     ),
-    body: ListView(padding: AppSpace.screen, children: const [_SharedMedia()]),
+    body: ListView(padding: AppSpace.screen, children: [_SharedMedia(myDaysOnly: myDaysOnly)]),
   );
 }
 
@@ -203,7 +207,8 @@ class _CallUsage extends ConsumerWidget {
 
 /* ── Everything either of you has sent ──────────────── */
 class _SharedMedia extends ConsumerWidget {
-  const _SharedMedia();
+  const _SharedMedia({this.myDaysOnly = false});
+  final bool myDaysOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -221,12 +226,12 @@ class _SharedMedia extends ConsumerWidget {
         // this is the album, and the 24-hour rule belongs to the home screen.
         final photos = [
           for (final m in all)
-            if (m.isPhoto) m,
+            if (m.isPhoto && (!myDaysOnly || m.toWidget)) m,
         ];
         return _Section(
           label: 'SHARED · ${photos.length} ${photos.length == 1 ? 'photo' : 'photos'}',
           child: photos.isEmpty
-              ? Text('Photos you send each other collect here.',
+              ? Text(myDaysOnly ? 'Your shared My Day photos will collect here.' : 'Photos you send each other collect here.',
                   style: AppText.body(AppColors.muted))
               : GridView.builder(
                   shrinkWrap: true,

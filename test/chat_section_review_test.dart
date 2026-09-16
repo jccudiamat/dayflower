@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 import 'package:dayflower/app_router.dart';
+import 'package:dayflower/core/widgets/app_bottom_nav.dart';
 import 'package:dayflower/core/models/user_profile.dart';
 import 'package:dayflower/core/providers/supabase_provider.dart';
 import 'package:dayflower/core/theme/app_theme.dart';
@@ -16,10 +17,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'review/chat_review_nav.dart';
 
-// Visual proposal only. Real Chat widgets and offline sample messages, with
-// the proposed navigation outside the screen. No backend writes or calls.
+// Production Chat and navigation with offline sample messages.
+// No backend writes or calls.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -52,13 +52,7 @@ void main() {
       final router = GoRouter(initialLocation: Routes.chat, routes: [
         GoRoute(
             path: Routes.chat,
-            builder: (_, __) => const Material(
-                  color: Color(0xFFF8F5FC),
-                  child: Column(children: [
-                    Expanded(child: FlowersScreen()),
-                    ChatReviewNav(),
-                  ]),
-                )),
+            builder: (_, __) => const FlowersScreen()),
       ]);
       final now = DateTime.now();
       final messages = <FlowerMessage>[
@@ -125,6 +119,17 @@ void main() {
           await file.writeAsBytes(bytes!.buffer.asUint8List());
           image.dispose();
         });
+      }
+      if (filled) {
+        await tester.enterText(find.byType(TextField), 'Unsent draft');
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+        await tester.pumpAndSettle();
+        expect(find.byType(AppBottomNav), findsNothing);
+        expect(find.text('Unsent draft'), findsOneWidget);
+        tester.view.resetViewInsets();
+        await tester.pumpAndSettle();
+        expect(find.byType(AppBottomNav), findsOneWidget);
+        expect(find.text('Unsent draft'), findsOneWidget);
       }
       await tester.pumpWidget(const SizedBox());
       router.dispose();

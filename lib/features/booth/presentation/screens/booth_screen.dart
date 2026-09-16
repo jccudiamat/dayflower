@@ -205,11 +205,11 @@ class _BoothScreenState extends ConsumerState<BoothScreen> {
         Align(
             alignment: Alignment.centerLeft,
             child: IconButton(
-              tooltip: 'Back to Activities',
+              tooltip: 'Back to Memories',
               icon: const AppIcon(Icons.arrow_back),
               onPressed: () => context.canPop()
                   ? context.pop()
-                  : context.go(Routes.activities),
+                  : context.go(Routes.memories),
             )),
         FeatureScreenHeader(
             title: 'Booth & Strip', subtitle: '$myName & $theirName'),

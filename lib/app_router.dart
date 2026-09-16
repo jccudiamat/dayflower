@@ -31,6 +31,8 @@ import 'features/dates/presentation/screens/events_screen.dart';
 import 'features/finance/presentation/screens/finance_screen.dart';
 import 'features/finance/presentation/screens/insights_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
+import 'features/memories/presentation/screens/memories_screen.dart';
+import 'features/travel/presentation/screens/travel_map_screen.dart';
 import 'features/gifts/presentation/screens/gifts_screen.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -47,7 +49,7 @@ import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
 
 // ── Route names ──────────────────────────────
-// Tab labels: Home · Flowers · Camera · Gifts · Activities.
+// Tabs: Home, Chat, Dayflower, Memories, Together. Legacy paths stay valid.
 // Feature folders keep their original names (tulip/dates/booth).
 class Routes {
   static const splash = '/';
@@ -57,28 +59,21 @@ class Routes {
   static const pair = '/pair';
   static const shell = '/app';
   static const home = '/app/home';
+  static const dayflower = '/app/dayflower';
+  static const memories = '/app/memories';
+  static const photos = '/app/memories/photos';
+  static const myDays = '/app/memories/my-days';
+  static const together = '/app/together';
+  static const travel = '/app/together/travel';
   static const notifications = '/app/home/notifications';
 
-  /// The Camera tab, despite the name — see messages_screen.dart. The path
-  /// predates the camera getting a tab of its own and is kept so existing
-  /// deep links keep resolving.
+  /// Camera path retained for widgets and existing deep links.
   static const flowers = '/app/flowers';
 
-  /// The Flowers tab.
-  ///
-  /// ⚠️ **Not `/app/flowers`** — that path is the Camera and has to stay put
-  /// for the widget deep links that name it by string. The tab used to open
-  /// the conversation directly, which meant there was nowhere to see what
-  /// the two of you had actually sent each other; this is that place, and
-  /// the thread is one tap from it.
+  /// Legacy Flowers hub URL redirects to the Dayflower center.
   static const blooms = '/app/blooms';
 
-  /// The conversation itself. Still nested under `flowers` for deep-link
-  /// compatibility.
-  ///
-  /// Still a path under `flowers` for deep-link compatibility, but no longer
-  /// a sub-route of anything: `flowers` is the Camera tab now and these two
-  /// are siblings. Nothing may navigate to `flowers` meaning "the chat".
+  /// Direct Chat tab; retain the original URL for notifications.
   static const chat = '/app/flowers/chat';
 
   /// The couple's own page — both of you, the numbers, and the date
@@ -95,19 +90,17 @@ class Routes {
   static const gifts = '/app/gifts';
   static const activities = '/app/activities';
 
-  /// Sub-route of the Activities hub — the tab itself is a menu, not the
-  /// booth. Nested under `activities` so AppBottomNav keeps the tab lit.
+  /// Photo booth now belongs to Memories; the historic URL stays valid.
   static const booth = '/app/activities/booth';
 
-  /// The rest of the Activities hub. All nested under `activities` for the
-  /// same reason as the booth — move one to a top-level path and the tab
-  /// silently goes dark inside it.
+  /// Together tools retain their existing deep links.
   static const reminders = '/app/activities/reminders';
   static const finance = '/app/activities/finance';
 
   /// The month, read back to you, and exportable as one image. Nested under
-  /// finance so the Activities tab stays lit inside it.
+  /// finance and assigned to the Together tab.
   static const insights = '/app/activities/finance/insights';
+  /// Chapters belongs to Memories, independent of its legacy path.
   static const chapters = '/app/activities/chapters';
 
   /// One month of the year. Path params rather than a query string so the
@@ -413,66 +406,85 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
-        routes: [
-          GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
-          GoRoute(path: Routes.notifications, builder: (_, __) => const ActivityFeedScreen(notificationsOnly: true)),
-          GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
-          GoRoute(
-              path: Routes.activityFeed,
-              builder: (_, __) => const ActivityFeedScreen()),
-          GoRoute(
-              path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
-          GoRoute(
-              path: Routes.blooms, builder: (_, __) => const BloomsScreen()),
-          GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
-          GoRoute(
-              path: Routes.chatSettings,
-              builder: (_, __) => const ChatSettingsScreen()),
-          GoRoute(
-              path: Routes.events, builder: (_, state) => EventsScreen(addOnOpen: state.uri.queryParameters['add'] == '1')),
-          GoRoute(
-              path: Routes.gifts,
-              builder: (_, state) =>
-                  GiftsScreen(occasion: state.uri.queryParameters['occasion'])),
-          GoRoute(
-              path: Routes.activities,
-              builder: (_, __) => const ActivitiesScreen()),
-          GoRoute(path: Routes.booth, builder: (_, __) => const BoothScreen()),
-          GoRoute(
-              path: Routes.reminders,
-              builder: (_, __) => const RemindersScreen()),
-          GoRoute(
-              path: Routes.finance, builder: (_, __) => const FinanceScreen()),
-          GoRoute(
-              path: Routes.insights,
-              builder: (_, __) => const InsightsScreen()),
-          GoRoute(
-              path: Routes.chapters,
-              builder: (_, __) => const ChaptersScreen()),
-          GoRoute(
-            path: Routes.chapter,
-            builder: (_, state) {
-              // A hand-typed or stale URL falls back to this month rather
-              // than crashing on a null parse.
-              final now = DateTime.now();
-              final year =
-                  int.tryParse(state.pathParameters['year'] ?? '') ?? now.year;
-              final month = int.tryParse(state.pathParameters['month'] ?? '') ??
-                  now.month;
-              return ChapterDetailScreen(
-                year: year,
-                month: month.clamp(1, 12),
-              );
-            },
-          ),
-          GoRoute(
-              path: Routes.settings,
-              builder: (_, __) => const SettingsScreen()),
-        ],
+        routes: appFeatureRoutes(),
       ),
     ],
   );
 });
+
+/// App destinations shared by the authenticated shell and navigation checks.
+List<RouteBase> appFeatureRoutes() => [
+      GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
+      GoRoute(
+          path: Routes.notifications,
+          builder: (_, __) =>
+              const ActivityFeedScreen(notificationsOnly: true)),
+      GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
+      GoRoute(
+          path: Routes.activityFeed,
+          builder: (_, __) => const ActivityFeedScreen()),
+      GoRoute(path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
+      GoRoute(
+          path: Routes.blooms,
+          redirect: (_, state) =>
+              state.uri.replace(path: Routes.dayflower).toString()),
+      GoRoute(path: Routes.dayflower, builder: (_, __) => const BloomsScreen()),
+      GoRoute(
+          path: Routes.memories, builder: (_, __) => const MemoriesScreen()),
+      GoRoute(
+          path: Routes.photos, builder: (_, __) => const SharedPhotosScreen()),
+      GoRoute(
+          path: Routes.myDays,
+          builder: (_, __) => const SharedPhotosScreen(myDaysOnly: true)),
+      GoRoute(
+          path: Routes.together, builder: (_, __) => const ActivitiesScreen()),
+      GoRoute(path: Routes.travel, builder: (_, __) => const TravelMapScreen()),
+      GoRoute(
+          path: Routes.chat,
+          builder: (_, state) => FlowersScreen(
+              openFlowers: state.uri.queryParameters['compose'] == 'flowers')),
+      GoRoute(
+          path: Routes.chatSettings,
+          builder: (_, __) => const ChatSettingsScreen()),
+      GoRoute(
+          path: Routes.events,
+          builder: (_, state) =>
+              EventsScreen(addOnOpen: state.uri.queryParameters['add'] == '1')),
+      GoRoute(
+          path: Routes.gifts,
+          builder: (_, state) =>
+              GiftsScreen(occasion: state.uri.queryParameters['occasion'])),
+      GoRoute(
+          path: Routes.activities,
+          redirect: (_, state) =>
+              state.uri.replace(path: Routes.together).toString()),
+      GoRoute(path: Routes.booth, builder: (_, __) => const BoothScreen()),
+      GoRoute(
+          path: Routes.reminders, builder: (_, __) => const RemindersScreen()),
+      GoRoute(path: Routes.finance, builder: (_, __) => const FinanceScreen()),
+      GoRoute(
+          path: Routes.insights, builder: (_, __) => const InsightsScreen()),
+      GoRoute(
+          path: Routes.chapters, builder: (_, __) => const ChaptersScreen()),
+      GoRoute(
+        path: Routes.chapter,
+        builder: (_, state) {
+          // A hand-typed or stale URL falls back to this month rather
+          // than crashing on a null parse.
+          final now = DateTime.now();
+          final year =
+              int.tryParse(state.pathParameters['year'] ?? '') ?? now.year;
+          final month =
+              int.tryParse(state.pathParameters['month'] ?? '') ?? now.month;
+          return ChapterDetailScreen(
+            year: year,
+            month: month.clamp(1, 12),
+          );
+        },
+      ),
+      GoRoute(
+          path: Routes.settings, builder: (_, __) => const SettingsScreen()),
+    ];
 
 // ── Splash — waits for auth to resolve ───────
 class SplashScreen extends ConsumerWidget {

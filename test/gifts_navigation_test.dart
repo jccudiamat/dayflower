@@ -160,11 +160,12 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('Gifts replaces Events in nav and fits narrow phones',
+  testWidgets('Gifts belongs to Together and fits narrow phones',
       (tester) async {
     for (final width in [390.0, 320.0]) {
       await _pump(tester, Routes.gifts, width: width);
-      expect(find.text('Gifts'), findsNWidgets(2));
+      expect(find.text('Gifts'), findsOneWidget);
+      expect(find.text('Together'), findsOneWidget);
       expect(find.text('Events'), findsNothing);
       expect(find.text('Gift us'), findsOneWidget);
       expect(tester.takeException(), isNull);

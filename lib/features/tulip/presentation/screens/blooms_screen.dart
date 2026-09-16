@@ -1,4 +1,3 @@
-import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,42 +6,31 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../app_router.dart';
-import '../../../../core/models/user_profile.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
+import '../../../../core/widgets/feature_cards.dart';
 import '../../../../core/widgets/flower_image.dart';
-import '../../../../core/widgets/user_avatar.dart';
-import '../../../home/data/mood_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
 
-/// The Flowers tab.
-///
-/// The tab used to open the conversation directly, which meant the one place
-/// named after the flowers never showed you any — every bloom either of you
-/// had ever sent was buried in a thread you had to scroll. This is where
-/// they live, with the conversation previewed at the top rather than hidden
-/// behind a row that said nothing.
+/// The Dayflower center, reusing the existing flowers and bouquet collection.
 class BloomsScreen extends ConsumerWidget {
-  const BloomsScreen({super.key});
+  const BloomsScreen({super.key, this.openBouquet});
+  final Future<bool> Function(Uri)? openBouquet;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userId = ref.watch(currentUserIdProvider);
     final messages = ref.watch(flowerMessagesProvider);
-    final unread = ref.watch(unreadMessageCountProvider);
     // The live row: a mood set on their phone should reach this card while
     // it is on screen, which is the whole reason `users` is in the realtime
     // publication. Falls back to the cached read on a cold start.
     final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
         ref.watch(partnerProfileProvider).valueOrNull;
     final theirName = partner?.petName ?? partner?.displayName ?? 'them';
-    final mood = ref.watch(partnerMoodProvider);
-    final chat = ref.watch(chatMessagesProvider).valueOrNull;
-    final last = (chat == null || chat.isEmpty) ? null : chat.first;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -77,20 +65,21 @@ class BloomsScreen extends ConsumerWidget {
                     delegate: SliverChildListDelegate.fixed([
                       const SizedBox(height: AppSpace.sm),
                       FeatureScreenHeader(
-                        title: 'Flowers',
+                        title: 'Dayflower',
                         subtitle: blooms.isEmpty && bouquets.isEmpty
                             ? 'Every bloom you send each other lands here.'
                             : '${blooms.length + bouquets.length} between you and $theirName',
                       ),
                       const SizedBox(height: AppSpace.md),
-                      _Conversation(
-                        partner: partner,
-                        name: theirName,
-                        mood: mood,
-                        last: last,
-                        mine: last != null && last.senderId == userId,
-                        unread: unread,
-                      ),
+                      FeatureRow(
+                        emoji: '🌷', color: AppColors.brand,
+                        title: 'Send a flower', blurb: 'Pick a bloom and add a note',
+                        onTap: () => context.push('${Routes.chat}?compose=flowers')),
+                      const SizedBox(height: AppSpace.xs),
+                      FeatureRow(
+                        emoji: '💐', color: AppColors.secondary,
+                        title: 'Create a bouquet', blurb: 'Opens the Dayflower bouquet creator',
+                        onTap: () => _createBouquet(context)),
                       if (bouquets.isNotEmpty) ...[
                         const SizedBox(height: AppSpace.md),
                         Text('FROM THE FLOWER SHOP', style: AppText.label()),
@@ -116,7 +105,7 @@ class BloomsScreen extends ConsumerWidget {
                     child: _Message(
                       title: 'Nothing picked yet',
                       body:
-                          'Open the conversation and send $theirName their first one.',
+                          'Send $theirName a flower. Your blooms will collect here.',
                     ),
                   )
                 else
@@ -148,162 +137,20 @@ class BloomsScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-/* ── The conversation, previewed ────────────────────── */
-/// Who it is with, what was said last, and — for your own last message —
-/// whether they have seen it. The row this replaces said only "Your
-/// conversation", so you had to open the thread to learn anything at all.
-class _Conversation extends StatelessWidget {
-  const _Conversation({
-    required this.partner,
-    required this.name,
-    required this.mood,
-    required this.last,
-    required this.mine,
-    required this.unread,
-  });
-
-  final UserProfile? partner;
-  final String name;
-
-  /// How they said they are feeling, or null when they have not said or it
-  /// has gone stale. Null is shown as **nothing** — see the title below.
-  final Mood? mood;
-
-  final FlowerMessage? last;
-  final bool mine;
-  final int unread;
-
-  @override
-  Widget build(BuildContext context) {
-    final message = last;
-    return Material(
-      color: AppColors.surface,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: InkWell(
-        onTap: () => context.go(Routes.chat),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        child: Container(
-          padding: const EdgeInsets.all(AppSpace.sm),
-          decoration: BoxDecoration(
-            border: Border.all(color: AppColors.border),
-            borderRadius: BorderRadius.circular(AppRadius.lg),
-          ),
-          child: Row(
-            children: [
-              UserAvatar(partner, size: 46),
-              const SizedBox(width: AppSpace.sm),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        // Their name, and how they are, as one sentence:
-                        // "Hubby is feeling loved 🥰". The name stays in the
-                        // heavier style so the row is still scannable as a
-                        // conversation rather than as a status.
-                        //
-                        // ⚠️ With no mood this is the bare name, not "is
-                        // feeling nothing" and not a placeholder inviting
-                        // them to set one. A mood is theirs to volunteer.
-                        Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              text: name,
-                              style: AppText.title(),
-                              children: mood == null
-                                  ? null
-                                  : [
-                                      TextSpan(
-                                        text: ' is feeling '
-                                            '${mood!.label.toLowerCase()} '
-                                            '${mood!.emoji}',
-                                        style: AppText.body(AppColors.muted),
-                                      ),
-                                    ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (message != null)
-                          Text(_when(message.sentAt), style: AppText.caption()),
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        // Only your own message carries a receipt. Whether
-                        // you have read theirs is a fact about you, not news.
-                        if (message != null && mine) ...[
-                          AppIcon(
-                            message.seenAt != null
-                                ? CupertinoIcons.checkmark_alt_circle_fill
-                                : CupertinoIcons.checkmark_alt_circle,
-                            size: 14,
-                            color: message.seenAt != null
-                                ? AppColors.secondary
-                                : AppColors.muted,
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                        Expanded(
-                          child: Text(
-                            message == null
-                                ? 'Say hello — nothing here yet'
-                                : message.previewFor(mine: mine),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: unread > 0 && !mine
-                                ? AppText.body(AppColors.ink)
-                                    .copyWith(fontWeight: FontWeight.w700)
-                                : AppText.body(AppColors.muted),
-                          ),
-                        ),
-                        if (unread > 0) ...[
-                          const SizedBox(width: AppSpace.xxs),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.brand,
-                              borderRadius:
-                                  BorderRadius.circular(AppRadius.pill),
-                            ),
-                            child: Text(
-                              '$unread',
-                              style: AppText.caption(Colors.white)
-                                  .copyWith(fontWeight: FontWeight.w700),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  Future<void> _createBouquet(BuildContext context) async {
+    try {
+      final uri = Uri.parse('https://mydayflower.com/bouquet');
+      final opened = await (openBouquet?.call(uri) ??
+          launchUrl(uri, mode: LaunchMode.externalApplication));
+      if (!opened) throw StateError('Could not open bouquet creator');
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Could not open the bouquet creator. Please try again.')));
+      }
+    }
   }
 
-  /// Time today, weekday this week, date beyond it. "2:31 PM" on something
-  /// from March tells you nothing.
-  static String _when(DateTime at) {
-    final now = DateTime.now();
-    final sameDay =
-        at.year == now.year && at.month == now.month && at.day == now.day;
-    if (sameDay) return DateFormat('h:mm a').format(at);
-    if (now.difference(at).inDays < 7) return DateFormat('EEE').format(at);
-    return DateFormat('d MMM').format(at);
-  }
 }
 
 /* ── Bouquets made on the website ───────────────────── */

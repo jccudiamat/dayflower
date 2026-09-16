@@ -1,35 +1,38 @@
 # Remaining section reorganization
 
-Branch: `codex/remaining-section-reorganization`, starting from verified release 77 (`611fa68`). The original checkout and the rejected older reorganization worktree are untouched. Home is complete and must remain unchanged.
+Branch: `codex/remaining-section-reorganization`, based on published build 77 (`611fa68`). The user requested reorganizing every remaining section together before refining them individually. This implementation replaces the earlier Chat-only preview stage. The original checkout and the rejected older reorganization worktree are untouched.
 
-Continue one section at a time, with visual review before implementation or publication. Current work is a Chat proposal rendered from the existing production conversation widgets with offline sample messages and a review-only navigation bar. No production source has changed in this stage.
+## Current implementation
 
-## Navigation target
+The bottom navigation is Home, Chat, the central Dayflower logo, Memories, Together. Existing colors, type, cards and feature screens are reused. Home content has no source changes; it only receives the shared updated navigation.
 
-Home, Chat, central Dayflower logo action, Memories, Together. Us and notifications remain in the approved Home header. Preserve the existing styling. The center's bouquet creation and persistent garden with daily care need their own review; the older draft's flower-picker shortcut is not an approved substitute for the garden.
+| Destination | Features and previous locations |
+| --- | --- |
+| Home | Approved greeting/My Day, heartbeat, mood, Events preview and widget previews. Bell and Us pill retained. |
+| Chat | Conversation formerly reached through Flowers. Existing calls, messages, quick flower picker, chat camera, replies and reactions retained. Partner header opens existing Chat settings and shared media. Navigation hides while typing or the flower picker is open. |
+| Dayflower center | Existing Flowers collection, including sent blooms and shared bouquet links. Send a flower opens the working Chat catalog. Create a bouquet opens the existing Dayflower website creator. The former conversation preview is removed because Chat now has its own tab. |
+| Memories | Booth & Strip and Chapters moved from Activities. Shared photos reuses the gallery from Chat settings. My Day photos is the same gallery filtered to photos shared to the widget, with a camera action explicitly targeting My Day. Finished strips remain in the booth history and shared-photo collection. |
+| Together | Events (also still linked by Home and Us), reminders and finances from Activities, Gifts from its old tab, and the existing Travel map screen. Fitness, async games and music retain their explicit Coming soon status. |
+| Us | Remains behind Home's pill, including couple details, relationship settings and the personal Settings link. |
 
-## Chat proposal
+## Scope boundaries
 
-| Feature | Current location | Proposed placement and reason |
-| --- | --- | --- |
-| Conversation | Flowers page, then conversation card | Open directly from Chat, removing the intermediate page for everyday communication. |
-| Voice and video calls | Conversation header | Keep beside the partner name, where the person being called is clear. |
-| Presence and partner identity | Conversation header | Keep here so availability is visible while messaging. |
-| Text, replies, reactions, receipts | Conversation | Keep existing behavior and appearance. |
-| Photo capture/upload | Composer camera | Keep chat media beside the message input; preserve the explicit chat destination. My Day remains a separate photo destination. |
-| Quick flower send | Composer flower picker | Keep the working shortcut; the shared garden is a separate section review. |
-| Shared media, calling usage, reaction preferences | Tap partner header, Chat settings | Retain secondary settings here without crowding the main thread. Memories can later provide another entry to the same shared media data. |
+This is feature placement, not a visual redesign. The central collection reuses existing flower data. No garden watering, growth or daily-care system was invented. The bouquet creator is the existing web tool, not a new native editor. All new views use real providers in production; preview identities and messages exist only in tests.
 
-Proposed navigation remains visible while reading; hide it when the keyboard or flower picker is open so composing retains available space. Keep the current back action until navigation/back-stack behavior is implemented and reviewed. Preserve existing deep links and notification-opened conversations.
+No release or merge into the original checkout has been performed. Review and refine each section before publishing.
 
-Review artifacts: `build/review/chat-filled.png` and `build/review/chat-empty.png`. Render harness: `test/chat_section_review_test.dart`; proposed nav is isolated under `test/review/` and is not shipped. These checks verify rendering, not live message delivery or calling.
+## Routing and return behavior
 
-## Subsequent section reviews
+- Existing camera, chat, notification, photo-booth, chapter, finance, event and reminder URLs are unchanged.
+- Old `/app/activities` redirects to Together; old `/app/blooms` redirects to Dayflower. Query strings are retained.
+- Tab selection maps legacy paths to their new owners. Booth and Chapters select Memories despite their old Activities paths. Events, gifts and finance select Together.
+- Feature entry points push a screen, preserving their origin. Back pops when possible and otherwise returns to the new parent section. Camera Close returns to its opener, with Home as the direct-link fallback.
+- App route registrations are shared with navigation tests so the checks exercise production builders and redirects.
 
-1. Chat review and implementation.
-2. Dayflower center: agree on bouquet creation, existing flower history, and the actual garden/care behavior before adding features or changing data.
-3. Memories: review photo booth, shared photos/strips and Chapters placement. Flower/bouquet history should have one clear primary home in the agreed garden.
-4. Together: review existing Events, reminders, finances, gifts and activity entries. Distinguish working features from placeholders; do not invent a working fitness or game implementation.
-5. Integrate the full navigation, check all old links and selected-tab states, then review before release.
+## Validation and previews
 
-No changes from this stage are published. Do not merge the old rejected draft wholesale.
+Automated checks cover real screen navigation, tab ownership, old links, return paths, the flower catalog, the unchanged Home interactions, narrow phones and large text. Existing tests for Gifts are updated to its Together placement. Phone screenshots are actual Flutter renders with offline data under `build/review/sections-{chat,dayflower,memories,together}.png`; the separate text conversation preview is `build/review/chat-filled.png`.
+
+Live calls, external bouquet sharing, map tile loading and device camera capture are not simulated as successfully completed by these tests. Their existing integrations remain in place.
+
+Validation completed: 414 tests passed in the full suite. Changed source and tests pass Flutter analysis with no issues. The Chat keyboard/navigation check also passes after verifying the draft remains visible when the keyboard closes. Home source is unchanged from build 77.

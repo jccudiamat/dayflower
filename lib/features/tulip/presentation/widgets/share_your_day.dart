@@ -568,7 +568,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                       _GlassButton(
                         icon: CupertinoIcons.xmark,
                         tooltip: 'Close',
-                        onTap: () => context.go(Routes.home),
+                        onTap: () => context.canPop() ? context.pop() : context.go(Routes.home),
                       ),
                       const SizedBox(width: AppSpace.xs),
                       // Named after where this shot is going, not after the

@@ -4,11 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../app_router.dart';
-import '../../features/tulip/data/flower_repository.dart';
-import '../../features/tulip/presentation/widgets/share_your_day.dart';
-import '../theme/app_colors.dart';
-import '../theme/design_tokens.dart';
+import 'package:dayflower/app_router.dart';
+import 'package:dayflower/features/tulip/data/flower_repository.dart';
+import 'package:dayflower/core/theme/app_colors.dart';
+import 'package:dayflower/core/theme/design_tokens.dart';
 
 /// Five destinations, and only the selected one says its name.
 ///
@@ -23,6 +22,7 @@ class AppBottomNav extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final location = GoRouterState.of(context).matchedLocation;
     final unread = ref.watch(unreadMessageCountProvider);
+    final section = sectionForLocation(location);
 
     return SafeArea(
       top: false,
@@ -43,57 +43,50 @@ class AppBottomNav extends ConsumerWidget {
               _NavItem(
                 icon: CupertinoIcons.house_fill,
                 label: 'Home',
-                // startsWith, not ==: the activity feed is nested under
-                // Home and the tab has to stay lit inside it.
-                selected: location.startsWith(Routes.home) ||
-                    location == Routes.events,
+                selected: section == AppSection.home,
                 onTap: () => context.go(Routes.home),
               ),
               _NavItem(
-                icon: Icons.local_florist_rounded,
-                label: 'Flowers',
-                // Opens the Flowers page, not the thread. Going straight to
-                // the conversation left nowhere to look back at what the two
-                // of you had sent — the tab named after the flowers never
-                // showed you any.
-                //
-                // Stays lit inside the conversation too: the thread is a
-                // child of this tab even though its path is not.
-                selected:
-                    location.startsWith(Routes.blooms) || location == Routes.chat,
+                icon: CupertinoIcons.chat_bubble_2_fill,
+                label: 'Chat',
+                selected: section == AppSection.chat,
                 badge: location == Routes.chat ? 0 : unread,
-                onTap: () => context.go(Routes.blooms),
+                onTap: () => context.go(Routes.chat),
               ),
+              Expanded(
+                  child: Semantics(
+                      label: 'Dayflower',
+                      selected: section == AppSection.dayflower,
+                      button: true,
+                      child: Tooltip(
+                          message: 'Dayflower',
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            onTap: () =>
+                                context.go(Routes.dayflower),
+                            child: SizedBox(
+                                height: 52,
+                                child: Center(
+                                    child: ClipRRect(
+                                  borderRadius:
+                                      BorderRadius.circular(AppRadius.sm),
+                                  child: Image.asset('assets/images/logo.png',
+                                      width: 42,
+                                      height: 42,
+                                      excludeFromSemantics: true),
+                                ))),
+                          )))),
               _NavItem(
-                icon: CupertinoIcons.camera_fill,
-                label: 'Camera',
-                // `== flowers`, not `startsWith`: the thread is nested under
-                // this path, and startsWith would light both tabs at once.
-                selected: location == Routes.flowers,
-                // Each door declares where a photo taken behind it should
-                // land — the chat sets `chat` the same way. The provider is
-                // global and sticky, so without this the camera keeps
-                // whatever the last entry point chose and the destination
-                // silently depends on where you have been.
-                onTap: () {
-                  ref.read(dayPhotoTargetProvider.notifier).state =
-                      DayPhotoTarget.widget;
-                  context.go(Routes.flowers);
-                },
-              ),
-              _NavItem(
-                icon: CupertinoIcons.gift_fill,
-                label: 'Gifts',
-                selected: location == Routes.gifts,
-                onTap: () => context.go(Routes.gifts),
+                icon: CupertinoIcons.photo_on_rectangle,
+                label: 'Memories',
+                selected: section == AppSection.memories,
+                onTap: () => context.go(Routes.memories),
               ),
               _NavItem(
                 icon: CupertinoIcons.square_grid_2x2_fill,
-                label: 'Activities',
-                // startsWith, not ==: reminders, finance and chapters are
-                // sub-routes and the tab has to stay lit inside them.
-                selected: location.startsWith(Routes.activities),
-                onTap: () => context.go(Routes.activities),
+                label: 'Together',
+                selected: section == AppSection.together,
+                onTap: () => context.go(Routes.together),
               ),
             ],
           ),
@@ -205,4 +198,24 @@ class _NavItem extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Tab ownership is independent of historic deep-link paths.
+enum AppSection { home, chat, dayflower, memories, together }
+
+AppSection sectionForLocation(String location) {
+  final path = Uri.parse(location).path;
+  bool inside(String root) => path == root || path.startsWith('$root/');
+  if (inside(Routes.chat)) return AppSection.chat;
+  if (inside(Routes.dayflower) || inside(Routes.blooms)) {
+    return AppSection.dayflower;
+  }
+  if (inside(Routes.memories) || inside(Routes.booth) || inside(Routes.chapters)) {
+    return AppSection.memories;
+  }
+  if (inside(Routes.together) || inside(Routes.activities) ||
+      inside(Routes.events) || inside(Routes.gifts)) {
+    return AppSection.together;
+  }
+  return AppSection.home;
 }

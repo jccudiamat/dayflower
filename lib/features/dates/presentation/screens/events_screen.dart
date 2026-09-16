@@ -424,7 +424,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
                   if (context.canPop()) {
                     context.pop();
                   } else {
-                    context.go(Routes.us);
+                    context.go(Routes.together);
                   }
                 }),
                 const SizedBox(width: AppSpace.xs),

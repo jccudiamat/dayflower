@@ -9,6 +9,7 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../calls/data/call_repository.dart';
 import '../../../calls/domain/call.dart';
 import '../../../calls/domain/call_notifier.dart';
@@ -23,7 +24,7 @@ import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
 
-/// The Flowers tab — the couple's conversation.
+/// The Chat tab: the couple's conversation.
 ///
 /// It reads as a messaging thread because that is what it now is: flowers
 /// and text share one table and one timeline. The flower button left of the
@@ -34,7 +35,8 @@ import '../widgets/flower_catalog_panel.dart';
 /// by a one-per-day DB index. Migration 0009 removed the index; what made
 /// a flower special was never the scarcity, it was the artwork and the note.
 class FlowersScreen extends ConsumerStatefulWidget {
-  const FlowersScreen({super.key});
+  const FlowersScreen({super.key, this.openFlowers = false});
+  final bool openFlowers;
 
   @override
   ConsumerState<FlowersScreen> createState() => _FlowersScreenState();
@@ -76,10 +78,20 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   @override
   void initState() {
     super.initState();
+    _panelOpen = widget.openFlowers;
     _focus.addListener(() {
       // Tapping the field means "I want the keyboard", so the drawer yields.
       if (_focus.hasFocus && _panelOpen) setState(() => _panelOpen = false);
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant FlowersScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.openFlowers && !oldWidget.openFlowers) {
+      _focus.unfocus();
+      _panelOpen = true;
+    }
   }
 
   @override
@@ -262,11 +274,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      // No tab bar in the thread, even though Flowers is a top-level tab:
-      // it would sit between the composer and the keyboard and make the
-      // conversation read as a form pinned inside a tab. The Camera tab is
-      // full-bleed for the same reason. The header's back chevron is the
-      // way out, and it goes Home like the camera's × does.
+      bottomNavigationBar: keyboardUp || _panelOpen ? null : const AppBottomNav(),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -285,7 +293,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             // Nothing sits below the composer/drawer any more, so whichever
             // is bottom-most has to clear the gesture bar itself. With the
             // keyboard up the keyboard already covers it.
-            if (!keyboardUp)
+            if (!keyboardUp && _panelOpen)
               SizedBox(height: MediaQuery.paddingOf(context).bottom),
           ],
         ),

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import '../../../../app_router.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ⚠️ latlong2 exports its own Path (a route between points), which shadows
@@ -48,11 +51,12 @@ class TravelMapScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      bottomNavigationBar: const AppBottomNav(),
       appBar: AppBar(
         backgroundColor: AppColors.background,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: IosBackButton(onTap: () => Navigator.of(context).maybePop()),
+        leading: IosBackButton(onTap: () => context.canPop() ? context.pop() : context.go(Routes.together)),
         title: Text('Travel map', style: AppText.title()),
         centerTitle: false,
       ),

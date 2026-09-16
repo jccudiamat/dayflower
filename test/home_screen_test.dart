@@ -6,6 +6,12 @@ import 'package:dayflower/features/greetings/presentation/monthsary_envelope.dar
 import 'dart:ui' as ui;
 
 import 'package:dayflower/app_router.dart';
+import 'package:dayflower/core/widgets/app_bottom_nav.dart';
+import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
+import 'package:dayflower/features/tulip/data/reaction_repository.dart';
+import 'package:dayflower/features/tulip/presentation/screens/chat_settings_screen.dart';
+import 'package:dayflower/features/finance/presentation/screens/finance_screen.dart';
+import 'package:dayflower/features/reminders/presentation/screens/reminders_screen.dart';
 import 'package:dayflower/features/activities/presentation/screens/activities_screen.dart';
 import 'package:dayflower/features/tulip/presentation/screens/flowers_screen.dart';
 import 'package:dayflower/features/tulip/presentation/screens/blooms_screen.dart';
@@ -58,6 +64,7 @@ var _boundary = GlobalKey();
 Future<GoRouter> _pump(WidgetTester tester, String route,
     {double width = 390,
     bool hasStart = true,
+    bool productionRoutes = false,
     bool filled = false,
     double height = 844,
     double textScale = 1,
@@ -73,7 +80,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final router = GoRouter(initialLocation: route, routes: [
+  final router = GoRouter(initialLocation: route, routes: productionRoutes ? appFeatureRoutes() : [
     GoRoute(
         path: Routes.activities, builder: (_, __) => const ActivitiesScreen()),
     GoRoute(path: Routes.chat, builder: (_, __) => const FlowersScreen()),
@@ -109,6 +116,8 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
   });
   await tester.pumpWidget(ProviderScope(
     overrides: [
+      flowerRepositoryProvider.overrideWithValue(_PreviewFlowers()),
+      reactionsProvider.overrideWith((ref) => Stream.value({})),
       pairGreetingProvider.overrideWith((ref) async => null),
       homeClockProvider.overrideWith((ref) => Stream.value(_now)),
       heartbeatRepositoryProvider.overrideWithValue(_beats),
@@ -135,9 +144,19 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       monthlyChaptersProvider.overrideWith((ref) => Stream.value([])),
       chapterMomentsProvider.overrideWith((ref) => Stream.value([])),
       remindersProvider.overrideWith((ref) => Stream.value([])),
+      financeRatesProvider.overrideWith((ref) => Stream.value(FxTable.empty)),
+      financeMainCurrencyProvider.overrideWith((ref) => Stream.value('PHP')),
       financeAccountsProvider.overrideWith((ref) => Stream.value([])),
+      financeEntriesProvider.overrideWith((ref) => Stream.value([])),
+      financeBudgetsProvider.overrideWith((ref) => Stream.value([])),
+      financeRecurringProvider.overrideWith((ref) => Stream.value([])),
+      financeHoldingsProvider.overrideWith((ref) => Stream.value([])),
+      financeGoalsProvider.overrideWith((ref) => Stream.value([])),
       reunionProvider.overrideWith((ref) => Stream.value(null)),
-      flowerMessagesProvider.overrideWith((ref) => Stream.value([])),
+      flowerMessagesProvider.overrideWith((ref) => Stream.value(
+        productionRoutes && filled ? [_mine, _theirs, FlowerMessage(
+          id: 'flower-preview', pairId: 'preview', senderId: 'preview-b',
+          flowerType: 'classic_tulip', note: 'Thinking of you', sentAt: _now)] : [])),
       openStripsProvider.overrideWith((ref) => Stream.value([])),
       partnerLastActiveProvider.overrideWith((ref) async => null),
       partnerProfileStreamProvider.overrideWith((ref) => Stream.value(null)),
@@ -297,6 +316,101 @@ void main() {
   });
   tearDown(() {
     debugNetworkImageHttpClientProvider = null;
+  });
+
+
+  Finder tab(String label) => find.byWidgetPredicate((w) =>
+      w is Semantics && w.properties.button == true && w.properties.label == label);
+
+  _homeTest('Reorganized roots render at phone widths and large text', (tester) async {
+    for (final (width, scale) in [(390.0, 1.0), (320.0, 1.0), (320.0, 2.0)]) {
+      for (final (route, name) in [
+        (Routes.chat, 'chat'), (Routes.dayflower, 'dayflower'),
+        (Routes.memories, 'memories'), (Routes.together, 'together')]) {
+        await _pump(tester, route, width: width, textScale: scale,
+            productionRoutes: true, filled: true);
+        await tester.runAsync(() async => Future<void>.delayed(const Duration(milliseconds: 400)));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: '$name $width $scale');
+        expect(find.byType(AppBottomNav), findsOneWidget);
+        for (final label in ['Home', 'Chat', 'Dayflower', 'Memories', 'Together']) {
+          expect(tab(label), findsOneWidget);
+        }
+        if (width == 390 && scale == 1) await _screenshot(tester, 'sections-$name');
+        await tester.pumpWidget(const SizedBox());
+      }
+    }
+  });
+
+  _homeTest('Five tabs and legacy roots reach the correct sections', (tester) async {
+    final router = await _pump(tester, Routes.home, productionRoutes: true);
+    for (final (label, path) in [
+      ('Chat', Routes.chat), ('Dayflower', Routes.dayflower),
+      ('Memories', Routes.memories), ('Together', Routes.together), ('Home', Routes.home)]) {
+      await tester.tap(tab(label));
+      await tester.pumpAndSettle();
+      expect(router.routeInformationProvider.value.uri.path, path);
+      expect((tester.widget(tab(label)) as Semantics).properties.selected, isTrue);
+      expect(tester.takeException(), isNull);
+    }
+    router.go('${Routes.activities}?from=old-link');
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, Routes.together);
+    expect(router.routeInformationProvider.value.uri.queryParameters['from'], 'old-link');
+    router.go(Routes.blooms);
+    await tester.pumpAndSettle();
+    expect(router.routeInformationProvider.value.uri.path, Routes.dayflower);
+  });
+
+  _homeTest('Memories opens existing tools and returns to the same hub', (tester) async {
+    final router = await _pump(tester, Routes.memories, productionRoutes: true);
+    for (final (label, path, type) in [
+      ('Booth & Strip', Routes.booth, BoothScreen),
+      ('Shared photos', Routes.photos, SharedPhotosScreen),
+      ('My Day photos', Routes.myDays, SharedPhotosScreen),
+      ('Chapters', Routes.chapters, ChaptersScreen)]) {
+      await _reveal(tester, find.text(label));
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path);
+      expect(find.byType(type), findsOneWidget);
+      expect((tester.widget(tab('Memories')) as Semantics).properties.selected, isTrue);
+      expect(tester.takeException(), isNull);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(MemoriesScreen), findsOneWidget);
+    }
+  });
+
+  _homeTest('Together opens persisted tools and Dayflower opens the flower picker', (tester) async {
+    final router = await _pump(tester, Routes.together, productionRoutes: true);
+    for (final (label, path, type) in [
+      ('Events', Routes.events, EventsScreen),
+      ('Reminders', Routes.reminders, RemindersScreen),
+      ('Finances', Routes.finance, FinanceScreen),
+      ('Gifts', Routes.gifts, GiftsScreen)]) {
+      await _reveal(tester, find.text(label));
+      await tester.tap(find.text(label));
+      await tester.pumpAndSettle();
+      expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path);
+      expect(find.byType(type), findsOneWidget);
+      expect((tester.widget(tab('Together')) as Semantics).properties.selected, isTrue);
+      expect(tester.takeException(), isNull);
+      router.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(ActivitiesScreen), findsOneWidget);
+    }
+    await tester.tap(tab('Dayflower'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Send a flower'));
+    await tester.pumpAndSettle();
+    expect(GoRouterState.of(tester.element(find.byType(FlowersScreen))).uri.queryParameters['compose'], 'flowers');
+    expect(find.byType(FlowersScreen), findsOneWidget);
+    expect(find.byType(AppBottomNav), findsNothing);
+    expect(find.byTooltip('Keyboard'), findsOneWidget);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(BloomsScreen), findsOneWidget);
   });
 
   _homeTest(
@@ -517,4 +631,12 @@ void _homeTest(String description, WidgetTesterCallback body) {
       debugNetworkImageHttpClientProvider = null;
     }
   });
+}
+
+class _PreviewFlowers extends FlowerRepository {
+  _PreviewFlowers() : super(SupabaseClient('https://example.invalid', 'offline',
+      authOptions: const AuthClientOptions(autoRefreshToken: false)));
+  @override
+  Future<String> signedPhotoUrl(String path, {Duration ttl = const Duration(hours: 1)}) async =>
+      'https://preview.invalid/$path';
 }
