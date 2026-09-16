@@ -82,3 +82,19 @@
   .home-footer nav { justify-content: center; }
 }
 @media (max-width: 380px) { .home-tools { grid-template-columns: 1fr; } .home-tool-top { min-height: 0; display: flex; } .home-tool h3 { margin-top: 20px; } .home-tool-label { min-height: 0; } .home-hero-actions { gap: 12px; } }
+
+/* A picture at the top of each tool card. One height drives the band and both
+   fits, so they cannot drift apart.
+
+   The sizing lives here rather than in utility classes on the element: a
+   next/image carrying width/height props resolved to 361x361 inside a 112px
+   band, leaving object-fit nothing to do while overflow:hidden did the
+   cropping. Percentage max-height did not rescue it either, because a
+   percentage against a centred grid item's track does not resolve. Explicit
+   pixels do. */
+.home-tool-thumb { --band: 112px; display: flex; align-items: center; justify-content: center; overflow: hidden; height: var(--band); margin-top: 16px; border-radius: 12px; background: #fffdf8b3; }
+.home-tool-art.is-cover { width: 100%; height: var(--band); object-fit: cover; }
+.home-tool-art.is-contain { width: auto; height: calc(var(--band) - 18px); max-width: 100%; object-fit: contain; }
+.home-tool-strip { display: flex; gap: 4px; padding: 5px; border-radius: 6px; background: #fffdf8; box-shadow: 0 6px 16px #1c102420; }
+.home-tool-strip span { display: block; overflow: hidden; width: 46px; height: 58px; border-radius: 3px; }
+@media (max-width: 760px) { .home-tool-thumb { --band: 96px; } }

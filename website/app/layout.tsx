@@ -71,7 +71,7 @@ export default async function RootLayout({
             `connect-src 'self'` already covers them.
 
             If a future version switches to rendering the tag server-side,
-            this goes silently dead rather than erroring — check for the
+            this goes silently dead rather than erroring, so check for the
             script in the DOM before trusting an empty dashboard. */}
         <Analytics />
       </body>

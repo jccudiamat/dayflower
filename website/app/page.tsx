@@ -6,6 +6,7 @@ import Link from "next/link";
 import WaitlistForm from "./components/WaitlistForm";
 import "./home.css";
 import { JsonLd, faqPage, ORGANISATION, WEBSITE, url } from "./lib/seo";
+import { ToolThumb } from "./components/Examples";
 
 export const metadata: Metadata = {
   // ⚠️ Deliberately the umbrella, not a keyword. Each tool page owns its own
@@ -50,7 +51,7 @@ export default async function Home() {
       <div className="home-letter"><p className="home-letter-to note">For your favorite person.</p><Image src="/bouquet/reveal-envelope.webp" alt="An ivory envelope sealed with a burgundy heart and a sprig of flowers" width={512} height={512} priority className="home-letter-art" /><p className="home-letter-note">A little something can mean everything.</p><span className="home-letter-signature">with love, Dayflower</span></div>
     </section>
     <section id="explore" className="home-explore" aria-labelledby="explore-title"><div className="home-section-intro"><div><p className="home-eyebrow">HERE FOR THE LITTLE GESTURES</p><h2 id="explore-title">What will you make of today?</h2></div><p>Make something, find something, or plan a moment together. It all starts here.</p></div>
-      <div className="home-tools">{tools.map(tool => <article key={tool.name} className={`home-tool ${tool.className}`}><div className="home-tool-top"><span>{tool.number}</span><p>{tool.note}</p></div><h3>{tool.name}</h3><p className="home-tool-label">{tool.label}</p><p className="home-tool-description">{tool.description}</p><Link href={tool.href}>{tool.action}<span aria-hidden="true">↗</span></Link></article>)}</div>
+      <div className="home-tools">{tools.map(tool => <article key={tool.name} className={`home-tool ${tool.className}`}><div className="home-tool-top"><span>{tool.number}</span><p>{tool.note}</p></div><ToolThumb tool={tool.name} /><h3>{tool.name}</h3><p className="home-tool-label">{tool.label}</p><p className="home-tool-description">{tool.description}</p><Link href={tool.href}>{tool.action}<span aria-hidden="true">↗</span></Link></article>)}</div>
     </section>
     <ProductTour />
     <section className="home-questions" aria-labelledby="questions-title"><div><p className="home-eyebrow">A FEW THINGS TO KNOW</p><h2 id="questions-title">The website now.<br />The app to come.</h2></div><div>{questions

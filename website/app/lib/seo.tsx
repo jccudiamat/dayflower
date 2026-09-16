@@ -42,7 +42,7 @@ export const WEBSITE = {
   //
   // ⚠️ No `alternateName` here, deliberately, unlike the Organization above.
   // Google picks between the two, and the alternate we want for query
-  // matching is literally "mydayflower" — offering it on this node would put
+  // matching is literally "mydayflower", so offering it here would put
   // the domain straight back in the running for the label it replaces.
   name: SITE_NAME,
   url: SITE,
