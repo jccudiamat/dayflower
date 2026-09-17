@@ -66,7 +66,7 @@
   .home-hero h1 { font-size: clamp(33px, 8.5vw, 48px); }
   .home-hero-copy > p:not(.home-eyebrow):not(.home-availability) { font-size: 16px; }
   .home-letter { width: min(100%, 340px); margin: auto; padding-top: 25px; }
-  .home-letter-art { max-width: 250px; margin-block: -15px -25px; }
+  .home-letter-art { max-width: 250px; margin-block: 0 -25px; }
   .home-section-intro { display: block; }
   .home-section-intro > p { margin-top: 16px; max-width: 100%; }
   .home-explore { padding: 20px 18px 45px; scroll-margin-top: 120px; }
