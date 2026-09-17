@@ -19,7 +19,7 @@ The bottom navigation is Home, Chat, the central Dayflower logo, Memories, Toget
 
 This is feature placement, not a visual redesign. The central collection reuses existing flower data. No garden watering, growth or daily-care system was invented. The bouquet creator is the existing web tool, not a new native editor. All new views use real providers in production; preview identities and messages exist only in tests.
 
-The user approved publication on 2026-09-17. Preparing build 80; the original checkout remains untouched. Further visual refinements can be reviewed section by section.
+The user approved publication on 2026-09-17. Published build 80; the original checkout remains untouched. Further visual refinements can be reviewed section by section.
 
 ## Routing and return behavior
 
@@ -50,3 +50,5 @@ Validation completed: 414 tests passed in the full suite. Changed source and tes
 Preflight found live build 79, a rollback to the same Home build 77 source (611fa68), with only its version stamp changed. Build 80 adds the approved reorganization and navbar refinements on that source. Unrelated work in the original checkout is not part of this release.
 
 The first release APK exceeded the 50 MiB upload ceiling by 127,201 bytes. Reused the already committed WebP version of the existing monthsary artwork (from 0dba55f) and updated its asset reference; no Home content or greeting behavior changed. Both greeting tests passed after the asset switch.
+
+Published and verified 2026-09-17T06:09:48.681909Z: version 1.0.0+80, dayflower-80-arm64-v8a.apk, 51,006,270 bytes. Public download SHA-256 matches the local APK: 6037e8349b3597f5abb550792068516feb478484688c32593393a867977ed114. Android package is com.dayflower.app; signing certificate matches prior releases. Previous builds retained. Release source remains on the separate reorganization branch; original checkout untouched.
