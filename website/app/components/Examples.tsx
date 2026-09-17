@@ -124,7 +124,7 @@ export function ExampleBouquet() {
  * rather than as a deliberate choice.
  */
 export function ToolThumb({ tool }: { tool: string }) {
-  if (tool === "Booth") {
+  if (tool === "Photo booth") {
     // Two photos side by side: the booth's couple layout, which is the one
     // thing here you cannot show with a single picture.
     return (
@@ -140,7 +140,9 @@ export function ToolThumb({ tool }: { tool: string }) {
   // cover for the photographic scenes, which crop happily; contain for a
   // cut-out object, which would lose its edges.
   const art: Record<string, { src: string; alt: string; fit: "contain" | "cover" }> = {
-    Bouquet: { src: "/flowers/bouquet.webp", alt: "An illustrated bouquet of tulips and daisies", fit: "cover" },
+    // A crop of the bouquet sample further down this file, so the card
+    // promises the thing the page actually delivers.
+    Bouquet: { src: "/models/bouquet-thumb.webp", alt: "A bouquet of daisies, tulips and roses with a photo tucked in among the stems", fit: "cover" },
     // ⚠️ Our own illustration, not a listing photo from the catalogue. Those
     // are sellers' images: several carry burned-in shop branding and one has
     // photographs of real people in it. Fine in the catalogue, where the page
