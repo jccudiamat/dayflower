@@ -1,6 +1,6 @@
 # Memories and photo booth review
 
-Branch: `codex/memories-photobooth`, based on published build 80. The user approved publication after reviewing the preview. Preparing build 81. The original checkout and Home screen source are untouched.
+Branch: `codex/memories-photobooth`, based on published build 80. The user approved publication after reviewing the preview. Published as build 81. The original checkout and Home screen source are untouched.
 
 ## Experience
 
@@ -40,3 +40,7 @@ Built-in image-generation tool used for an original booth illustration. Project 
 Final generation prompt:
 
 > Use case: product-mockup. Asset type: original photobooth entrance artwork for a couples mobile app, not a UI screenshot. A charming realistic vintage photo booth with rounded walnut wood cabinet, softly folded dusty pink velvet curtain partly open showing a small cream seat, brass details, small camera lens and print slot on the right pillar. A blank cream illuminated sign at top with NO text. Warm cozy studio light, sophisticated tactile materials, understated romantic feeling. Entire booth visible, front view with tiny perspective, centered on a solid pale blush-lavender background #F8F4FC with a soft grounding shadow. Portrait 2:3 composition, booth fills 90 percent height, no people, no text, no watermarks, no interface buttons. High quality product render with realistic wood grain, fabric and metal. Original design inspired by classic analog photo booths.
+
+## Publication
+
+Verified 2026-09-17T11:37:30.171581Z: version 1.0.0+81, dayflower-81-arm64-v8a.apk, 51404162 bytes. Public download SHA-256 matches the local APK: 61f016a1dd5e775095ed3e06311c21007da5f77a3d9fb45f6366b11ddd38943a. Android package com.dayflower.app, arm64-v8a, signing certificate unchanged from build 80. Existing releases retained. Physical device checks remain unverified as disclosed above. Original checkout remains untouched.
