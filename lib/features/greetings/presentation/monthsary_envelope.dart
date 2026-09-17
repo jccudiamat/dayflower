@@ -42,7 +42,7 @@ class _MonthsaryEnvelopeState extends ConsumerState<MonthsaryEnvelope> {
           tooltip: 'Close greeting', onPressed: () => Navigator.pop(context), icon: const AppIcon(Icons.close))),
         if (card['artwork'] == 'monthsary_53')
           Semantics(label: card['title'] as String, image: true,
-            child: Image.asset('assets/images/monthsary_53.png', excludeFromSemantics: true)),
+            child: Image.asset('assets/images/monthsary_53.webp', excludeFromSemantics: true)),
         Padding(padding: const EdgeInsets.fromLTRB(24, 20, 24, 28), child: Column(children: [
           Text(card['title'] as String, textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 25, height: 1.2, fontWeight: FontWeight.bold, color: Color(0xff9d2540))),

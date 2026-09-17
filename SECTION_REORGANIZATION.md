@@ -19,7 +19,7 @@ The bottom navigation is Home, Chat, the central Dayflower logo, Memories, Toget
 
 This is feature placement, not a visual redesign. The central collection reuses existing flower data. No garden watering, growth or daily-care system was invented. The bouquet creator is the existing web tool, not a new native editor. All new views use real providers in production; preview identities and messages exist only in tests.
 
-No release or merge into the original checkout has been performed. Review and refine each section before publishing.
+The user approved publication on 2026-09-17. Preparing build 80; the original checkout remains untouched. Further visual refinements can be reviewed section by section.
 
 ## Routing and return behavior
 
@@ -43,4 +43,10 @@ Validation completed: 414 tests passed in the full suite. Changed source and tes
 - Chat never displays the bottom navbar. Its back action and bottom safe-area spacing remain available.
 - Tapping the current section scrolls its existing content to the top. Tapping its tab from a nested screen returns to the section root and scrolls to the top. Controllers are scoped per section and disposed with their provider. Reduced-motion settings skip the animation. This does not refresh network data or reset a form.
 - Home content is unchanged; root route wrappers supply the scroll controllers.
-- Latest validation: 15 focused navigation, layout and interaction tests passed, and analysis reported no issues. Previews were regenerated and visually checked. These refinements are not deployed.
+- Latest validation: 15 focused navigation, layout and interaction tests passed, and analysis reported no issues. Previews were regenerated and visually checked. These refinements are included in the approved build 80 release.
+
+## Build 80 publication
+
+Preflight found live build 79, a rollback to the same Home build 77 source (611fa68), with only its version stamp changed. Build 80 adds the approved reorganization and navbar refinements on that source. Unrelated work in the original checkout is not part of this release.
+
+The first release APK exceeded the 50 MiB upload ceiling by 127,201 bytes. Reused the already committed WebP version of the existing monthsary artwork (from 0dba55f) and updated its asset reference; no Home content or greeting behavior changed. Both greeting tests passed after the asset switch.
