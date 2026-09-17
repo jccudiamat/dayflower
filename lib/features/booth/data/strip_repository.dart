@@ -177,6 +177,7 @@ class StripRepository {
       bytes: composed,
       fileExtension: 'jpg',
       note: strip.style.name,
+      toWidget: !strip.template.startsWith('studio_'),
     );
 
     await _client.from('photo_strips').update({
@@ -226,7 +227,7 @@ final myOpenStripProvider = Provider.autoDispose<PhotoStrip?>((ref) {
   final userId = ref.watch(currentUserIdProvider);
   final strips = ref.watch(openStripsProvider).valueOrNull ?? const [];
   for (final s in strips) {
-    if (s.aUser == userId && s.bPath == null) return s;
+    if (s.aUser == userId && s.bPath == null && !s.template.startsWith('studio_')) return s;
   }
   return null;
 });
@@ -236,7 +237,8 @@ final stripAwaitingMeProvider = Provider.autoDispose<PhotoStrip?>((ref) {
   final userId = ref.watch(currentUserIdProvider);
   final strips = ref.watch(openStripsProvider).valueOrNull ?? const [];
   for (final s in strips) {
-    if (s.aUser != userId && s.bPath == null) return s;
+    // Multi-shot invitations are completed inside the studio, not My Day's single-shot camera.
+    if (s.aUser != userId && s.bPath == null && !s.template.startsWith('studio_')) return s;
   }
   return null;
 });

@@ -1,3 +1,4 @@
+import 'package:dayflower/features/booth/presentation/screens/booth_archive_screen.dart';
 import 'package:dayflower/app_router.dart';
 import 'package:dayflower/core/models/pair.dart';
 import 'package:dayflower/core/models/user_profile.dart';
@@ -8,7 +9,6 @@ import 'package:dayflower/features/auth/data/auth_repository.dart';
 import 'package:dayflower/features/auth/presentation/screens/login_screen.dart';
 import 'package:dayflower/features/booth/data/strip_repository.dart';
 import 'package:dayflower/features/booth/domain/strip_templates.dart';
-import 'package:dayflower/features/booth/presentation/screens/booth_screen.dart';
 import 'package:dayflower/features/dates/data/event_repository.dart';
 import 'package:dayflower/features/dates/presentation/screens/events_screen.dart';
 import 'package:dayflower/features/gifts/data/gift_favorites_repository.dart';
@@ -245,7 +245,7 @@ void main() {
     final repo = RecordingStrips();
     final photo = Uint8List.fromList(img.encodePng(img.Image(width: 30, height: 40)));
     final invite = PhotoStrip(id: 'invite', pairId: 'pair', template: 'classic', aUser: 'b', aPath: 'pair/partner.jpg', createdAt: DateTime(2026));
-    await pumpScreen(tester, const BoothScreen(), [
+    await pumpScreen(tester, const BoothArchiveScreen(legacyTools: true), [
       stripRepositoryProvider.overrideWithValue(repo),
       boothPhotoPickerProvider.overrideWithValue((_) async => photo),
       openStripsProvider.overrideWith((ref) => Stream.value([invite])),
@@ -261,7 +261,7 @@ void main() {
   });
 
   testWidgets('canceling the image picker does not invent a selected photo', (tester) async {
-    await pumpScreen(tester, const BoothScreen(), [
+    await pumpScreen(tester, const BoothArchiveScreen(legacyTools: true), [
       boothPhotoPickerProvider.overrideWithValue((_) async => null),
     ]);
     await tapVisible(tester, find.text('Upload photo'));
@@ -277,7 +277,7 @@ void main() {
       final repo = RecordingStrips();
       final photo =
           Uint8List.fromList(img.encodePng(img.Image(width: 30, height: 40)));
-      await pumpScreen(tester, const BoothScreen(), [
+      await pumpScreen(tester, const BoothArchiveScreen(legacyTools: true), [
         stripRepositoryProvider.overrideWithValue(repo),
         boothPhotoPickerProvider.overrideWithValue((_) async => photo),
       ]);

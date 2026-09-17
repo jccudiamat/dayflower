@@ -285,6 +285,9 @@ class _PhotoResponse extends Stream<List<int>> implements HttpClientResponse {
 }
 
 Future<void> _reveal(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    await tester.scrollUntilVisible(finder, 280, scrollable: find.byType(Scrollable).first);
+  }
   await Scrollable.ensureVisible(tester.element(finder), alignment: .35);
   await tester.pumpAndSettle();
 }
@@ -415,6 +418,24 @@ void main() {
     expect(router.routeInformationProvider.value.uri.path, Routes.dayflower);
   });
 
+  _homeTest('Memories visual previews at phone widths and large text', (tester) async {
+    for (final (width, scale) in [(390.0, 1.0), (320.0, 2.0)]) {
+      await _pump(tester, Routes.memories, width: width, textScale: scale,
+          height: 844, productionRoutes: true, filled: true);
+      await tester.pumpAndSettle();
+      await _screenshot(tester, 'memories-new-${width.toInt()}');
+      await _reveal(tester, find.text('Chapters'));
+      expect(tester.takeException(), isNull);
+    }
+    await _pump(tester, Routes.memories, width: 390, height: 1800,
+        productionRoutes: true, filled: true);
+    await tester.pumpAndSettle();
+    await _screenshot(tester, 'memories-new-full');
+    await _pump(tester, Routes.booth, productionRoutes: true);
+    await tester.pumpAndSettle();
+    await _screenshot(tester, 'booth-entrance');
+  });
+
   _homeTest('Memories opens existing tools and returns to the same hub', (tester) async {
     final router = await _pump(tester, Routes.memories, productionRoutes: true);
     for (final (label, path, type) in [
@@ -427,7 +448,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path);
       expect(find.byType(type), findsOneWidget);
-      expect((tester.widget(tab('Memories')) as Semantics).properties.selected, isTrue);
+      if (type == BoothScreen) {
+        expect(find.byType(AppBottomNav), findsNothing);
+      } else {
+        expect((tester.widget(tab('Memories')) as Semantics).properties.selected, isTrue);
+      }
       expect(tester.takeException(), isNull);
       router.pop();
       await tester.pumpAndSettle();

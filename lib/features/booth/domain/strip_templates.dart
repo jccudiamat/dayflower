@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'booth_design.dart';
 
 /// A booth strip layout.
 ///
@@ -150,7 +151,17 @@ class StripTemplate {
 
   /// Unknown ids fall back rather than throw: a strip row can outlive a
   /// template being renamed, and an old message must still render.
-  static StripTemplate byId(String id) => _byId[id] ?? all.first;
+  static StripTemplate byId(String id) {
+    final design = BoothDesign.parse(id);
+    if (design != null) {
+      return StripTemplate(
+      id: design.id, name: design.title, tagline: 'Your photos, together',
+      isDuo: true, emoji: '\u{1F4F8}', accent: design.look.curtain,
+      paper: design.look.paper, ink: design.look.ink,
+    );
+    }
+    return _byId[id] ?? all.first;
+  }
 
   static List<StripTemplate> get duo =>
       all.where((t) => t.isDuo).toList(growable: false);

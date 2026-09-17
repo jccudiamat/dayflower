@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart' show compute;
 import 'package:image/image.dart' as img;
 
 import 'strip_templates.dart';
+import 'booth_design.dart';
+import 'booth_renderer.dart';
 
 /// Renders the finished strip: photos framed on the template's paper.
 ///
@@ -51,6 +53,11 @@ class _Job {
 /// Top-level so it can be handed to [compute] — closures cannot cross an
 /// isolate boundary.
 Uint8List _renderSync(_Job job) {
+  final design = BoothDesign.parse(job.templateId);
+  if (design != null) {
+    if (job.second == null) throw StateError('Both photo sets are needed');
+    return BoothRenderer.combine(design, job.first, job.second!);
+  }
   final t = StripTemplate.byId(job.templateId);
 
   final a = _tryDecode(job.first);
