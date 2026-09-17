@@ -9,7 +9,7 @@
 .home-primary:hover { background: #5e3551; }
 .home-text-link { display: inline-flex; gap: 12px; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; color: #78576f; }
 .home-availability { max-width: 380px; color: #837187; font-size: 13px; line-height: 1.7; }
-.home-letter { position: relative; text-align: center; border: 1px solid #eadce5; border-radius: 130px 130px 20px 20px; background: radial-gradient(ellipse at 50% 25%, #fff7f2, #f3e3e8 80%); padding: 36px 20px 30px; transform: rotate(3deg); box-shadow: 0 18px 55px #613d5810; }
+.home-letter { position: relative; text-align: center; border: 1px solid #eadce5; border-radius: 50% 50% 20px 20px / 160px 160px 20px 20px; background: radial-gradient(ellipse at 50% 25%, #fff7f2, #f3e3e8 80%); padding: 36px 20px 30px; transform: rotate(3deg); box-shadow: 0 18px 55px #613d5810; }
 .home-letter-to { color: #866477; font-size: 20px; }
 .home-letter-art { width: 100%; height: auto; max-width: 345px; margin: -8px auto -30px; }
 .home-letter-note { font-size: 14px; color: #79586e; font-weight: 600; }
