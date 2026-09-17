@@ -1,6 +1,6 @@
 # Memories and photo booth review
 
-Branch: `codex/memories-photobooth`, based on published build 80. This change is local for review, not published. The original checkout and Home screen source are untouched.
+Branch: `codex/memories-photobooth`, based on published build 80. The user approved publication after reviewing the preview. Preparing build 81. The original checkout and Home screen source are untouched.
 
 ## Experience
 
@@ -22,7 +22,7 @@ Local solo/one-phone output is not uploaded unless the user chooses Keep in Memo
 
 425 tests passed in the full suite; scoped analysis reported no issues. The 35 focused checks cover camera sequence timing, background cancellation, permission denial/upload cancellation, phone layouts and 2× text, real export pixels for each frame, both halves of a couple composite, invitation creation/joining, truthful failed/successful gallery-save states, legacy booth behavior, Home behavior and section routing. Screenshot tests use offline fixture photos and a camera adapter, not a live camera or real user messages.
 
-Physical device camera rendering, camera switching, native gallery persistence, native share sheet and two real signed-in devices have not been exercised in this desktop session. Check those on devices before release. Nothing has been deployed or sent to a real partner from the test harness.
+Physical device camera rendering, camera switching, native gallery persistence, native share sheet and two real signed-in devices have not been exercised in this desktop session. These device checks remain unverified; the user approved publication after this limitation was disclosed. No real partner messages were sent by the test harness.
 
 ## Review artifacts
 
