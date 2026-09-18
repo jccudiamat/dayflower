@@ -10,7 +10,11 @@ import 'package:dayflower/core/widgets/app_bottom_nav.dart';
 import 'package:dayflower/core/widgets/section_scroll_scope.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
-import 'package:dayflower/features/tulip/presentation/screens/chat_settings_screen.dart';
+import 'package:dayflower/features/booth/presentation/screens/booth_archive_screen.dart';
+import 'package:dayflower/features/tulip/presentation/widgets/media_viewer.dart';
+import 'package:dayflower/features/booth/presentation/screens/booth_studio_screen.dart';
+import 'package:dayflower/features/booth/domain/booth_design.dart';
+import 'package:dayflower/features/booth/domain/booth_renderer.dart';
 import 'package:dayflower/features/finance/presentation/screens/finance_screen.dart';
 import 'package:dayflower/features/reminders/presentation/screens/reminders_screen.dart';
 import 'package:dayflower/features/activities/presentation/screens/activities_screen.dart';
@@ -67,6 +71,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
     bool hasStart = true,
     bool productionRoutes = false,
     bool filled = false,
+    bool boothFilled = false,
     double height = 844,
     double textScale = 1,
     bool unpaired = false,
@@ -155,10 +160,10 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       financeGoalsProvider.overrideWith((ref) => Stream.value([])),
       reunionProvider.overrideWith((ref) => Stream.value(null)),
       flowerMessagesProvider.overrideWith((ref) => Stream.value(
-        productionRoutes && filled ? [_mine, _theirs, FlowerMessage(
+        productionRoutes && filled ? [_mine, _theirs, if (boothFilled) ..._boothPhotos, FlowerMessage(
           id: 'flower-preview', pairId: 'preview', senderId: 'preview-b',
           flowerType: 'classic_tulip', note: 'Thinking of you', sentAt: _now)] : [])),
-      openStripsProvider.overrideWith((ref) => Stream.value([])),
+      openStripsProvider.overrideWith((ref) => Stream.value(boothFilled ? _pendingBooth : [])),
       partnerLastActiveProvider.overrideWith((ref) async => null),
       partnerProfileStreamProvider.overrideWith((ref) => Stream.value(null)),
       giftFavoritesRepositoryProvider.overrideWithValue(MemoryFavorites()),
@@ -234,6 +239,21 @@ final _theirs = FlowerMessage(
     imagePath: 'partner.png',
     sentAt: _now,
     toWidget: true);
+final _boothImages = <String, Uint8List>{};
+final _boothPhotos = [
+  for (final (i, path, design) in [
+    (0, 'booth-strip.jpg', const BoothDesign(look: BoothLook.vintage)),
+    (1, 'booth-grid.jpg', const BoothDesign(look: BoothLook.rose, layout: BoothLayout.grid)),
+    (2, 'booth-photo.jpg', const BoothDesign(look: BoothLook.classic, layout: BoothLayout.portrait)),
+  ]) FlowerMessage(id: 'booth-$i', pairId: 'preview', senderId: 'preview-a',
+      imagePath: path, note: design.title, sentAt: _now.subtract(Duration(days: i))),
+];
+final _pendingBooth = [
+  PhotoStrip(id: 'mine-pending', pairId: 'preview', template: 'studio_rose_strip',
+      aUser: 'preview-a', aPath: 'booth-strip.jpg', createdAt: _now),
+  PhotoStrip(id: 'partner-pending', pairId: 'preview', template: 'studio_vintage_strip',
+      aUser: 'preview-b', aPath: 'booth-strip.jpg', createdAt: _now.subtract(const Duration(days: 1))),
+];
 final _beats = _HeartbeatFake();
 
 class _HeartbeatFake extends HeartbeatRepository {
@@ -260,7 +280,7 @@ class _PhotoRequest implements HttpClientRequest {
   final Uri url;
   @override
   Future<HttpClientResponse> close() async => _PhotoResponse(
-      File('test/fixtures/home/${url.pathSegments.last}').readAsBytesSync());
+      _boothImages[url.pathSegments.last] ?? File('test/fixtures/home/${url.pathSegments.last}').readAsBytesSync());
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -295,6 +315,17 @@ Future<void> _reveal(WidgetTester tester, Finder finder) async {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
+    final mine = File('test/fixtures/home/me.png').readAsBytesSync();
+    final theirs = File('test/fixtures/home/partner.png').readAsBytesSync();
+    for (final (name, design) in [
+      ('booth-strip.jpg', const BoothDesign(look: BoothLook.vintage)),
+      ('booth-grid.jpg', const BoothDesign(look: BoothLook.rose, layout: BoothLayout.grid)),
+      ('booth-photo.jpg', const BoothDesign(look: BoothLook.classic, layout: BoothLayout.portrait)),
+    ]) {
+      _boothImages[name] = await BoothRenderer.render(design,
+          List.generate(design.layout.shots, (i) => i.isEven ? mine : theirs));
+    }
+
     tz.initializeTimeZones();
     for (final (family, asset) in [
       ('TikTokSans', 'assets/fonts/tiktok/TikTokSans.ttf'),
@@ -377,10 +408,10 @@ void main() {
 
   _homeTest('Parent tab closes a detail and returns to the top', (tester) async {
     await _pump(tester, Routes.memories, height: 500, productionRoutes: true);
-    await _reveal(tester, find.text('Chapters'));
+    await _reveal(tester, find.text('Journal'));
     final container = ProviderScope.containerOf(tester.element(find.byType(MemoriesScreen)));
     expect(container.read(sectionScrollControllerProvider(Routes.memories)).offset, greaterThan(0));
-    await tester.tap(find.text('Chapters'));
+    await tester.tap(find.text('Journal'));
     await tester.pumpAndSettle();
     expect(find.byType(ChaptersScreen), findsOneWidget);
     await tester.tap(tab('Memories'));
@@ -421,30 +452,94 @@ void main() {
   _homeTest('Memories visual previews at phone widths and large text', (tester) async {
     for (final (width, scale) in [(390.0, 1.0), (320.0, 2.0)]) {
       await _pump(tester, Routes.memories, width: width, textScale: scale,
-          height: 844, productionRoutes: true, filled: true);
+          height: 844, productionRoutes: true, filled: true, boothFilled: true);
       await tester.pumpAndSettle();
       await _screenshot(tester, 'memories-new-${width.toInt()}');
-      await _reveal(tester, find.text('Chapters'));
+      await _reveal(tester, find.text('Pending strips'));
+      await _screenshot(tester, 'memories-pending-${width.toInt()}');
+      await _reveal(tester, find.text('Booth collection'));
+      await _screenshot(tester, 'memories-collection-${width.toInt()}');
+      await _reveal(tester, find.text('Journal'));
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -450));
+      await tester.pumpAndSettle();
+      await _screenshot(tester, 'journal-preview-${width.toInt()}');
       expect(tester.takeException(), isNull);
     }
-    await _pump(tester, Routes.memories, width: 390, height: 1800,
-        productionRoutes: true, filled: true);
+    await _pump(tester, Routes.memories, width: 390, height: 2150,
+        productionRoutes: true, filled: true, boothFilled: true);
     await tester.pumpAndSettle();
-    await _screenshot(tester, 'memories-new-full');
+    await _screenshot(tester, 'memories-booth-full');
     await _pump(tester, Routes.booth, productionRoutes: true);
     await tester.pumpAndSettle();
     await _screenshot(tester, 'booth-entrance');
+  });
+
+  _homeTest('Memories archives separate pending and completed prints, including empty states', (tester) async {
+    for (final filled in [false, true]) {
+      await tester.pumpWidget(const SizedBox());
+      await _pump(tester, Routes.boothPending, productionRoutes: true,
+          filled: filled, boothFilled: filled, width: 320, textScale: 2);
+      await tester.pumpAndSettle();
+      expect(find.text('Saved strips & photos'), findsNothing);
+      if (!filled) expect(find.text('No strips waiting for a photo.'), findsOneWidget);
+      await _screenshot(tester, filled ? 'pending-detail-filled' : 'pending-detail-empty');
+      expect(tester.takeException(), isNull);
+
+      await tester.pumpWidget(const SizedBox());
+      await _pump(tester, Routes.boothCollection, productionRoutes: true,
+          filled: filled, boothFilled: filled);
+      await tester.pumpAndSettle();
+      expect(find.text('Waiting strips'), findsNothing);
+      if (!filled) {
+        expect(find.text('Your first strip will appear here once it is shared.'), findsOneWidget);
+        await _screenshot(tester, 'collection-detail-empty');
+      } else {
+        await _screenshot(tester, 'collection-detail-filled');
+        final title = find.text(_boothPhotos.first.note!);
+        await _reveal(tester, title);
+        await tester.tap(find.ancestor(of: title, matching: find.byType(InkWell)).first);
+        await tester.pumpAndSettle();
+        final viewer = tester.widget<MediaViewer>(find.byType(MediaViewer));
+        expect(viewer.imagePath, _boothPhotos.first.imagePath);
+      }
+      expect(tester.takeException(), isNull);
+    }
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, Routes.memories, productionRoutes: true, height: 1780);
+    await tester.pumpAndSettle();
+    await tester.runAsync(() => precacheImage(
+        const AssetImage('assets/images/booth_entrance.jpg'),
+        tester.element(find.byType(MemoriesScreen))));
+    await tester.pumpAndSettle();
+    await _screenshot(tester, 'memories-booth-empty');
+  });
+
+  _homeTest('Memories prioritizes a partner invitation and opens that exact strip', (tester) async {
+    await _pump(tester, Routes.memories, productionRoutes: true, filled: true, boothFilled: true);
+    await _reveal(tester, find.text('Join this strip'));
+    await tester.tap(find.text('Join this strip'));
+    await tester.pumpAndSettle();
+    final studio = tester.widget<BoothStudioScreen>(find.byType(BoothStudioScreen));
+    expect(studio.joining?.id, 'partner-pending');
+    expect(tester.takeException(), isNull);
   });
 
   _homeTest('Memories opens existing tools and returns to the same hub', (tester) async {
     final router = await _pump(tester, Routes.memories, productionRoutes: true);
     for (final (label, path, type) in [
       ('Booth & Strip', Routes.booth, BoothScreen),
-      ('Shared photos', Routes.photos, SharedPhotosScreen),
-      ('My Day photos', Routes.myDays, SharedPhotosScreen),
-      ('Chapters', Routes.chapters, ChaptersScreen)]) {
+      ('Pending strips', Routes.boothPending, BoothArchiveScreen),
+      ('Booth collection', Routes.boothCollection, BoothArchiveScreen),
+      ('Journal', Routes.chapters, ChaptersScreen)]) {
       await _reveal(tester, find.text(label));
-      await tester.tap(find.text(label));
+      if (label == 'Journal') {
+        final book = find.byWidgetPredicate((widget) => widget is Semantics &&
+            widget.properties.label == 'Open your shared journal');
+        await _reveal(tester, book);
+        await tester.tap(book);
+      } else {
+        await tester.tap(find.text(label));
+      }
       await tester.pumpAndSettle();
       expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path);
       expect(find.byType(type), findsOneWidget);

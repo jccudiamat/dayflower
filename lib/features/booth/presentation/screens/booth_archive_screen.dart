@@ -24,9 +24,12 @@ import 'booth_studio_screen.dart';
 
 /// Activities uses the same compositor, repository and private photos as
 /// the Camera. There is no second collection of pretend memories.
+enum BoothArchiveView { all, pending, collection }
+
 class BoothArchiveScreen extends ConsumerStatefulWidget {
-  const BoothArchiveScreen({super.key, this.legacyTools = false});
+  const BoothArchiveScreen({super.key, this.legacyTools = false, this.view = BoothArchiveView.all});
   final bool legacyTools;
+  final BoothArchiveView view;
   @override
   ConsumerState<BoothArchiveScreen> createState() => _BoothArchiveScreenState();
 }
@@ -178,13 +181,7 @@ class _BoothArchiveScreenState extends ConsumerState<BoothArchiveScreen> {
         partner?.petName ?? partner?.displayName ?? 'Your partner';
     final open = ref.watch(openStripsProvider);
     final messages = ref.watch(flowerMessagesProvider);
-    final templateNames = StripTemplate.all.map((t) => t.name).toSet();
-    final history = (messages.valueOrNull ?? const <FlowerMessage>[])
-        .where((m) =>
-            m.isPhoto &&
-            (templateNames.contains(m.note) ||
-                m.note?.startsWith('Dayflower booth') == true))
-        .toList();
+    final history = boothCollection(messages.valueOrNull ?? const []);
     return Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const AppBottomNav(),
@@ -200,7 +197,11 @@ class _BoothArchiveScreenState extends ConsumerState<BoothArchiveScreen> {
                   : context.go(Routes.memories),
             )),
         FeatureScreenHeader(
-            title: 'Your strips', subtitle: '$myName & $theirName'),
+            title: switch (widget.view) {
+              BoothArchiveView.pending => 'Pending strips',
+              BoothArchiveView.collection => 'Booth collection',
+              BoothArchiveView.all => 'Your strips',
+            }, subtitle: '$myName & $theirName'),
         const SizedBox(height: 16),
         if (widget.legacyTools || _joining != null) ...[
           Wrap(spacing: 8, children: [
@@ -280,6 +281,7 @@ class _BoothArchiveScreenState extends ConsumerState<BoothArchiveScreen> {
         ],
         if (_error != null && !widget.legacyTools && _joining == null)
           Text(_error!, style: AppText.body(AppColors.danger)),
+        if (widget.view != BoothArchiveView.collection) ...[
         Text('Waiting strips', style: AppText.title()),
         open.when(
           loading: () => const LinearProgressIndicator(),
@@ -349,7 +351,9 @@ class _BoothArchiveScreenState extends ConsumerState<BoothArchiveScreen> {
                 ]),
         ),
         const SizedBox(height: 24),
-        Text('Your strips', style: AppText.title()),
+        ],
+        if (widget.view != BoothArchiveView.pending) ...[
+        Text('Saved strips & photos', style: AppText.title()),
         if (messages.isLoading) const LinearProgressIndicator(),
         if (messages.hasError)
           _retry('Could not load your strips.',
@@ -386,6 +390,7 @@ class _BoothArchiveScreenState extends ConsumerState<BoothArchiveScreen> {
                           style: AppText.caption()),
                     ])),
           )),
+        ],
       ])),
     );
   }

@@ -21,6 +21,7 @@ import 'features/auth/presentation/widgets/startup_brand.dart';
 import 'features/activities/presentation/screens/activities_screen.dart';
 import 'features/activity/presentation/screens/activity_feed_screen.dart';
 import 'features/booth/presentation/screens/booth_screen.dart';
+import 'features/booth/presentation/screens/booth_archive_screen.dart';
 import 'features/calls/data/call_repository.dart';
 import 'features/calls/domain/call.dart';
 import 'features/calls/domain/call_notifier.dart';
@@ -93,6 +94,8 @@ class Routes {
 
   /// Photo booth now belongs to Memories; the historic URL stays valid.
   static const booth = '/app/activities/booth';
+  static const boothPending = '/app/activities/booth/pending';
+  static const boothCollection = '/app/activities/booth/collection';
 
   /// Together tools retain their existing deep links.
   static const reminders = '/app/activities/reminders';
@@ -460,6 +463,10 @@ List<RouteBase> appFeatureRoutes() => [
           redirect: (_, state) =>
               state.uri.replace(path: Routes.together).toString()),
       GoRoute(path: Routes.booth, builder: (_, __) => const BoothScreen()),
+      GoRoute(path: Routes.boothPending,
+          builder: (_, __) => const BoothArchiveScreen(view: BoothArchiveView.pending)),
+      GoRoute(path: Routes.boothCollection,
+          builder: (_, __) => const BoothArchiveScreen(view: BoothArchiveView.collection)),
       GoRoute(
           path: Routes.reminders, builder: (_, __) => const RemindersScreen()),
       GoRoute(path: Routes.finance, builder: (_, __) => const FinanceScreen()),

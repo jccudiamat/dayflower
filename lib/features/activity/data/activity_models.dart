@@ -148,9 +148,9 @@ enum ActivityKind {
   goalDone('goal_done', 'Goal done', 'ticked off a goal', AppColors.success),
   momentAdded('moment_added', 'Moment', 'saved a moment', AppColors.brand),
   chapterWritten(
-      'chapter_written', 'Chapter', 'wrote the review', AppColors.secondary),
+      'chapter_written', 'Journal', 'wrote the review', AppColors.secondary),
   chapterClosed(
-      'chapter_closed', 'Chapter closed', 'closed the chapter',
+      'chapter_closed', 'Month complete', 'completed the month in your journal',
       AppColors.secondary),
   reunionSet('reunion_set', 'Countdown', 'moved the countdown', AppColors.brand),
   stripWaiting('strip_waiting', 'Your turn', 'started a photo strip',

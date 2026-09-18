@@ -242,3 +242,17 @@ final stripAwaitingMeProvider = Provider.autoDispose<PhotoStrip?>((ref) {
   }
   return null;
 });
+
+/// The same classification as the existing archive, including legacy strips.
+/// Ordinary chat and My Day photos are not booth keepsakes.
+List<FlowerMessage> boothCollection(Iterable<FlowerMessage> messages) {
+  final templateNames = StripTemplate.all.map((t) => t.name).toSet();
+  return messages.where((m) => m.isPhoto && m.imagePath != null &&
+      (templateNames.contains(m.note) ||
+       m.note?.startsWith('Dayflower booth · ') == true)).toList()
+    ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+}
+
+final boothCollectionProvider = Provider.autoDispose<AsyncValue<List<FlowerMessage>>>((ref) {
+  return ref.watch(flowerMessagesProvider).whenData(boothCollection);
+});

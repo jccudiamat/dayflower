@@ -62,7 +62,7 @@ class _ChaptersScreenState extends ConsumerState<ChaptersScreen> {
                   const SizedBox(width: AppSpace.xs),
                   const Expanded(
                     child: FeatureScreenHeader(
-                      title: 'Chapters',
+                      title: 'Journal',
                       subtitle: 'Twelve months, twelve stories',
                     ),
                   ),
@@ -77,7 +77,7 @@ class _ChaptersScreenState extends ConsumerState<ChaptersScreen> {
                 children: [
                   if (loadError != null)
                     AppErrorNotice(
-                      message: 'Your chapters could not load',
+                      message: 'Your journal could not load',
                       detail: loadError,
                     ),
                   _YearBar(
@@ -205,7 +205,7 @@ class _CurrentChapterCard extends StatelessWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text('THIS CHAPTER',
+                  child: Text('THIS MONTH',
                       style: AppText.label(AppColors.onDarkMuted)),
                 ),
                 Text(
@@ -238,7 +238,7 @@ class _CurrentChapterCard extends StatelessWidget {
             const SizedBox(height: AppSpace.sm),
             Row(
               children: [
-                Text(goals.isEmpty ? 'Set this month\'s goals' : 'Open chapter',
+                Text(goals.isEmpty ? 'Set this month\'s goals' : 'Open month',
                     style: AppText.body(AppColors.onDark)
                         .copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(width: 4),

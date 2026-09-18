@@ -105,7 +105,7 @@ class ChapterDetailScreen extends ConsumerWidget {
                 children: [
                   if (loadError != null)
                     AppErrorNotice(
-                      message: 'This chapter could not load',
+                      message: 'This journal entry could not load',
                       detail: loadError,
                     ),
                   // ── Goals ──
@@ -319,7 +319,7 @@ class ChapterDetailScreen extends ConsumerWidget {
         final ok = await showConfirmDialog(
           context,
           title: 'Delete this moment?',
-          message: 'It disappears from the chapter for both of you.',
+          message: 'It disappears from the journal for both of you.',
           confirmLabel: 'Delete',
         );
         if (ok && context.mounted) {
@@ -663,7 +663,7 @@ class _ReviewCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     chapter!.isClosed
-                        ? 'Chapter closed'
+                        ? 'Month complete'
                         : 'Still open — keep adding to it',
                     style: AppText.caption(),
                   ),
@@ -689,7 +689,7 @@ class _ReviewCard extends StatelessWidget {
                       '$momentCount moment${momentCount == 1 ? '' : 's'}. '
                       'Write what this month was actually about.'
                   : 'Come back when the month is over and turn the goals and '
-                      'moments into a chapter you can read next year.',
+                      'moments into a journal entry you can read next year.',
               style: AppText.body(),
             ),
             const SizedBox(height: AppSpace.md),
@@ -1242,7 +1242,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                 const SizedBox(width: AppSpace.xs),
                 Expanded(
                   child: Text(
-                    'Close this chapter',
+                    'Complete this month',
                     style: AppText.body(AppColors.ink),
                   ),
                 ),
