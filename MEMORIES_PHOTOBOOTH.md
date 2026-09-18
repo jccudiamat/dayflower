@@ -46,9 +46,9 @@ Final generation prompt:
 Verified 2026-09-17T11:37:30.171581Z: version 1.0.0+81, dayflower-81-arm64-v8a.apk, 51404162 bytes. Public download SHA-256 matches the local APK: 61f016a1dd5e775095ed3e06311c21007da5f77a3d9fb45f6366b11ddd38943a. Android package com.dayflower.app, arm64-v8a, signing certificate unchanged from build 80. Existing releases retained. Physical device checks remain unverified as disclosed above. Original checkout remains untouched.
 
 
-## Pending review: Journal and booth collections
+## Journal and booth collections (published in build 82)
 
-Not published. Build 81 remains the live release.
+Approved for publication and released as build 82.
 
 - Renamed displayed Chapters labels to Journal; preserved existing routes and stored records. Memories now previews Journal as a green vintage book with gold detailing and a ribbon.
 - Replaced the Shared photos and My Day previews in Memories. Order is booth entrance, Pending strips, Booth collection, Journal.
@@ -58,4 +58,9 @@ Not published. Build 81 remains the live release.
 - Verified 32 Home/booth/trust/collection tests, then reran the 3 Memories tests after preview polish. Scoped analysis is clean. Phone renders cover 390px and 320px with 2x text. No production data was used in preview screenshots.
 - Review images: build/review/memories-booth-full.png, memories-pending-390.png, memories-collection-390.png, journal-preview-390.png.
 
-- September 18 follow-up: verified populated/empty archive separation and opening the exact stored print in MediaViewer. Captured memories-booth-empty.png, pending-detail-empty.png, pending-detail-filled.png, collection-detail-empty.png and collection-detail-filled.png. Still unpublished.
+- September 18 follow-up: verified populated/empty archive separation and opening the exact stored print in MediaViewer. Captured memories-booth-empty.png, pending-detail-empty.png, pending-detail-filled.png, collection-detail-empty.png and collection-detail-filled.png. Unpublished at the time of that review.
+
+
+## Build 82 publication
+
+Verified 2026-09-18T20:03:14.343056Z: version 1.0.0+82, dayflower-82-arm64-v8a.apk, 51404474 bytes. Public download SHA-256 matches the local APK: ced9555770582346448bc848e010ae45e0cdab1da59f25efc9798bbcb9c72819. Android package com.dayflower.app, arm64-v8a, signing certificate unchanged. Existing releases retained. Original checkout untouched.
