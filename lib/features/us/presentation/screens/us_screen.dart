@@ -1,3 +1,5 @@
+import '../../../../core/widgets/story_components.dart';
+import '../../../tulip/data/flower_repository.dart';
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -12,15 +14,12 @@ import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
-import '../../../../core/widgets/ios_back_button.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/utils/zone_distance.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
-import '../widgets/calling_card.dart';
 import '../widgets/couple_hero.dart';
-import '../../domain/couple_dates.dart';
 
 /// The couple's own page — the "us" the whole app is about.
 ///
@@ -54,8 +53,12 @@ class UsScreen extends ConsumerWidget {
                   AppSpace.sm, AppSpace.sm, AppSpace.sm, 0),
               child: Row(
                 children: [
-                  IosBackButton(onTap: () => context.go(Routes.home)),
-                  const SizedBox(width: AppSpace.xs),
+                  IconButton(
+                      tooltip: 'Back',
+                      onPressed: () => context.canPop()
+                          ? context.pop()
+                          : context.go(Routes.home),
+                      icon: const AppIcon(CupertinoIcons.back)),
                   Expanded(child: Text('Us', style: AppText.hero())),
                   // The one personal thing on a shared page, so it is an
                   // icon in the corner rather than a row in the list.
@@ -80,28 +83,36 @@ class UsScreen extends ConsumerWidget {
                     ),
                     clipBehavior: Clip.antiAlias,
                     child: ListTile(
-                      leading: const AppIcon(CupertinoIcons.calendar,
+                      leading: const AppIcon(CupertinoIcons.clock,
                           color: AppColors.secondary),
-                      title: Text('Events', style: AppText.subtitle()),
-                      subtitle: Text('Your dates, countdowns & clocks',
+                      title:
+                          Text('Activity history', style: AppText.subtitle()),
+                      subtitle: Text(
+                          'Everything the two of you have been up to',
                           style: AppText.caption()),
                       trailing: AppIcon(CupertinoIcons.chevron_right,
                           size: 16, color: AppColors.muted),
-                      onTap: () => context.push(Routes.events),
+                      onTap: () => context.push(Routes.activityFeed),
                     ),
                   ),
                   const SizedBox(height: AppSpace.sm),
+                  _RelationshipTimeline(start: pair?.togetherSince),
+                  const StorySection('Our identity'),
                   _TogetherSinceCard(pair: pair),
-                  if (pair?.togetherSince != null) ...[
-                    const SizedBox(height: AppSpace.sm),
-                    _MilestonesCard(start: pair!.togetherSince!),
-                  ],
                   const SizedBox(height: AppSpace.sm),
                   _WhereYouAreCard(me: me, partner: partner),
-                  // Silent below 70% of the month's allowance, and absent
-                  // entirely on a self-hosted build — it brings its own
-                  // leading gap so this list needs no condition.
-                  const CallingCard(),
+                  const SizedBox(height: AppSpace.md),
+                  UtilityRow(
+                      icon: CupertinoIcons.square_grid_2x2,
+                      title: 'Widgets & Connections',
+                      subtitle: 'My Day, Heartbeat and Reunion',
+                      onTap: () => context.push(Routes.widgetSettings)),
+                  const SizedBox(height: AppSpace.xs),
+                  UtilityRow(
+                      icon: CupertinoIcons.person_2,
+                      title: 'Names & preferences',
+                      subtitle: 'Endearments, notifications and privacy',
+                      onTap: () => context.push(Routes.settings)),
                   const SizedBox(height: AppSpace.md),
                   const _PremiumCard(),
                 ],
@@ -152,8 +163,7 @@ class _TogetherSinceCard extends ConsumerStatefulWidget {
   final Pair? pair;
 
   @override
-  ConsumerState<_TogetherSinceCard> createState() =>
-      _TogetherSinceCardState();
+  ConsumerState<_TogetherSinceCard> createState() => _TogetherSinceCardState();
 }
 
 class _TogetherSinceCardState extends ConsumerState<_TogetherSinceCard> {
@@ -240,102 +250,6 @@ class _TogetherSinceCardState extends ConsumerState<_TogetherSinceCard> {
     );
   }
 }
-
-/// What the start date implies, without anybody entering it twice.
-class _MilestonesCard extends StatelessWidget {
-  const _MilestonesCard({required this.start});
-  final DateTime start;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final monthsary = nextMonthsary(start, now);
-    final anniversary = nextAnniversary(start, now);
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('COMING UP', style: AppText.label()),
-          const SizedBox(height: AppSpace.xs),
-          _MilestoneRow(
-            emoji: '🌷',
-            title: '${monthsBetween(start, monthsary)} month monthsary',
-            date: monthsary,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          _MilestoneRow(
-            emoji: '💞',
-            title:
-                '${anniversaryNumber(start, anniversary)} year anniversary',
-            date: anniversary,
-          ),
-          const SizedBox(height: AppSpace.xs),
-          Text(
-            'Both are worked out from your start date — they appear on '
-            'Events on their own.',
-            style: AppText.caption(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MilestoneRow extends StatelessWidget {
-  const _MilestoneRow({
-    required this.emoji,
-    required this.title,
-    required this.date,
-  });
-
-  final String emoji;
-  final String title;
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    final days = daysBetween(DateTime.now(), date);
-    final away = days == 0
-        ? 'Today'
-        : days == 1
-            ? 'Tomorrow'
-            : 'in $days days';
-
-    return Row(
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 20)),
-        const SizedBox(width: AppSpace.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppText.subtitle()),
-              Text(DateFormat('EEEE d MMMM').format(date),
-                  style: AppText.caption()),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.blush,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-          ),
-          child: Text(
-            away,
-            style: AppText.label(AppColors.brandDark),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/* ── Where you both are ──────────────────── */
 
 class _WhereYouAreCard extends ConsumerWidget {
   const _WhereYouAreCard({required this.me, required this.partner});
@@ -547,5 +461,51 @@ class _Card extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _RelationshipTimeline extends ConsumerWidget {
+  const _RelationshipTimeline({required this.start});
+  final DateTime? start;
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final since = start;
+    if (since == null) return const SizedBox.shrink();
+    final flowers = (ref.watch(flowerMessagesProvider).valueOrNull ?? [])
+        .where((m) => m.flower != null)
+        .toList()
+      ..sort((a, b) => a.sentAt.compareTo(b.sentAt));
+    final now = DateTime.now();
+    final moments = <({DateTime date, String title})>[
+      (date: since, title: 'Together since'),
+      if (flowers.isNotEmpty)
+        (date: flowers.first.sentAt, title: 'Our first Dayflower'),
+      for (var year = since.year + 1; year <= now.year; year++)
+        if (!DateTime(year, since.month, since.day).isAfter(now))
+          (
+            date: DateTime(year, since.month, since.day),
+            title:
+                '${year - since.year} ${year - since.year == 1 ? 'year' : 'years'} together'
+          ),
+    ]..sort((a, b) => a.date.compareTo(b.date));
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const StorySection('Our story'),
+      for (final m in moments)
+        Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
+            child: Row(children: [
+              const AppIcon(CupertinoIcons.heart,
+                  size: 20, color: AppColors.brand),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(m.title, style: AppText.subtitle()),
+                    Text(DateFormat('d MMMM y').format(m.date),
+                        style: AppText.caption()),
+                  ]))
+            ])),
+    ]);
   }
 }

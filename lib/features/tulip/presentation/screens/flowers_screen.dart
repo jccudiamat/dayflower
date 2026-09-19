@@ -1,3 +1,6 @@
+import '../../../dayflower/presentation/dayflower_screen.dart';
+import '../../../heartbeat/data/heartbeat_repository.dart';
+import '../../../../core/widgets/story_components.dart';
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +12,7 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../calls/data/call_repository.dart';
 import '../../../calls/domain/call.dart';
 import '../../../calls/domain/call_notifier.dart';
@@ -233,6 +237,60 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     }
   }
 
+  void _showActions() {
+    showModalBottomSheet<void>(
+        context: context,
+        builder: (sheet) => SafeArea(
+            child: Padding(
+                padding: const EdgeInsets.all(AppSpace.sm),
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  UtilityRow(
+                      icon: CupertinoIcons.heart,
+                      title: 'Send flower',
+                      subtitle: 'A little something from Dayflower',
+                      onTap: () {
+                        Navigator.pop(sheet);
+                        showDayflowerPicker(context, ref);
+                      }),
+                  UtilityRow(
+                      icon: CupertinoIcons.heart_fill,
+                      title: 'Heartbeat',
+                      subtitle: 'Send some love',
+                      onTap: () async {
+                        Navigator.pop(sheet);
+                        final pair = ref.read(currentPairProvider).valueOrNull;
+                        final user = ref.read(currentUserIdProvider);
+                        if (pair == null || user == null) return;
+                        try {
+                          await ref
+                              .read(heartbeatRepositoryProvider)
+                              .send(pairId: pair.id, senderId: user);
+                        } catch (_) {
+                          if (mounted) {
+                            _showError(
+                                'Your heartbeat couldn’t send. Try again.');
+                          }
+                        }
+                      }),
+                  UtilityRow(
+                      icon: CupertinoIcons.photo,
+                      title: 'Photo',
+                      subtitle: 'Share a moment',
+                      onTap: () {
+                        Navigator.pop(sheet);
+                        _openCamera();
+                      }),
+                  UtilityRow(
+                      icon: CupertinoIcons.map,
+                      title: 'Our Map',
+                      subtitle: 'Your shared cities and places',
+                      onTap: () {
+                        Navigator.pop(sheet);
+                        context.push(Routes.ourMap);
+                      }),
+                ]))));
+  }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -262,11 +320,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      // No tab bar in the thread, even though Flowers is a top-level tab:
-      // it would sit between the composer and the keyboard and make the
-      // conversation read as a form pinned inside a tab. The Camera tab is
-      // full-bleed for the same reason. The header's back chevron is the
-      // way out, and it goes Home like the camera's × does.
+      bottomNavigationBar:
+          keyboardUp || _panelOpen ? null : const AppBottomNav(),
       body: SafeArea(
         bottom: false,
         child: Column(
@@ -285,7 +340,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             // Nothing sits below the composer/drawer any more, so whichever
             // is bottom-most has to clear the gesture bar itself. With the
             // keyboard up the keyboard already covers it.
-            if (!keyboardUp)
+            if (!keyboardUp && _panelOpen)
               SizedBox(height: MediaQuery.paddingOf(context).bottom),
           ],
         ),
@@ -402,10 +457,11 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                         _ComposerIcon(
                           icon: _panelOpen
                               ? CupertinoIcons.keyboard
-                              : Icons.local_florist_rounded,
+                              : CupertinoIcons.add,
                           color: _panelOpen ? AppColors.muted : AppColors.brand,
-                          tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
-                          onTap: _togglePanel,
+                          tooltip:
+                              _panelOpen ? 'Keyboard' : 'More ways to connect',
+                          onTap: _panelOpen ? _togglePanel : _showActions,
                         ),
                         Expanded(
                           child: TextField(
@@ -476,8 +532,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             onTap: () => setState(() => _replyingTo = null),
             child: Padding(
               padding: const EdgeInsets.all(6),
-              child:
-                  AppIcon(CupertinoIcons.xmark, size: 15, color: AppColors.muted),
+              child: AppIcon(CupertinoIcons.xmark,
+                  size: 15, color: AppColors.muted),
             ),
           ),
         ],
@@ -580,7 +636,8 @@ class _ChatHeader extends ConsumerWidget {
     final name = partner?.petName ?? partner?.displayName ?? '…';
     // Their mood lives on the Flowers card now. Here, the useful thing about
     // the person you are typing to is whether they are there to read it.
-    final active = activeLabel(ref.watch(partnerLastActiveProvider).valueOrNull);
+    final active =
+        activeLabel(ref.watch(partnerLastActiveProvider).valueOrNull);
     final live = ref.watch(liveCallProvider);
 
     return Container(
@@ -591,20 +648,6 @@ class _ChatHeader extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          // Home, not `Routes.flowers` — that path is the Camera tab now
-          // (see messages_screen.dart), so backing out of the conversation
-          // used to drop you into a viewfinder. The chat is a top-level tab
-          // in its own right, so its way out is the same as the camera's ×.
-          IconButton(
-            onPressed: () =>
-                context.canPop() ? context.pop() : context.go(Routes.home),
-            tooltip: 'Back',
-            iconSize: 20,
-            padding: const EdgeInsets.only(right: AppSpace.xs),
-            constraints: const BoxConstraints(),
-            icon:
-                AppIcon(CupertinoIcons.chevron_back, color: AppColors.muted),
-          ),
           // Their face and their name are one tap target, not two: people
           // press the person when they want to know about the person, and
           // splitting it means half the presses land on nothing.
@@ -616,28 +659,28 @@ class _ChatHeader extends ConsumerWidget {
                 UserAvatar(partner, size: 40),
                 const SizedBox(width: AppSpace.xs),
                 Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(name, style: AppText.title().copyWith(fontSize: 17)),
-                // Whether they are there, rather than a running total of
-                // flowers. The count was true and told you nothing you would
-                // act on; this is the one line that changes while you read.
-                //
-                // ⚠️ Nothing at all when we have never heard from their
-                // phone — see activeLabel. A partner on a build with no
-                // heartbeat is not "away", we simply do not know, and a
-                // header must not turn that into a claim about them.
-                if (active != null)
-                  Text(
-                    active,
-                    style: active == 'Active now'
-                        ? AppText.caption(AppColors.secondary)
-                        : AppText.caption(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(name, style: AppText.title().copyWith(fontSize: 17)),
+                      // Whether they are there, rather than a running total of
+                      // flowers. The count was true and told you nothing you would
+                      // act on; this is the one line that changes while you read.
+                      //
+                      // ⚠️ Nothing at all when we have never heard from their
+                      // phone — see activeLabel. A partner on a build with no
+                      // heartbeat is not "away", we simply do not know, and a
+                      // header must not turn that into a claim about them.
+                      if (active != null)
+                        Text(
+                          active,
+                          style: active == 'Active now'
+                              ? AppText.caption(AppColors.secondary)
+                              : AppText.caption(),
+                        ),
+                    ],
                   ),
-              ],
-            ),
                 ),
               ]),
             ),

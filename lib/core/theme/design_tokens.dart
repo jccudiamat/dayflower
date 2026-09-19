@@ -5,6 +5,8 @@ import 'app_colors.dart';
 
 /// 4pt grid spacing tokens.
 class AppSpace {
+  static const double screenInset = 20;
+  static const double compact = 12;
   static const double xxs = 4;
   static const double xs = 8;
   static const double sm = 16;
@@ -57,6 +59,8 @@ class AppElevation {
 
 /// Motion tokens used across interactions.
 class AppMotion {
+  static Duration duration(BuildContext context, Duration value) =>
+      MediaQuery.disableAnimationsOf(context) ? Duration.zero : value;
   static const Curve easeOut = Cubic(0.22, 1, 0.36, 1);
 
   static const Duration micro = Duration(milliseconds: 150);
@@ -74,8 +78,7 @@ class AppMotion {
 /// happened to be loaded first.
 class AppText {
   // ── Display hierarchy ────────────────────────────────────────
-  static TextStyle display([Color? color]) =>
-      AppTypography.style(
+  static TextStyle display([Color? color]) => AppTypography.style(
         fontSize: 30,
         height: 1.12,
         fontWeight: FontWeight.w700,
@@ -98,8 +101,7 @@ class AppText {
         color: color ?? AppColors.ink,
       );
 
-  static TextStyle subtitle([Color? color]) =>
-      AppTypography.style(
+  static TextStyle subtitle([Color? color]) => AppTypography.style(
         fontSize: 16,
         height: 1.3,
         fontWeight: FontWeight.w600,
@@ -114,8 +116,7 @@ class AppText {
         color: color ?? AppColors.body,
       );
 
-  static TextStyle caption([Color? color]) =>
-      AppTypography.style(
+  static TextStyle caption([Color? color]) => AppTypography.style(
         fontSize: 12.5,
         height: 1.35,
         fontWeight: FontWeight.w500,
@@ -123,8 +124,7 @@ class AppText {
       );
 
   /// Overline label — uppercase section headers, pills, nav labels.
-  static TextStyle label([Color? color]) =>
-      AppTypography.style(
+  static TextStyle label([Color? color]) => AppTypography.style(
         fontSize: 11,
         height: 1.2,
         fontWeight: FontWeight.w600,

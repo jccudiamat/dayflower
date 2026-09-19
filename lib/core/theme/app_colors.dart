@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 /// jasmine opens after dark. Both are real entries in the catalogue, so the
 /// control is drawn with the same artwork the conversation sends.
 enum AppMode {
-  light(flowerId: 'stem_sunflower', title: 'Sunflower', line: 'Follows the sun'),
+  light(
+      flowerId: 'stem_sunflower', title: 'Sunflower', line: 'Follows the sun'),
   dark(flowerId: 'stem_jasmine', title: 'Jasmine', line: 'Opens after dark');
 
   const AppMode({
@@ -62,7 +63,7 @@ const _lightPalette = Palette(
   surfaceSubtle: Color(0xFFEFEAF8), // OTP boxes, inset fills
   ink: Color(0xFF1C1024), // primary text
   body: Color(0xFF564A5E), // secondary text
-  muted: Color(0xFF8E8698), // tertiary text, hints
+  muted: Color(0xFF746A80), // readable secondary labels on lavender
   border: Color(0xFFEAE5F0), // hairlines
   blush: Color(0xFFFCEDF4),
   blushMid: Color(0xFFF6D3E4),

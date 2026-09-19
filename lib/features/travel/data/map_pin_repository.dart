@@ -102,14 +102,15 @@ class MapPinRepository {
   /// ⚠️ Either of them can remove any pin — the map is a thing they build
   /// together, not two private maps drawn on one sheet. See the policies in
   /// 0047.
+  Future<void> markVisited(String id) =>
+      _client.from('map_pins').update({'visited': true}).eq('id', id);
+
   Future<void> remove(String id) async {
     await _client.from('map_pins').delete().eq('id', id);
   }
 
   Future<void> rename({required String id, required String label}) async {
-    await _client
-        .from('map_pins')
-        .update({'label': label.trim()}).eq('id', id);
+    await _client.from('map_pins').update({'label': label.trim()}).eq('id', id);
   }
 }
 

@@ -4039,3 +4039,106 @@ it. The test row was deleted afterwards so it would not inflate the day's
 count.
 
 366 tests pass. ⚠️ **Not published** — build 69 has none of this.
+
+## The homepage is a place now (2026-09-19)
+
+The landing page was rebuilt against a supplied reference image: a scenic
+sunrise hero, three plain white sections, a scenic nighttime call to action,
+and a minimal footer. The reference decided the appearance; this codebase
+decided everything the page actually does.
+
+### The shape is the point
+
+    hero ······ scenic, warm, alive
+    create ···· white, plain, product
+    app ······· white, plain, product
+    about ····· white, plain, quiet
+    night ····· scenic, warm, alive
+    footer ···· white
+
+⚠️ **Only the first and last sections are scenic.** The contrast between a
+painted opening and a flat middle is most of what makes the reference read
+the way it does. Adding scenery, gradients or illustration to the three white
+sections does not make the page richer; it flattens the only rhythm it has.
+The note is at the top of `home.css` for the next person.
+
+### One world, two lights
+
+`app/components/scene/` is a layered 2.5D landscape in SVG, not WebGL. The
+reference is a still painting with a very small amount of life in it, and a
+few hundred shapes that never repaint reproduce it closer — and on a mid
+phone far cheaper — than a scene graph would. `/world` and its Three.js
+meadow are untouched and still noindexed; nothing on the homepage imports
+them.
+
+Dawn and night share one `Scenery` component and one set of curves, with two
+palettes. The waterline sits at y=496 of 640 in both, which is why the
+closing scene reads as *later* rather than *elsewhere*. Change a hill and it
+changes in both.
+
+Three layers meet the viewport three different ways: `far` and `hills`
+stretch (`preserveAspectRatio="none"`, so a phone keeps the town on the right
+edge instead of cropping it off), `near` keeps its aspect and crops, because
+a stretched flower reads immediately as broken.
+
+🔴 **Nothing in the scene is content.** The whole tree is `aria-hidden` with
+`pointer-events: none`; every word, link and field is HTML above it. Turn the
+scenery off and the page still says the same things over a painted sky.
+
+### Three things that cost an afternoon
+
+- 🔴 **`mix-blend-mode: screen` on the light wash took the whole hero with
+  it.** The blended layer forced the section onto a compositing path that
+  some rasterisers drop entirely, and the hero painted as a blank rectangle —
+  scenery, headline and buttons together. It is plain alpha now. Nothing
+  decorative is worth a failure mode that takes the copy down.
+- 🔴 **Scroll parallax clamped at -1 slid every layer upward.** A section
+  still below the fold has a positive `top`, so the night scene loaded with a
+  band of bare background under the meadow. Progress is clamped at 0: layers
+  only ever drift down, and down is clipped.
+- 🔴 **A screenshot folder inside `website/` broke the CSS pipeline.**
+  Headless Chrome profiles under `website/.shots/` left locked files, the
+  PostCSS pass walks the project tree, and Turbopack panicked reading a
+  Chrome `LOCK` file — after which imported stylesheets silently vanished
+  from the bundle one at a time. Scratch output goes outside the project.
+
+### The app preview is two phones, not five
+
+`AppPhones.tsx` rebuilds the real Home and Memories screens in HTML rather
+than pasting screenshots: the type stays crisp at any density, the pair
+weighs a few kilobytes, and the only bitmaps are photographs the app would
+actually be showing. Two screens, because the story the homepage needs is
+*live the moment* in front and *keep the moment* behind; a row of five
+identical rectangles says neither. They are laid out at one fixed size and
+scaled bodily with `--ps`, because phone UI is a hundred small fixed
+relationships and fluid type pulls every one of them apart at a different
+rate.
+
+Every flower in the meadow is defined once and stamped with `<use>`. Written
+out per instance, a nine-petal daisy is about a kilobyte of markup, and sixty
+tufts across two scenes had the homepage shipping megabytes of HTML.
+
+### Contrast, because the reference does not have to care
+
+White navigation over a sunrise is about 2.3:1 against the sky. A scrim
+carries it past 4.5:1, measured off the rendered pixels rather than guessed:
+270px tall and eased, so it reads as the sky being deeper overhead rather
+than as a grey bar. The scroll cue got a pill for the same reason — it sits
+over dark grass in one place and the pale stone path in another.
+
+Under `prefers-reduced-motion` the pigeon and the drifting petals are removed
+rather than frozen, and the parallax never wires up. What is left is the
+painting, which is what the reference is anyway.
+
+### Deliberate departures from the reference
+
+- **The FAQ is gone.** The reference has none, the brief asks for a concise
+  page, and Google stopped showing FAQ rich results for sites like ours in
+  2023. `faqPage` is still exported and `/long-distance` still uses it.
+- **The app section's button says "Join the waitlist", not "Learn more".**
+  There is no app page to learn more on, and sending somebody to a signup
+  form under that label is a small lie.
+- **No social icons in the footer.** The reference shows three; we have no
+  accounts, and `ORGANISATION` has no `sameAs`. The brand line is there.
+- **`ToolThumb` in `Examples.tsx` is now unused** — it drew the old homepage
+  card art and its CSS went with the rest of the old `home.css`.

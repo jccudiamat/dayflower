@@ -19,6 +19,8 @@ import '../domain/flower_catalog.dart';
 ///  - a **text message** (none of the three set; [note] carries the text).
 ///
 /// Migration 0025 enforces that at least one of the four is present.
+enum PhotoOrigin { daily, card, booth }
+
 class FlowerMessage {
   const FlowerMessage({
     required this.id,
@@ -195,7 +197,8 @@ class FlowerMessage {
   /// as though it arrived.
   String previewFor({required bool mine}) {
     final note = this.note?.trim() ?? '';
-    if (isBouquet) return mine ? 'You sent a bouquet 💐' : 'Sent you a bouquet 💐';
+    if (isBouquet)
+      return mine ? 'You sent a bouquet 💐' : 'Sent you a bouquet 💐';
     if (isPhoto) {
       if (note.isNotEmpty) return '📷  $note';
       return mine ? '📷  You shared a photo' : '📷  Shared a photo';
@@ -206,8 +209,9 @@ class FlowerMessage {
     }
     if (isText) return note;
     final bloom = flower!;
-    final line = mine ? 'You sent ${bloom.name} ${bloom.emoji}'
-                      : '${bloom.name} ${bloom.emoji}';
+    final line = mine
+        ? 'You sent ${bloom.name} ${bloom.emoji}'
+        : '${bloom.name} ${bloom.emoji}';
     return note.isEmpty ? line : '$line — $note';
   }
 
@@ -226,8 +230,7 @@ class FlowerMessage {
     caseSensitive: false,
   );
 
-  String? get bouquetGiftId =>
-      _giftLink.firstMatch(note ?? '')?.group(1);
+  String? get bouquetGiftId => _giftLink.firstMatch(note ?? '')?.group(1);
 
   bool get isBouquet => bouquetGiftId != null;
 
@@ -374,11 +377,13 @@ class FlowerRepository {
     String? note,
     bool toWidget = true,
     bool toChat = true,
+    PhotoOrigin origin = PhotoOrigin.daily,
   }) async {
     // <pair_id>/<uuid>.<ext> — the leading segment is what the Storage RLS
     // policy reads to check pair membership, so it must stay first.
     final ext = fileExtension.replaceAll('.', '').toLowerCase();
-    final path = '$pairId/${_uuid()}.$ext';
+    final prefix = origin == PhotoOrigin.daily ? '' : '${origin.name}-';
+    final path = '$pairId/$prefix${_uuid()}.$ext';
 
     await _client.storage.from(dayPhotoBucket).uploadBinary(
           path,

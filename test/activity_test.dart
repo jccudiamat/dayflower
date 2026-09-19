@@ -75,18 +75,18 @@ void main() {
       expect(_activity().route, Routes.reminders);
     });
 
-    test('a chapter activity opens its own month', () {
+    test('a goal activity opens its own month in Together', () {
       final a = _activity(
         kind: 'goal_set',
         meta: const {'year': 2026, 'month': 9},
       );
-      expect(a.route, Routes.chapterFor(2026, 9));
+      expect(a.route, Routes.goalsFor(2026, 9));
     });
 
-    test('a chapter activity with no month falls back to the index', () {
+    test('a goal activity with no month falls back to current goals', () {
       // The failure this prevents: `/chapters/null/null`, which resolves to
       // *this* month and silently shows the wrong one.
-      expect(_activity(kind: 'goal_set').route, Routes.chapters);
+      expect(_activity(kind: 'goal_set').route, Routes.goals);
     });
 
     test('year and month survive arriving as strings', () {
@@ -100,10 +100,10 @@ void main() {
       expect(a.route, Routes.chapterFor(2026, 9));
     });
 
-    test('a waiting strip opens the camera, a finished one the thread', () {
+    test('a waiting strip opens the booth, a finished one the thread', () {
       // Not the same place, on purpose: one is a thing to do and only the
       // shutter can do it; the other is a photo that already exists.
-      expect(_activity(kind: 'strip_waiting').route, Routes.flowers);
+      expect(_activity(kind: 'strip_waiting').route, Routes.booth);
       expect(_activity(kind: 'strip_done').route, Routes.chat);
     });
   });
@@ -213,4 +213,3 @@ FlowerMessage _message({
       note: note,
       sentAt: DateTime(2026, 9, 3),
     );
-

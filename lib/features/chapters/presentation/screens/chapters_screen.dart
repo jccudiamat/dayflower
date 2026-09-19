@@ -58,11 +58,14 @@ class _ChaptersScreenState extends ConsumerState<ChaptersScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IosBackButton(onTap: () => context.go(Routes.activities)),
+                  IosBackButton(
+                      onTap: () => context.canPop()
+                          ? context.pop()
+                          : context.go(Routes.dayflower)),
                   const SizedBox(width: AppSpace.xs),
                   const Expanded(
                     child: FeatureScreenHeader(
-                      title: 'Chapters',
+                      title: 'Our Journal',
                       subtitle: 'Twelve months, twelve stories',
                     ),
                   ),
@@ -116,10 +119,9 @@ class _ChaptersScreenState extends ConsumerState<ChaptersScreen> {
                           child: _MonthTile(
                             chapterKey: key,
                             goals: goals.where((g) => g.key == key).toList(),
-                            moments:
-                                moments.where((m) => m.key == key).length,
-                            chapter: chapters
-                                .firstWhereOrNull((c) => c.key == key),
+                            moments: moments.where((m) => m.key == key).length,
+                            chapter:
+                                chapters.firstWhereOrNull((c) => c.key == key),
                             onTap: () => _open(key),
                           ),
                         );

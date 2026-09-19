@@ -1,3 +1,4 @@
+import '../../../memories/data/relationship_memory.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/models/pair.dart';
@@ -50,7 +51,7 @@ class CoupleHero extends ConsumerWidget {
         // catches it. Without this the plum sits on the lavender canvas as
         // a hole rather than an object.
         border: Border.all(color: Colors.white.withValues(alpha: .07)),
-        boxShadow: AppElevation.lift,
+        boxShadow: AppElevation.card,
       ),
       clipBehavior: Clip.antiAlias,
       child: Stack(
@@ -98,7 +99,13 @@ class CoupleHero extends ConsumerWidget {
                   ),
                 ],
                 const SizedBox(height: AppSpace.md),
-                _StatStrip(stats: stats, start: start),
+                _StatStrip(
+                    stats: stats,
+                    start: start,
+                    memories: ref
+                        .watch(relationshipMemoriesProvider)
+                        .valueOrNull
+                        ?.length),
               ],
             ),
           ),
@@ -237,7 +244,9 @@ class _Faces extends StatelessWidget {
 /// tabular figures so the row does not jitter as counts change, and a
 /// letter-spaced overline underneath.
 class _StatStrip extends StatelessWidget {
-  const _StatStrip({required this.stats, required this.start});
+  const _StatStrip(
+      {required this.stats, required this.start, required this.memories});
+  final int? memories;
 
   final CoupleStats? stats;
   final DateTime? start;
@@ -255,12 +264,15 @@ class _StatStrip extends StatelessWidget {
       ),
       (show(stats?.flowers), 'FLOWERS'),
       (show(stats?.hearts), 'HEARTS'),
-      (show(stats?.streak), 'STREAK'),
+      (show(memories), 'MEMORIES'),
     ];
 
     return Column(
       children: [
-        Divider(height: 1, thickness: 1, color: Colors.white.withValues(alpha: .09)),
+        Divider(
+            height: 1,
+            thickness: 1,
+            color: Colors.white.withValues(alpha: .09)),
         Padding(
           padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
           child: Row(

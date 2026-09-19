@@ -31,10 +31,12 @@ class ChapterDetailScreen extends ConsumerWidget {
     super.key,
     required this.year,
     required this.month,
+    this.goalsOnly = false,
   });
 
   final int year;
   final int month;
+  final bool goalsOnly;
 
   ChapterKey get _key => ChapterKey(year, month);
 
@@ -74,13 +76,18 @@ class ChapterDetailScreen extends ConsumerWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  IosBackButton(onTap: () => context.go(Routes.chapters)),
+                  IosBackButton(
+                      onTap: () => context
+                          .go(goalsOnly ? Routes.together : Routes.chapters)),
                   const SizedBox(width: AppSpace.xs),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(DateFormat('MMMM yyyy').format(_key.firstDay),
+                        Text(
+                            goalsOnly
+                                ? 'Monthly goals'
+                                : DateFormat('MMMM yyyy').format(_key.firstDay),
                             style: AppText.hero()),
                         const SizedBox(height: AppSpace.xxs),
                         Text(
@@ -121,7 +128,7 @@ class ChapterDetailScreen extends ConsumerWidget {
                   if (goals.isEmpty)
                     const _EmptyHint(
                       emoji: '🎯',
-                      title: 'No goals set',
+                      title: 'Start this month’s story.',
                       body: 'List what you each want out of this month, and '
                           'what you want out of it together.',
                     )
@@ -132,13 +139,14 @@ class ChapterDetailScreen extends ConsumerWidget {
                       // Only the owner may write a solo goal — RLS enforces
                       // it, so the UI matches rather than offering a tap
                       // that comes back 42501.
-                      final editable =
-                          goal.isShared || (userId != null && goal.ownerId == userId);
+                      final editable = goal.isShared ||
+                          (userId != null && goal.ownerId == userId);
                       return Padding(
                         padding: const EdgeInsets.only(bottom: AppSpace.xxs),
                         child: _GoalRow(
                           goal: goal,
-                          scopeLabel: _scopeLabel(goal.ownerId, userId, partnerName),
+                          scopeLabel:
+                              _scopeLabel(goal.ownerId, userId, partnerName),
                           editable: editable,
                           onToggle: () => _guard(
                             context,
@@ -157,45 +165,48 @@ class ChapterDetailScreen extends ConsumerWidget {
                     }),
                   ],
 
-                  // ── Moments ──
-                  const SizedBox(height: AppSpace.md),
-                  _SectionHeader(
-                    label: 'What happened',
-                    onAdd: () => _openMomentSheet(context, ref),
-                  ),
-                  const SizedBox(height: AppSpace.xs),
-                  if (moments.isEmpty)
-                    const _EmptyHint(
-                      emoji: '✨',
-                      title: 'Nothing logged yet',
-                      body: 'Add the things worth remembering as they happen '
-                          '— the review writes itself later.',
-                    )
-                  else
-                    ...moments.map((moment) => Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpace.xxs),
-                          child: _MomentRow(
-                            moment: moment,
-                            onTap: () => _openMomentSheet(
-                              context,
-                              ref,
-                              existing: moment,
+                  if (!goalsOnly) ...[
+                    // ── Moments ──
+                    const SizedBox(height: AppSpace.md),
+                    _SectionHeader(
+                      label: 'What happened',
+                      onAdd: () => _openMomentSheet(context, ref),
+                    ),
+                    const SizedBox(height: AppSpace.xs),
+                    if (moments.isEmpty)
+                      const _EmptyHint(
+                        emoji: '✨',
+                        title: 'A month worth remembering.',
+                        body: 'Add the things worth remembering as they happen '
+                            '— the review writes itself later.',
+                      )
+                    else
+                      ...moments.map((moment) => Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpace.xxs),
+                            child: _MomentRow(
+                              moment: moment,
+                              onTap: () => _openMomentSheet(
+                                context,
+                                ref,
+                                existing: moment,
+                              ),
                             ),
-                          ),
-                        )),
+                          )),
 
-                  // ── Review ──
-                  const SizedBox(height: AppSpace.md),
-                  Text('THE REVIEW', style: AppText.label()),
-                  const SizedBox(height: AppSpace.xs),
-                  _ReviewCard(
-                    chapterKey: _key,
-                    chapter: chapter,
-                    goalsDone: done,
-                    goalsTotal: goals.length,
-                    momentCount: moments.length,
-                    onWrite: () => _openReviewSheet(context, ref, chapter),
-                  ),
+                    // ── Review ──
+                    const SizedBox(height: AppSpace.md),
+                    Text('THE REVIEW', style: AppText.label()),
+                    const SizedBox(height: AppSpace.xs),
+                    _ReviewCard(
+                      chapterKey: _key,
+                      chapter: chapter,
+                      goalsDone: done,
+                      goalsTotal: goals.length,
+                      momentCount: moments.length,
+                      onWrite: () => _openReviewSheet(context, ref, chapter),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -209,12 +220,17 @@ class ChapterDetailScreen extends ConsumerWidget {
   static String _statusLine(ChapterKey key, int total, int done) {
     if (key.isFuture) return 'Not started yet';
     if (key.isCurrent) {
-      return total == 0 ? 'Set the goals for this month' : '$done of $total done';
+      return total == 0
+          ? 'Set the goals for this month'
+          : '$done of $total done';
     }
-    return total == 0 ? 'A month with nothing written down' : '$done of $total done';
+    return total == 0
+        ? 'A month with nothing written down'
+        : '$done of $total done';
   }
 
-  static String _scopeLabel(String? ownerId, String? userId, String partnerName) {
+  static String _scopeLabel(
+      String? ownerId, String? userId, String partnerName) {
     if (ownerId == null) return 'Ours';
     if (ownerId == userId) return 'Mine';
     return partnerName;
@@ -398,7 +414,8 @@ class _SectionHeader extends StatelessWidget {
           onTap: onAdd,
           child: Row(
             children: [
-              const AppIcon(CupertinoIcons.add, size: 13, color: AppColors.brand),
+              const AppIcon(CupertinoIcons.add,
+                  size: 13, color: AppColors.brand),
               const SizedBox(width: 3),
               Text('Add', style: AppText.label(AppColors.brand)),
             ],
@@ -636,8 +653,8 @@ class _ReviewCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(
-            color: written ? AppColors.blushMid : AppColors.border),
+        border:
+            Border.all(color: written ? AppColors.blushMid : AppColors.border),
         boxShadow: AppElevation.card,
       ),
       child: Column(
@@ -670,8 +687,7 @@ class _ReviewCard extends StatelessWidget {
                 ),
                 GestureDetector(
                   onTap: onWrite,
-                  child: Text('Edit',
-                      style: AppText.label(AppColors.brand)),
+                  child: Text('Edit', style: AppText.label(AppColors.brand)),
                 ),
               ],
             ),
@@ -716,9 +732,7 @@ class _Hearts extends StatelessWidget {
         (i) => Padding(
           padding: const EdgeInsets.only(right: 3),
           child: AppIcon(
-            i < rating
-                ? CupertinoIcons.heart_fill
-                : CupertinoIcons.heart,
+            i < rating ? CupertinoIcons.heart_fill : CupertinoIcons.heart,
             size: 15,
             color: i < rating ? AppColors.brand : AppColors.blushMid,
           ),
@@ -946,8 +960,8 @@ class _GoalSheetState extends State<_GoalSheet> {
             Center(
               child: TextButton(
                 onPressed: () => Navigator.pop(context, const _Deleted()),
-                child:
-                    Text('Delete goal', style: AppText.caption(AppColors.danger)),
+                child: Text('Delete goal',
+                    style: AppText.caption(AppColors.danger)),
               ),
             ),
           ],

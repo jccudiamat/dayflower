@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../app_router.dart';
 import '../../features/tulip/data/flower_repository.dart';
-import '../../features/tulip/presentation/widgets/share_your_day.dart';
 import '../theme/app_colors.dart';
 import '../theme/design_tokens.dart';
 
@@ -43,57 +42,33 @@ class AppBottomNav extends ConsumerWidget {
               _NavItem(
                 icon: CupertinoIcons.house_fill,
                 label: 'Home',
-                // startsWith, not ==: the activity feed is nested under
-                // Home and the tab has to stay lit inside it.
-                selected: location.startsWith(Routes.home) ||
-                    location == Routes.events,
+                selected: location.startsWith(Routes.home),
                 onTap: () => context.go(Routes.home),
               ),
               _NavItem(
-                icon: Icons.local_florist_rounded,
-                label: 'Flowers',
-                // Opens the Flowers page, not the thread. Going straight to
-                // the conversation left nowhere to look back at what the two
-                // of you had sent — the tab named after the flowers never
-                // showed you any.
-                //
-                // Stays lit inside the conversation too: the thread is a
-                // child of this tab even though its path is not.
-                selected:
-                    location.startsWith(Routes.blooms) || location == Routes.chat,
+                icon: CupertinoIcons.chat_bubble_2_fill,
+                label: 'Chat',
+                selected: location.startsWith(Routes.chat),
                 badge: location == Routes.chat ? 0 : unread,
-                onTap: () => context.go(Routes.blooms),
+                onTap: () => context.go(Routes.chat),
               ),
               _NavItem(
-                icon: CupertinoIcons.camera_fill,
-                label: 'Camera',
-                // `== flowers`, not `startsWith`: the thread is nested under
-                // this path, and startsWith would light both tabs at once.
-                selected: location == Routes.flowers,
-                // Each door declares where a photo taken behind it should
-                // land — the chat sets `chat` the same way. The provider is
-                // global and sticky, so without this the camera keeps
-                // whatever the last entry point chose and the destination
-                // silently depends on where you have been.
-                onTap: () {
-                  ref.read(dayPhotoTargetProvider.notifier).state =
-                      DayPhotoTarget.widget;
-                  context.go(Routes.flowers);
-                },
+                icon: CupertinoIcons.heart_fill,
+                label: 'Dayflower',
+                selected: location.startsWith(Routes.dayflower),
+                onTap: () => context.go(Routes.dayflower),
               ),
               _NavItem(
-                icon: CupertinoIcons.gift_fill,
-                label: 'Gifts',
-                selected: location == Routes.gifts,
-                onTap: () => context.go(Routes.gifts),
+                icon: CupertinoIcons.photo_on_rectangle,
+                label: 'Memories',
+                selected: location.startsWith(Routes.memories),
+                onTap: () => context.go(Routes.memories),
               ),
               _NavItem(
                 icon: CupertinoIcons.square_grid_2x2_fill,
-                label: 'Activities',
-                // startsWith, not ==: reminders, finance and chapters are
-                // sub-routes and the tab has to stay lit inside them.
-                selected: location.startsWith(Routes.activities),
-                onTap: () => context.go(Routes.activities),
+                label: 'Together',
+                selected: location.startsWith(Routes.together),
+                onTap: () => context.go(Routes.together),
               ),
             ],
           ),
@@ -137,14 +112,69 @@ class _NavItem extends StatelessWidget {
             selected: selected,
             button: true,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpace.xxs),
+              padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Stack(
                     clipBehavior: Clip.none,
                     children: [
-                      AppIcon(icon, size: 24, color: color, selected: selected),
+                      if (label == 'Dayflower')
+                        Opacity(
+                            opacity: selected ? 1 : .6,
+                            child: ColorFiltered(
+                                colorFilter: ColorFilter.matrix(selected
+                                    ? const <double>[
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0
+                                      ]
+                                    : const <double>[
+                                        .51,
+                                        .43,
+                                        .06,
+                                        0,
+                                        0,
+                                        .13,
+                                        .81,
+                                        .06,
+                                        0,
+                                        0,
+                                        .13,
+                                        .43,
+                                        .44,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        0,
+                                        1,
+                                        0
+                                      ]),
+                                child: Image.asset('assets/images/mark.png',
+                                    width: 28,
+                                    height: 28,
+                                    excludeFromSemantics: true)))
+                      else
+                        AppIcon(icon,
+                            size: 24, color: color, selected: selected),
                       if (badge > 0)
                         Positioned(
                           top: -3,
@@ -178,7 +208,7 @@ class _NavItem extends StatelessWidget {
                   // the gap too, so the icons stay put instead of shifting
                   // up and down as the label comes and goes.
                   AnimatedSize(
-                    duration: AppMotion.micro,
+                    duration: AppMotion.duration(context, AppMotion.micro),
                     curve: AppMotion.easeOut,
                     alignment: Alignment.topCenter,
                     child: selected

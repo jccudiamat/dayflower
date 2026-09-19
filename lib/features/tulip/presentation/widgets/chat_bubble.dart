@@ -210,8 +210,7 @@ class ChatBubble extends StatelessWidget {
   // ── Day photo ─────────────────────────────────────
   /// The photo stays here forever, even after it has dropped off the
   /// partner's home screen — that expiry is a widget rule, not a data one.
-  /// Once it has expired the bubble says so, so the two surfaces don't
-  /// silently disagree.
+  /// Keep the caption about the preserved moment, not its widget lifetime.
   Widget _buildPhoto(BuildContext context) {
     // Only a photo that was actually sent to the home screen can have left
     // it. A chat-only photo never went, so saying it expired invents a
@@ -282,9 +281,7 @@ class ChatBubble extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  expired
-                      ? 'Your day · expired'
-                      : 'Your day · on the home screen',
+                  expired ? 'Daily Moment' : 'Your day · on the home screen',
                   style: AppText.label(
                       expired ? AppColors.muted : AppColors.secondary),
                 ),
@@ -499,8 +496,8 @@ class _SwipeToReplyState extends State<_SwipeToReply> {
             opacity: (_dx / _trigger).clamp(0.0, 1.0),
             child: Padding(
               padding: const EdgeInsets.only(left: 6),
-              child:
-                  AppIcon(CupertinoIcons.reply, size: 17, color: AppColors.muted),
+              child: AppIcon(CupertinoIcons.reply,
+                  size: 17, color: AppColors.muted),
             ),
           ),
           Transform.translate(
@@ -691,9 +688,8 @@ class _ReactionOverlay extends StatelessWidget {
             // message rather than hovering over the whole thread.
             alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
             child: Column(
-              crossAxisAlignment: isMine
-                  ? CrossAxisAlignment.end
-                  : CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  isMine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 _ReactionBar(messageId: messageId),
@@ -799,8 +795,8 @@ class _DeleteCard extends StatelessWidget {
           onDelete();
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppSpace.sm, vertical: 10),
+          padding:
+              const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 10),
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(AppRadius.md),

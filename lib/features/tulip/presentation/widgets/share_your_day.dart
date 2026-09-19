@@ -568,7 +568,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                       _GlassButton(
                         icon: CupertinoIcons.xmark,
                         tooltip: 'Close',
-                        onTap: () => context.go(Routes.home),
+                        onTap: () => context.canPop() ? context.pop()
+                            : context.go(_target == DayPhotoTarget.chat ? Routes.chat : Routes.home),
                       ),
                       const SizedBox(width: AppSpace.xs),
                       // Named after where this shot is going, not after the
@@ -980,17 +981,18 @@ class _MyDaysViewerState extends ConsumerState<MyDaysViewer> {
 }
 
 /// The last page: a way back to the camera.
-class _AddDayPage extends StatelessWidget {
+class _AddDayPage extends ConsumerWidget {
   const _AddDayPage();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           GestureDetector(
             onTap: () {
+              ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.widget;
               Navigator.of(context).pop();
               context.push(Routes.flowers);
             },

@@ -153,12 +153,53 @@ Future<void> _publish(List<String> args) async {
   }
   final originalPubspec = pubspec.readAsStringSync();
   final version = _Version.parse(originalPubspec);
-  final newBuild = options.build ?? version.build + 1;
+  // 🔴 **The live build number comes from the bucket, not just pubspec.**
+  //
+  // This has gone wrong twice. `pubspec.yaml` is restored after every
+  // publish, so it records the build this working tree *last compiled*, not
+  // the one phones are actually offered. Publish from a tree that is a few
+  // builds behind — a second machine, another branch, an agent session that
+  // did not pull — and `version.build + 1` lands on a number that already
+  // exists. The upload overwrites that APK and, worse, rewrites
+  // `latest.json` to point *backwards*: every phone already on a higher
+  // build is then offered nothing, forever, with no error anywhere.
+  //
+  // First time it republished 28 over 28. Second time it pointed a fleet on
+  // 77 back to 76. Asking the bucket what is live costs one request.
+  // ⚠️ **Both the advertised number and the objects themselves.**
+  //
+  // `latest.json` alone is not enough, and the second incident proved it:
+  // once a bad publish has pointed it backwards, it *under*-reports, and
+  // the next run happily overwrites a real APK sitting above it. The
+  // listing is the ground truth about what exists; latest.json is only
+  // what phones are currently told.
+  final liveBuild = await _highestPublishedBuild(
+    supabaseUrl: supabaseUrl,
+    serviceKey: serviceKey,
+  );
+  final highest = [
+    version.build,
+    if (liveBuild != null) liveBuild,
+  ].reduce((a, b) => a > b ? a : b);
 
-  if (newBuild <= version.build && !options.skipBuild) {
+  final newBuild = options.build ?? highest + 1;
+
+  if (newBuild <= highest) {
+    final source = liveBuild != null && liveBuild > version.build
+        ? 'published'
+        : 'local';
     _fail(
-      'Build $newBuild is not newer than the current ${version.build}. '
-      'Phones compare build numbers, so this would never be offered.',
+      'Build $newBuild is not newer than the $source build $highest. '
+      'Phones compare build numbers, so this would be offered to nobody — '
+      'and publishing it would point latest.json backwards for anyone '
+      'already above it. Pass --build ${highest + 1} to go forward.',
+    );
+  }
+
+  if (liveBuild != null && liveBuild > version.build) {
+    stdout.writeln(
+      'Note: pubspec says ${version.build} but build $liveBuild is live. '
+      'Publishing $newBuild.',
     );
   }
 
@@ -293,6 +334,67 @@ Future<void> _publish(List<String> args) async {
 /// ⚠️ Old APKs are kept for **manual rollback only** — sideloading a known-good
 /// build when a release turns out broken. Five is a fortnight of them at the
 /// cadence this project actually runs at. Nothing in the app reads them.
+/// The highest build that exists, by either measure.
+///
+/// Takes the larger of what `latest.json` advertises and what is actually in
+/// the bucket. They disagree exactly when something has gone wrong, and the
+/// larger of the two is the only safe answer — publishing at or below it
+/// either clobbers a real APK or points phones backwards.
+///
+/// Null when neither can be read. A missing answer must not block a release,
+/// so the caller falls back to pubspec; it is the *contradiction* that is
+/// worth stopping for.
+Future<int?> _highestPublishedBuild({
+  required String supabaseUrl,
+  required String? serviceKey,
+}) async {
+  final candidates = <int>[];
+
+  final advertised = await _advertisedBuildNumber(supabaseUrl);
+  if (advertised != null) candidates.add(advertised);
+
+  if (serviceKey != null && serviceKey.isNotEmpty) {
+    try {
+      final objects =
+          await _listBuilds(supabaseUrl: supabaseUrl, serviceKey: serviceKey);
+      for (final o in objects) {
+        final match = RegExp(r'^dayflower-(\d+)-').firstMatch(o.name);
+        if (match != null) candidates.add(int.parse(match.group(1)!));
+      }
+    } catch (_) {
+      // Listing is a nicety; the advertised number still guards the common
+      // case, and no network must not mean no release.
+    }
+  }
+
+  if (candidates.isEmpty) return null;
+  return candidates.reduce((a, b) => a > b ? a : b);
+}
+
+/// What phones are being offered right now.
+Future<int?> _advertisedBuildNumber(String supabaseUrl) async {
+  final url = Uri.parse(
+    '${supabaseUrl.replaceAll(RegExp(r'/+$'), '')}'
+    '/storage/v1/object/public/$_bucket/latest.json',
+  );
+  try {
+    final client = HttpClient();
+    final request = await client.getUrl(url);
+    final response = await request.close();
+    if (response.statusCode != 200) {
+      client.close();
+      return null;
+    }
+    final body = await response.transform(utf8.decoder).join();
+    client.close();
+    final decoded = jsonDecode(body);
+    final build = decoded is Map ? decoded['buildNumber'] : null;
+    return build is int ? build : int.tryParse('$build');
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<void> _prune({
   required String supabaseUrl,
   required String serviceKey,

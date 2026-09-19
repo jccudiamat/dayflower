@@ -107,7 +107,7 @@ class ReminderScheduler {
   /// ⚠️ Spelled out rather than imported from `Routes`: app_router.dart pulls
   /// in every screen in the app, and this file is loaded by the background
   /// isolate. `reminder_countdown_routes_test` asserts the two stay equal.
-  static const remindersRoute = '/app/activities/reminders';
+  static const remindersRoute = '/app/together/reminders';
 
   static const actionSnooze = 'reminder_snooze';
   static const actionDone = 'reminder_done';
@@ -547,9 +547,8 @@ class ReminderScheduler {
         // local notifications, so timeSensitive (which does pierce Focus
         // modes) is genuinely as close to an alarm as a third-party app gets
         // without a push backend. A real iOS alarm is the system Clock app.
-        interruptionLevel: rings
-            ? InterruptionLevel.timeSensitive
-            : InterruptionLevel.active,
+        interruptionLevel:
+            rings ? InterruptionLevel.timeSensitive : InterruptionLevel.active,
       ),
     );
 
@@ -731,9 +730,14 @@ Future<void> reminderActionBackground(NotificationResponse response) async {
       final client = Supabase.instance.client;
       final user = client.auth.currentUser;
       if (user == null) return;
-      final call = await client.from('flower_messages').select('sender_id,call_mode')
-          .eq('id', callId).maybeSingle();
-      if (call == null || call['call_mode'] == null || call['sender_id'] == user.id) return;
+      final call = await client
+          .from('flower_messages')
+          .select('sender_id,call_mode')
+          .eq('id', callId)
+          .maybeSingle();
+      if (call == null ||
+          call['call_mode'] == null ||
+          call['sender_id'] == user.id) return;
       await client.rpc('end_call', params: {'p_message_id': callId});
     } catch (e) {
       debugPrint('call decline failed: $e');
@@ -761,11 +765,8 @@ Future<void> reminderActionBackground(NotificationResponse response) async {
     final client = Supabase.instance.client;
     if (client.auth.currentUser == null) return; // signed out
 
-    final rows = await client
-        .from('reminders')
-        .select()
-        .eq('id', reminderId)
-        .limit(1);
+    final rows =
+        await client.from('reminders').select().eq('id', reminderId).limit(1);
     if (rows.isEmpty) return;
     final reminder = Reminder.fromMap(rows.first);
     final repository = ReminderRepository(client);

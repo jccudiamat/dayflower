@@ -1,0 +1,669 @@
+/* ── The two-phone app preview ────────────────────────────────────────────
+ *
+ * Laid out at one fixed size and scaled bodily with `--ps`, rather than made
+ * fluid. Phone UI is a hundred small fixed relationships — a 10px caption
+ * under an 11.5px title, a 2px hairline — and fluid type pulls every one of
+ * them apart at a different rate. Scaling the whole object keeps it looking
+ * like a screenshot of software instead of a responsive web page pretending
+ * to be one.
+ */
+
+.app-phones {
+  --ps: 0.82;
+  position: relative;
+  width: calc(600px * var(--ps));
+  height: calc(664px * var(--ps));
+  margin-inline: auto;
+}
+.app-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 600px;
+  height: 664px;
+  transform: scale(var(--ps));
+  transform-origin: top left;
+}
+
+.ph {
+  position: absolute;
+  top: 0;
+}
+.ph-home {
+  left: 14px;
+  top: 6px;
+  z-index: 3;
+  transform: rotate(4deg);
+}
+.ph-mem {
+  left: 296px;
+  top: 40px;
+  z-index: 2;
+  transform: rotate(2deg) scale(0.955);
+  transform-origin: top left;
+}
+
+.ph-body {
+  padding: 9px;
+  border-radius: 44px;
+  background: linear-gradient(150deg, #514a5e 0%, #1a1522 38%, #3a3347 72%, #16121d 100%);
+  box-shadow:
+    0 40px 60px -28px rgba(44, 24, 42, 0.42),
+    0 3px 8px rgba(44, 24, 42, 0.14);
+}
+.ph-mem .ph-body {
+  box-shadow: 0 34px 50px -30px rgba(44, 24, 42, 0.34);
+}
+
+.ph-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 36px;
+  background: #f7f5fb;
+  /* 🔴 The screen sets its own background, so it must set its own colour.
+     Without this every unstyled node inherits the section's text colour. */
+  color: #1c1024;
+  font-family: var(--font-quicksand), system-ui, sans-serif;
+  line-height: 1.35;
+}
+/* The bar under the phone, holding it up. */
+.ph::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  bottom: -18px;
+  height: 26px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(60, 34, 56, 0.22), transparent 70%);
+}
+
+/* ── Status bar ─────────────────────────────────────────────────────────── */
+.ph-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 22px 2px;
+}
+.ph-time {
+  font-size: 12px;
+  font-weight: 700;
+}
+.ph-status-icons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.ph-sig {
+  height: 9px;
+  width: auto;
+  fill: #1c1024;
+}
+
+/* ── Home ───────────────────────────────────────────────────────────────── */
+.ph-appbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 15px 4px;
+}
+.ph-wordmark {
+  flex: 1;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.ph-bell svg {
+  width: 15px;
+  height: 15px;
+  fill: #5b5066;
+}
+.ph-pair {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 2px 16px 2px 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fdeaf3, #f9d9ea);
+}
+.ph-face {
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1.5px solid #fff;
+  width: 24px;
+  height: 24px;
+}
+.ph-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-face-b {
+  margin-left: -9px;
+}
+.ph-face-c {
+  width: 28px;
+  height: 28px;
+  border-color: #f6d7e6;
+}
+.ph-send {
+  position: absolute;
+  right: 4px;
+  font-size: 8px;
+  color: #d5568f;
+}
+
+.ph-scroll {
+  flex: 1;
+  overflow: hidden;
+  padding: 4px 14px 0;
+}
+
+.ph-greet {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ph-greet-copy {
+  flex: 1;
+  min-width: 0;
+  padding-top: 2px;
+}
+.ph-greet-line,
+.ph-greet-name {
+  font-size: 16.5px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+}
+.ph-emoji {
+  font-size: 0.82em;
+}
+.ph-greet-meta {
+  margin-top: 4px;
+  font-size: 10.5px;
+  color: #6d6178;
+}
+.ph-greet-meta + .ph-greet-meta {
+  margin-top: 1px;
+}
+.ph-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #e7f6ed;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #2f7a52;
+}
+.ph-live i {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #34a06a;
+}
+
+.ph-daily {
+  position: relative;
+  flex: 0 0 96px;
+  height: 118px;
+  overflow: hidden;
+  border-radius: 20px;
+  box-shadow: 0 6px 14px rgba(60, 34, 56, 0.14);
+}
+.ph-daily img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-daily-note {
+  position: absolute;
+  left: 9px;
+  bottom: 8px;
+  font-size: 10.5px;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+}
+
+.ph-card {
+  border-radius: 16px;
+  border: 1px solid #f1ecf6;
+  background: #fff;
+  padding: 10px 11px;
+  box-shadow: 0 2px 6px rgba(60, 34, 56, 0.04);
+}
+
+.ph-map {
+  position: relative;
+  overflow: hidden;
+  margin-top: 9px;
+}
+.ph-map-back {
+  position: absolute;
+  inset: 8px 6px;
+  width: auto;
+  height: auto;
+}
+.ph-map-row {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+}
+.ph-map-right {
+  text-align: right;
+}
+.ph-city {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.ph-clock {
+  font-size: 10px;
+  color: #6d6178;
+}
+.ph-arc {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin: 1px 0 3px;
+}
+.ph-map-foot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #6d6178;
+}
+.ph-link {
+  font-weight: 700;
+  color: #b95b93;
+}
+
+.ph-mood {
+  margin-top: 9px;
+}
+.ph-mood-top {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.ph-mood-top > div {
+  flex: 1;
+  min-width: 0;
+}
+.ph-mood-title {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.ph-mood-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #6d6178;
+}
+.ph-heart {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #f0709f, #906fe8);
+  box-shadow: 0 4px 10px rgba(198, 86, 140, 0.32);
+}
+.ph-heart svg {
+  width: 18px;
+  height: 18px;
+  fill: #fff;
+}
+.ph-mood-row {
+  display: flex;
+  gap: 5px;
+  margin-top: 9px;
+}
+.ph-mood-chip {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  height: 27px;
+  border-radius: 999px;
+  background: #fdf1f6;
+  font-size: 13px;
+}
+
+.ph-section {
+  margin: 10px 0 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.ph-soon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border-color: #f9dfeb;
+  background: linear-gradient(100deg, #fdeef5, #fbe4ef);
+}
+.ph-soon-when {
+  font-size: 10px;
+  font-weight: 700;
+  color: #d5568f;
+}
+.ph-soon-title {
+  margin-top: 2px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.ph-soon-date {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #6d6178;
+}
+.ph-soon-art {
+  position: absolute;
+  right: -6px;
+  bottom: -10px;
+  width: 78px;
+  height: auto;
+  transform: rotate(-6deg);
+}
+
+.ph-ago {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.ph-ago-photo {
+  display: block;
+  flex: 0 0 54px;
+  height: 46px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.ph-ago-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-ago-title {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+.ph-ago-sub {
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: #4f4459;
+}
+.ph-ago-date {
+  margin-top: 2px;
+  font-size: 9.5px;
+  color: #8e8698;
+}
+
+/* ── Memories ───────────────────────────────────────────────────────────── */
+.ph-memhead {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 15px 0;
+}
+.ph-memhead > div {
+  flex: 1;
+  min-width: 0;
+}
+.ph-memtitle {
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+}
+.ph-memsub {
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: #8e8698;
+}
+.ph-memicon svg {
+  width: 15px;
+  height: 15px;
+  color: #6d6178;
+  margin-top: 5px;
+}
+
+.ph-chips {
+  display: flex;
+  gap: 5px;
+  padding: 10px 14px 4px;
+}
+.ph-chip {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #f0ecf8;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #625771;
+}
+.ph-chip.is-on {
+  background: linear-gradient(95deg, #f579ab, #ee6fa8);
+  color: #fff;
+  padding-inline: 14px;
+}
+
+.ph-scroll-mem {
+  padding-inline: 12px;
+}
+.ph-month {
+  margin: 8px 0 7px 2px;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.ph-timeline {
+  position: relative;
+  padding-left: 44px;
+}
+.ph-rail {
+  position: absolute;
+  left: 37px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 2px;
+  background: linear-gradient(#f584ae, #f0709f);
+}
+.ph-rail-faint {
+  opacity: 0.3;
+}
+.ph-entry {
+  position: relative;
+  margin-bottom: 7px;
+}
+.ph-when {
+  position: absolute;
+  left: -44px;
+  top: 50%;
+  width: 34px;
+  transform: translateY(-50%);
+  text-align: center;
+}
+.ph-when-day {
+  font-size: 10px;
+  font-weight: 700;
+  color: #4f4459;
+}
+.ph-when-date {
+  font-size: 9.5px;
+  color: #8e8698;
+}
+.ph-dot {
+  position: absolute;
+  left: -9px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 999px;
+  background: #ee6fa8;
+}
+.ph-dot-faint {
+  background: #f6b6d0;
+}
+.ph-memcard {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px 7px 7px;
+  border-radius: 14px;
+}
+.ph-thumb {
+  display: block;
+  flex: 0 0 56px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 11px;
+  background: #f3eef7;
+}
+.ph-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ph-thumb-strip {
+  flex-basis: 38px;
+  height: 62px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: #fffdf8;
+  box-shadow: 0 2px 6px rgba(60, 34, 56, 0.16);
+}
+.ph-thumb-strip img {
+  height: 18px;
+  border-radius: 2px;
+}
+.ph-thumb-note {
+  position: relative;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: linear-gradient(150deg, #fbd0e0, #f6a6c6);
+  box-shadow: 0 3px 8px rgba(60, 34, 56, 0.16);
+}
+.ph-thumb-note i {
+  position: absolute;
+  inset: 6px 6px auto;
+  height: 16px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.5);
+}
+.ph-thumb-note em {
+  margin-top: 16px;
+  font-size: 8px;
+  color: #8c3d63;
+}
+.ph-memcopy {
+  flex: 1;
+  min-width: 0;
+}
+.ph-memname {
+  font-size: 12px;
+  font-weight: 700;
+}
+.ph-memmeta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #7a7085;
+}
+.ph-memquote {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #4f4459;
+}
+.ph-fav svg {
+  width: 13px;
+  height: 13px;
+  fill: #ee6fa8;
+  align-self: flex-start;
+}
+.ph-book {
+  flex: 0 0 46px;
+  height: 60px;
+  border-radius: 3px 6px 6px 3px;
+  background: linear-gradient(105deg, #1f3a2c 0 6px, #2c5140 6px, #24422f);
+  box-shadow: 0 3px 9px rgba(30, 50, 40, 0.3);
+  position: relative;
+}
+.ph-book::after {
+  content: "";
+  position: absolute;
+  inset: 12px 8px auto;
+  height: 12px;
+  border-top: 1px solid rgba(214, 186, 122, 0.6);
+  border-bottom: 1px solid rgba(214, 186, 122, 0.6);
+}
+
+/* ── Tab bar ────────────────────────────────────────────────────────────── */
+.ph-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 7px 6px 12px;
+  border-top: 1px solid #efeaf5;
+  background: #fffdff;
+}
+.ph-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: #8e8698;
+}
+.ph-tab svg {
+  width: 17px;
+  height: 17px;
+  fill: #9a92a6;
+}
+.ph-tab.is-on {
+  color: #7a5ad4;
+}
+.ph-tab.is-on svg {
+  fill: #7a5ad4;
+}
+.ph-tab-mark img {
+  width: 27px;
+  height: 27px;
+  margin-bottom: 1px;
+}
+
+@media (max-width: 1180px) {
+  .app-phones {
+    --ps: 0.78;
+  }
+}
+@media (max-width: 1040px) {
+  .app-phones {
+    --ps: 0.72;
+  }
+}
+@media (max-width: 900px) {
+  .app-phones {
+    --ps: 0.68;
+  }
+}
+@media (max-width: 700px) {
+  .app-phones {
+    --ps: 0.62;
+  }
+}
+@media (max-width: 420px) {
+  .app-phones {
+    --ps: 0.54;
+  }
+}

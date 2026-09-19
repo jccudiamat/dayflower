@@ -76,6 +76,9 @@ class Activity {
 
       case ActivityKind.goalSet:
       case ActivityKind.goalDone:
+        final year = _int('year');
+        final month = _int('month');
+        return year == null || month == null ? Routes.goals : Routes.goalsFor(year, month);
       case ActivityKind.momentAdded:
       case ActivityKind.chapterWritten:
       case ActivityKind.chapterClosed:
@@ -90,10 +93,9 @@ class Activity {
       case ActivityKind.reunionSet:
         return Routes.events;
 
-      // The camera, not the thread: a strip waiting on you is a thing to
-      // *do*, and the shutter is the only place you can do it.
+      // Open the existing strip invitation in Memories.
       case ActivityKind.stripWaiting:
-        return Routes.flowers;
+        return Routes.booth;
 
       // The finished strip was posted as an ordinary photo message, so the
       // thread is where it actually is.

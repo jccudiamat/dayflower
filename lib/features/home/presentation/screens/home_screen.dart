@@ -1,5 +1,8 @@
+import '../widgets/today_story.dart';
+import '../../../../core/widgets/user_avatar.dart';
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -15,7 +18,6 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
-import '../../../../core/widgets/user_avatar.dart';
 import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
@@ -25,9 +27,10 @@ import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
-import '../../../activity/presentation/widgets/activity_timeline.dart';
-import '../../../gifts/presentation/widgets/gift_occasion_card.dart';
+import '../../../activity/data/activity_repository.dart';
 import '../../../greetings/presentation/monthsary_envelope.dart';
+import '../../../reunion/data/reunion_repository.dart';
+import '../../../dates/presentation/widgets/reunion_card.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -63,24 +66,17 @@ class HomeScreen extends ConsumerWidget {
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
                   _HomeHeader(),
-                  SizedBox(height: AppSpace.md),
-                  MonthsaryEnvelope(),
-                  // The two things you came to *do*, first: say how you are
-                  // and reach for them. Activity sits under both because it
-                  // is what happened rather than what to do, and the badge
-                  // plus the notification are what make sure it is noticed
-                  // without it having to be at the top.
-                  _MoodCard(),
                   SizedBox(height: AppSpace.sm),
-                  _HeartbeatCard(),
-                  SizedBox(height: AppSpace.md),
-                  GiftOccasionCard(),
-                  SizedBox(height: AppSpace.md),
-                  // The conversation card used to sit here. It went the same
-                  // way the reunion countdown did: the Flowers tab is one
-                  // tap away and shows the thread properly, so a preview of
-                  // it on Home was a second place saying the same thing.
-                  ActivitySection(),
+                  LocationPreview(),
+                  SizedBox(height: AppSpace.sm),
+                  MonthsaryEnvelope(),
+                  _MoodCard(),
+                  ReceivedFlowerPreview(),
+                  SizedBox(height: AppSpace.xs),
+                  ComingUpPreview(),
+                  _HomeReunion(),
+                  MemoryCallback(),
+                  _HomeActions(),
                 ]),
               ),
             ),
@@ -102,6 +98,10 @@ class _MoodCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mood = ref.watch(moodProvider);
+    final theirMood = ref.watch(partnerMoodProvider);
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    final theirName =
+        partner?.petName ?? partner?.displayName ?? 'Your partner';
 
     return Container(
       width: double.infinity,
@@ -114,6 +114,14 @@ class _MoodCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const _HeartbeatCard(embedded: true),
+          if (theirMood != null) ...[
+            const SizedBox(height: AppSpace.xs),
+            Text(
+                '$theirName is feeling ${theirMood.label.toLowerCase()} ${theirMood.emoji}',
+                style: AppText.body(AppColors.muted)),
+          ],
+          const SizedBox(height: AppSpace.xs),
           Row(
             children: [
               Expanded(
@@ -128,20 +136,26 @@ class _MoodCard extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: AppSpace.xs),
-          Row(
-            children: [
-              for (final m in Mood.values) ...[
-                Expanded(
-                  child: _MoodChip(
-                    mood: m,
-                    selected: mood == m,
-                    onTap: () => ref.read(moodProvider.notifier).select(m),
-                  ),
-                ),
-                if (m != Mood.values.last) const SizedBox(width: 6),
-              ],
-            ],
-          ),
+          SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: [
+                for (final m in Mood.values)
+                  Padding(
+                      padding: const EdgeInsets.only(right: AppSpace.xxs),
+                      child: SizedBox(
+                          width: 48,
+                          height: 48,
+                          child: Semantics(
+                              button: true,
+                              selected: mood == m,
+                              label: m.label,
+                              child: _MoodChip(
+                                  mood: m,
+                                  selected: mood == m,
+                                  onTap: () => ref
+                                      .read(moodProvider.notifier)
+                                      .select(m))))),
+              ])),
         ],
       ),
     );
@@ -166,7 +180,7 @@ class _MoodChip extends StatelessWidget {
       child: AspectRatio(
         aspectRatio: 1,
         child: AnimatedContainer(
-          duration: AppMotion.micro,
+          duration: AppMotion.duration(context, AppMotion.micro),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: selected ? AppColors.blush : AppColors.background,
@@ -190,7 +204,8 @@ class _MoodChip extends StatelessWidget {
 
 /* ── Heartbeat card ──────────────────────────────── */
 class _HeartbeatCard extends ConsumerStatefulWidget {
-  const _HeartbeatCard();
+  const _HeartbeatCard({this.embedded = false});
+  final bool embedded;
 
   @override
   ConsumerState<_HeartbeatCard> createState() => _HeartbeatCardState();
@@ -198,24 +213,11 @@ class _HeartbeatCard extends ConsumerStatefulWidget {
 
 class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     with TickerProviderStateMixin {
-  /// The heart itself. Ripples are sized relative to it.
-  static const double _heartSize = 84;
-
-  /// Big enough to hold a fully expanded incoming ripple without clipping —
-  /// [Stack] clips by default, so this and [_incomingGrowth] move together.
-  static const double _stageSize = 190;
-
-  static const double _incomingGrowth = 106;
-  static const Duration _incomingDuration = Duration(milliseconds: 1200);
-
   late final AnimationController _scaleCtrl;
 
   /// Double-thump (lub-dub) played on the receiving side only.
   late final AnimationController _beatCtrl;
   late final Animation<double> _beat;
-
-  int _rippleSeed = 0;
-  final List<_Ripple> _ripples = [];
 
   @override
   void initState() {
@@ -266,49 +268,13 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     super.dispose();
   }
 
-  void _addRipple(_Ripple ripple) {
-    setState(() => _ripples.add(ripple));
-    Future.delayed(ripple.delay + ripple.duration, () {
-      if (mounted) setState(() => _ripples.remove(ripple));
-    });
-  }
-
-  /// Your own tap — a single modest ring. Deliberately smaller than the
-  /// incoming one: receiving should feel bigger than sending.
-  void _spawnSentRipple() {
-    _addRipple(
-      _Ripple(
-        id: _rippleSeed++,
-        color: AppColors.brand,
-        growth: 40,
-        duration: AppMotion.emotional,
-        strokeWidth: 2,
-      ),
-    );
-  }
-
-  /// Their tap — three staggered rings sweeping out to the edge of the stage,
-  /// the first carrying a soft bloom behind the heart.
-  void _spawnIncomingRipples() {
-    for (var i = 0; i < 3; i++) {
-      _addRipple(
-        _Ripple(
-          id: _rippleSeed++,
-          color: AppColors.lavender,
-          growth: _incomingGrowth,
-          duration: _incomingDuration,
-          delay: Duration(milliseconds: i * 200),
-          strokeWidth: 3 - i * 0.6,
-          bloom: i == 0,
-        ),
-      );
-    }
-  }
-
   void _onTap() {
     HapticFeedback.mediumImpact();
-    _scaleCtrl.forward().then((_) => _scaleCtrl.reverse());
-    _spawnSentRipple();
+    if (!MediaQuery.disableAnimationsOf(context)) {
+      _scaleCtrl.forward().then((_) {
+        if (mounted) _scaleCtrl.reverse();
+      });
+    }
 
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
@@ -320,7 +286,12 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     ref
         .read(heartbeatRepositoryProvider)
         .send(pairId: pair.id, senderId: userId)
-        .catchError((Object e) => debugPrint('heartbeat send failed: $e'));
+        .catchError((Object e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Your heartbeat couldn’t send. Try again.')));
+      }
+    });
   }
 
   @override
@@ -336,182 +307,51 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     // heart. Notification delivery is owned by the app root.
     ref.listen(todayHeartbeatCountsProvider, (prev, next) {
       if (prev == null || next.partner <= prev.partner) return;
-      _spawnIncomingRipples();
-      _beatCtrl.forward(from: 0);
-
-
+      if (!MediaQuery.disableAnimationsOf(context)) {
+        _beatCtrl.forward(from: 0);
+      }
     });
 
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpace.md),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.xl),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          // "Haptic" because that is the whole feature: the tap arrives
-          // on their phone as a buzz, not as a notification to read.
-          Text('HAPTIC HEARTBEAT', style: AppText.label()),
-          const SizedBox(height: AppSpace.xs),
-          SizedBox(
-            width: _stageSize,
-            height: _stageSize,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                for (final r in _ripples)
-                  _RippleRing(
-                    key: ValueKey(r.id),
-                    ripple: r,
-                    baseSize: _heartSize,
-                  ),
-                AnimatedBuilder(
-                  animation: Listenable.merge([_scaleCtrl, _beatCtrl]),
-                  builder: (context, child) => Transform.scale(
-                    scale: (1 + _scaleCtrl.value) * _beat.value,
-                    child: child,
-                  ),
-                  child: GestureDetector(
-                    onTap: _onTap,
-                    child: Container(
-                      width: _heartSize,
-                      height: _heartSize,
-                      decoration: BoxDecoration(
-                        gradient: AppGradients.brand,
-                        shape: BoxShape.circle,
-                        boxShadow: AppElevation.glow,
-                      ),
-                      child: const AppIcon(
-                        CupertinoIcons.heart_fill,
-                        color: Colors.white,
-                        size: 38,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppSpace.sm),
-          Text(
-            counts.mine == 0
-                ? 'Tap to send a pulse'
-                : 'Tapped ${counts.mine}× today',
-            style: AppText.subtitle(),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            counts.partner == 0
-                ? "$partnerName hasn't tapped yet today"
-                : '$partnerName sent ${counts.partner} ${counts.partner == 1 ? "pulse" : "pulses"} today 💗',
-            style: AppText.caption(),
-          ),
-        ],
-      ),
-    );
+        padding: widget.embedded
+            ? EdgeInsets.zero
+            : const EdgeInsets.all(AppSpace.sm),
+        decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(AppRadius.lg),
+            border:
+                widget.embedded ? null : Border.all(color: AppColors.border)),
+        child: Row(children: [
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text('A little closer', style: AppText.subtitle()),
+                Text(
+                    '${counts.mine + counts.partner} little moments shared today',
+                    style: AppText.caption()),
+              ])),
+          Semantics(
+              label: 'Send some love to $partnerName',
+              button: true,
+              child: IconButton(
+                onPressed: _onTap,
+                tooltip: 'Send some love',
+                icon: AnimatedBuilder(
+                    animation: Listenable.merge([_scaleCtrl, _beatCtrl]),
+                    builder: (context, child) => Transform.scale(
+                        scale: MediaQuery.disableAnimationsOf(context)
+                            ? 1
+                            : (1 + _scaleCtrl.value) * _beat.value,
+                        child: child),
+                    child: const AppIcon(CupertinoIcons.heart_fill,
+                        color: AppColors.brand, size: 36)),
+              )),
+        ]));
   }
 }
 
 /// One expanding ring. Several of these, staggered, make the incoming pulse.
-class _Ripple {
-  _Ripple({
-    required this.id,
-    required this.color,
-    required this.growth,
-    required this.duration,
-    required this.strokeWidth,
-    this.delay = Duration.zero,
-    this.bloom = false,
-  });
-
-  final int id;
-  final Color color;
-
-  /// How much wider than the heart the ring gets, in logical pixels.
-  final double growth;
-  final Duration duration;
-  final double strokeWidth;
-  final Duration delay;
-
-  /// Fills the ring with a faint wash as well as stroking it.
-  final bool bloom;
-}
-
-class _RippleRing extends StatefulWidget {
-  const _RippleRing({
-    super.key,
-    required this.ripple,
-    required this.baseSize,
-  });
-
-  final _Ripple ripple;
-  final double baseSize;
-
-  @override
-  State<_RippleRing> createState() => _RippleRingState();
-}
-
-class _RippleRingState extends State<_RippleRing>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(vsync: this, duration: widget.ripple.duration);
-    if (widget.ripple.delay == Duration.zero) {
-      _ctrl.forward();
-    } else {
-      Future.delayed(widget.ripple.delay, () {
-        if (mounted) _ctrl.forward();
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final r = widget.ripple;
-    return IgnorePointer(
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (context, _) {
-          final v = Curves.easeOut.transform(_ctrl.value);
-          // Fade late rather than linearly, so the ring stays readable most of
-          // the way out instead of vanishing at half radius.
-          final fade = (1 - v * v).clamp(0.0, 1.0);
-          final size = widget.baseSize + r.growth * v;
-          return Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: r.bloom
-                  ? r.color.withValues(alpha: 0.14 * fade)
-                  : null,
-              border: Border.all(
-                color: r.color.withValues(alpha: fade),
-                width: r.strokeWidth,
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-/* ── Header ──────────────────────────────── */
-
-/// The greeting block: who you are to them, where they are, and how far
-/// away that is — with today's photos standing beside it.
 class _HomeHeader extends ConsumerWidget {
   const _HomeHeader();
 
@@ -551,52 +391,52 @@ class _HomeHeader extends ConsumerWidget {
           child: Padding(
             padding: const EdgeInsets.only(bottom: AppSpace.sm),
             child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_greetingFor(DateTime.now()), style: AppText.display()),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      myName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.display(AppColors.brandDark),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpace.xxs),
-                  // A different bloom each time the app opens — see
-                  // greetingFlower for why it is picked once per launch
-                  // rather than once per build.
-                  Text(greetingFlower, style: const TextStyle(fontSize: 22)),
-                ],
-              ),
-              const SizedBox(height: AppSpace.xs),
-
-              // Where they are and what time it is there. One line, because
-              // it is one thought.
-              if (partnerName != null && partnerTime != null)
-                Text(
-                  // Their town when they have picked one, the timezone's
-                  // namesake city otherwise — "Manila" for everybody in
-                  // Asia/Manila, which is where this line started.
-                  '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(partnerZone!)} · '
-                  '${DateFormat('h:mm a').format(partnerTime)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppText.body(AppColors.body),
-                ),
-
-              // Replaces the old "Day N together". A streak counts how long
-              // you have kept a habit; this counts what the app is actually
-              // about. Hidden entirely when a zone is unknown rather than
-              // guessed at.
-              if (distance != null) ...[
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_greetingFor(DateTime.now()), style: AppText.title()),
                 const SizedBox(height: 2),
-                Text(distance, style: AppText.body(AppColors.body)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        myName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.hero(AppColors.ink),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpace.xxs),
+                    // A different bloom each time the app opens — see
+                    // greetingFlower for why it is picked once per launch
+                    // rather than once per build.
+                    Text(greetingFlower, style: const TextStyle(fontSize: 22)),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.xs),
+
+                // Where they are and what time it is there. One line, because
+                // it is one thought.
+                if (partnerName != null && partnerTime != null)
+                  Text(
+                    // Their town when they have picked one, the timezone's
+                    // namesake city otherwise — "Manila" for everybody in
+                    // Asia/Manila, which is where this line started.
+                    '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(partnerZone!)} · '
+                    '${DateFormat('h:mm a').format(partnerTime)}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.body(AppColors.body),
+                  ),
+
+                // Replaces the old "Day N together". A streak counts how long
+                // you have kept a habit; this counts what the app is actually
+                // about. Hidden entirely when a zone is unknown rather than
+                // guessed at.
+                if (distance != null) ...[
+                  const SizedBox(height: 2),
+                  Text(distance, style: AppText.body(AppColors.body)),
+                ],
               ],
-            ],
             ),
           ),
         ),
@@ -705,8 +545,7 @@ class _DayArchState extends ConsumerState<_DayArch>
     // make half of all swipes silently do nothing.
     if (theirs != null && mine != null) {
       return GestureDetector(
-        onHorizontalDragEnd: (_) =>
-            _bringForward(mine: _swap.value < 0.5),
+        onHorizontalDragEnd: (_) => _bringForward(mine: _swap.value < 0.5),
         child: AnimatedBuilder(
           animation: _swap,
           builder: (context, _) {
@@ -738,7 +577,10 @@ class _DayArchState extends ConsumerState<_DayArch>
                 // Painted back to front. The keys carry each card's element
                 // through the reorder, so the photo does not get rebuilt —
                 // and its signed URL not re-fetched — every time they trade.
-                if (theirsInFront) ...[myCard, theirCard] else ...[
+                if (theirsInFront) ...[
+                  myCard,
+                  theirCard
+                ] else ...[
                   theirCard,
                   myCard,
                 ],
@@ -770,7 +612,10 @@ class _DayArchState extends ConsumerState<_DayArch>
     // opens the camera so there is something here next time.
     return ClipRRect(
       borderRadius: _DayArch.shape,
-      child: _DayEmpty(onTap: () => context.go(Routes.flowers)),
+      child: _DayEmpty(onTap: () {
+        ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.widget;
+        context.push(Routes.flowers);
+      }),
     );
   }
 
@@ -930,24 +775,24 @@ class _DayEmpty extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: CustomPaint(
-      painter: _DashedArchPainter(),
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpace.xs),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text('📷', style: TextStyle(fontSize: 22)),
-              const SizedBox(height: AppSpace.xxs),
-              Text(
-                'Share your day',
-                textAlign: TextAlign.center,
-                style: AppText.caption(AppColors.brand)
-                    .copyWith(fontWeight: FontWeight.w600),
-              ),
-            ],
+        painter: _DashedArchPainter(),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpace.xs),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('📷', style: TextStyle(fontSize: 22)),
+                const SizedBox(height: AppSpace.xxs),
+                Text(
+                  'Share your day',
+                  textAlign: TextAlign.center,
+                  style: AppText.caption(AppColors.brand)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -998,7 +843,7 @@ class _DashedArchPainter extends CustomPainter {
 
 /* ── Top bar ─────────────────────────────── */
 
-/// The app's own bar: who this is on the left, who you two are on the right.
+/// The app's wordmark on the left and Notifications on the right.
 ///
 /// Lives in a `floating`/`snap` SliverAppBar, so it gets out of the way as
 /// soon as you start reading and comes back whole on the first flick up.
@@ -1019,104 +864,83 @@ class _HomeBar extends ConsumerWidget {
           ),
         ),
         const Spacer(),
-        const _CouplePill(),
+        IconButton(
+          tooltip: 'Notifications',
+          onPressed: () => context.push(Routes.notifications),
+          icon: Badge(
+            isLabelVisible: ref.watch(unseenActivityCountProvider) > 0,
+            backgroundColor: AppColors.brand,
+            child: AppIcon(CupertinoIcons.bell, color: AppColors.ink),
+          ),
+        ),
+        IconButton(
+            tooltip: 'Our story',
+            onPressed: () => context.push(Routes.us),
+            icon: UserAvatar(ref.watch(partnerProfileProvider).valueOrNull,
+                size: 32)),
       ],
     );
   }
 }
 
-/// Both faces and both names in one control — the "us" of the app, and the
-/// way into the page about the two of you.
-///
-/// Replaces the lone profile avatar the old header carried: a couples app
-/// showing only your own face at the top was always slightly wrong, and the
-/// pair is what the whole screen is about.
-///
-/// It used to open Settings, which was the same mistake one layer down: a
-/// control showing *both* of you led to a screen about one. It opens Us
-/// now, and Settings is the gear in that page's corner.
-class _CouplePill extends ConsumerWidget {
-  const _CouplePill();
+/// Entry points previously supplied by the Camera tab and Settings.
+class _HomeActions extends ConsumerWidget {
+  const _HomeActions();
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => Wrap(
+        spacing: AppSpace.sm,
+        children: [
+          TextButton.icon(
+            onPressed: () {
+              ref.read(dayPhotoTargetProvider.notifier).state =
+                  DayPhotoTarget.widget;
+              context.push(Routes.flowers);
+            },
+            icon: const AppIcon(CupertinoIcons.camera),
+            label: const Text('Share your day'),
+          ),
+        ],
+      );
+}
 
-  static const double _face = 26;
+/// Same countdown card as Events; editing stays in Together.
+class _HomeReunion extends ConsumerStatefulWidget {
+  const _HomeReunion();
+  @override
+  ConsumerState<_HomeReunion> createState() => _HomeReunionState();
+}
+
+class _HomeReunionState extends ConsumerState<_HomeReunion> {
+  late final Timer _ticker;
+  DateTime _now = DateTime.now();
+  @override
+  void initState() {
+    super.initState();
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+  void dispose() {
+    _ticker.cancel();
+    super.dispose();
+  }
 
-    final myName = me?.petName ?? me?.displayName;
-    final theirName = partner?.petName ?? partner?.displayName;
-    // Before pairing there is no "&" to show, so the pill quietly becomes a
-    // single name rather than reading "Bunny & null".
-    final label = [
-      if (myName != null) myName,
-      if (theirName != null) theirName,
-    ].join(' & ');
-
-    return Semantics(
-      button: true,
-      label: 'You and your partner',
-      child: GestureDetector(
-        onTap: () => context.go(Routes.us),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(4, 4, AppSpace.xs, 4),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Overlapped rather than side by side: two touching circles
-              // read as a couple, two spaced ones read as a list.
-              SizedBox(
-                width: partner == null ? _face : _face * 1.62,
-                height: _face,
-                child: Stack(
-                  children: [
-                    UserAvatar(me, size: _face),
-                    if (partner != null)
-                      Positioned(
-                        left: _face * 0.62,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            // A hairline of the bar's own colour behind the
-                            // second face is what separates the two circles
-                            // where they overlap.
-                            border: Border.all(
-                              color: AppColors.surface,
-                              width: 1.5,
-                            ),
-                          ),
-                          child: UserAvatar(partner, size: _face - 3),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              if (label.isNotEmpty) ...[
-                const SizedBox(width: AppSpace.xs),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 132),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.caption(AppColors.ink)
-                        .copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ],
-              const SizedBox(width: 2),
-              AppIcon(CupertinoIcons.chevron_down,
-                  size: 12, color: AppColors.muted),
-            ],
-          ),
-        ),
-      ),
+  @override
+  Widget build(BuildContext context) {
+    final reunion = ref.watch(reunionProvider).valueOrNull;
+    if (reunion == null || !reunion.happensAt.isAfter(_now)) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.md, bottom: AppSpace.md),
+      child: ReunionCard(
+          title: reunion.title,
+          place: reunion.destination,
+          when: reunion.happensAt,
+          now: _now,
+          onTap: () => context.push(Routes.events)),
     );
   }
 }

@@ -31,6 +31,7 @@ import 'features/dates/presentation/screens/events_screen.dart';
 import 'features/finance/presentation/screens/finance_screen.dart';
 import 'features/finance/presentation/screens/insights_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
+import 'features/memories/presentation/screens/memories_screen.dart';
 import 'features/gifts/presentation/screens/gifts_screen.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/onboarding/presentation/screens/onboarding_screen.dart';
@@ -45,10 +46,10 @@ import 'features/tulip/presentation/screens/chat_settings_screen.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
+import 'features/dayflower/presentation/dayflower_screen.dart';
+import 'features/travel/presentation/screens/travel_map_screen.dart';
 
-// ── Route names ──────────────────────────────
-// Tab labels: Home · Flowers · Camera · Gifts · Activities.
-// Feature folders keep their original names (tulip/dates/booth).
+// Tab ownership follows these path prefixes. Old published links redirect below.
 class Routes {
   static const splash = '/';
   static const welcome = '/welcome';
@@ -57,70 +58,34 @@ class Routes {
   static const pair = '/pair';
   static const shell = '/app';
   static const home = '/app/home';
-
-  /// The Camera tab, despite the name — see messages_screen.dart. The path
-  /// predates the camera getting a tab of its own and is kept so existing
-  /// deep links keep resolving.
+  static const notifications = '/app/home/notifications';
+  // Capture is a tool. Keep its published path and explicit sending target.
   static const flowers = '/app/flowers';
-
-  /// The Flowers tab.
-  ///
-  /// ⚠️ **Not `/app/flowers`** — that path is the Camera and has to stay put
-  /// for the widget deep links that name it by string. The tab used to open
-  /// the conversation directly, which meant there was nowhere to see what
-  /// the two of you had actually sent each other; this is that place, and
-  /// the thread is one tap from it.
-  static const blooms = '/app/blooms';
-
-  /// The conversation itself. Still nested under `flowers` for deep-link
-  /// compatibility.
-  ///
-  /// Still a path under `flowers` for deep-link compatibility, but no longer
-  /// a sub-route of anything: `flowers` is the Camera tab now and these two
-  /// are siblings. Nothing may navigate to `flowers` meaning "the chat".
-  static const chat = '/app/flowers/chat';
-
-  /// The couple's own page — both of you, the numbers, and the date
-  /// everything else is derived from. A sub-route of Home, like the
-  /// activity feed: it is reached from the pair pill on Home's top bar, so
-  /// the Home tab should stay lit inside it.
-  static const us = '/app/home/us';
-
-  /// Everything that has happened, in one list. A sub-route of Home, not
-  /// of the Activities hub: it is reached from the Home section, and the
-  /// hub is a menu of features rather than a log of them.
-  static const activityFeed = '/app/home/activity';
-  static const events = '/app/events';
-  static const gifts = '/app/gifts';
-  static const activities = '/app/activities';
-
-  /// Sub-route of the Activities hub — the tab itself is a menu, not the
-  /// booth. Nested under `activities` so AppBottomNav keeps the tab lit.
-  static const booth = '/app/activities/booth';
-
-  /// The rest of the Activities hub. All nested under `activities` for the
-  /// same reason as the booth — move one to a top-level path and the tab
-  /// silently goes dark inside it.
-  static const reminders = '/app/activities/reminders';
-  static const finance = '/app/activities/finance';
-
-  /// The month, read back to you, and exportable as one image. Nested under
-  /// finance so the Activities tab stays lit inside it.
-  static const insights = '/app/activities/finance/insights';
-  static const chapters = '/app/activities/chapters';
-
-  /// One month of the year. Path params rather than a query string so the
-  /// route reads as what it is: `/chapters/2026/8`.
-  static const chapter = '/app/activities/chapters/:year/:month';
-  static String chapterFor(int year, int month) =>
-      '/app/activities/chapters/$year/$month';
-
-  /// What is between the two of you: how much calling is left this month,
-  /// and everything either of you has sent. Reached by tapping their name in
-  /// the chat header, which is where people look for it.
-  static const chatSettings = '/app/flowers/chat/settings';
-
-  static const settings = '/app/settings';
+  static const chat = '/app/chat';
+  static const chatSettings = '/app/chat/settings';
+  static const dayflower = '/app/dayflower';
+  static const ourMap = '/app/together/map';
+  static const memories = '/app/memories';
+  static const photos = '/app/memories/photos';
+  static const blooms = '/app/dayflower/garden';
+  static const booth = '/app/dayflower/booth';
+  static const chapters = '/app/dayflower/journal';
+  static const chapter = '/app/dayflower/journal/:year/:month';
+  static String chapterFor(int year, int month) => '$chapters/$year/$month';
+  static const together = '/app/together';
+  static const activities = together;
+  static const events = '/app/together/events';
+  static const gifts = '/app/together/gifts';
+  static const reminders = '/app/together/reminders';
+  static const finance = '/app/together/finance';
+  static const insights = '/app/together/finance/insights';
+  static const goals = '/app/together/goals';
+  static const goalsMonth = '/app/together/goals/:year/:month';
+  static String goalsFor(int year, int month) => '$goals/$year/$month';
+  static const us = '/app/us';
+  static const activityFeed = '/app/us/activity';
+  static const settings = '/app/us/settings';
+  static const widgetSettings = '/app/us/settings/widgets';
 
   /// The ringing screen for a reminder alarm. **Top-level, outside the app
   /// shell on purpose** — an alarm is not a place you navigated to, it is an
@@ -139,6 +104,26 @@ class Routes {
   /// let a stale deep link open a screen for a call that ended yesterday.
   static const call = '/call';
 }
+
+const legacyAppRoutes = <String, String>{
+  '/app/memories/flowers': Routes.blooms,
+  '/app/memories/booth': Routes.booth,
+  '/app/memories/chapters': Routes.chapters,
+  '/app/flowers/chat': Routes.chat,
+  '/app/flowers/chat/settings': Routes.chatSettings,
+  '/app/blooms': Routes.blooms,
+  '/app/home/us': Routes.us,
+  '/app/home/activity': Routes.activityFeed,
+  '/app/events': Routes.events,
+  '/app/gifts': Routes.gifts,
+  '/app/activities': Routes.together,
+  '/app/activities/booth': Routes.booth,
+  '/app/activities/reminders': Routes.reminders,
+  '/app/activities/finance': Routes.finance,
+  '/app/activities/finance/insights': Routes.insights,
+  '/app/activities/chapters': Routes.chapters,
+  '/app/settings': Routes.settings,
+};
 
 /// Whether an async gate input is safe to act on.
 ///
@@ -413,6 +398,70 @@ final routerProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         builder: (context, state, child) => AppShell(child: child),
         routes: [
+          for (final entry in legacyAppRoutes.entries)
+            GoRoute(
+                path: entry.key,
+                redirect: (_, state) =>
+                    state.uri.replace(path: entry.value).toString()),
+          GoRoute(
+            path: '/app/activities/chapters/:year/:month',
+            redirect: (_, state) => state.uri
+                .replace(
+                    path:
+                        '${Routes.chapters}/${state.pathParameters['year']}/${state.pathParameters['month']}')
+                .toString(),
+          ),
+          GoRoute(
+              path: Routes.dayflower,
+              builder: (_, __) => const DayflowerScreen()),
+          GoRoute(
+              path: Routes.ourMap,
+              builder: (_, state) => TravelMapScreen(
+                  initialTab: state.uri.queryParameters['tab'] == 'next'
+                      ? 2
+                      : state.uri.queryParameters['tab'] == 'places'
+                          ? 1
+                          : 0)),
+          GoRoute(
+              path: '/app/memories/chapters/:year/:month',
+              redirect: (_, state) => state.uri
+                  .replace(
+                      path:
+                          '${Routes.chapters}/${state.pathParameters['year']}/${state.pathParameters['month']}')
+                  .toString()),
+          GoRoute(
+              path: Routes.memories,
+              builder: (_, __) => const MemoriesScreen()),
+          GoRoute(
+              path: Routes.widgetSettings,
+              builder: (_, __) => const WidgetSettingsScreen()),
+          GoRoute(
+              path: Routes.photos,
+              builder: (_, __) => const SharedPhotosScreen()),
+          GoRoute(
+              path: Routes.notifications,
+              builder: (_, __) =>
+                  const ActivityFeedScreen(notificationsOnly: true)),
+          GoRoute(
+              path: Routes.goalsMonth,
+              builder: (_, state) {
+                final now = DateTime.now();
+                return ChapterDetailScreen(
+                  year: int.tryParse(state.pathParameters['year'] ?? '') ??
+                      now.year,
+                  month: (int.tryParse(state.pathParameters['month'] ?? '') ??
+                          now.month)
+                      .clamp(1, 12),
+                  goalsOnly: true,
+                );
+              }),
+          GoRoute(
+              path: Routes.goals,
+              builder: (_, __) {
+                final now = DateTime.now();
+                return ChapterDetailScreen(
+                    year: now.year, month: now.month, goalsOnly: true);
+              }),
           GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
           GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
           GoRoute(

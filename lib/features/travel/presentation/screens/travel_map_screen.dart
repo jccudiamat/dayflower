@@ -1,3 +1,6 @@
+import '../../../home/presentation/widgets/today_story.dart';
+import 'package:dayflower/core/widgets/app_icon.dart';
+import 'package:dayflower/core/widgets/story_components.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,22 +30,36 @@ import '../widgets/add_pin_sheet.dart';
 /// ⚠️ OSM's tile policy expects a real user agent and modest volume. Two
 /// people looking at their own map is well inside it; anything that starts
 /// prefetching tiles is not, and would need a paid tile host.
-class TravelMapScreen extends ConsumerWidget {
-  const TravelMapScreen({super.key});
+class TravelMapScreen extends ConsumerStatefulWidget {
+  const TravelMapScreen({super.key, this.initialTab = 0});
+  final int initialTab;
+  @override
+  ConsumerState<TravelMapScreen> createState() => _TravelMapScreenState();
+}
+
+class _TravelMapScreenState extends ConsumerState<TravelMapScreen> {
+  late int _tab = widget.initialTab;
 
   /// Where the map opens when there is nothing on it yet — far enough out
   /// that any two places in the world are both on screen.
   static const _wholeWorld = LatLng(20, 0);
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final pins = ref.watch(mapPinsProvider).valueOrNull ?? const <MapPin>[];
+  Widget build(BuildContext context) {
+    final allPins = ref.watch(mapPinsProvider);
+    final pins = (allPins.valueOrNull ?? const <MapPin>[])
+        .where((p) => _tab == 0
+            ? false
+            : _tab == 1
+                ? p.visited
+                : !p.visited)
+        .toList();
     final me = ref.watch(userProfileProvider).valueOrNull;
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
 
     final people = [
-      if (me != null && me.hasPlace) me,
-      if (partner != null && partner.hasPlace) partner,
+      if (_tab == 0 && me != null && me.hasPlace) me,
+      if (_tab == 0 && partner != null && partner.hasPlace) partner,
     ];
     final journey = journeyBetween(me, partner);
 
@@ -53,23 +70,94 @@ class TravelMapScreen extends ConsumerWidget {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IosBackButton(onTap: () => Navigator.of(context).maybePop()),
-        title: Text('Travel map', style: AppText.title()),
+        title: Text('Our Map', style: AppText.title()),
         centerTitle: false,
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brand,
         foregroundColor: Colors.white,
-        onPressed: () => showAddPinSheet(context),
-        icon: const Icon(Icons.add_location_alt_outlined),
+        onPressed: () => showAddPinSheet(context, visited: _tab != 2),
+        icon: const AppIcon(Icons.add_location_alt_outlined),
         label: const Text('Add a place'),
       ),
       body: Column(
         children: [
-          if (people.length < 2) _MissingPlaceNote(me: me, partner: partner),
+          Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpace.screenInset),
+              child: Text(
+                  'Where you are, where you’ve been and where you’re going.',
+                  style: AppText.caption())),
+          Padding(
+              padding: const EdgeInsets.all(AppSpace.xs),
+              child: Wrap(spacing: AppSpace.xs, children: [
+                for (var i = 0; i < 3; i++)
+                  ChoiceChip(
+                      label: Text(['Now', 'Our Places', 'Next'][i]),
+                      selected: _tab == i,
+                      onSelected: (_) => setState(() => _tab = i)),
+              ])),
+          if (_tab == 0)
+            const Padding(
+                padding: EdgeInsets.all(AppSpace.sm),
+                child: LocationPreview(openMap: false)),
+          if (_tab == 0)
+            Padding(
+                padding: const EdgeInsets.all(AppSpace.xs),
+                child: Text('Based on the cities you choose to share.',
+                    style: AppText.caption())),
+          if (_tab != 0 && allPins.hasError)
+            const Text('Your places couldn’t load. Please try again.'),
+          if (_tab != 0 &&
+              !allPins.isLoading &&
+              !allPins.hasError &&
+              pins.isEmpty)
+            Padding(
+                padding: const EdgeInsets.all(AppSpace.sm),
+                child: Text(
+                    _tab == 1
+                        ? 'Add your first place together.'
+                        : 'Where would you love to go together?',
+                    style: AppText.body())),
+          if (_tab != 0 && pins.isNotEmpty)
+            SizedBox(
+                height: 110,
+                child: ListView(scrollDirection: Axis.horizontal, children: [
+                  for (final pin in pins)
+                    SizedBox(
+                        width: 280,
+                        child: Padding(
+                            padding: const EdgeInsets.all(AppSpace.xs),
+                            child: UtilityRow(
+                                icon: Icons.place_outlined,
+                                title: pin.label,
+                                subtitle: pin.place,
+                                trailing: pin.visited
+                                    ? const SizedBox.shrink()
+                                    : TextButton(
+                                        onPressed: () async {
+                                          try {
+                                            await ref
+                                                .read(mapPinRepositoryProvider)
+                                                .markVisited(pin.id);
+                                          } catch (_) {
+                                            if (context.mounted) {
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(const SnackBar(
+                                                      content: Text(
+                                                          'That didn’t save. Try again.')));
+                                            }
+                                          }
+                                        },
+                                        child: const Text('We went!')))))
+                ])),
+          if (_tab == 0 && people.length < 2)
+            _MissingPlaceNote(me: me, partner: partner),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(AppRadius.lg),
               child: FlutterMap(
+                key: ValueKey(_tab),
                 options: MapOptions(
                   initialCenter: _openingCentre(pins, people),
                   initialZoom: pins.isEmpty && people.length < 2 ? 1.6 : 3.2,
@@ -198,8 +286,8 @@ class _MissingPlaceNote extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(
-          AppSpace.sm, 0, AppSpace.sm, AppSpace.xs),
+      margin:
+          const EdgeInsets.fromLTRB(AppSpace.sm, 0, AppSpace.sm, AppSpace.xs),
       padding: const EdgeInsets.all(AppSpace.sm),
       decoration: BoxDecoration(
         color: AppColors.surfaceSubtle,
@@ -425,6 +513,5 @@ class _TailPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_TailPainter old) =>
-      old.fill != fill || old.edge != edge;
+  bool shouldRepaint(_TailPainter old) => old.fill != fill || old.edge != edge;
 }

@@ -15,16 +15,17 @@ import '../../data/map_pin_repository.dart';
 /// "Where you are" — and nowhere else. No location permission is asked for
 /// and no photo is read for EXIF: a pin is a place one of them chose to
 /// name. See the header of migration 0047.
-Future<void> showAddPinSheet(BuildContext context) {
+Future<void> showAddPinSheet(BuildContext context, {bool visited = true}) {
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => const _AddPinSheet(),
+    builder: (_) => _AddPinSheet(visited: visited),
   );
 }
 
 class _AddPinSheet extends ConsumerStatefulWidget {
-  const _AddPinSheet();
+  const _AddPinSheet({required this.visited});
+  final bool visited;
 
   @override
   ConsumerState<_AddPinSheet> createState() => _AddPinSheetState();
@@ -33,7 +34,7 @@ class _AddPinSheet extends ConsumerStatefulWidget {
 class _AddPinSheetState extends ConsumerState<_AddPinSheet> {
   final _label = TextEditingController();
   CityResult? _place;
-  bool _visited = true;
+  late bool _visited = widget.visited;
   bool _saving = false;
 
   @override
@@ -171,7 +172,8 @@ Future<void> showPinSheet(BuildContext context, MapPin pin) {
             Text(pin.place, style: AppText.caption()),
             if (!pin.visited) ...[
               const SizedBox(height: AppSpace.xs),
-              Text('Somewhere you want to go', style: AppText.caption(AppColors.secondary)),
+              Text('Somewhere you want to go',
+                  style: AppText.caption(AppColors.secondary)),
             ],
             const SizedBox(height: AppSpace.sm),
             Consumer(

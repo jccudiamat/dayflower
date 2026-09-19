@@ -74,10 +74,8 @@ class StripRepository {
         .stream(primaryKey: ['id'])
         .eq('pair_id', pairId)
         .order('created_at', ascending: false)
-        .map((rows) => rows
-            .map(PhotoStrip.fromMap)
-            .where((s) => !s.isComplete)
-            .toList());
+        .map((rows) =>
+            rows.map(PhotoStrip.fromMap).where((s) => !s.isComplete).toList());
   }
 
   /// Solo template: composite and post in one go. No row — there is nobody
@@ -95,6 +93,7 @@ class StripRepository {
       senderId: senderId,
       bytes: composed,
       fileExtension: 'jpg',
+      origin: PhotoOrigin.booth,
       note: template.name,
     );
   }
@@ -134,8 +133,7 @@ class StripRepository {
     final path = await _uploadHalf(strip.pairId, bytes);
     await _client
         .from('photo_strips')
-        .update({'b_user': senderId, 'b_path': path})
-        .eq('id', strip.id);
+        .update({'b_user': senderId, 'b_path': path}).eq('id', strip.id);
 
     await finish(
       strip: PhotoStrip(
@@ -176,6 +174,7 @@ class StripRepository {
       senderId: senderId,
       bytes: composed,
       fileExtension: 'jpg',
+      origin: PhotoOrigin.booth,
       note: strip.style.name,
     );
 
@@ -214,8 +213,7 @@ final stripRepositoryProvider = Provider<StripRepository>((ref) {
 });
 
 /// Open (incomplete) strips for the pair.
-final openStripsProvider =
-    StreamProvider.autoDispose<List<PhotoStrip>>((ref) {
+final openStripsProvider = StreamProvider.autoDispose<List<PhotoStrip>>((ref) {
   final pair = ref.watch(currentPairProvider).valueOrNull;
   if (pair == null || !pair.isLinked) return Stream.value(const []);
   return ref.watch(stripRepositoryProvider).watchOpen(pair.id);
