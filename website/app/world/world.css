@@ -1,0 +1,102 @@
+/* The Dayflower world, and the page that scrolls over it. */
+
+/* ⚠️ Fixed, behind everything, and inert. The scene is scenery: every control
+   on this page is ordinary HTML above it, which is what keeps the page
+   keyboard-navigable and readable with the canvas switched off entirely. */
+.world-stage {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+.world-sky { position: absolute; inset: 0; transition: background 1.2s linear; }
+.world-canvas { position: absolute; inset: 0; animation: world-arrive 1.4s ease both; }
+
+@keyframes world-arrive { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .world-canvas { animation: none; }
+  .world-sky { transition: none; }
+}
+
+.world-page { position: relative; z-index: 1; }
+
+/* Acts ─────────────────────────────────────────────────────────────────────
+   Each act is a full-height stage the world shows through. The copy sits in a
+   soft panel rather than a hard card: section 3 asks for the landscape to
+   frame the words, not for the words to sit in a box on top of it. */
+.world-act {
+  display: grid;
+  align-content: center;
+  min-height: 100svh;
+  max-width: 1120px;
+  margin: auto;
+  padding: 90px 28px;
+}
+.world-act-narrow { max-width: 720px; }
+
+.world-panel {
+  max-width: 620px;
+  padding: 34px 32px 36px;
+  border-radius: 26px;
+  /* Enough backing to keep text legible over any hour of the day, while the
+     blur keeps the landscape present behind it. */
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  backdrop-filter: blur(14px);
+  border: 1px solid #ffffff5c;
+  box-shadow: 0 24px 60px #1c102418;
+}
+
+.world-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--brand-dark);
+}
+.world-act h1 {
+  font-size: clamp(40px, 6vw, 66px);
+  line-height: 1.06;
+  letter-spacing: -0.045em;
+  font-weight: 700;
+  margin: 18px 0 0;
+}
+.world-act h1 span { display: block; color: #8c5675; }
+.world-act h2 {
+  font-size: clamp(28px, 3.6vw, 42px);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+  margin: 14px 0 0;
+}
+.world-lede { margin-top: 18px; font-size: 17px; line-height: 1.85; color: var(--body-color); }
+
+.world-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin-top: 28px; }
+.world-primary {
+  display: inline-flex; align-items: center; min-height: 50px;
+  padding: 12px 26px; border-radius: 30px;
+  background: #754766; color: #fff; font-weight: 700; font-size: 15px;
+}
+.world-primary:hover { background: #5e3551; }
+.world-secondary {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 44px;
+  font-size: 15px; font-weight: 600; color: #78576f;
+}
+.world-secondary:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+.world-hint {
+  margin-top: 40px;
+  font-size: 13px;
+  color: #7c6a80;
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+.world-hint span { animation: world-nudge 2.6s ease-in-out infinite; }
+@keyframes world-nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .world-hint span { animation: none; } }
+
+@media (max-width: 720px) {
+  .world-act { padding: 72px 20px; min-height: 92svh; }
+  .world-panel { padding: 26px 22px 28px; border-radius: 22px; }
+  .world-lede { font-size: 16px; }
+}
