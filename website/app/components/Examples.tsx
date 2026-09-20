@@ -114,33 +114,55 @@ export function ExampleBouquet() {
   );
 }
 
-/* Homepage previews use the same artwork as the tools themselves. */
+/* ── Homepage tool cards ────────────────────────────────────────────────── */
+
+/**
+ * The little picture at the top of each card on the homepage.
+ *
+ * ⚠️ All four cards get one, not just the two that needed it. A row of four
+ * where two carry a picture and two do not reads as a page that failed to load
+ * rather than as a deliberate choice.
+ */
 export function ToolThumb({ tool }: { tool: string }) {
   if (tool === "Photo booth") {
+    // Two photos side by side: the booth's couple layout, which is the one
+    // thing here you cannot show with a single picture.
     return (
-      <div className="home-tool-thumb home-tool-thumb-booth">
-        <div className="home-tool-print"><Shot model="cove" /><span>you</span></div>
-        <div className="home-tool-print"><Shot model="sunset" /><span>& me</span></div>
-        <span className="home-preview-caption">A moment, made yours.</span>
+      <div className="home-tool-thumb">
+        <div className="home-tool-strip" style={{ transform: "rotate(-2.5deg)" }}>
+          <span><Shot model="cove" /></span>
+          <span><Shot model="sunset" /></span>
+        </div>
       </div>
     );
   }
 
-  const art: Record<string, { src: string; alt: string; width: number; height: number }> = {
-    Bouquet: { src: "/models/bouquet-sample.webp", alt: "A complete bouquet of daisies, tulips and roses wrapped in paper, with a photo tucked inside", width: 720, height: 625 },
-    Gifts: { src: "/bouquet/reveal-box.webp", alt: "A burgundy gift box with a ribbon and flowers", width: 512, height: 512 },
-    Journal: { src: "/flowers/bench_in_bloom.webp", alt: "A quiet garden bench surrounded by flowers", width: 512, height: 512 },
+  // cover for the photographic scenes, which crop happily; contain for a
+  // cut-out object, which would lose its edges.
+  const art: Record<string, { src: string; alt: string; fit: "contain" | "cover" }> = {
+    // A crop of the bouquet sample further down this file, so the card
+    // promises the thing the page actually delivers.
+    Bouquet: { src: "/models/bouquet-thumb.webp", alt: "A bouquet of daisies, tulips and roses with a photo tucked in among the stems", fit: "cover" },
+    // ⚠️ Our own illustration, not a listing photo from the catalogue. Those
+    // are sellers' images: several carry burned-in shop branding and one has
+    // photographs of real people in it. Fine in the catalogue, where the page
+    // credits them; not fine as decoration on the homepage.
+    Gifts: { src: "/bouquet/reveal-box.webp", alt: "An illustrated gift box tied with a ribbon", fit: "contain" },
+    Journal: { src: "/flowers/bench_in_bloom.webp", alt: "An illustrated bench surrounded by flowers", fit: "cover" },
   };
   const a = art[tool];
   if (!a) return null;
 
   return (
     <div className="home-tool-thumb">
-      <Image src={a.src} alt={a.alt} width={a.width} height={a.height}
-        sizes="(max-width: 600px) 90vw, (max-width: 1120px) 44vw, 500px"
-        className="home-tool-art" />
-      {tool === "Gifts" && <span className="home-preview-caption">Just because. Just for them.</span>}
-      {tool === "Journal" && <span className="home-journal-caption">A little time together.</span>}
+      <Image
+        src={a.src}
+        alt={a.alt}
+        width={512}
+        height={512}
+        sizes="280px"
+        className={`home-tool-art is-${a.fit}`}
+      />
     </div>
   );
 }

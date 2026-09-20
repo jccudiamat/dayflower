@@ -63,3 +63,10 @@ and semantics. Creation cards reflow at narrow widths or large text sizes.
 provider overrides. `CAPTURE_REVIEW=true` writes review PNGs to `build/review`.
 `test/relationship_memory_test.dart` checks preservation and lifecycle filtering.
 No live couple content needs to be created to run these checks.
+
+Validation: the full Flutter suite passed 411 tests. Analysis of `lib` and `test`
+reported no errors or warnings; three existing style notices remain in the OTP
+and alarm widgets. The screen checks include 320px and 390px widths, 200% text,
+tab selection, legacy links, keyboard handling, and flower memory detail views.
+Review images and validation logs are under `build/review/dayflower-*` and
+`build/review/story-*` (local generated artifacts, not application assets).

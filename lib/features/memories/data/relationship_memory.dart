@@ -102,7 +102,9 @@ List<RelationshipMemory> buildRelationshipMemories({
   for (final event in events) {
     final date = DateTime.tryParse('${event['date']}');
     if (date == null ||
-        !date.isBefore(DateTime(today.year, today.month, today.day))) continue;
+        !date.isBefore(DateTime(today.year, today.month, today.day))) {
+      continue;
+    }
     result.add(RelationshipMemory(
         id: 'event:${event['id']}',
         kind: MemoryKind.events,

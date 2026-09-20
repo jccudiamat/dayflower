@@ -159,7 +159,7 @@ export default async function Home() {
                         alt={tool.art.alt}
                         width={tool.art.width}
                         height={tool.art.height}
-                        sizes="(max-width: 700px) 90vw, 240px"
+                        sizes="(max-width: 520px) 90vw, (max-width: 1100px) 44vw, 360px"
                       />
                     ) : (
                       <BoothArt />
@@ -340,9 +340,9 @@ function BoothArt() {
   return (
     <span className="home-strip">
       <span className="home-strip-print">
-        <Image src="/models/cove.webp" alt="" width={720} height={960} sizes="90px" />
-        <Image src="/models/sunset.webp" alt="" width={720} height={960} sizes="90px" />
-        <Image src="/models/cove.webp" alt="" width={720} height={960} sizes="90px" />
+        <Image src="/models/cove.webp" alt="" width={720} height={960} sizes="100px" />
+        <Image src="/models/sunset.webp" alt="" width={720} height={960} sizes="100px" />
+        <Image src="/models/cove.webp" alt="" width={720} height={960} sizes="100px" />
         <em className="note">you &amp; me</em>
       </span>
       <span className="sr-only">A photo strip of three pictures</span>

@@ -97,13 +97,14 @@ class DayflowerScreen extends ConsumerWidget {
                       size: 56, color: AppColors.brand),
                   onTap: () => context.push(Routes.booth)),
             ];
-            if (single)
+            if (single) {
               return Column(children: [
                 for (final action in actions)
                   Padding(
                       padding: const EdgeInsets.only(bottom: AppSpace.xs),
                       child: SizedBox(width: width, child: action))
               ]);
+            }
             return Column(children: [
               for (var i = 0; i < actions.length; i += 2) ...[
                 if (i > 0) const SizedBox(height: AppSpace.xs),

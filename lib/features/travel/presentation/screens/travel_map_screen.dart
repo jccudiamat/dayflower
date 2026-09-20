@@ -101,11 +101,6 @@ class _TravelMapScreenState extends ConsumerState<TravelMapScreen> {
             const Padding(
                 padding: EdgeInsets.all(AppSpace.sm),
                 child: LocationPreview(openMap: false)),
-          if (_tab == 0)
-            Padding(
-                padding: const EdgeInsets.all(AppSpace.xs),
-                child: Text('Based on the cities you choose to share.',
-                    style: AppText.caption())),
           if (_tab != 0 && allPins.hasError)
             const Text('Your places couldn’t load. Please try again.'),
           if (_tab != 0 &&
@@ -121,7 +116,7 @@ class _TravelMapScreenState extends ConsumerState<TravelMapScreen> {
                     style: AppText.body())),
           if (_tab != 0 && pins.isNotEmpty)
             SizedBox(
-                height: 110,
+                height: 110 * MediaQuery.textScalerOf(context).scale(14) / 14,
                 child: ListView(scrollDirection: Axis.horizontal, children: [
                   for (final pin in pins)
                     SizedBox(

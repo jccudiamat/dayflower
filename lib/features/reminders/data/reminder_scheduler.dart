@@ -737,7 +737,9 @@ Future<void> reminderActionBackground(NotificationResponse response) async {
           .maybeSingle();
       if (call == null ||
           call['call_mode'] == null ||
-          call['sender_id'] == user.id) return;
+          call['sender_id'] == user.id) {
+        return;
+      }
       await client.rpc('end_call', params: {'p_message_id': callId});
     } catch (e) {
       debugPrint('call decline failed: $e');

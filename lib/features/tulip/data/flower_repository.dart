@@ -197,8 +197,9 @@ class FlowerMessage {
   /// as though it arrived.
   String previewFor({required bool mine}) {
     final note = this.note?.trim() ?? '';
-    if (isBouquet)
+    if (isBouquet) {
       return mine ? 'You sent a bouquet 💐' : 'Sent you a bouquet 💐';
+    }
     if (isPhoto) {
       if (note.isNotEmpty) return '📷  $note';
       return mine ? '📷  You shared a photo' : '📷  Shared a photo';

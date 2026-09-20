@@ -517,8 +517,13 @@ class _DayArchState extends ConsumerState<_DayArch>
 
   /// Their day starts in front and returns there, always. It is what you
   /// opened the app for; yours is the receipt that you posted.
-  void _bringForward({required bool mine}) =>
+  void _bringForward({required bool mine}) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _swap.value = mine ? 1 : 0;
+    } else {
       mine ? _swap.forward() : _swap.reverse();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -782,7 +787,8 @@ class _DayEmpty extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('📷', style: TextStyle(fontSize: 22)),
+                const AppIcon(CupertinoIcons.camera,
+                    size: 24, color: AppColors.brand),
                 const SizedBox(height: AppSpace.xxs),
                 Text(
                   'Share your day',
