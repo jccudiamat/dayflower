@@ -8,6 +8,10 @@ import 'dart:ui' as ui;
 import 'package:dayflower/app_router.dart';
 import 'package:dayflower/core/widgets/app_bottom_nav.dart';
 import 'package:dayflower/core/widgets/section_scroll_scope.dart';
+import 'package:dayflower/features/tulip/presentation/widgets/flower_catalog_panel.dart';
+import 'package:dayflower/features/memories/presentation/widgets/memory_tile.dart';
+import 'package:dayflower/features/dayflower/presentation/dayflower_screen.dart';
+import 'package:dayflower/features/travel/data/map_pin_repository.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
 import 'package:dayflower/features/booth/presentation/screens/booth_archive_screen.dart';
@@ -162,6 +166,10 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       monthlyGoalsProvider.overrideWith((ref) => Stream.value([])),
       monthlyChaptersProvider.overrideWith((ref) => Stream.value([])),
       chapterMomentsProvider.overrideWith((ref) => Stream.value([])),
+      // ⚠️ Memories waits on every one of its sources, so an un-stubbed
+      // provider leaves the whole screen on a spinner rather than failing
+      // loudly. Map pins were the one nothing else needed.
+      mapPinsProvider.overrideWith((ref) => Stream.value(const [])),
       remindersProvider.overrideWith((ref) => Stream.value([])),
       financeRatesProvider.overrideWith((ref) => Stream.value(FxTable.empty)),
       financeMainCurrencyProvider.overrideWith((ref) => Stream.value('PHP')),
@@ -420,19 +428,28 @@ void main() {
     }
   });
 
+  // ⚠️ Runs against Dayflower, not Memories. Memories keeps its one
+  // detail link ('Prints') in the scaffold header, so there is no way to
+  // be scrolled down and still able to tap it, which is the whole shape
+  // this test needs. Dayflower's 'All months' sits in the page body.
   _homeTest('Parent tab closes a detail and returns to the top', (tester) async {
-    await _pump(tester, Routes.memories, height: 500, productionRoutes: true);
-    await _reveal(tester, find.text('Journal'));
-    final container = ProviderScope.containerOf(tester.element(find.byType(MemoriesScreen)));
-    expect(container.read(sectionScrollControllerProvider(Routes.memories)).offset, greaterThan(0));
-    await tester.tap(find.text('Journal'));
+    await _pump(tester, Routes.dayflower, height: 500, productionRoutes: true);
+    await _reveal(tester, find.text('All months'));
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(DayflowerScreen)));
+    expect(
+        container.read(sectionScrollControllerProvider(Routes.dayflower)).offset,
+        greaterThan(0));
+    await tester.tap(find.text('All months'));
     await tester.pumpAndSettle();
     expect(find.byType(ChaptersScreen), findsOneWidget);
-    await tester.tap(tab('Memories'));
+    await tester.tap(tab('Dayflower'));
     await tester.pumpAndSettle();
-    expect(find.byType(MemoriesScreen), findsOneWidget);
+    expect(find.byType(DayflowerScreen), findsOneWidget);
     expect(find.byType(ChaptersScreen), findsNothing);
-    expect(container.read(sectionScrollControllerProvider(Routes.memories)).offset, closeTo(0, 0.1));
+    expect(
+        container.read(sectionScrollControllerProvider(Routes.dayflower)).offset,
+        closeTo(0, 0.1));
     expect(tester.takeException(), isNull);
   });
 
@@ -458,31 +475,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.routeInformationProvider.value.uri.path, Routes.together);
     expect(router.routeInformationProvider.value.uri.queryParameters['from'], 'old-link');
+    // ⚠️ Blooms no longer bounces to the tab root: it is the garden
+    // itself again. What still has to hold is that it counts as Dayflower,
+    // so the tab under it stays lit.
     router.go(Routes.blooms);
     await tester.pumpAndSettle();
-    expect(router.routeInformationProvider.value.uri.path, Routes.dayflower);
+    expect(router.routeInformationProvider.value.uri.path, Routes.blooms);
+    expect((tester.widget(tab('Dayflower')) as Semantics).properties.selected,
+        isTrue);
   });
 
-  _homeTest('Memories visual previews at phone widths and large text', (tester) async {
+  _homeTest('Memories and Dayflower render at phone widths and large text',
+      (tester) async {
     for (final (width, scale) in [(390.0, 1.0), (320.0, 2.0)]) {
-      await _pump(tester, Routes.memories, width: width, textScale: scale,
-          height: 844, productionRoutes: true, filled: true, boothFilled: true);
+      await _pump(tester, Routes.memories,
+          width: width, textScale: scale, height: 844,
+          productionRoutes: true, filled: true, boothFilled: true);
       await tester.pumpAndSettle();
+      // The filter row and at least one dated entry: the two things the
+      // timeline is made of.
+      expect(find.text('All'), findsOneWidget);
+      expect(find.byType(MemoryTile), findsWidgets);
       await _screenshot(tester, 'memories-new-${width.toInt()}');
-      await _reveal(tester, find.text('Pending strips'));
-      await _screenshot(tester, 'memories-pending-${width.toInt()}');
-      await _reveal(tester, find.text('Booth collection'));
-      await _screenshot(tester, 'memories-collection-${width.toInt()}');
-      await _reveal(tester, find.text('Journal'));
-      await tester.drag(find.byType(Scrollable).first, const Offset(0, -450));
+      expect(tester.takeException(), isNull, reason: 'memories $width/$scale');
+      await tester.pumpWidget(const SizedBox());
+
+      await _pump(tester, Routes.dayflower,
+          width: width, textScale: scale, height: 844,
+          productionRoutes: true, filled: true, boothFilled: true);
       await tester.pumpAndSettle();
-      await _screenshot(tester, 'journal-preview-${width.toInt()}');
-      expect(tester.takeException(), isNull);
+      await _screenshot(tester, 'dayflower-new-${width.toInt()}');
+      expect(tester.takeException(), isNull, reason: 'dayflower $width/$scale');
+      await tester.pumpWidget(const SizedBox());
     }
-    await _pump(tester, Routes.memories, width: 390, height: 2150,
-        productionRoutes: true, filled: true, boothFilled: true);
-    await tester.pumpAndSettle();
-    await _screenshot(tester, 'memories-booth-full');
     await _pump(tester, Routes.booth, productionRoutes: true);
     await tester.pumpAndSettle();
     await _screenshot(tester, 'booth-entrance');
@@ -528,48 +553,68 @@ void main() {
     await _screenshot(tester, 'memories-booth-empty');
   });
 
-  _homeTest('Memories prioritizes a partner invitation and opens that exact strip', (tester) async {
-    await _pump(tester, Routes.memories, productionRoutes: true, filled: true, boothFilled: true);
+  // 🔴 Dayflower used to lead with a 'saved you a spot' card. It was
+  // removed: the booth's own front page already announces a waiting strip
+  // and carries 'Saved & waiting strips', so the card was a second voice
+  // saying the same thing above the four tools people come here for.
+  // What still has to hold is that the waiting strip is reachable and
+  // joins the right one.
+  _homeTest('The booth surfaces a waiting strip and joins that exact one',
+      (tester) async {
+    await _pump(tester, Routes.boothPending,
+        productionRoutes: true, filled: true, boothFilled: true);
+    await tester.pumpAndSettle();
+    expect(find.byType(BoothArchiveScreen), findsOneWidget);
     await _reveal(tester, find.text('Join this strip'));
     await tester.tap(find.text('Join this strip'));
     await tester.pumpAndSettle();
-    final studio = tester.widget<BoothStudioScreen>(find.byType(BoothStudioScreen));
+    // A studio template is finished in the studio, so joining opens it on
+    // that exact strip rather than the archive's own camera.
+    final studio =
+        tester.widget<BoothStudioScreen>(find.byType(BoothStudioScreen));
     expect(studio.joining?.id, 'partner-pending');
     expect(tester.takeException(), isNull);
   });
 
-  _homeTest('Memories opens existing tools and returns to the same hub', (tester) async {
-    final router = await _pump(tester, Routes.memories, productionRoutes: true);
-    for (final (label, path, type) in [
-      ('Booth & Strip', Routes.booth, BoothScreen),
-      ('Pending strips', Routes.boothPending, BoothArchiveScreen),
-      ('Booth collection', Routes.boothCollection, BoothArchiveScreen),
-      ('Journal', Routes.chapters, ChaptersScreen)]) {
+  _homeTest('Each hub opens the tools it owns and returns to itself',
+      (tester) async {
+    // 🔴 The four links this used to walk all lived on Memories.
+    // Making things moved to Dayflower and only the kept prints stayed
+    // behind, so the walk is now per hub, which is the thing worth
+    // asserting.
+    for (final (hub, hubType, label, path, type) in [
+      (Routes.memories, MemoriesScreen, 'Prints', Routes.boothCollection,
+          BoothArchiveScreen),
+      (Routes.dayflower, DayflowerScreen, 'All months', Routes.chapters,
+          ChaptersScreen),
+      (Routes.dayflower, DayflowerScreen, 'Photo Booth', Routes.booth,
+          BoothScreen),
+    ]) {
+      final router = await _pump(tester, hub, productionRoutes: true);
       await _reveal(tester, find.text(label));
-      if (label == 'Journal') {
-        final book = find.byWidgetPredicate((widget) => widget is Semantics &&
-            widget.properties.label == 'Open your shared journal');
-        await _reveal(tester, book);
-        await tester.tap(book);
-      } else {
-        await tester.tap(find.text(label));
-      }
+      await tester.tap(find.text(label));
       await tester.pumpAndSettle();
-      expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path);
-      expect(find.byType(type), findsOneWidget);
+      expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path,
+          reason: label);
+      expect(find.byType(type), findsOneWidget, reason: label);
       if (type == BoothScreen) {
-        expect(find.byType(AppBottomNav), findsNothing);
+        expect(find.byType(AppBottomNav), findsNothing, reason: label);
       } else {
-        expect((tester.widget(tab('Memories')) as Semantics).properties.selected, isTrue);
+        final owner = hub == Routes.memories ? 'Memories' : 'Dayflower';
+        expect((tester.widget(tab(owner)) as Semantics).properties.selected,
+            isTrue,
+            reason: label);
       }
-      expect(tester.takeException(), isNull);
+      expect(tester.takeException(), isNull, reason: label);
       router.pop();
       await tester.pumpAndSettle();
-      expect(find.byType(MemoriesScreen), findsOneWidget);
+      expect(find.byType(hubType), findsOneWidget, reason: label);
+      await tester.pumpWidget(const SizedBox());
     }
   });
 
-  _homeTest('Together opens persisted tools and Dayflower opens the flower picker', (tester) async {
+  _homeTest('Together opens persisted tools and Dayflower opens the flower picker',
+      (tester) async {
     final router = await _pump(tester, Routes.together, productionRoutes: true);
     for (final (label, path, type) in [
       ('Events', Routes.events, EventsScreen),
@@ -581,7 +626,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(GoRouterState.of(tester.element(find.byType(type))).uri.path, path);
       expect(find.byType(type), findsOneWidget);
-      expect((tester.widget(tab('Together')) as Semantics).properties.selected, isTrue);
+      expect((tester.widget(tab('Together')) as Semantics).properties.selected,
+          isTrue);
       expect(tester.takeException(), isNull);
       router.pop();
       await tester.pumpAndSettle();
@@ -589,15 +635,20 @@ void main() {
     }
     await tester.tap(tab('Dayflower'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Send a flower'));
+    // ⚠️ Two things say 'Send a flower' on an empty garden: the tile up
+    // in Today and the empty state's own button. The tile is the one being
+    // tested, and it is the first in the tree.
+    await tester.tap(find.text('Send a flower').first);
     await tester.pumpAndSettle();
-    expect(GoRouterState.of(tester.element(find.byType(FlowersScreen))).uri.queryParameters['compose'], 'flowers');
-    expect(find.byType(FlowersScreen), findsOneWidget);
-    expect(find.byType(AppBottomNav), findsNothing);
-    expect(find.byTooltip('Keyboard'), findsOneWidget);
-    router.pop();
+    // The picker is a sheet over Dayflower now, not a push to Flowers, so
+    // the tab stays lit underneath it.
+    expect(find.byType(FlowerCatalogPanel), findsOneWidget);
+    expect(find.byType(DayflowerScreen), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    Navigator.of(tester.element(find.byType(FlowerCatalogPanel))).pop();
     await tester.pumpAndSettle();
-    expect(find.byType(BloomsScreen), findsOneWidget);
+    expect(find.byType(FlowerCatalogPanel), findsNothing);
+    expect(find.byType(DayflowerScreen), findsOneWidget);
   });
 
   _homeTest(

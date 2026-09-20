@@ -33,6 +33,7 @@ import 'features/dates/presentation/screens/events_screen.dart';
 import 'features/finance/presentation/screens/finance_screen.dart';
 import 'features/finance/presentation/screens/insights_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
+import 'features/dayflower/presentation/dayflower_screen.dart';
 import 'features/memories/presentation/screens/memories_screen.dart';
 import 'features/travel/presentation/screens/travel_map_screen.dart';
 import 'features/gifts/presentation/screens/gifts_screen.dart';
@@ -428,11 +429,16 @@ List<RouteBase> appFeatureRoutes() => [
           path: Routes.activityFeed,
           builder: (_, __) => const ActivityFeedScreen()),
       GoRoute(path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
+      // 🔴 Blooms is a destination again, not a redirect. It was folded
+      // into the Dayflower tab when that tab *was* the garden; Dayflower is
+      // now a hub whose 'Your Garden — See all' opens this, and a redirect
+      // back to the hub would have made that link return to the page it was
+      // already on.
+      GoRoute(path: Routes.blooms, builder: (_, __) => const BloomsScreen()),
       GoRoute(
-          path: Routes.blooms,
-          redirect: (_, state) =>
-              state.uri.replace(path: Routes.dayflower).toString()),
-      GoRoute(path: Routes.dayflower, builder: (_, __) => const SectionScrollScope(route: Routes.dayflower, child: BloomsScreen())),
+          path: Routes.dayflower,
+          builder: (_, __) => const SectionScrollScope(
+              route: Routes.dayflower, child: DayflowerScreen())),
       GoRoute(
           path: Routes.memories, builder: (_, __) => const SectionScrollScope(route: Routes.memories, child: MemoriesScreen())),
       GoRoute(

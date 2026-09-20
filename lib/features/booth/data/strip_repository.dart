@@ -232,7 +232,6 @@ final myOpenStripProvider = Provider.autoDispose<PhotoStrip?>((ref) {
   return null;
 });
 
-/// A half **they** started, waiting on me. This is the invite.
 final stripAwaitingMeProvider = Provider.autoDispose<PhotoStrip?>((ref) {
   final userId = ref.watch(currentUserIdProvider);
   final strips = ref.watch(openStripsProvider).valueOrNull ?? const [];

@@ -275,14 +275,26 @@ AppSection sectionForLocation(String location) {
   final path = Uri.parse(location).path;
   bool inside(String root) => path == root || path.startsWith('$root/');
   if (inside(Routes.chat)) return AppSection.chat;
-  if (inside(Routes.dayflower) || inside(Routes.blooms)) {
+  // 🔴 Ownership follows what a page is *for*, not where its path sits.
+  // Making a strip, writing this month and growing the garden are all
+  // Dayflower, even though the booth and the journal still answer on the
+  // old /app/activities/... paths they were born under. Looking back at what
+  // you kept is Memories.
+  //
+  // ⚠️ The collection is a child path of the booth, so it has to be asked
+  // about first or `inside(Routes.booth)` would swallow it.
+  if (inside(Routes.boothCollection)) return AppSection.memories;
+  if (inside(Routes.dayflower) ||
+      inside(Routes.blooms) ||
+      inside(Routes.booth) ||
+      inside(Routes.chapters)) {
     return AppSection.dayflower;
   }
-  if (inside(Routes.memories) || inside(Routes.booth) || inside(Routes.chapters)) {
-    return AppSection.memories;
-  }
-  if (inside(Routes.together) || inside(Routes.activities) ||
-      inside(Routes.events) || inside(Routes.gifts)) {
+  if (inside(Routes.memories)) return AppSection.memories;
+  if (inside(Routes.together) ||
+      inside(Routes.activities) ||
+      inside(Routes.events) ||
+      inside(Routes.gifts)) {
     return AppSection.together;
   }
   return AppSection.home;

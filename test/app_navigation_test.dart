@@ -8,14 +8,27 @@ void main() {
     expect(Routes.flowers, '/app/flowers');
     expect(Routes.chat, '/app/flowers/chat');
     expect(Routes.events, '/app/events');
+    // 🔴 Looking back is Memories. The saved prints live here even though
+    // their path hangs off the booth's.
     for (final route in [
       Routes.photos,
       Routes.myDays,
-      Routes.booth,
-      Routes.chapters,
-      Routes.chapterFor(2026, 9)
+      Routes.boothCollection,
     ]) {
-      expect(sectionForLocation(route), AppSection.memories);
+      expect(sectionForLocation(route), AppSection.memories, reason: route);
+    }
+    // Making things is Dayflower, whatever path they answer on. The booth and
+    // the journal kept their original /app/activities/... literals because
+    // widgets and notifications point at them.
+    for (final route in [
+      Routes.booth,
+      Routes.boothPending,
+      Routes.chapters,
+      Routes.chapterFor(2026, 9),
+      Routes.blooms,
+      Routes.dayflower,
+    ]) {
+      expect(sectionForLocation(route), AppSection.dayflower, reason: route);
     }
     for (final route in [
       Routes.events,

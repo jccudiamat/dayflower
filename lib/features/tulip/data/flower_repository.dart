@@ -19,6 +19,15 @@ import '../domain/flower_catalog.dart';
 ///  - a **text message** (none of the three set; [note] carries the text).
 ///
 /// Migration 0025 enforces that at least one of the four is present.
+/// What a photo was made for, which is written into its file name.
+///
+/// 🔴 **The prefix is the only record of this.** Nothing in the database says
+/// whether a picture came from the booth, a card or an ordinary day, so
+/// Memories reads it back off the storage path. Renaming a member renames
+/// every future file and silently reclassifies nothing that already exists,
+/// so old prefixes have to keep being recognised — see [MemoryKind].
+enum PhotoOrigin { daily, card, booth }
+
 class FlowerMessage {
   const FlowerMessage({
     required this.id,
@@ -374,11 +383,15 @@ class FlowerRepository {
     String? note,
     bool toWidget = true,
     bool toChat = true,
+    PhotoOrigin origin = PhotoOrigin.daily,
   }) async {
     // <pair_id>/<uuid>.<ext> — the leading segment is what the Storage RLS
     // policy reads to check pair membership, so it must stay first.
     final ext = fileExtension.replaceAll('.', '').toLowerCase();
-    final path = '$pairId/${_uuid()}.$ext';
+    // An ordinary day photo stays unprefixed, so every path
+    // already in the bucket keeps meaning what it meant.
+    final prefix = origin == PhotoOrigin.daily ? '' : '${origin.name}-';
+    final path = '$pairId/$prefix${_uuid()}.$ext';
 
     await _client.storage.from(dayPhotoBucket).uploadBinary(
           path,

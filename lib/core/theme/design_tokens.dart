@@ -5,6 +5,11 @@ import 'app_colors.dart';
 
 /// 4pt grid spacing tokens.
 class AppSpace {
+  /// The gutter every full screen is inset by.
+  static const double screenInset = 20;
+  /// Between screenInset and sm, for rows that need breathing room
+  /// without a full step.
+  static const double compact = 12;
   static const double xxs = 4;
   static const double xs = 8;
   static const double sm = 16;
