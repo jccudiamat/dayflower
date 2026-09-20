@@ -3,6 +3,9 @@ import 'package:go_router/go_router.dart';
 import '../../../../app_router.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import 'package:flutter_map/flutter_map.dart';
+
+import '../../../../core/map/flight_path.dart';
+import '../../../../core/map/map_tiles.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 // ⚠️ latlong2 exports its own Path (a route between points), which shadows
 // the dart:ui Path the callout tail is drawn with.
@@ -83,33 +86,27 @@ class TravelMapScreen extends ConsumerWidget {
                   maxZoom: 17,
                 ),
                 children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    // ⚠️ Required by OSM's policy, and the thing that gets
-                    // an app blocked when it is left as the default.
-                    userAgentPackageName: 'com.dayflower.app',
-                    tileProvider: NetworkTileProvider(),
-                  ),
+                  MapTiles.layer(context),
                   // 🔴 Under the markers, deliberately: a dotted line drawn
                   // over a face reads as a scratch on the photo.
                   if (journey != null && people.length == 2)
                     PolylineLayer(
                       polylines: [
                         Polyline(
-                          points: [
+                          points: FlightPath.between(
                             LatLng(people[0].cityLat!, people[0].cityLon!),
                             LatLng(people[1].cityLat!, people[1].cityLon!),
-                          ],
+                          ),
                           color: AppColors.brand,
                           strokeWidth: 2,
-                          // ⚠️ Straight on screen, not the curve a plane
-                          // actually flies. The great-circle path bends on a
-                          // Mercator projection, and the honest-looking arc
-                          // would need the line subdivided into dozens of
-                          // points — for a picture of "there is a gap", the
-                          // straight line is what people read fastest. The
-                          // *distance* on it is great-circle and true.
+                          // ⚠️ The curve a plane actually flies, subdivided
+                          // into dozens of points so the great-circle path
+                          // bends the way it really does on a Mercator
+                          // projection. This used to be a straight two-point
+                          // line on the grounds that it read faster; the same
+                          // arc now runs on Home, and one screen bending
+                          // while the other stayed flat read as two different
+                          // products. [FlightPath] draws both.
                           pattern: const StrokePattern.dotted(),
                         ),
                       ],
