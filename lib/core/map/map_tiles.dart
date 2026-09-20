@@ -65,8 +65,14 @@ class MapTiles {
     }
     final style = labelled ? _cartoStyleLabelled : _cartoStyle;
     return TileLayer(
+      // 🔴 `key`, not `api_key`. CARTO ignores an unrecognised parameter
+      // rather than rejecting the request: the tile comes back 200 with a
+      // real image, byte-identical to the unauthenticated one, and carries
+      // an 'API key required' watermark burned into the pixels. Nothing in
+      // the status code or the logs says anything is wrong, so this is only
+      // ever caught by looking at the map. See the test that pins it.
       urlTemplate:
-          'https://basemaps.cartocdn.com/rastertiles/$style/{z}/{x}/{y}{r}.png?api_key=$key',
+          'https://basemaps.cartocdn.com/rastertiles/$style/{z}/{x}/{y}{r}.png?key=$key',
       // Retina tiles where the screen can show them: `{r}` becomes "@2x".
       retinaMode: RetinaMode.isHighDensity(context),
       userAgentPackageName: 'com.dayflower.app',
