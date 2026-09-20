@@ -1,3 +1,21 @@
+// 🔴 **`const` is a correctness hazard on this screen, not an
+// optimisation.** This is the one screen you are looking at while the theme
+// changes under you, so its widgets are the only ones whose elements are
+// alive across the switch. Flutter skips any subtree whose widget is
+// identical to the last one, and a const widget always is — so it never
+// rebuilds, and every colour it read from the global AppColors palette
+// stays frozen at the mode it was first built in.
+//
+// Four cards shipped const and stayed white on a black screen. A const
+// card also makes everything in its `children:` list const, so the rows
+// inside it froze too: their titles inherited fresh colour from the theme
+// while their subtitles kept light-mode ink, on a card that was still
+// white. Restoring const anywhere here brings all of that back.
+//
+// The lints below would do exactly that, so they are off for this file.
+// See theme_repaint_test.dart, which pins the failure and the fix.
+// ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables, prefer_const_constructors_in_immutables
+
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -213,7 +231,7 @@ class SettingsScreen extends ConsumerWidget {
             // ── Appearance ───────────────────────────
             Text('APPEARANCE', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            const _Card(children: [_AppearanceRow()]),
+            _Card(children: [_AppearanceRow()]),
             const SizedBox(height: AppSpace.md),
 
             // ── Alerts ───────────────────────────────
@@ -251,7 +269,7 @@ class SettingsScreen extends ConsumerWidget {
               style: AppText.caption(),
             ),
             const SizedBox(height: AppSpace.xs),
-            const _Card(
+            _Card(
               children: [
                 _WidgetModeRow(
                   title: "Today's Flower",
@@ -281,7 +299,7 @@ class SettingsScreen extends ConsumerWidget {
               style: AppText.caption(),
             ),
             const SizedBox(height: AppSpace.xs),
-            const _Card(children: [_ReunionBackgroundRow()]),
+            _Card(children: [_ReunionBackgroundRow()]),
             const SizedBox(height: AppSpace.md),
             Text('PHOTO ROTATION', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
@@ -291,7 +309,7 @@ class SettingsScreen extends ConsumerWidget {
               style: AppText.caption(),
             ),
             const SizedBox(height: AppSpace.xs),
-            const _Card(
+            _Card(
               children: [
                 // ⚠️ "Don't" is first and is the default. A card that moves
                 // on its own is the kind of thing that reads as delightful
@@ -598,18 +616,35 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 /* ── Grouped card ────────────────────────────────── */
+/// 🔴 **Reads the palette through Theme, never through AppColors.**
+/// Four of these are built `const`, and a const widget is identical to
+/// itself, so Flutter's updateChild returns the existing element without
+/// calling build again. A colour fetched from the global palette is
+/// therefore fetched exactly once, and the card goes on painting the mode
+/// it was first inflated in — which is how Settings ended up with four
+/// white cards on a black screen, white titles on them and, inside the very
+/// same cards, dividers that had switched correctly because `Divider` reads
+/// the theme.
+///
+/// ⚠️ The MaterialApp is keyed on the mode to force exactly this rebuild,
+/// and it is not enough here: GoRouter's delegate outlives the rekey and
+/// keeps the page's elements, so the const subtree under it is never
+/// discarded. Depending on an InheritedWidget is what actually works, and
+/// it works *because* Theme notifies its dependents regardless of whether
+/// the widget that registered the dependency is const.
 class _Card extends StatelessWidget {
-  const _Card({required this.children});
+  _Card({required this.children});
   final List<Widget> children;
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: theme.colorScheme.surface,
         borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: theme.dividerColor),
       ),
       child: Column(children: children),
     );
