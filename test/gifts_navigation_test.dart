@@ -529,6 +529,35 @@ void main() {
     await _screenshot(tester, 'story-flower-detail');
   });
 
+  testWidgets('Memory filters say there is more to reach, then stop saying it',
+      (tester) async {
+    // Seven filters do not fit a 390pt screen. The row scrolls, but the
+    // seventh used to clip mid-word against the scaffold inset with nothing
+    // to show it could move, which reads as a layout bug. A fade marks the
+    // overflow and must disappear once you reach the end, or it becomes a
+    // permanent smudge on a row that has nowhere left to go.
+    await _pump(tester, Routes.memories);
+    await tester.pumpAndSettle();
+
+    final row = find.descendant(
+        of: find.byType(MemoriesScreen),
+        matching: find.byType(SingleChildScrollView));
+    expect(row, findsWidgets);
+
+    final scrollable = tester.widget<SingleChildScrollView>(row.first);
+    final controller = scrollable.controller!;
+    expect(controller.position.maxScrollExtent, greaterThan(0),
+        reason: 'the filters should overflow a phone-width screen');
+
+    expect(find.byType(ShaderMask), findsOneWidget,
+        reason: 'the trailing fade should mark the pills you cannot see yet');
+
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pumpAndSettle();
+    expect(find.byType(ShaderMask), findsNothing,
+        reason: 'at the end there is nothing further to hint at');
+  });
+
   testWidgets('Primary pages remain usable with large accessibility text',
       (tester) async {
     for (final route in [
