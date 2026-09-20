@@ -29,8 +29,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/services/legal_links.dart';
-import '../../../../core/services/pulse_alerts.dart';
 import '../../../../core/theme/app_colors.dart';
+import 'settings_sections.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../../core/models/avatar_flower.dart';
 import '../../../../core/theme/design_tokens.dart';
@@ -43,15 +43,12 @@ import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/city_picker.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../auth/data/auth_repository.dart';
-import '../../../heartbeat/data/pulse_alert_prefs.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../updates/data/update_repository.dart';
 import '../../../push/data/push_repository.dart';
 import '../../../push/data/push_service.dart';
 import '../../../updates/presentation/widgets/update_screen.dart';
-import '../../../widget/widget_mode_provider.dart';
-import '../../../widget/widget_sync.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -90,9 +87,9 @@ class SettingsScreen extends ConsumerWidget {
             // ── Profile ──────────────────────────────
             Text('YOUR PROFILE', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            _Card(
+            SettingsCard(
               children: [
-                _Row(
+                SettingsRow(
                   title: 'Name',
                   value: profile?.displayName,
                   onTap: () => _editText(
@@ -115,8 +112,8 @@ class SettingsScreen extends ConsumerWidget {
                 // this screen, at 66px, with a camera badge on it — a text
                 // row underneath saying the word "Photo" was describing
                 // something already on screen and better tapped directly.
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Nickname',
                   value: profile?.petName ?? 'Not set',
                   onTap: () => _editText(
@@ -136,18 +133,18 @@ class SettingsScreen extends ConsumerWidget {
                     },
                   ),
                 ),
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Birthday',
                   value: profile?.birthday == null
                       ? 'Not set'
                       : DateFormat('MMMM d').format(profile!.birthday!),
                   onTap: () => _editBirthday(context, ref, profile),
                 ),
-                const _Line(),
+                const SettingsLine(),
                 // Where they are, which is the distance — see migration
                 // 0034 for why this is not the timezone.
-                _Row(
+                SettingsRow(
                   title: 'Where you are',
                   subtitle: 'Sets the distance between you',
                   value: profile?.city?.split(',').first.trim() ?? 'Not set',
@@ -166,8 +163,8 @@ class SettingsScreen extends ConsumerWidget {
                     ref.invalidate(userProfileProvider);
                   },
                 ),
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Timezone',
                   // Picking a city sets this too. It stays its own row for
                   // the one case where they genuinely differ: someone away
@@ -192,15 +189,15 @@ class SettingsScreen extends ConsumerWidget {
             // ── Pair ─────────────────────────────────
             Text('YOUR PAIR', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            _Card(
+            SettingsCard(
               children: [
-                _Row(
+                SettingsRow(
                   title: 'Connected with',
                   value: partner?.petName ?? partner?.displayName ?? '—',
                   chevron: false,
                 ),
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Invite code',
                   value: pair?.inviteCode ?? '—',
                   chevron: false,
@@ -215,8 +212,8 @@ class SettingsScreen extends ConsumerWidget {
                           );
                         },
                 ),
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Disconnect partner',
                   subtitle: 'Unlinks your accounts and erases shared history',
                   danger: true,
@@ -231,105 +228,30 @@ class SettingsScreen extends ConsumerWidget {
             // ── Appearance ───────────────────────────
             Text('APPEARANCE', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            _Card(children: [_AppearanceRow()]),
+            SettingsCard(children: [_AppearanceRow()]),
             const SizedBox(height: AppSpace.md),
 
-            // ── Alerts ───────────────────────────────
-            Text('ALERTS', style: AppText.label()),
+            // ── Notifications and widgets ────────
+            // ⚠️ Both were spelled out here. Alerts moved to the
+            // notifications list, where somebody deciding how they want to
+            // be interrupted is already standing. The widget options were
+            // three headings and three paragraphs for one feature, which
+            // pushed the things people actually come to Settings for below
+            // the fold.
+            Text('MORE', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            _Card(
+            SettingsCard(
               children: [
-                // One switch, and deliberately only one. The row under
-                // here used to pick how long a heartbeat had to wait before
-                // another was allowed to buzz — a window on a gesture that
-                // is already the smallest thing you can send someone.
-                _SwitchRow(
-                  title: 'Heartbeat alerts',
-                  subtitle: PulseAlerts.supported
-                      ? 'Vibrate and play a heartbeat every time they send one'
-                      : 'Only available on the Android and iOS app',
-                  value: ref.watch(pulseAlertsEnabledProvider),
-                  onChanged: PulseAlerts.supported
-                      ? (v) => ref
-                          .read(pulseAlertsEnabledProvider.notifier)
-                          .setEnabled(v)
-                      : null,
+                SettingsRow(
+                  title: 'Home screen widgets',
+                  subtitle: 'What they show, and how they behave',
+                  onTap: () => context.push(Routes.widgetSettings),
                 ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.md),
-
-            // ── Home screen widget ───────────────────
-            Text('HOME SCREEN WIDGET', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              DayflowerWidgets.isSupported
-                  ? 'Long-press your home screen → Widgets → Dayflower. "Today\'s Flower", "Heartbeat" and "Reunion" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
-                  : 'Home screen widgets are only available on the Android and iOS app.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            _Card(
-              children: [
-                _WidgetModeRow(
-                  title: "Today's Flower",
-                  subtitle: 'Their flower and note',
-                  mode: WidgetMode.flower,
-                ),
-                _Line(),
-                _WidgetModeRow(
-                  title: 'Heartbeat',
-                  subtitle: 'Tap it to send a pulse',
-                  mode: WidgetMode.heartbeat,
-                ),
-                _Line(),
-                _WidgetModeRow(
-                  title: 'Reunion',
-                  subtitle: 'Days until you are in the same place',
-                  mode: WidgetMode.reunion,
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpace.md),
-            Text('REUNION WIDGET', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              'The picture behind the countdown. Somewhere you are going, or '
-              'somewhere you have been.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            _Card(children: [_ReunionBackgroundRow()]),
-            const SizedBox(height: AppSpace.md),
-            Text('PHOTO ROTATION', style: AppText.label()),
-            const SizedBox(height: AppSpace.xs),
-            Text(
-              'How often the widget moves to their next day. Only applies '
-              'when more than one is live.',
-              style: AppText.caption(),
-            ),
-            const SizedBox(height: AppSpace.xs),
-            _Card(
-              children: [
-                // ⚠️ "Don't" is first and is the default. A card that moves
-                // on its own is the kind of thing that reads as delightful
-                // for a week and restless after that, so it is opt-in.
-                _WidgetRotationRow(
-                  title: "Don't rotate",
-                  subtitle: 'Only the newest day',
-                  seconds: 0,
-                ),
-                _Line(),
-                _WidgetRotationRow(
-                  title: 'Every 3 seconds',
-                  subtitle: 'Through their live days',
-                  seconds: 3,
-                ),
-                _Line(),
-                _WidgetRotationRow(
-                  title: 'Every 5 seconds',
-                  subtitle: 'A calmer pace',
-                  seconds: 5,
+                SettingsLine(),
+                SettingsRow(
+                  title: 'Notifications',
+                  subtitle: 'What reaches you, and how',
+                  onTap: () => context.push(Routes.notificationSettings),
                 ),
               ],
             ),
@@ -338,20 +260,20 @@ class SettingsScreen extends ConsumerWidget {
             // ── About ────────────────────────────────
             Text('ABOUT', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            _Card(
+            SettingsCard(
               children: [
                 const _VersionRow(),
                 if (UpdateRepository.supported) ...[
-                  const _Line(),
+                  const SettingsLine(),
                   const _CheckForUpdatesRow(),
                 ],
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Terms of Service',
                   onTap: () => openLegalPage(context, ref, LegalPage.terms),
                 ),
-                const _Line(),
-                _Row(
+                const SettingsLine(),
+                SettingsRow(
                   title: 'Privacy Policy',
                   onTap: () => openLegalPage(context, ref, LegalPage.privacy),
                 ),
@@ -616,412 +538,18 @@ class _ProfileHeader extends StatelessWidget {
 }
 
 /* ── Grouped card ────────────────────────────────── */
-/// 🔴 **Reads the palette through Theme, never through AppColors.**
-/// Four of these are built `const`, and a const widget is identical to
-/// itself, so Flutter's updateChild returns the existing element without
-/// calling build again. A colour fetched from the global palette is
-/// therefore fetched exactly once, and the card goes on painting the mode
-/// it was first inflated in — which is how Settings ended up with four
-/// white cards on a black screen, white titles on them and, inside the very
-/// same cards, dividers that had switched correctly because `Divider` reads
-/// the theme.
-///
-/// ⚠️ The MaterialApp is keyed on the mode to force exactly this rebuild,
-/// and it is not enough here: GoRouter's delegate outlives the rekey and
-/// keeps the page's elements, so the const subtree under it is never
-/// discarded. Depending on an InheritedWidget is what actually works, and
-/// it works *because* Theme notifies its dependents regardless of whether
-/// the widget that registered the dependency is const.
-class _Card extends StatelessWidget {
-  _Card({required this.children});
-  final List<Widget> children;
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: theme.dividerColor),
-      ),
-      child: Column(children: children),
-    );
-  }
-}
-
-class _Line extends StatelessWidget {
-  const _Line();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(horizontal: AppSpace.sm),
-      child: Divider(height: 1),
-    );
-  }
-}
 
 /* ── Reunion widget background ────────────────────── */
 
-/// Picks (or clears) the photo behind the reunion countdown widget.
-///
-/// ⚠️ **Device-local, and deliberately not shared.** The countdown itself is
-/// one row on `reunions` and belongs to both of you; the picture behind it is
-/// a decision about one home screen. Syncing it would mean one person's
-/// choice of wallpaper overwriting the other's, and an upload, and a bucket,
-/// for something neither of them would ever see on the other's phone.
-class _ReunionBackgroundRow extends ConsumerStatefulWidget {
-  const _ReunionBackgroundRow();
-
-  @override
-  ConsumerState<_ReunionBackgroundRow> createState() =>
-      _ReunionBackgroundRowState();
-}
-
-class _ReunionBackgroundRowState extends ConsumerState<_ReunionBackgroundRow> {
-  String _path = '';
-  var _busy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final path = await DayflowerWidgets.currentReunionBackground();
-    if (mounted) setState(() => _path = path);
-  }
-
-  Future<void> _pick() async {
-    if (_busy) return;
-    setState(() => _busy = true);
-    try {
-      final picked = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
-        // Generous: the widget downscales to 1200px on its own, and asking
-        // the picker for something small first would throw away detail the
-        // crop might have wanted.
-        maxWidth: 2400,
-        maxHeight: 2400,
-      );
-      if (picked == null) return;
-      final saved = await DayflowerWidgets.setReunionBackground(
-          await picked.readAsBytes());
-      if (mounted) setState(() => _path = saved ?? '');
-    } catch (e) {
-      debugPrint('reunion background pick failed: $e');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _clear() async {
-    setState(() => _busy = true);
-    await DayflowerWidgets.setReunionBackground(null);
-    if (mounted) {
-      setState(() {
-        _path = '';
-        _busy = false;
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = DayflowerWidgets.isSupported && !_busy;
-    final has = _path.isNotEmpty;
-
-    return Column(
-      children: [
-        _Row(
-          title: 'Background image',
-          subtitle: has
-              ? 'Tap to choose a different one'
-              : 'Uses the Dayflower gradient until you pick one',
-          value: _busy
-              ? 'Saving…'
-              : has
-                  ? 'Chosen'
-                  : 'Not set',
-          onTap: enabled ? _pick : null,
-        ),
-        if (has) ...[
-          const _Line(),
-          _Row(
-            title: 'Remove background',
-            danger: true,
-            chevron: false,
-            onTap: enabled ? _clear : null,
-          ),
-        ],
-      ],
-    );
-  }
-}
 
 /* ── Widget photo-rotation picker row ────────────── */
-/// Same shape as [_WidgetModeRow] — one choice out of three, shown as an
-/// outline rather than a tick, per design.md.
-class _WidgetRotationRow extends ConsumerWidget {
-  const _WidgetRotationRow({
-    required this.title,
-    required this.subtitle,
-    required this.seconds,
-  });
-
-  final String title;
-  final String subtitle;
-  final int seconds;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(widgetRotationProvider) == seconds;
-    final enabled = DayflowerWidgets.isSupported;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled
-            ? () =>
-                ref.read(widgetRotationProvider.notifier).setSeconds(seconds)
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.sm,
-            vertical: 14,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppText.body(
-                        enabled ? AppColors.ink : AppColors.muted,
-                      ).copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: AppText.caption()),
-                  ],
-                ),
-              ),
-              AnimatedContainer(
-                duration: AppMotion.micro,
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected && enabled
-                        ? AppColors.secondary
-                        : AppColors.border,
-                    width: selected && enabled ? 6 : 1.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /* ── Adaptive-widget mode picker row ─────────────── */
-class _WidgetModeRow extends ConsumerWidget {
-  const _WidgetModeRow({
-    required this.title,
-    required this.subtitle,
-    required this.mode,
-  });
-
-  final String title;
-  final String subtitle;
-  final WidgetMode mode;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(widgetModeProvider) == mode;
-    final enabled = DayflowerWidgets.isSupported;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: enabled
-            ? () => ref.read(widgetModeProvider.notifier).setMode(mode)
-            : null,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.sm,
-            vertical: 14,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppText.body(
-                        enabled ? AppColors.ink : AppColors.muted,
-                      ).copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(subtitle, style: AppText.caption()),
-                  ],
-                ),
-              ),
-              // Selection reads as an outline, per design.md.
-              AnimatedContainer(
-                duration: AppMotion.micro,
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: selected && enabled
-                        ? AppColors.secondary
-                        : AppColors.border,
-                    width: selected && enabled ? 6 : 1.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /* ── Settings row with a switch ──────────────────── */
-class _SwitchRow extends StatelessWidget {
-  const _SwitchRow({
-    required this.title,
-    required this.value,
-    required this.onChanged,
-    this.subtitle,
-  });
-
-  final String title;
-  final String? subtitle;
-  final bool value;
-  final ValueChanged<bool>? onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        left: AppSpace.sm,
-        right: AppSpace.xs,
-        top: 10,
-        bottom: 10,
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppText.body(AppColors.ink)
-                      .copyWith(fontWeight: FontWeight.w600),
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 2),
-                  Text(subtitle!, style: AppText.caption()),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(width: AppSpace.xs),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeTrackColor: AppColors.brand,
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 /* ── Settings row ────────────────────────────────── */
-class _Row extends StatelessWidget {
-  const _Row({
-    required this.title,
-    this.subtitle,
-    this.value,
-    this.onTap,
-    this.chevron = true,
-    this.danger = false,
-  });
-
-  final String title;
-  final String? subtitle;
-  final String? value;
-  final VoidCallback? onTap;
-  final bool chevron;
-  final bool danger;
-
-  @override
-  Widget build(BuildContext context) {
-    final titleColor = danger ? AppColors.danger : AppColors.ink;
-
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.sm,
-            vertical: 14,
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: AppText.body(titleColor)
-                          .copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    if (subtitle != null) ...[
-                      const SizedBox(height: 2),
-                      Text(subtitle!, style: AppText.caption()),
-                    ],
-                  ],
-                ),
-              ),
-              if (value != null)
-                Text(
-                  value!,
-                  style: AppText.caption(AppColors.body),
-                ),
-              if (chevron && onTap != null) ...[
-                const SizedBox(width: 4),
-                AppIcon(
-                  CupertinoIcons.chevron_forward,
-                  size: 20,
-                  color: AppColors.muted,
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /* ── About: version + manual update check ────────── */
 
@@ -1033,7 +561,7 @@ class _VersionRow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return _Row(
+    return SettingsRow(
       title: 'Version',
       value: ref.watch(installedVersionProvider).valueOrNull ?? '—',
       chevron: false,
@@ -1052,7 +580,7 @@ class _CheckForUpdatesRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(updateControllerProvider);
 
-    return _Row(
+    return SettingsRow(
       title: 'Check for updates',
       subtitle: switch (state.stage) {
         UpdateStage.checking => 'Checking…',
@@ -1452,7 +980,7 @@ class _AppearanceRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(themeModeProvider);
-    return _SwitchRow(
+    return SettingsSwitchRow(
       title: 'Dark mode',
       subtitle: 'Kinder at night. Only on this phone.',
       value: mode == AppMode.dark,

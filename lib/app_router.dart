@@ -44,6 +44,8 @@ import 'features/pairing/presentation/screens/pairing_screen.dart';
 import 'features/reminders/presentation/screens/alarm_screen.dart';
 import 'features/reminders/presentation/screens/reminders_screen.dart';
 import 'features/settings/presentation/screens/settings_screen.dart';
+import 'features/settings/presentation/screens/notification_settings_screen.dart';
+import 'features/settings/presentation/screens/widget_settings_screen.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/tulip/presentation/screens/blooms_screen.dart';
 import 'features/tulip/presentation/screens/chat_settings_screen.dart';
@@ -120,6 +122,11 @@ class Routes {
   static const chatSettings = '/app/flowers/chat/settings';
 
   static const settings = '/app/settings';
+  static const widgetSettings = '/app/settings/widgets';
+  /// Hangs off the notifications list rather than Settings: it is reached
+  /// from the bell, which is where people are standing when they decide to
+  /// change how they are interrupted.
+  static const notificationSettings = '/app/home/notifications/settings';
 
   /// The ringing screen for a reminder alarm. **Top-level, outside the app
   /// shell on purpose** — an alarm is not a place you navigated to, it is an
@@ -424,6 +431,12 @@ List<RouteBase> appFeatureRoutes() => [
           path: Routes.notifications,
           builder: (_, __) =>
               const ActivityFeedScreen(notificationsOnly: true)),
+      GoRoute(
+          path: Routes.notificationSettings,
+          builder: (_, __) => const NotificationSettingsScreen()),
+      GoRoute(
+          path: Routes.widgetSettings,
+          builder: (_, __) => const WidgetSettingsScreen()),
       GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
       GoRoute(
           path: Routes.activityFeed,

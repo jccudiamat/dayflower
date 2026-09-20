@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,7 @@ import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_icon.dart';
 import '../../../../core/widgets/feature_screen_header.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 import '../../data/activity_models.dart';
@@ -86,6 +88,17 @@ class _ActivityFeedScreenState extends ConsumerState<ActivityFeedScreen> {
                       subtitle: widget.notificationsOnly ? 'Updates from your partner' : 'Everything the two of you have been up to',
                     ),
                   ),
+                  // ⚠️ Only on the notifications list. On the activity
+                  // history there is nothing to configure, and a gear that
+                  // opened somebody else's settings would be a trap.
+                  if (widget.notificationsOnly)
+                    IconButton(
+                      tooltip: 'Notification settings',
+                      icon: AppIcon(CupertinoIcons.gear,
+                          size: 22, color: AppColors.body),
+                      onPressed: () =>
+                          context.push(Routes.notificationSettings),
+                    ),
                 ],
               ),
             ),
