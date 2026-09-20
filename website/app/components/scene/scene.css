@@ -1,0 +1,559 @@
+/* ── The Dayflower world ──────────────────────────────────────────────────
+ *
+ * Layout and motion for the two scenic sections. The art itself is in
+ * `Scenery.tsx`; this file decides how much of it you see, how deep it sits,
+ * and how little of it moves.
+ *
+ * 🔴 Everything in here is decoration. `.scene` takes no pointer events and
+ * carries no text the page needs, so any rule below can fail without taking
+ * a word or a control with it.
+ */
+
+.scene {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  /* The layers are painted in source order; the vignette closes the stack. */
+  isolation: isolate;
+}
+
+.scene-far,
+.scene-hills,
+.scene-near {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  display: block;
+  /* Overscanned, so the parallax shift never drags an edge into frame. */
+  will-change: transform;
+}
+
+.scene-far {
+  top: 0;
+  height: 88%;
+  transform: translate3d(calc(var(--px, 0) * -9px), calc(var(--py, 0) * -5px + var(--sc, 0) * 26px), 0) scale(1.045);
+}
+.scene-hills {
+  bottom: 0;
+  height: 36%;
+  transform: translate3d(calc(var(--px, 0) * -18px), calc(var(--sc, 0) * 44px), 0) scale(1.05);
+  transform-origin: bottom center;
+}
+.scene-near {
+  bottom: 0;
+  height: 30%;
+  transform: translate3d(calc(var(--px, 0) * -32px), calc(var(--sc, 0) * 66px), 0) scale(1.06);
+  transform-origin: bottom center;
+}
+
+/* Foliage hanging into the corners, close enough to the lens to be soft. */
+.scene-canopy {
+  position: absolute;
+  top: -6%;
+  width: clamp(160px, 21vw, 320px);
+  aspect-ratio: 300 / 220;
+  filter: blur(1.4px);
+  transform: translate3d(calc(var(--px, 0) * -44px), calc(var(--py, 0) * -14px), 0);
+}
+.scene-canopy-left {
+  left: -3%;
+}
+.scene-canopy-right {
+  right: -3%;
+  transform: translate3d(calc(var(--px, 0) * -44px), calc(var(--py, 0) * -14px), 0) scaleX(-1);
+}
+
+.scene-tree {
+  position: absolute;
+  bottom: 0;
+  height: 104%;
+  aspect-ratio: 320 / 620;
+  filter: blur(1.1px);
+  transform: translate3d(calc(var(--px, 0) * -38px), 0, 0);
+}
+.scene-tree-left {
+  left: -2%;
+}
+.scene-tree-right {
+  right: -2%;
+  transform: translate3d(calc(var(--px, 0) * -38px), 0, 0) scaleX(-1);
+}
+
+/* The light in the air: one warm bloom where the sun is, laid over
+   everything below it, so sky, water and meadow are lit by the same source
+   instead of being three separately coloured pictures stacked up.
+   ⚠️ Plain alpha, not `mix-blend-mode: screen`. Screen looked better by a
+   hair and cost the whole hero: the blended layer forced the section onto a
+   compositing path that some rasterisers drop entirely, and the section
+   painted as a blank rectangle — scenery, headline and buttons with it.
+   Nothing decorative is worth a failure mode that takes the copy down. */
+.scene-light {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(42% 36% at 53% 62%, rgba(255, 238, 198, 0.55), rgba(255, 238, 198, 0) 72%),
+    linear-gradient(180deg, rgba(255, 216, 178, 0.14) 0%, rgba(255, 242, 216, 0.2) 44%, rgba(255, 242, 216, 0) 74%);
+}
+.scene-night .scene-light {
+  background:
+    radial-gradient(32% 28% at 33% 22%, rgba(178, 200, 244, 0.3), transparent 74%),
+    radial-gradient(64% 42% at 62% 84%, rgba(255, 198, 132, 0.12), transparent 72%);
+}
+
+/* A breath of shade at the edges: the frame, not a filter over the picture. */
+.scene-vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(130% 92% at 50% 42%, transparent 52%, rgba(74, 48, 62, 0.16) 100%);
+}
+.scene-night .scene-vignette {
+  background: radial-gradient(120% 90% at 46% 30%, transparent 40%, rgba(5, 10, 24, 0.5) 100%);
+}
+
+/* The moon keeps its own frame so it stays round at every width. */
+.scene-moon {
+  position: absolute;
+  left: 22%;
+  top: 6%;
+  width: clamp(90px, 10vw, 140px);
+  aspect-ratio: 1;
+  transform: translate3d(calc(var(--px, 0) * -6px), calc(var(--py, 0) * -4px), 0);
+}
+
+/* ── The sign, and the mailbox ──────────────────────────────────────────── */
+
+.scene-sign {
+  position: absolute;
+  left: 1.5%;
+  bottom: 2%;
+  height: clamp(300px, 66%, 540px);
+  aspect-ratio: 320 / 440;
+  transform: translate3d(calc(var(--px, 0) * -26px), calc(var(--sc, 0) * 50px), 0);
+}
+.sign-text {
+  font-family: var(--font-lora), Georgia, serif;
+  font-style: italic;
+  font-size: 29px;
+  letter-spacing: 0.02em;
+}
+.sign-heart {
+  font-size: 23px;
+}
+/* The board swings, very slightly, because it is hanging from two ropes. */
+.sign-board {
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: swing 7.5s ease-in-out infinite alternate;
+}
+@keyframes swing {
+  from {
+    transform: rotate(-0.55deg);
+  }
+  to {
+    transform: rotate(0.55deg);
+  }
+}
+
+.lantern {
+  animation: lantern 4.5s ease-in-out infinite alternate;
+}
+@keyframes lantern {
+  from {
+    opacity: 0.75;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.scene-mailbox {
+  position: absolute;
+  left: 4%;
+  bottom: 4%;
+  height: clamp(210px, 70%, 340px);
+  aspect-ratio: 260 / 340;
+  transform: translate3d(calc(var(--px, 0) * -24px), 0, 0);
+}
+/* Home for the night: a shift of weight, once every ten seconds. */
+.dove {
+  transform-box: fill-box;
+  transform-origin: bottom center;
+  animation: roost 9s ease-in-out infinite;
+}
+@keyframes roost {
+  0%,
+  86%,
+  100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  90% {
+    transform: rotate(-1.6deg) translateY(-1.5px);
+  }
+  95% {
+    transform: rotate(1deg) translateY(0);
+  }
+}
+
+/* ── Wind ───────────────────────────────────────────────────────────────── */
+
+.sway {
+  transform-box: view-box;
+  animation-name: sway;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
+@keyframes sway {
+  from {
+    transform: rotate(calc(var(--tilt, 1deg) * -1));
+  }
+  to {
+    transform: rotate(var(--tilt, 1deg));
+  }
+}
+
+.cloud {
+  animation: cloud-drift 260s linear infinite;
+}
+@keyframes cloud-drift {
+  from {
+    transform: translateX(-180px);
+  }
+  to {
+    transform: translateX(1620px);
+  }
+}
+
+.twinkle {
+  animation: twinkle 6s ease-in-out infinite alternate;
+}
+@keyframes twinkle {
+  from {
+    opacity: 0.15;
+  }
+  to {
+    opacity: 0.95;
+  }
+}
+
+/* ── Petals and fireflies ───────────────────────────────────────────────── */
+
+.drift {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.petal {
+  position: absolute;
+  left: -4%;
+  width: var(--size, 12px);
+  height: var(--size, 12px);
+  border-radius: 60% 10% 60% 10%;
+  background: linear-gradient(140deg, #fbd3e0, #f3a1c0);
+  box-shadow: 0 1px 2px rgba(120, 60, 90, 0.12);
+  animation-name: petal-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+/* Across in a third of the cycle, gone for the rest of it. */
+@keyframes petal-drift {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 0;
+  }
+  4% {
+    opacity: 1;
+  }
+  30% {
+    opacity: 1;
+  }
+  36%,
+  100% {
+    transform: translate3d(112vw, var(--fall, 20vh), 0) rotate(var(--spin, 360deg));
+    opacity: 0;
+  }
+}
+
+.firefly {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #ffe3a1;
+  box-shadow: 0 0 10px 3px rgba(255, 213, 130, 0.55);
+  animation-name: firefly;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+@keyframes firefly {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  60% {
+    opacity: 0.35;
+  }
+  85% {
+    transform: translate3d(var(--slide, 40px), var(--rise, -40px), 0);
+    opacity: 0.8;
+  }
+}
+
+/* ── The pigeon ─────────────────────────────────────────────────────────── */
+
+.pigeon-flight {
+  position: absolute;
+  top: 6%;
+  left: 0;
+  width: clamp(104px, 12vw, 176px);
+  pointer-events: none;
+  animation: pigeon-fly 46s linear infinite;
+  z-index: 2;
+}
+.pigeon-bob {
+  position: relative;
+  animation: pigeon-bob 2.4s ease-in-out infinite alternate;
+}
+.pigeon-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.pigeon-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 10px 16px rgba(70, 44, 60, 0.22));
+}
+.pigeon-button:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 6px;
+  border-radius: 12px;
+}
+/* Stop the bird while somebody is dealing with it. */
+.pigeon-flight:has(.pigeon-button:focus-visible),
+.pigeon-flight.is-open {
+  animation-play-state: paused;
+}
+.pigeon-flight.is-open .pigeon-bob {
+  animation-play-state: paused;
+}
+
+@keyframes pigeon-fly {
+  0% {
+    transform: translate3d(114vw, 2vh, 0) scaleX(1);
+    opacity: 0;
+  }
+  3% {
+    opacity: 1;
+  }
+  12% {
+    transform: translate3d(86vw, -1vh, 0);
+  }
+  22% {
+    transform: translate3d(58vw, 1.5vh, 0);
+  }
+  30% {
+    transform: translate3d(34vw, -1.5vh, 0);
+  }
+  36% {
+    opacity: 1;
+  }
+  40%,
+  100% {
+    transform: translate3d(-22vw, -3vh, 0);
+    opacity: 0;
+  }
+}
+@keyframes pigeon-bob {
+  from {
+    transform: translateY(-4px) rotate(-1.5deg);
+  }
+  to {
+    transform: translateY(5px) rotate(1.5deg);
+  }
+}
+
+.pigeon-letter {
+  position: absolute;
+  top: calc(100% - 8px);
+  left: 50%;
+  width: 232px;
+  transform: translateX(-50%);
+  padding: 16px 18px 14px;
+  border-radius: 16px;
+  border: 1px solid #f0dfe6;
+  background: #fffdf8;
+  box-shadow: 0 18px 40px rgba(60, 34, 50, 0.22);
+  pointer-events: auto;
+  text-align: center;
+}
+.pigeon-letter-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #4b2c3e;
+}
+.pigeon-letter-note {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #7a5a6c;
+}
+.pigeon-letter-link {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 40px;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b8447a;
+}
+.pigeon-letter-link:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pigeon-letter-close {
+  display: block;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 11.5px;
+  color: #9b8592;
+  cursor: pointer;
+}
+
+/* ── Handwriting in the world ───────────────────────────────────────────── */
+
+.scene-note {
+  position: absolute;
+  font-family: var(--font-lora), Georgia, serif;
+  font-style: italic;
+  line-height: 1.5;
+  pointer-events: none;
+  transform: rotate(-7deg);
+}
+.scene-note-dawn {
+  right: 3.5%;
+  top: 30%;
+  width: 116px;
+  font-size: 17px;
+  color: #6c4f5f;
+  text-shadow: 0 1px 2px rgba(255, 252, 245, 0.6);
+}
+.scene-note-night {
+  right: 7%;
+  top: 26%;
+  width: 132px;
+  font-size: 18px;
+  color: #efe6f0;
+  text-shadow: 0 1px 10px rgba(12, 20, 44, 0.7);
+}
+
+/* ── Quiet, when asked ──────────────────────────────────────────────────────
+ *
+ * `globals.css` already flattens every animation site-wide under
+ * `prefers-reduced-motion`. That alone would leave the moving pieces frozen
+ * at whatever keyframe they landed on — a pigeon parked mid-air, petals in a
+ * stack at the left edge — so the ones whose whole point is travel are taken
+ * out of the picture instead. What is left is the painting, which is what
+ * the reference is anyway.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .drift,
+  .pigeon-flight {
+    display: none;
+  }
+  .scene-far,
+  .scene-hills,
+  .scene-near,
+  .scene-canopy,
+  .scene-canopy-right,
+  .scene-tree,
+  .scene-tree-right,
+  .scene-sign,
+  .scene-mailbox {
+    transform: none;
+  }
+  .scene-canopy-right,
+  .scene-tree-right {
+    transform: scaleX(-1);
+  }
+}
+
+/* ── Narrower ──────────────────────────────────────────────────────────────
+ *
+ * ⚠️ The framing props are the first things to go, not the last. Two trees
+ * drawn to frame a 1440px scene meet in the middle of a phone and the night
+ * section becomes a picture of bark; the sign and the handwritten notes
+ * crowd the headline long before that. The landscape itself stays.
+ */
+@media (max-width: 860px) {
+  .scene-sign,
+  .scene-note-dawn {
+    display: none;
+  }
+  .scene-canopy {
+    width: 34vw;
+  }
+  .scene-tree {
+    height: 82%;
+  }
+  .scene-tree-left {
+    left: -11%;
+  }
+  .scene-tree-right {
+    right: -11%;
+  }
+  .scene-moon {
+    left: 7%;
+    top: 5%;
+    width: clamp(66px, 13vw, 100px);
+  }
+  .scene-mailbox {
+    left: 1%;
+    height: clamp(150px, 42%, 210px);
+  }
+  .scene-note-night {
+    right: 4%;
+    top: 10%;
+    width: 110px;
+    font-size: 15px;
+  }
+  .pigeon-letter {
+    width: 200px;
+  }
+}
+
+@media (max-width: 700px) {
+  /* Nowhere left for it to sit that is not either the headline or the
+     mailbox, so it stays behind on a phone. */
+  .scene-note-night {
+    display: none;
+  }
+  .scene-tree {
+    height: 66%;
+  }
+  .scene-tree-left {
+    left: -18%;
+  }
+  .scene-tree-right {
+    right: -18%;
+  }
+  .scene-mailbox {
+    height: clamp(118px, 32%, 168px);
+  }
+}

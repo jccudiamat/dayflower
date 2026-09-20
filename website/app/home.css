@@ -1,100 +1,773 @@
-.dayflower-home { overflow: clip; }
-.home-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: #78566e; }
-.home-hero { max-width: 1120px; margin: auto; display: grid; grid-template-columns: 1.2fr 1fr; gap: 65px; align-items: center; padding: 68px 28px 75px; }
-.home-hero h1 { font-size: clamp(38px, 4.6vw, 58px); line-height: 1.13; letter-spacing: -.05em; font-weight: 700; margin: 22px 0; }
-.home-hero h1 span { color: #8c5675; }
-.home-hero-copy > p:not(.home-eyebrow):not(.home-availability) { color: #726178; font-size: 17px; line-height: 1.9; max-width: 510px; }
-.home-hero-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 24px; margin: 30px 0 18px; }
-.home-primary { display: inline-flex; min-height: 50px; align-items: center; padding: 12px 25px; border-radius: 30px; background: #754766; color: #fff; font-weight: 700; font-size: 15px; }
-.home-primary:hover { background: #5e3551; }
-.home-text-link { display: inline-flex; gap: 12px; align-items: center; min-height: 44px; font-size: 14px; font-weight: 600; color: #78576f; }
-.home-availability { max-width: 380px; color: #837187; font-size: 13px; line-height: 1.7; }
-.home-letter { position: relative; text-align: center; border: 1px solid #eadce5; border-radius: 50% 50% 20px 20px / 160px 160px 20px 20px; background: radial-gradient(ellipse at 50% 25%, #fff7f2, #f3e3e8 80%); padding: 36px 20px 30px; transform: rotate(3deg); box-shadow: 0 18px 55px #613d5810; }
-.home-letter-to { color: #866477; font-size: 20px; }
-.home-letter-art { width: 100%; height: auto; max-width: 345px; margin: -8px auto -30px; }
-.home-letter-note { font-size: 14px; color: #79586e; font-weight: 600; }
-.home-letter-signature { display: block; margin-top: 12px; font-size: 12px; letter-spacing: .06em; color: #997c8f; }
-.home-explore { max-width: 1120px; padding: 30px 28px 75px; margin: auto; scroll-margin-top: 90px; }
-.home-section-intro { display: flex; justify-content: space-between; align-items: end; gap: 30px; margin-bottom: 28px; }
-.home-section-intro h2, .home-questions h2 { font-size: clamp(27px, 3vw, 36px); font-weight: 700; line-height: 1.25; letter-spacing: -.035em; margin-top: 12px; }
-.home-section-intro > p { max-width: 295px; font-size: 15px; color: #79677e; line-height: 1.8; }
-.home-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; }
-.home-tool { display: flex; flex-direction: column; min-width: 0; padding: 22px; border: 1px solid #e5dce9; border-radius: 18px; background: #f6ecf1; }
-.home-tool.is-booth { background: #eeeaf6; }
-.home-tool.is-gifts { background: #f3eee5; }
-.home-tool.is-journal { background: #eaf0ed; }
-.home-tool-top { display: flex; align-items: start; justify-content: space-between; gap: 14px; font-size: 12px; color: #817085; min-height: 42px; }
-.home-tool-top > span { font-size: 13px; }
-.home-tool-top > p { max-width: 116px; text-align: right; }
-.home-tool h3 { font-size: 28px; font-weight: 700; letter-spacing: -.03em; margin: 25px 0 12px; }
-.home-tool-label { font-size: 15px; font-weight: 700; line-height: 1.55; min-height: 48px; }
-.home-tool-description { font-size: 14px; line-height: 1.85; color: #75647a; margin: 14px 0 24px; flex: 1; }
-.home-tool > a { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid #dacee2; padding-top: 17px; min-height: 44px; font-size: 14px; font-weight: 700; color: #765570; }
-.home-tool > a:hover { text-decoration: underline; text-underline-offset: 4px; }
-.home-app { background: #21182e; color: #f7eff6; }
-.home-app-inner { max-width: 1120px; margin: auto; display: grid; grid-template-columns: 1.4fr 1fr; gap: 70px; padding: 75px 28px; align-items: center; }
-.home-app .home-eyebrow { color: #d4afc7; }
-.home-app h2 { font-size: clamp(29px, 3.2vw, 42px); font-weight: 700; line-height: 1.2; letter-spacing: -.03em; margin: 20px 0; }
-.home-app h2 span { color: #e0bad4; }
-.home-app-copy > p:not(.home-eyebrow) { font-size: 16px; line-height: 1.85; color: #bcb0c6; }
-.home-app-features { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin: 32px 0; }
-.home-app-features article { scroll-margin-top: 130px; }
-.home-app-features h3 { font-size: 15px; line-height: 1.6; font-weight: 700; }
-.home-app-features p { font-size: 14px; color: #bcb0c6; line-height: 1.85; margin-top: 8px; }
-.home-app-link { display: inline-flex; gap: 14px; color: #e5bfd9; font-size: 14px; font-weight: 700; min-height: 44px; align-items: center; }
-.home-app-preview { min-width: 0; display: flex; flex-direction: column; align-items: center; }
-.home-app-preview figcaption { margin-top: 25px; font-size: 12px; color: #ad9fb9; text-align: center; }
-.home-questions { max-width: 1060px; margin: auto; padding: 75px 28px; display: grid; grid-template-columns: .85fr 1.15fr; gap: 65px; }
-.home-questions details { border-bottom: 1px solid #e2d8e8; padding: 20px 0; }
-.home-questions summary { font-size: 15px; font-weight: 700; cursor: pointer; }
-.home-questions details p { color: #75637c; line-height: 1.85; font-size: 15px; margin-top: 15px; }
-.home-waitlist { background: #21182e; text-align: center; padding: 65px 24px; color: #f9f1f8; scroll-margin-top: 85px; }
-.home-waitlist > div { max-width: 550px; margin: auto; }
-.home-waitlist .home-eyebrow { color: #ccabc3; }
-.home-waitlist h2 { font-size: 40px; letter-spacing: -.03em; font-weight: 700; line-height: 1.2; margin-top: 20px; }
-.home-waitlist h2 span { color: #dfb7d0; }
-.home-waitlist p:not(.home-eyebrow) { color: #bfb0c9; font-size: 16px; line-height: 1.9; margin: 22px auto 27px; max-width: 455px; }
-.home-waitlist small { display: block; color: #b2a0bc; margin-top: 17px; font-size: 12px; }
-.home-waitlist .waitlist-form { margin: auto; }
-.home-footer { max-width: 1120px; margin: auto; display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 25px; padding: 30px 28px; color: #86748d; font-size: 12px; }
-.home-footer-brand { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 700; color: #6e5173; }
-.home-footer nav { display: flex; flex-wrap: wrap; gap: 20px; font-size: 13px; }
-.dayflower-home a:focus-visible, .home-footer a:focus-visible { outline: 3px solid #906fe8; outline-offset: 5px; }
-@media (max-width: 1000px) { .home-tools { grid-template-columns: 1fr 1fr; } .home-hero { gap: 35px; } .home-app-inner { gap: 35px; } }
-@media (max-width: 700px) {
-  .home-hero { grid-template-columns: 1fr; padding: 35px 22px 45px; gap: 30px; }
-  .home-hero h1 { font-size: clamp(33px, 8.5vw, 48px); }
-  .home-hero-copy > p:not(.home-eyebrow):not(.home-availability) { font-size: 16px; }
-  .home-letter { width: min(100%, 340px); margin: auto; padding-top: 25px; }
-  .home-letter-art { max-width: 250px; margin-block: 0 -25px; }
-  .home-section-intro { display: block; }
-  .home-section-intro > p { margin-top: 16px; max-width: 100%; }
-  .home-explore { padding: 20px 18px 45px; scroll-margin-top: 120px; }
-  .home-tool { padding: 18px; }
-  .home-tool h3 { font-size: 26px; }
-  .home-tool-top { display: block; min-height: 59px; }
-  .home-tool-top > p { text-align: left; margin-top: 8px; }
-  .home-tool > a { font-size: 13px; gap: 6px; }
-  .home-app-inner, .home-questions { grid-template-columns: 1fr; gap: 35px; padding: 45px 22px; }
-  .home-app-features { gap: 22px; }
-  .home-waitlist { scroll-margin-top: 120px; padding: 45px 22px; }
-  .home-footer { justify-content: center; text-align: center; padding: 28px 20px; }
-  .home-footer nav { justify-content: center; }
+/* ── The Dayflower homepage ───────────────────────────────────────────────
+ *
+ * The shape of this page is a deliberate contrast, and it is the thing to
+ * protect when editing it:
+ *
+ *   hero ······ scenic, warm, alive
+ *   create ···· white, plain, product
+ *   app ······· white, plain, product
+ *   about ····· white, plain, quiet
+ *   night ····· scenic, warm, alive
+ *   footer ···· white
+ *
+ * ⚠️ The middle of the page is meant to feel like a different kind of
+ * document from the two ends. Adding scenery, gradients or illustration to
+ * the three white sections does not make the page richer; it flattens the
+ * only rhythm it has.
+ */
+
+.dayflower-home {
+  overflow: clip;
+  --ink: #241b2c;
+  --soft: #6f6472;
+  --pink: #e05f97;
+  --shell: 1260px;
 }
-@media (max-width: 380px) { .home-tools { grid-template-columns: 1fr; } .home-tool-top { min-height: 0; display: flex; } .home-tool h3 { margin-top: 20px; } .home-tool-label { min-height: 0; } .home-hero-actions { gap: 12px; } }
 
-/* A picture at the top of each tool card. One height drives the band and both
-   fits, so they cannot drift apart.
+.home-shell {
+  max-width: var(--shell);
+  margin-inline: auto;
+  padding-inline: clamp(20px, 4vw, 44px);
+}
 
-   The sizing lives here rather than in utility classes on the element: a
-   next/image carrying width/height props resolved to 361x361 inside a 112px
-   band, leaving object-fit nothing to do while overflow:hidden did the
-   cropping. Percentage max-height did not rescue it either, because a
-   percentage against a centred grid item's track does not resolve. Explicit
-   pixels do. */
-.home-tool-thumb { --band: 112px; display: flex; align-items: center; justify-content: center; overflow: hidden; height: var(--band); margin-top: 16px; border-radius: 12px; background: #fffdf8b3; }
-.home-tool-art.is-cover { width: 100%; height: var(--band); object-fit: cover; }
-.home-tool-art.is-contain { width: auto; height: calc(var(--band) - 18px); max-width: 100%; object-fit: contain; }
-.home-tool-strip { display: flex; gap: 4px; padding: 5px; border-radius: 6px; background: #fffdf8; box-shadow: 0 6px 16px #1c102420; }
-.home-tool-strip span { display: block; overflow: hidden; width: 46px; height: 58px; border-radius: 3px; }
-@media (max-width: 760px) { .home-tool-thumb { --band: 96px; } }
+/* Display type is the site serif, set upright.
+   ⚠️ Not the `.note` italic, which stays reserved for the couple's own
+   words. This is the reference's editorial voice: large, light, unhurried. */
+.home-hero h1,
+.home-create h2,
+.home-app h2,
+.home-values h2,
+.home-night h2 {
+  font-family: var(--font-lora), Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  line-height: 1.08;
+  color: var(--ink);
+}
+
+.home-eyebrow {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--pink);
+}
+
+.home-lede {
+  margin-top: 16px;
+  max-width: 34ch;
+  font-size: 15.5px;
+  line-height: 1.62;
+  color: var(--soft);
+}
+
+.home-intro h2 {
+  margin-top: 14px;
+  font-size: clamp(25px, 2.5vw, 36px);
+}
+
+/* The pale pill under the two middle sections' headings. */
+.home-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  margin-top: 24px;
+  padding: 0 24px;
+  border-radius: 999px;
+  background: linear-gradient(100deg, #fde4ee, #fbd3e4);
+  color: #7d2f57;
+  font-size: 14px;
+  font-weight: 700;
+  transition: background 160ms ease, transform 160ms ease;
+}
+.home-pill:hover {
+  background: linear-gradient(100deg, #fbd7e6, #f8c4da);
+}
+
+.dayflower-home a:focus-visible,
+.home-footer a:focus-visible,
+.home-nav a:focus-visible {
+  outline: 3px solid #8b72e0;
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+/* ── Navigation over the scene ──────────────────────────────────────────── */
+
+.home-nav {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+}
+/* 🔴 White nav text over a sunrise is about 2.3:1 against the sky on its
+   own, which is not a readable navigation bar, it is a decorative one. This
+   scrim carries it past 4.5:1 without turning the top of the scene into a
+   black band: it holds its weight through the height of the bar and is gone
+   by the time the headline starts. */
+.home-nav::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  /* Tall and eased rather than short and strong: a 150px scrim held its
+     weight and then stopped, and the seam read as a grey bar across the
+     sky. Over 270px with most of the falloff in the middle it reads as the
+     sky simply being deeper overhead, which is also true of real ones. */
+  height: 270px;
+  background: linear-gradient(
+    180deg,
+    rgba(36, 21, 36, 0.54) 0%,
+    rgba(36, 21, 36, 0.5) 22%,
+    rgba(36, 21, 36, 0.3) 52%,
+    rgba(36, 21, 36, 0.12) 76%,
+    rgba(36, 21, 36, 0) 100%
+  );
+  pointer-events: none;
+}
+.home-nav-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 1320px;
+  margin-inline: auto;
+  padding: 14px clamp(16px, 3vw, 34px);
+}
+.home-nav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 19px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 12px rgba(58, 30, 46, 0.45);
+}
+.home-nav-brand img {
+  width: 28px;
+  height: 28px;
+  filter: drop-shadow(0 1px 3px rgba(58, 30, 46, 0.35));
+}
+.home-nav-links {
+  display: flex;
+  gap: clamp(18px, 2.4vw, 38px);
+  margin-inline: auto;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.home-nav-links a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: #fff;
+  text-shadow: 0 1px 10px rgba(58, 30, 46, 0.5);
+}
+.home-nav-links a:hover {
+  text-decoration: underline;
+  text-underline-offset: 6px;
+}
+.home-nav-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 22px;
+  border-radius: 999px;
+  background: linear-gradient(100deg, #f984b6, #ef6ea6);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(190, 74, 128, 0.32);
+}
+.home-nav-cta:hover {
+  background: linear-gradient(100deg, #f775ad, #e85d9a);
+}
+.home-nav-heart {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 14px rgba(58, 30, 46, 0.18);
+}
+.home-nav-heart svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: #e05f97;
+  stroke-width: 1.7;
+}
+.home-nav-heart:hover svg {
+  fill: #fbd9e7;
+}
+
+/* ── Hero ───────────────────────────────────────────────────────────────── */
+
+.home-hero {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: clamp(600px, 46vw, 780px);
+  overflow: hidden;
+  background: linear-gradient(175deg, #c3d0ee, #efd8e2 58%, #fdf1e3);
+}
+.home-hero-scene {
+  position: absolute;
+  inset: 0;
+}
+
+.home-hero-copy {
+  position: relative;
+  z-index: 3;
+  max-width: 660px;
+  padding: 40px 20px 0;
+  text-align: center;
+}
+/* A breath of light behind the words. The sky is bright here anyway; this
+   is what guarantees the contrast rather than hoping for it. */
+.home-hero-copy::before {
+  content: "";
+  position: absolute;
+  inset: -12% -10%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(60% 52% at 50% 46%, rgba(255, 252, 245, 0.72), rgba(255, 250, 242, 0) 72%);
+}
+.home-hero h1 {
+  font-size: clamp(44px, 5.6vw, 78px);
+  line-height: 1.02;
+}
+.home-hero-lede {
+  margin: 20px auto 0;
+  max-width: 420px;
+  font-size: clamp(15px, 1.25vw, 17.5px);
+  line-height: 1.55;
+  color: #4d4351;
+}
+.home-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 28px;
+}
+.home-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 52px;
+  padding: 0 30px;
+  border-radius: 999px;
+  background: linear-gradient(100deg, #f77db0, #ea5c9b);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 10px 26px rgba(190, 74, 128, 0.34);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.home-cta:hover {
+  box-shadow: 0 14px 30px rgba(190, 74, 128, 0.42);
+}
+.home-cta-plain {
+  display: inline-flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 0 30px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #43333f;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 8px 22px rgba(70, 42, 60, 0.16);
+}
+.home-cta-plain:hover {
+  background: #fff;
+}
+
+.home-scroll {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 18px;
+  /* The cue sits wherever the meadow happens to be: sometimes dark grass,
+     sometimes the pale stone path, which white text loses against. The pill
+     is what makes it legible in both places rather than in one. */
+  border-radius: 999px;
+  background: rgba(26, 18, 24, 0.46);
+  transform: translateX(-50%);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 8px rgba(30, 40, 24, 0.7);
+}
+.home-scroll span {
+  animation: nudge 2.6s ease-in-out infinite;
+}
+@keyframes nudge {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+  }
+  85% {
+    transform: translateY(4px);
+  }
+}
+
+/* ── Create ─────────────────────────────────────────────────────────────── */
+
+.home-create {
+  background: #faf6f6;
+  padding: clamp(44px, 5vw, 74px) 0;
+  scroll-margin-top: 20px;
+}
+.home-create-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.08fr) 2.32fr;
+  gap: clamp(26px, 3.2vw, 46px);
+  align-items: start;
+}
+.home-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: clamp(12px, 1.4vw, 20px);
+}
+.home-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid #f2eaea;
+  background: #fff;
+  box-shadow: 0 2px 10px rgba(60, 34, 50, 0.03);
+  color: var(--ink);
+}
+.home-card-art {
+  display: grid;
+  place-items: center;
+  height: 240px;
+  min-width: 0;
+  overflow: hidden;
+  background: #f8eef1;
+}
+.is-booth .home-card-art {
+  background: #f1edf8;
+}
+.is-gifts .home-card-art {
+  background: #f9f0ea;
+}
+.is-journal .home-card-art {
+  background: #f4f1ea;
+}
+.home-card-art img {
+  width: 100%;
+  height: 240px;
+  object-fit: contain;
+  padding: 12px;
+  transition: transform 320ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+.home-card-name {
+  margin: 14px 15px 0;
+  font-size: 19px;
+  font-weight: 700;
+}
+.home-card-desc {
+  margin: 5px 15px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--soft);
+  flex: 1;
+}
+.home-card-go {
+  margin: 12px 15px 14px;
+  font-size: 16px;
+  color: #7d6a7c;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .home-card {
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+  .home-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 26px rgba(60, 34, 50, 0.09);
+  }
+  .home-card:hover .home-card-art img {
+    transform: scale(1.04);
+  }
+}
+
+/* The booth card's strip of prints. */
+.home-strip {
+  display: block;
+  padding: 7px 7px 0;
+  border-radius: 4px;
+  background: #fffdf8;
+  box-shadow: 0 8px 18px rgba(69, 51, 83, 0.16);
+  transform: rotate(-4deg);
+}
+.home-strip-print {
+  display: grid;
+  gap: 4px;
+  width: 100px;
+}
+.home-strip-print img {
+  width: 100%;
+  height: 54px;
+  object-fit: cover;
+  padding: 0;
+  border-radius: 2px;
+}
+.home-strip-print em {
+  padding: 5px 0 7px;
+  text-align: center;
+  font-size: 11px;
+  color: #79586e;
+}
+
+/* ── App ────────────────────────────────────────────────────────────────── */
+
+.home-app {
+  background: #fcfaf9;
+  padding: clamp(36px, 3.4vw, 50px) 0 clamp(40px, 4vw, 58px);
+  scroll-margin-top: 20px;
+}
+.home-app-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 0.82fr;
+  gap: clamp(16px, 2.2vw, 40px);
+  align-items: center;
+}
+.home-app-stage {
+  margin: 0;
+  min-width: 0;
+}
+.home-app-stage figcaption {
+  margin-top: 26px;
+  text-align: center;
+  font-size: 11px;
+  color: #9d93a0;
+}
+.home-features {
+  display: grid;
+  gap: clamp(20px, 2.6vw, 34px);
+}
+.home-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.home-feature-icon,
+.home-value-icon {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  fill: none;
+  stroke: #ec6ba5;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.home-feature-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.home-feature-note {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--soft);
+}
+
+/* ── For real relationships ─────────────────────────────────────────────── */
+
+.home-values {
+  background: #faf8f7;
+  padding: clamp(40px, 4.4vw, 64px) 0 clamp(44px, 5vw, 72px);
+  scroll-margin-top: 20px;
+}
+.home-values-grid {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) 2.6fr;
+  gap: clamp(26px, 3.4vw, 50px);
+  align-items: start;
+}
+.home-value-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(20px, 3vw, 48px);
+  padding-top: 8px;
+}
+.home-value-icon {
+  width: 31px;
+  height: 31px;
+}
+.home-value-title {
+  margin-top: 22px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.home-value-body {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--soft);
+}
+
+/* ── Night ──────────────────────────────────────────────────────────────── */
+
+.home-night {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: clamp(490px, 35vw, 600px);
+  overflow: hidden;
+  background: linear-gradient(180deg, #0d1730, #1b2a4d 60%, #334667);
+  scroll-margin-top: 0;
+}
+.home-night-scene {
+  position: absolute;
+  inset: 0;
+}
+.home-night-copy {
+  position: relative;
+  z-index: 3;
+  width: min(640px, 100%);
+  /* Lifted off the flowers: the section centres its content, and centred
+     put the last two lines down among the foreground blooms, where a line
+     of 11px type has a daisy behind every other word. */
+  padding: 0 22px 126px;
+  text-align: center;
+  color: #fdfbff;
+}
+.home-night h2 {
+  font-size: clamp(30px, 3.6vw, 48px);
+  color: #fff;
+  text-shadow: 0 2px 20px rgba(8, 14, 32, 0.55);
+}
+.home-night-copy > p {
+  margin: 16px auto 22px;
+  max-width: 460px;
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: #e9e5f2;
+  text-shadow: 0 1px 12px rgba(8, 14, 32, 0.6);
+}
+.home-night .waitlist-form {
+  margin-inline: auto;
+  max-width: 470px;
+}
+/* The field is a single bright object on a dark scene, as in the reference:
+   white trough, pink action, nothing else competing with it. */
+.home-night .waitlist-row {
+  padding: 6px;
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 14px 34px rgba(6, 12, 28, 0.36);
+}
+.home-night .waitlist-input {
+  color: #3d3346;
+}
+.home-night-invite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 18px;
+  font-size: 13px;
+  color: #e6e1f0;
+  text-shadow: 0 1px 10px rgba(8, 14, 32, 0.6);
+}
+.home-night-invite span {
+  color: #f6a7c7;
+  font-size: 15px;
+}
+.home-night small {
+  display: block;
+  margin-top: 10px;
+  font-size: 11.5px;
+  color: #d5cfe2;
+  text-shadow: 0 1px 8px rgba(8, 14, 32, 0.75);
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.home-footer {
+  background: #fff;
+  padding: 18px 0 22px;
+}
+.home-footer-grid {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 18px 30px;
+}
+.home-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #3c2f42;
+}
+.home-footer-grid nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  font-size: 13px;
+  color: #6e6374;
+}
+.home-footer-grid nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+}
+.home-footer-grid nav a:hover {
+  color: #3c2f42;
+}
+.home-footer-line {
+  margin-left: auto;
+  font-size: 12.5px;
+  color: #9a8fa0;
+}
+.home-footer-copy {
+  max-width: var(--shell);
+  margin: 6px auto 0;
+  padding-inline: clamp(20px, 4vw, 44px);
+  font-size: 11.5px;
+  color: #a79cad;
+}
+
+/* ── Narrower ───────────────────────────────────────────────────────────── */
+
+@media (max-width: 1080px) {
+  .home-app-grid {
+    grid-template-columns: 1fr 1.15fr;
+    row-gap: 36px;
+  }
+  /* The phones move under the copy and the four features run beside them. */
+  .home-app-stage {
+    grid-row: span 2;
+    grid-column: 2;
+  }
+  .home-features {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 900px) {
+  .home-create-grid,
+  .home-values-grid {
+    grid-template-columns: 1fr;
+    gap: 30px;
+  }
+  .home-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .home-lede {
+    max-width: 46ch;
+  }
+  .home-nav-links {
+    gap: 16px;
+    font-size: 13px;
+  }
+  .home-nav-heart {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .home-hero {
+    height: auto;
+    min-height: 640px;
+    padding: 96px 0 84px;
+  }
+  .home-hero-copy {
+    padding-top: 0;
+  }
+  .home-hero h1 {
+    font-size: clamp(38px, 11vw, 54px);
+  }
+  .home-hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: 320px;
+    margin-inline: auto;
+  }
+  .home-cta,
+  .home-cta-plain {
+    justify-content: center;
+  }
+  .home-nav-inner {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    justify-content: space-between;
+  }
+  .home-nav-links {
+    order: 3;
+    flex-basis: 100%;
+    justify-content: space-between;
+    margin-inline: 0;
+    font-size: 12.5px;
+  }
+  .home-nav-links a {
+    min-height: 38px;
+  }
+  .home-app-grid {
+    grid-template-columns: 1fr;
+  }
+  .home-app-stage,
+  .home-features {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .home-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+  }
+  .home-value-list {
+    grid-template-columns: 1fr;
+    gap: 26px;
+  }
+  .home-night {
+    height: auto;
+    min-height: 500px;
+    padding: 70px 0 58px;
+  }
+  .home-footer-grid {
+    justify-content: center;
+    text-align: center;
+  }
+  .home-footer-grid nav {
+    justify-content: center;
+  }
+  .home-footer-line {
+    margin-inline: auto;
+  }
+  .home-footer-copy {
+    text-align: center;
+  }
+}
+
+@media (max-width: 520px) {
+  .home-cards {
+    grid-template-columns: 1fr;
+  }
+  .home-card-art,
+  .home-card-art > img {
+    height: 250px;
+  }
+  .home-features {
+    grid-template-columns: 1fr;
+  }
+}
