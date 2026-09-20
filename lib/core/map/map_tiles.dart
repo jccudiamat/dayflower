@@ -30,6 +30,14 @@ class MapTiles {
   /// The same style with place names, for the screen you actually explore.
   static const _cartoStyleLabelled = 'voyager';
 
+  /// ⚠️ **'dark_all' and 'dark_nolabels', not 'dark_matter'.** The style
+  /// is called Dark Matter everywhere in CARTO's own documentation, and that
+  /// name 404s on the raster endpoint. Both of these were checked against the
+  /// live tile server, and they really are dark — mean brightness 22 against
+  /// Voyager's 236.
+  static const _cartoDark = 'dark_nolabels';
+  static const _cartoDarkLabelled = 'dark_all';
+
   /// 🔴 Guarded, because reading `dotenv.env` before `load()` throws rather
   /// than returning empty. Widget tests never load it, and a production build
   /// whose .env failed to parse would take every map down with it. A missing
@@ -55,6 +63,10 @@ class MapTiles {
   static TileLayer layer(BuildContext context, {bool labelled = true}) {
     final key = _key;
     if (key == null) {
+      // ⚠️ The keyless fallback has no dark variant — OSM serves one
+      // style and it is a bright one. A phone in dark mode with no key set
+      // therefore still gets a pale map. That is a reason to set the key,
+      // not a reason to tint somebody else's tiles into illegibility.
       return TileLayer(
         urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
         // ⚠️ Required by OSM's policy, and the thing that gets an app blocked
@@ -63,7 +75,15 @@ class MapTiles {
         tileProvider: NetworkTileProvider(),
       );
     }
-    final style = labelled ? _cartoStyleLabelled : _cartoStyle;
+    // 🔴 Read from Theme rather than AppColors.isDark. The palette is a
+    // global, and a global is not a dependency: a const widget that read it
+    // would keep whichever map it was first built with. Theme notifies its
+    // dependents whether or not the widget that asked is const, which is the
+    // same reason Settings stopped shipping white cards on a black screen.
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final style = dark
+        ? (labelled ? _cartoDarkLabelled : _cartoDark)
+        : (labelled ? _cartoStyleLabelled : _cartoStyle);
     return TileLayer(
       // 🔴 `key`, not `api_key`. CARTO ignores an unrecognised parameter
       // rather than rejecting the request: the tile comes back 200 with a

@@ -13,13 +13,22 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   /// [MapTiles.layer] reads pixel density off the context, so it needs a real
   /// tree rather than a stub.
-  Future<TileLayer> layer(WidgetTester tester, {bool labelled = true}) async {
+  Future<TileLayer> layer(WidgetTester tester,
+      {bool labelled = true, Brightness brightness = Brightness.light}) async {
     late TileLayer built;
     await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(brightness: brightness),
         home: Builder(builder: (context) {
-      built = MapTiles.layer(context, labelled: labelled);
-      return const SizedBox.shrink();
-    })));
+          built = MapTiles.layer(context, labelled: labelled);
+          return const SizedBox.shrink();
+        })));
+    // ⚠️ One more frame, and it matters on a tree that is being reused. A
+    // Theme dependency is notified by marking the dependent dirty, so the
+    // rebuild lands on the *next* frame — read straight after pumpWidget and
+    // you get the layer from the theme you just replaced. Invisible in the
+    // app, which paints that frame a few milliseconds later; not invisible
+    // here, where it silently made this file test nothing.
+    await tester.pumpAndSettle();
     return built;
   }
 
@@ -57,5 +66,30 @@ void main() {
     expect((await layer(tester, labelled: false)).urlTemplate,
         contains('voyager_nolabels'));
     expect((await layer(tester)).urlTemplate, contains('rastertiles/voyager/'));
+  });
+
+  testWidgets('Dark mode swaps the basemap, on both maps', (tester) async {
+    dotenv.loadFromString(envString: 'CARTO_API_KEY=test-key-123');
+    final home = await layer(tester,
+        labelled: false, brightness: Brightness.dark);
+    final travel = await layer(tester, brightness: Brightness.dark);
+    // ⚠️ 'dark_all' and 'dark_nolabels'. CARTO's own docs call this style
+    // Dark Matter, and 'dark_matter' 404s on the raster endpoint.
+    expect(home.urlTemplate, contains('rastertiles/dark_nolabels/'));
+    expect(travel.urlTemplate, contains('rastertiles/dark_all/'));
+    expect(home.urlTemplate, isNot(contains('voyager')));
+    expect(travel.urlTemplate, isNot(contains('voyager')));
+  });
+
+  testWidgets('The style follows Theme, so a const map still repaints',
+      (tester) async {
+    // 🔴 The whole reason this reads Theme and not AppColors.isDark: a
+    // global is not a dependency, and a const widget that read one would
+    // keep whichever map it was first built with. Same failure that shipped
+    // four white cards on a black Settings screen.
+    dotenv.loadFromString(envString: 'CARTO_API_KEY=test-key-123');
+    final light = await layer(tester, brightness: Brightness.light);
+    final dark = await layer(tester, brightness: Brightness.dark);
+    expect(light.urlTemplate, isNot(dark.urlTemplate));
   });
 }
