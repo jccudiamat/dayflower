@@ -10,6 +10,7 @@ import '../../domain/booth_design.dart';
 import '../widgets/booth_visuals.dart';
 import 'booth_archive_screen.dart';
 import 'booth_studio_screen.dart';
+import '../../../../core/widgets/ios_back_button.dart';
 export 'booth_archive_screen.dart'
     show boothPhotoPickerProvider, normalizeBoothPhoto;
 
@@ -31,12 +32,11 @@ class BoothScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
           children: [
             Row(children: [
-              IconButton(
-                  tooltip: 'Back to Memories',
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => context.canPop()
+              IosBackButton(
+                  tooltip: 'Back to Dayflower',
+                  onTap: () => context.canPop()
                       ? context.pop()
-                      : context.go(Routes.memories)),
+                      : context.go(Routes.dayflower)),
               const Spacer(),
               TextButton(
                   onPressed: archive,

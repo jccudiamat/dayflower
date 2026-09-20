@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:dayflower/core/theme/app_typography.dart';
 
+import '../widgets/app_icon.dart';
 import 'app_colors.dart';
 import 'design_tokens.dart';
 
@@ -68,6 +70,18 @@ class AppTheme {
         // canvas behind them: dark glyphs on a light app, light on a dark.
         systemOverlayStyle:
             dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+      ),
+
+      // 🔴 Every automatic back button in the app, in one place.
+      // An AppBar with no explicit `leading` draws Material's arrow, which
+      // is how two screens ended up with a different way back from the
+      // twelve that ask for [IosBackButton] by hand. Setting it here means
+      // the next AppBar written without a leading is already right.
+      actionIconTheme: ActionIconThemeData(
+        backButtonIconBuilder: (context) => AppIcon(
+            CupertinoIcons.chevron_back,
+            size: 18,
+            color: AppColors.ink),
       ),
 
       inputDecorationTheme: InputDecorationTheme(

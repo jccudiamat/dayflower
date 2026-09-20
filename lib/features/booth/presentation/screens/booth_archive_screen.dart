@@ -21,6 +21,7 @@ export '../../data/booth_photo_picker.dart';
 import '../../domain/strip_templates.dart';
 import '../../domain/booth_design.dart';
 import 'booth_studio_screen.dart';
+import '../../../../core/widgets/ios_back_button.dart';
 
 /// Activities uses the same compositor, repository and private photos as
 /// the Camera. There is no second collection of pretend memories.
@@ -189,12 +190,11 @@ class _BoothArchiveScreenState extends ConsumerState<BoothArchiveScreen> {
           child: ListView(padding: const EdgeInsets.all(18), children: [
         Align(
             alignment: Alignment.centerLeft,
-            child: IconButton(
-              tooltip: 'Back to Memories',
-              icon: const AppIcon(Icons.arrow_back),
-              onPressed: () => context.canPop()
+            child: IosBackButton(
+              tooltip: 'Back to Dayflower',
+              onTap: () => context.canPop()
                   ? context.pop()
-                  : context.go(Routes.memories),
+                  : context.go(Routes.dayflower),
             )),
         FeatureScreenHeader(
             title: switch (widget.view) {

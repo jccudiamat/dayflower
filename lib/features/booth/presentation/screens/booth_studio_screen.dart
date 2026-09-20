@@ -18,6 +18,7 @@ import '../../domain/strip_compositor.dart';
 import '../../domain/strip_templates.dart';
 import '../widgets/booth_visuals.dart';
 import '../../data/booth_photo_picker.dart';
+import '../../../../core/widgets/ios_back_button.dart';
 
 final boothRenderProvider =
     Provider<Future<Uint8List> Function(BoothDesign, List<Uint8List>)>(
@@ -412,10 +413,7 @@ class _BoothStudioScreenState extends ConsumerState<BoothStudioScreen>
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 30),
                   children: [
                 Row(children: [
-                  IconButton(
-                      tooltip: 'Back',
-                      onPressed: _busy ? null : _back,
-                      icon: const Icon(Icons.arrow_back)),
+                  IosBackButton(onTap: _busy ? null : _back),
                   Expanded(
                       child: Text('DAYFLOWER PHOTO BOOTH',
                           style: AppText.label(), textAlign: TextAlign.center)),

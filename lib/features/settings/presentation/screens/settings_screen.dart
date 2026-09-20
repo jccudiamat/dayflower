@@ -17,8 +17,6 @@ import '../../../../core/models/user_profile.dart';
 import '../../../../core/models/avatar_flower.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/theme/theme_mode_prefs.dart';
-import '../../../../core/widgets/flower_image.dart';
-import '../../../tulip/domain/flower_catalog.dart';
 import '../../../../core/services/avatar_image.dart';
 import '../../../../core/widgets/flower_avatar.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -215,7 +213,7 @@ class SettingsScreen extends ConsumerWidget {
             // ── Appearance ───────────────────────────
             Text('APPEARANCE', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            const _AppearanceRow(),
+            const _Card(children: [_AppearanceRow()]),
             const SizedBox(height: AppSpace.md),
 
             // ── Alerts ───────────────────────────────
@@ -1400,88 +1398,32 @@ class _AvatarAction extends StatelessWidget {
 
 /* ── Appearance ───────────────────────────────────── */
 
-/// Light or dark, chosen by picking a flower.
+/// Dark mode, as one switch.
 ///
-/// Two cards rather than a switch, because "Dark mode ●—" tells you what the
-/// setting is called and a sunflower beside a jasmine tells you what it
-/// does. Both are real entries in the catalogue drawn with the same artwork
-/// the conversation sends, so the control is made of the app rather than
-/// borrowed from a settings screen.
+/// 🔴 **This was two cards with a sunflower and a jasmine on them.** The
+/// idea was that the artwork says what the setting does better than the words
+/// "Dark mode" do. In practice it was two large tap targets, neither obviously
+/// selected at a glance, for a choice with exactly two states and an obvious
+/// default — and it sat in a row of plain switches that all behaved the other
+/// way. A switch is what the rest of this screen uses and what the setting
+/// actually is.
+///
+/// ⚠️ The palette is global, so flipping this repaints the whole app from
+/// the root. See the key on MaterialApp in app.dart, and the test that pins
+/// why it is needed.
 class _AppearanceRow extends ConsumerWidget {
   const _AppearanceRow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final current = ref.watch(themeModeProvider);
-    return Row(
-      children: [
-        for (final mode in AppMode.values) ...[
-          Expanded(
-            child: _ModeCard(
-              mode: mode,
-              selected: mode == current,
-              onTap: () => ref.read(themeModeProvider.notifier).use(mode),
-            ),
-          ),
-          if (mode != AppMode.values.last) const SizedBox(width: AppSpace.xs),
-        ],
-      ],
-    );
-  }
-}
-
-class _ModeCard extends StatelessWidget {
-  const _ModeCard({
-    required this.mode,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final AppMode mode;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // Falls back to the classic tulip for an id the catalogue does not know,
-    // the same as everywhere else — a missing asset must not be a blank card.
-    final flower = FlowerCatalog.byId(mode.flowerId);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.lg),
-      child: AnimatedContainer(
-        duration: AppMotion.micro,
-        curve: AppMotion.easeOut,
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpace.xs,
-          vertical: AppSpace.sm,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.blush : AppColors.surface,
-          borderRadius: BorderRadius.circular(AppRadius.lg),
-          border: Border.all(
-            // The chosen one is outlined in the brand pink at full weight;
-            // the other keeps the ordinary hairline every card has.
-            color: selected ? AppColors.brand : AppColors.border,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            FlowerImage(flower: flower, size: 56),
-            const SizedBox(height: AppSpace.xs),
-            Text(mode.title, style: AppText.subtitle()),
-            const SizedBox(height: 2),
-            Text(
-              mode.line,
-              style: AppText.caption(),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
+    final mode = ref.watch(themeModeProvider);
+    return _SwitchRow(
+      title: 'Dark mode',
+      subtitle: 'Kinder at night. Only on this phone.',
+      value: mode == AppMode.dark,
+      onChanged: (on) => ref
+          .read(themeModeProvider.notifier)
+          .use(on ? AppMode.dark : AppMode.light),
     );
   }
 }
