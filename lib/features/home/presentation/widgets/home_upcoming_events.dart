@@ -91,7 +91,7 @@ class _HomeUpcomingEventsState extends ConsumerState<HomeUpcomingEvents>
           const SizedBox(height: AppSpace.sm),
           if (event == null && (custom.isLoading || reunion.isLoading))
             Padding(
-                padding: const EdgeInsets.all(AppSpace.md),
+                padding: const EdgeInsets.all(AppSpace.sm),
                 child: Text('Loading your dates…', style: AppText.body()))
           else if (event != null || !failed)
             ClipRect(
@@ -122,7 +122,7 @@ class _HomeUpcomingEventsState extends ConsumerState<HomeUpcomingEvents>
                           child: InkWell(
                               onTap: () => context.push(Routes.events),
                               child: Padding(
-                                  padding: const EdgeInsets.all(AppSpace.md),
+                                  padding: const EdgeInsets.all(AppSpace.sm),
                                   child: LayoutBuilder(builder: (context, box) {
                                     final content = Column(
                                         crossAxisAlignment:

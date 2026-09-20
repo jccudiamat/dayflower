@@ -26,6 +26,8 @@ import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
 import '../../../activity/data/activity_repository.dart';
 import '../widgets/home_upcoming_events.dart';
+import '../widgets/home_throwback.dart';
+import '../widgets/home_map_card.dart';
 import '../widgets/home_widget_gallery.dart';
 import '../../domain/home_moments.dart';
 import '../../../../core/widgets/user_avatar.dart';
@@ -101,12 +103,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         children: [
                           _HomeHeader(),
                           SizedBox(height: AppSpace.md),
+                          HomeMapCard(),
+                          SizedBox(height: AppSpace.md),
                           _HeartbeatCard(),
                           SizedBox(height: AppSpace.md),
-                          _MoodCard(),
-                          SizedBox(height: AppSpace.md),
                           HomeUpcomingEvents(),
-                          SizedBox(height: AppSpace.lg),
+                          SizedBox(height: AppSpace.md),
+                          HomeThrowback(),
                           HomeWidgetGallery(),
                         ]),
                   )),
@@ -132,30 +135,22 @@ class _MoodCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final mood = ref.watch(moodProvider);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(AppSpace.sm),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
+    // ⚠️ No Container of its own: this is the lower half of the heartbeat
+    // card, so the surface, radius and border come from the parent.
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('HOW ARE YOU FEELING?', style: AppText.label()),
-              ),
-              Text(
-                mood?.label ?? 'Tap one',
-                style: AppText.caption(
-                  mood == null ? AppColors.muted : AppColors.brand,
-                ).copyWith(fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
+          Row(children: [
+            Expanded(
+                child: Text('HOW ARE YOU FEELING?', style: AppText.label())),
+            // ⚠️ Nothing here until something is chosen. The old placeholder
+            // read "Tap one", which is an instruction sitting where an answer
+            // goes and left the row looking answered before it was.
+            if (mood != null)
+              Text(mood.label,
+                  style: AppText.caption(AppColors.brand)
+                      .copyWith(fontWeight: FontWeight.w600)),
+          ]),
           const SizedBox(height: AppSpace.xs),
           Row(
             children: [
@@ -171,9 +166,7 @@ class _MoodCard extends ConsumerWidget {
               ],
             ],
           ),
-        ],
-      ),
-    );
+        ]);
   }
 }
 
@@ -196,7 +189,8 @@ class _MoodChip extends StatelessWidget {
         label: mood.label,
         child: GestureDetector(
           onTap: onTap,
-          child: AspectRatio(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            AspectRatio(
             aspectRatio: 1,
             child: AnimatedContainer(
               duration: AppMotion.micro,
@@ -213,10 +207,13 @@ class _MoodChip extends StatelessWidget {
               child: Text(
                 mood.emoji,
                 style: const TextStyle(fontSize: 19),
-                semanticsLabel: mood.label,
+                // The Semantics wrapper already names this mood; without an
+                // empty label here a screen reader says it twice.
+                semanticsLabel: '',
               ),
             ),
-          ),
+            ),
+          ]),
         ));
   }
 }
@@ -440,12 +437,12 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       Text(enabled ? 'Tap to send' : 'Pair first',
           style: AppText.caption(), textAlign: TextAlign.center),
     ]);
-    return Container(
-      key: const ValueKey('home-heartbeat'),
-      padding:
-          const EdgeInsets.symmetric(horizontal: AppSpace.sm, vertical: 28),
-      decoration: _homeCardDecoration(),
-      child: LayoutBuilder(builder: (context, constraints) {
+    // 🔴 One card, holding both halves. The heartbeat and the mood
+    // check-in were two separate surfaces asking the same question a few
+    // pixels apart; they are now stacked inside a single shell. Neither
+    // half's own layout was altered — this is a merge of the containers,
+    // not a redesign of what is in them.
+    final heartbeat = LayoutBuilder(builder: (context, constraints) {
         final largeText = MediaQuery.textScalerOf(context).scale(14) / 14 > 1.5;
         if (constraints.maxWidth < 250 || largeText) {
           return Column(
@@ -461,7 +458,18 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
           const SizedBox(width: 12),
           SizedBox(width: _stageSize, child: action)
         ]);
-      }),
+      });
+
+    return Container(
+      key: const ValueKey('home-heartbeat'),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AppSpace.sm, vertical: AppSpace.sm),
+      decoration: _homeCardDecoration(),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        heartbeat,
+        const SizedBox(height: AppSpace.sm),
+        const _MoodCard(),
+      ]),
     );
   }
 }
@@ -626,7 +634,7 @@ class _HomeHeader extends ConsumerWidget {
       );
       return Padding(
         key: const ValueKey('home-my-day'),
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.only(top: 16),
         child: Row(
             key: const ValueKey('my-day-side-by-side'),
             crossAxisAlignment: CrossAxisAlignment.center,

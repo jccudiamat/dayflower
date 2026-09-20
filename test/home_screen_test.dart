@@ -37,6 +37,7 @@ import 'package:dayflower/core/models/user_profile.dart';
 import 'package:dayflower/core/providers/supabase_provider.dart';
 import 'package:dayflower/core/theme/app_theme.dart';
 import 'package:dayflower/core/theme/app_colors.dart';
+import 'package:dayflower/core/theme/design_tokens.dart';
 import 'package:dayflower/features/activity/data/activity_repository.dart';
 import 'package:dayflower/features/calls/data/call_usage.dart';
 import 'package:dayflower/features/dates/presentation/screens/events_screen.dart';
@@ -66,8 +67,20 @@ import 'package:timezone/data/latest.dart' as tz;
 const _capture = bool.fromEnvironment('CAPTURE_REVIEW');
 var _boundary = GlobalKey();
 
+/// A photo from this same date, one year back — the only shape of thing the
+/// throwback will show, so the only shape worth seeding.
+final _lastYear = FlowerMessage(
+  id: 'throwback',
+  pairId: 'preview',
+  senderId: 'preview-b',
+  imagePath: 'preview/last-year.jpg',
+  note: 'Still one of my favourites.',
+  sentAt: DateTime(_now.year - 1, _now.month, _now.day, 9, 30),
+);
+
 Future<GoRouter> _pump(WidgetTester tester, String route,
     {double width = 390,
+    bool throwback = false,
     bool hasStart = true,
     bool productionRoutes = false,
     bool filled = false,
@@ -160,6 +173,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       financeGoalsProvider.overrideWith((ref) => Stream.value([])),
       reunionProvider.overrideWith((ref) => Stream.value(null)),
       flowerMessagesProvider.overrideWith((ref) => Stream.value(
+        throwback ? [_lastYear] :
         productionRoutes && filled ? [_mine, _theirs, if (boothFilled) ..._boothPhotos, FlowerMessage(
           id: 'flower-preview', pairId: 'preview', senderId: 'preview-b',
           flowerType: 'classic_tulip', note: 'Thinking of you', sentAt: _now)] : [])),
@@ -663,6 +677,103 @@ void main() {
       }
       await tester.pumpWidget(const SizedBox());
     }
+  });
+
+  _homeTest('Every section sits the same distance from the next',
+      (tester) async {
+    // 🔴 Measure the ink, not the boxes. The greeting used to carry 16pt of
+    // its own bottom padding inside its box, so it read 40 from the card
+    // below while every card read 24 — and the boxes all agreed with each
+    // other the whole time. A first version of this test compared box edges,
+    // passed on the broken layout, and would have locked the bug in.
+    await _pump(tester, Routes.home, filled: true, height: 2200);
+    await tester.pumpAndSettle();
+
+    double bottomOf(List<String> keys) {
+      var lowest = double.negativeInfinity;
+      for (final key in keys) {
+        final finder = find.byKey(ValueKey(key));
+        expect(finder, findsWidgets, reason: '$key is missing from Home');
+        final bottom = tester.getRect(finder.first).bottom;
+        if (bottom > lowest) lowest = bottom;
+      }
+      return lowest;
+    }
+
+    double topOf(String key) {
+      final finder = find.byKey(ValueKey(key));
+      expect(finder, findsOneWidget, reason: '$key is missing from Home');
+      return tester.getRect(finder.first).top;
+    }
+
+    // The header's visible edge is whichever of the greeting or the photo
+    // deck hangs lowest, not the padded wrapper around them.
+    final sections = <(String, double, double)>[
+      ('greeting', topOf('home-greeting'), bottomOf(['home-greeting', 'home-photo-deck'])),
+      ('map', topOf('home-map'), bottomOf(['home-map'])),
+      ('heartbeat', topOf('home-heartbeat'), bottomOf(['home-heartbeat'])),
+      ('upcoming', topOf('home-upcoming'), bottomOf(['home-upcoming'])),
+      ('widgets', topOf('home-widget-gallery'), bottomOf(['home-widget-gallery'])),
+    ];
+
+    for (var i = 1; i < sections.length; i++) {
+      final gap = sections[i].$2 - sections[i - 1].$3;
+      expect(gap, closeTo(AppSpace.md, 1.0),
+          reason: '${sections[i - 1].$1} -> ${sections[i].$1} is '
+              '${gap.toStringAsFixed(1)}, not AppSpace.md');
+    }
+  });
+
+  _homeTest('A photo from this date last year comes back', (tester) async {
+    await _pump(tester, Routes.home, filled: true, throwback: true,
+        height: 2200);
+    await tester.pumpAndSettle();
+
+    expect(find.text('A year ago today'), findsOneWidget);
+    expect(find.text('This moment'), findsOneWidget);
+    expect(find.text('Still one of my favourites.'), findsOneWidget);
+    await _screenshot(tester, 'home-throwback');
+  });
+
+  _homeTest('A day with nothing to look back on says nothing', (tester) async {
+    // 🔴 The section must vanish rather than caption an unrelated photo with
+    // "a year ago today", and vanishing must not leave a hole: the gap either
+    // side of it collapsed to 48pt the first time, because the page and the
+    // section each contributed one.
+    await _pump(tester, Routes.home, filled: true, height: 2200);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('ago today'), findsNothing);
+  });
+
+  _homeTest('Choosing a mood names it, and not before', (tester) async {
+    await _pump(tester, Routes.home, filled: true, height: 2200);
+    await tester.pumpAndSettle();
+
+    // Nothing is named until something is chosen. The row used to read
+    // "Tap one" here, which is an instruction sitting where an answer goes.
+    expect(find.text('Calm'), findsNothing);
+    expect(find.text('Tap one'), findsNothing);
+
+    final face = find.text('😌');
+    expect(face, findsOneWidget);
+    await tester.tap(face);
+    await tester.pumpAndSettle();
+
+    final label = find.text('Calm');
+    expect(label, findsOneWidget);
+
+    // It belongs in the header row, level with the question it answers,
+    // rather than anywhere below the faces.
+    final question = tester.getRect(find.text('HOW ARE YOU FEELING?'));
+    final labelBox = tester.getRect(label);
+    expect(labelBox.center.dy, closeTo(question.center.dy, 4),
+        reason: 'the mood name should sit on the question row');
+    expect(labelBox.left, greaterThanOrEqualTo(question.right),
+        reason: 'it belongs at the end of that row, after the question');
+    expect(labelBox.top, lessThan(tester.getRect(face).top),
+        reason: 'and above the faces, not under them');
+
+    await _screenshot(tester, 'home-mood-chosen');
   });
 
   _homeTest('Review full Home and its dark appearance', (tester) async {

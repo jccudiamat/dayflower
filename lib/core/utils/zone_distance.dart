@@ -91,6 +91,14 @@ const _zoneCoordinates = <String, (double lat, double lng)>{
   'Pacific/Honolulu': (21.3069, -157.8583),
 };
 
+/// Where a zone sits on the globe, for drawing rather than for measuring.
+///
+/// ⚠️ One representative city per zone, so this is an approximation by
+/// design. Good enough to place a pin on a world map a few hundred pixels
+/// wide; not good enough to quote as somebody's location.
+(double, double)? zoneCoordinates(String? zone) =>
+    zone == null ? null : _zoneCoordinates[zone];
+
 const double _earthRadiusMiles = 3958.7613;
 
 /// Great-circle distance between two zones, in miles.

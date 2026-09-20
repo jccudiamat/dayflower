@@ -210,6 +210,17 @@ final _artwork = <IconData, String>{
       '<rect x="4" y="10" width="16" height="12" rx="2"/><path d="M7 10V7a5 5 0 0 1 10 0v3m-5 5v3"/>',
   CupertinoIcons.bell_fill:
       '<path d="M5 9a7 7 0 0 1 14 0v6l2 3H3l2-3Zm4 12h6"/>',
+  // Two speech bubbles, the front one overlapping the back. Drawn here
+  // rather than taken from Cupertino so the stroke matches the rest of the
+  // bar: the stock glyph is a filled pair and would read heavier than the
+  // four outlines beside it.
+  CupertinoIcons.chat_bubble_2:
+      '<path d="M16.6 9.2V6.4A2.4 2.4 0 0 0 14.2 4H5.4A2.4 2.4 0 0 0 3 6.4v5.2a2.4 2.4 0 0 0 2.4 2.4h1.3"/>'
+      '<path d="M21 11.8a2.4 2.4 0 0 0-2.4-2.4H9.8a2.4 2.4 0 0 0-2.4 2.4V17a2.4 2.4 0 0 0 2.4 2.4h1.4L14 21.6V19.4h4.6A2.4 2.4 0 0 0 21 17Z"/>',
+  // Two lives overlapping. Circles rather than people or a heart: the ring
+  // pair says "both of us, sharing the middle" without drawing anybody.
+  Icons.join_full:
+      '<circle cx="9.4" cy="12" r="5.8"/><circle cx="14.6" cy="12" r="5.8"/>',
   CupertinoIcons.book:
       '<path d="M12 5C9 2 5 2 2 3v17c3-1 7-1 10 1 3-2 7-2 10-1V3c-3-1-7-1-10 2Zm0 0v16"/>',
   CupertinoIcons.share: '<path d="M12 16V2m-5 5 5-5 5 5M7 10H3v12h18V10h-4"/>',
