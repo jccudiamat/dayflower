@@ -116,11 +116,22 @@ class CallAlerts {
   }
 
   /// Rings for [callId], unless it is already the one ringing.
+  /// The app's own answer and end-call colours, for the notification's two
+  /// buttons.
+  ///
+  /// ⚠️ Not the usual green and red, and not the gradient either — a colour
+  /// hint takes one value. The answer button on the call screen runs pink to
+  /// purple, and the purple end is the half that does not read as the same
+  /// colour as Decline at a glance.
+  static const _answerColor = 0xFF906FE8; // AppGradients.cta, purple end
+  static const _declineColor = 0xFFE2447C; // AppColors.danger
+
   static Future<void> ring({
     required String callId,
     required String callerName,
     required bool isVideo,
     required bool foreground,
+    Uint8List? callerAvatar,
   }) async {
     if (!supported) return;
 
@@ -175,7 +186,18 @@ class CallAlerts {
         // row, so by the time this lands the ring screen is what is there.
         payload: 'dayflower://call?id=${Uri.encodeComponent(callId)}',
       );
-      await NativeCalls.invoke('styleIncoming', {'name': callerName});
+      // 🔴 After the plugin's notification, never instead of it. This
+      // replaces it in place with a CallStyle one — the caller's face and
+      // two round buttons in the app's colours — and if any of that fails
+      // the working notification is still on screen. See CallNotification.
+      await NativeCalls.invoke<bool>('styleIncoming', {
+        'name': callerName,
+        'callId': callId,
+        'channelId': _channelId,
+        'answerColor': _answerColor,
+        'declineColor': _declineColor,
+        if (callerAvatar != null) 'avatar': callerAvatar,
+      });
     } catch (e) {
       debugPrint('call alert failed: $e');
     }

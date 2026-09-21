@@ -94,4 +94,10 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // NotificationCompat.CallStyle, for the incoming-call notification with
+    // the caller's face and the app's own answer/decline colours. It landed
+    // in core 1.9; the version Flutter's plugins drag in is not guaranteed
+    // to be that new, and a missing class here fails at runtime rather than
+    // at build. See CallNotification.kt.
+    implementation("androidx.core:core-ktx:1.13.1")
 }

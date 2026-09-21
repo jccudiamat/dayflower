@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'dart:async';
 
 import 'package:device_preview/device_preview.dart';
@@ -29,6 +31,7 @@ import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
+import 'features/calls/data/native_calls.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/data/call_pip.dart';
 import 'features/presence/data/presence_repository.dart';
@@ -90,6 +93,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     _wireWidgetLaunches();
     _wireAlarmTaps();
     _wireNotificationRoutes();
+    _wireNativeCallButtons();
     // ref.listen only fires on change, so seed the widget with whatever is
     // already pinned once the first frame has settled.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -420,11 +424,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         );
         return;
       }
-      _settled(() => CallAlerts.ring(
+      _settled(() async => CallAlerts.ring(
             callId: next.id,
             callerName: _partnerName,
             isVideo: next.call == CallMode.video,
             foreground: _foreground,
+            callerAvatar: await _partnerAvatar(),
           ));
     });
 
@@ -586,9 +591,61 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     return (partner?.flower ?? AvatarFlower.fallback).emoji;
   }
 
+  /// Answer and Decline on the call notification's own buttons.
+  ///
+  /// 🔴 CallStyle draws those buttons itself, so their taps arrive as
+  /// Activity intents and never touch flutter_local_notifications — none of
+  /// the plugin's action handling sees them. Routed to the same places a tap
+  /// on the plugin's actions goes, so there is one behaviour rather than two
+  /// that drift.
+  void _wireNativeCallButtons() {
+    NativeCalls.onAction((action, callId) {
+      if (action == 'decline') {
+        ref.read(callNotifierProvider.notifier).decline();
+        return;
+      }
+      // ⚠️ Parked rather than answered here. The call screen answers it on
+      // the way in, which is the same path the lock-screen Answer already
+      // took, and it works whether or not a session exists yet.
+      CallAlerts.pendingAnswerId = callId;
+      AppNotifications.pendingRoute.value = Routes.call;
+    });
+  }
+
   String get _partnerName {
     final partner = ref.read(partnerProfileProvider).valueOrNull;
     return partner?.petName ?? partner?.displayName ?? 'your partner';
+  }
+
+  /// The caller's face, for the call notification.
+  ///
+  /// ⚠️ Bytes, not a URL: the notification is built in Kotlin and nothing
+  /// there fetches anything. Cached for the process because a ring is the
+  /// worst moment to wait on a round trip, and null is fine — CallStyle
+  /// falls back to the name alone.
+  Uint8List? _partnerAvatarBytes;
+  String? _partnerAvatarPath;
+
+  Future<Uint8List?> _partnerAvatar() async {
+    final path = ref.read(partnerProfileProvider).valueOrNull?.avatarPath;
+    if (path == null || path.isEmpty) return null;
+    if (_partnerAvatarPath == path && _partnerAvatarBytes != null) {
+      return _partnerAvatarBytes;
+    }
+    try {
+      final url = await ref.read(avatarUrlProvider(path).future);
+      if (url == null) return null;
+      final client = HttpClient()
+        ..connectionTimeout = const Duration(seconds: 5);
+      final response = await (await client.getUrl(Uri.parse(url))).close();
+      if (response.statusCode != 200) return null;
+      final bytes = await consolidateHttpClientResponseBytes(response);
+      _partnerAvatarPath = path;
+      return _partnerAvatarBytes = bytes;
+    } catch (e) {
+      debugPrint('caller avatar failed: $e');
+      return null;
+    }
   }
 
   void _syncWidget(FlowerMessage? received) {

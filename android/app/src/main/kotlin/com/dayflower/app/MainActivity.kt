@@ -3,6 +3,7 @@ package com.dayflower.app
 import android.app.KeyguardManager
 import android.app.PictureInPictureParams
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.os.Build
@@ -27,6 +28,16 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
+    private var callChannel: MethodChannel? = null
+
+    /**
+     * An Answer or Decline tapped while the app was dead.
+     *
+     * WARNING: the notification can be tapped before there is a Flutter
+     * engine to tell. Without parking it, answering a call from the lock
+     * screen on a cold start opened the app and did nothing.
+     */
+    private var pendingCallAction: Pair<String, String>? = null
 
     /**
      * Whether a call is live right now.
@@ -79,6 +90,23 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
+
+        // The incoming call, restyled. Dart posts the ring first and this
+        // replaces it in place - see CallNotification, and the warning there
+        // about why that order matters.
+        callChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            CallNotification.CHANNEL,
+        ).apply {
+            setMethodCallHandler { call, result ->
+                CallNotification.handle(applicationContext, call, result)
+            }
+        }
+        // A tap that arrived before the engine existed has been waiting.
+        pendingCallAction?.let { deliverCallAction(it.first, it.second) }
+        pendingCallAction = null
+        // And the intent that launched us may itself be an Answer.
+        readCallAction(intent)
 
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
             setMethodCallHandler { call, result ->
@@ -156,6 +184,40 @@ class MainActivity : FlutterActivity() {
         // fail-open rule as the Dart side.
         if (power == null || keyguard == null) return true
         return power.isInteractive && !keyguard.isKeyguardLocked
+    }
+
+    /**
+     * The Answer or Decline button on the call notification.
+     *
+     * WARNING: these arrive as Activity intents, not as notification
+     * actions the Flutter plugin knows about - CallNotification builds its
+     * own PendingIntents, because CallStyle's buttons are its own. Both
+     * land here, and Dart does the rest so that answering from the lock
+     * screen and answering from the ring screen are the same code path.
+     */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        readCallAction(intent)
+    }
+
+    private fun readCallAction(intent: Intent?) {
+        val action = intent?.getStringExtra(CallNotification.EXTRA_ACTION)
+            ?: return
+        val id = intent.getStringExtra(CallNotification.EXTRA_ID) ?: return
+        // Cleared so a rotation or a resume does not answer the call twice.
+        intent.removeExtra(CallNotification.EXTRA_ACTION)
+        intent.removeExtra(CallNotification.EXTRA_ID)
+        deliverCallAction(action, id)
+    }
+
+    private fun deliverCallAction(action: String, id: String) {
+        val sink = callChannel
+        if (sink == null) {
+            pendingCallAction = action to id
+            return
+        }
+        sink.invokeMethod("callAction", mapOf("action" to action, "callId" to id))
     }
 
     /**
