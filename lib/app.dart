@@ -695,7 +695,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 /// Without this, pressing back on a full-screen updater would quietly pop
 /// the screen hidden behind it, or leave the app on the last route.
 /// Where the back button goes when there is nothing left to pop, or null to
-/// let the press fall through and close the app.
+/// let the press fall through to the Activity.
 ///
 /// 🔴 Every tab is a dead end. The bottom bar navigates with go(), which
 /// replaces the stack rather than growing it, so on Chat, Dayflower,
@@ -703,12 +703,19 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 /// back button went straight out to the launcher. Back should leave the
 /// section first, the same as pressing Home in the bar.
 ///
-/// ⚠️ Home returns null, so from there back really does close, on the
+/// 🔴 **[callActive] hands the press straight back to Android, and that is
+/// load-bearing.** A back press only reaches `MainActivity.onBackPressed`
+/// when Dart declines it, and that is where a live call becomes the
+/// floating window over the launcher. Answering here — for any reason —
+/// swallows the press, and the call quietly stops being able to float. The
+/// feature is native, so nothing in this file would fail if it broke.
+///
+/// ⚠️ Home returns null too, so from there back really does close, on the
 /// first press. That is Android's convention for the root of an app, and a
 /// "press again to exit" toast trades a thing to learn for a guard against
 /// a press people meant.
-String? backFallbackRoute(String here) =>
-    here == Routes.home ? null : Routes.home;
+String? backFallbackRoute(String here, {required bool callActive}) =>
+    callActive || here == Routes.home ? null : Routes.home;
 
 class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
   _UpdateBackButtonDispatcher(this._ref);
@@ -737,8 +744,11 @@ class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
     // launcher. Leaving Chat, Memories or Together should land on Home, the
     // same as pressing Home in the bar.
     final router = _ref.read(routerProvider);
-    final fallback =
-        backFallbackRoute(router.routeInformationProvider.value.uri.path);
+    final call = _ref.read(callNotifierProvider);
+    final fallback = backFallbackRoute(
+      router.routeInformationProvider.value.uri.path,
+      callActive: call != null && !call.status.isTerminal,
+    );
     if (fallback != null) {
       router.go(fallback);
       return true;
