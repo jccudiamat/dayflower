@@ -14,7 +14,8 @@ import '../../data/flower_repository.dart';
 /// to `getExternalStorageDirectory()/Saved`, which is somewhere nothing else
 /// looks — a Save that puts a picture where the Gallery will never show it
 /// is a button that lies. This goes through MediaStore (`MediaSaver.kt`) and
-/// lands in Pictures/Dayflower.
+/// lands in DCIM, beside the phone's own pictures — not in an app album,
+/// which is somewhere people have to go looking for.
 class MediaSaver {
   MediaSaver._();
 

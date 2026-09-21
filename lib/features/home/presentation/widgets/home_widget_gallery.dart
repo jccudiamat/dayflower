@@ -117,7 +117,9 @@ class _WidgetFeature extends StatelessWidget {
             )),
       );
   void _setup(BuildContext context) {
-    final widgetName = kind == HomeWidgetKind.myDay ? "Today's Flower" : title;
+    // ⚠️ Was overridden to "Today's Flower" here while the card above it
+    // said "My Day" — the same widget under two names, in one sheet.
+    final widgetName = title;
     final android = defaultTargetPlatform == TargetPlatform.android;
     showModalBottomSheet<void>(
         context: context,

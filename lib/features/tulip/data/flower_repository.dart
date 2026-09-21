@@ -702,13 +702,23 @@ final dayPhotoUrlProvider =
   }
 });
 
-/// Where a day photo should land. Ordered as the camera offers them, with
-/// [widget] first because parking a photo on their home screen is what
-/// "share your day" means — the thread copy is the extra, not the point.
+/// Where a day photo should land. [myDay] first because parking a photo on
+/// their home screen is what "share your day" means.
+///
+/// 🔴 **Two destinations, and deliberately not three.** There used to be a
+/// "Both", which meant a photo sent to the conversation also appeared on the
+/// home screen. Sending someone a picture in a chat is not the same act as
+/// putting it on their home screen for a day, and one control that quietly
+/// did both made the chat the loud option by accident. Anyone who wants it
+/// in both places sends it twice, which is the honest amount of effort for
+/// asking for two things.
+///
+/// ⚠️ Rows written before this still carry to_widget and to_chat both true.
+/// Nothing reads the enum to interpret them — [FlowerMessage] reads the two
+/// booleans directly — so old photos keep behaving exactly as they did.
 enum DayPhotoTarget {
-  widget('Widget', '🏠', toWidget: true, toChat: false),
-  chat('Chat', '💬', toWidget: false, toChat: true),
-  both('Both', '✨', toWidget: true, toChat: true);
+  myDay('My Day', '🏠', toWidget: true, toChat: false),
+  chat('Chat', '💬', toWidget: false, toChat: true);
 
   const DayPhotoTarget(
     this.label,

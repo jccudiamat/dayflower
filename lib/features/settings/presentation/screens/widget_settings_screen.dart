@@ -64,7 +64,7 @@ class WidgetSettingsScreen extends ConsumerWidget {
                 children: [
                   Text(
                     DayflowerWidgets.isSupported
-                        ? 'Long-press your home screen → Widgets → Dayflower. "Today\'s Flower", "Heartbeat" and "Reunion" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
+                        ? 'Long-press your home screen → Widgets → Dayflower. "My Day", "Heartbeat" and "Reunion" can be placed on their own; the plain "Dayflower" widget shows whichever you pick here.'
                         : 'Home screen widgets are only available on the Android and iOS app.',
                     style: AppText.caption(),
                   ),
@@ -72,8 +72,8 @@ class WidgetSettingsScreen extends ConsumerWidget {
                   SettingsCard(
                     children: [
                       WidgetModeRow(
-                        title: "Today's Flower",
-                        subtitle: 'Their flower and note',
+                        title: 'My Day',
+                        subtitle: 'Their photo and note',
                         mode: WidgetMode.flower,
                       ),
                       SettingsLine(),

@@ -35,7 +35,7 @@ import '../../domain/day_reactions.dart';
 /// Widget is still the default, because parking a photo on their home screen
 /// is what "share your day" means; the thread copy is the extra.
 final dayPhotoTargetProvider =
-    StateProvider<DayPhotoTarget>((ref) => DayPhotoTarget.widget);
+    StateProvider<DayPhotoTarget>((ref) => DayPhotoTarget.myDay);
 
 /// The "Share your day" bar at the top of the Flowers tab.
 ///
@@ -229,7 +229,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Future<void> _shareBytes(
     Uint8List bytes,
     String ext, {
-    DayPhotoTarget target = DayPhotoTarget.widget,
+    DayPhotoTarget target = DayPhotoTarget.myDay,
   }) async {
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
@@ -246,9 +246,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
           );
       if (mounted) {
         _toast(switch (target) {
-          DayPhotoTarget.widget => 'On their home screen for 24 hours 🌼',
+          DayPhotoTarget.myDay => 'On their home screen for 24 hours 🌼',
           DayPhotoTarget.chat => 'Sent to the conversation 💬',
-          DayPhotoTarget.both => 'Home screen and conversation ✨',
         });
       }
     } catch (_) {
@@ -399,7 +398,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// "join their strip" tap all take the same route.
   Future<void> _handleShot(
     Uint8List bytes, {
-    DayPhotoTarget target = DayPhotoTarget.widget,
+    DayPhotoTarget target = DayPhotoTarget.myDay,
   }) async {
     final waiting = ref.read(stripAwaitingMeProvider);
 
@@ -577,9 +576,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                       // concludes their photo went somewhere it did not.
                       Text(
                         switch (ref.watch(dayPhotoTargetProvider)) {
-                          DayPhotoTarget.widget => 'My Day',
+                          DayPhotoTarget.myDay => 'My Day',
                           DayPhotoTarget.chat => 'Send a photo',
-                          DayPhotoTarget.both => 'My Day + chat',
                         },
                         style: AppText.title(Colors.white),
                       ),

@@ -79,7 +79,7 @@ class SharedPhotosScreen extends ConsumerWidget {
       actions: [if (myDaysOnly) IconButton(
         tooltip: 'Share your day', icon: const Icon(CupertinoIcons.camera),
         onPressed: () {
-          ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.widget;
+          ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.myDay;
           context.push(Routes.flowers);
         })],
     ),

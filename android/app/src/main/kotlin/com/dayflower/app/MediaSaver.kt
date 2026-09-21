@@ -50,11 +50,18 @@ object MediaSaver {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, name)
                     put(MediaStore.Images.Media.MIME_TYPE, mimeFor(name))
-                    // Its own album, so saved flowers and days sit together
-                    // rather than scattered through the camera roll.
+                    // WARNING: DCIM, not Pictures/Dayflower. An app album
+                    // keeps saved flowers and days together, and that was
+                    // the original reasoning - but it also puts them
+                    // somewhere people have to go looking for. Several
+                    // gallery apps show DCIM as the roll and file
+                    // everything else away under Albums, so "Save" appeared
+                    // to do nothing. DCIM is where a phone's own pictures
+                    // live, which is where someone who just tapped Save
+                    // expects to find one.
                     put(
                         MediaStore.Images.Media.RELATIVE_PATH,
-                        Environment.DIRECTORY_PICTURES + "/Dayflower",
+                        Environment.DIRECTORY_DCIM,
                     )
                     // WARNING: hides the row from the Gallery until the
                     // bytes are written. Without it a scan that lands

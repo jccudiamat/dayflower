@@ -573,7 +573,7 @@ BoxDecoration _homeCardDecoration() => BoxDecoration(
     border: Border.all(color: AppColors.border));
 
 void _shareDay(BuildContext context, WidgetRef ref) {
-  ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.widget;
+  ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.myDay;
   context.push(Routes.flowers);
 }
 
