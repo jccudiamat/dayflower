@@ -164,22 +164,26 @@ class MainActivity : FlutterActivity() {
     }
 
     /**
-     * A back press that would close Dayflower, while a call is up.
+     * Back goes to Flutter, always. Dart decides what it means.
      *
-     * WARNING: this is only ever reached when Flutter has nothing left to
-     * pop. Routes are handled on the Dart side first - the call screen's own
-     * back returns to the conversation and never gets here - so by the time
-     * the Activity is asked, the next step really is leaving the app. That
-     * is the moment the call should become a floating window instead of
-     * disappearing, and it is what "the back button pressed twice" means in
-     * practice: once to leave the call screen, again to leave the app.
+     * WARNING: this used to read `if (callActive && enterPip()) return`
+     * before calling super, with a comment claiming it was only reached
+     * once Flutter had nothing left to pop. That was exactly backwards.
+     * super.onBackPressed() is FlutterActivity's, and calling it is what
+     * hands the press to Dart - so checking first meant Flutter never saw
+     * a back press at all while a call was up. Every press went straight
+     * out to a floating window over the launcher: the call screen never
+     * popped, the conversation never came back, the app simply left.
      *
-     * onUserLeaveHint does NOT cover this. It fires for Home and recents;
-     * a back press finishes the activity without it.
+     * The routing lives in Dart, which is the half that knows what is on
+     * screen. When Dart decides a press would leave the app while a call
+     * is live, it asks for PiP itself through the "enter" method above.
+     *
+     * onUserLeaveHint still covers Home and recents, which never reach
+     * here.
      */
-    @Suppress("DEPRECATION", "MissingSuperCall")
+    @Suppress("DEPRECATION")
     override fun onBackPressed() {
-        if (callActive && enterPip()) return
         super.onBackPressed()
     }
 

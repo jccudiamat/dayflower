@@ -703,19 +703,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 /// back button went straight out to the launcher. Back should leave the
 /// section first, the same as pressing Home in the bar.
 ///
-/// 🔴 **[callActive] hands the press straight back to Android, and that is
-/// load-bearing.** A back press only reaches `MainActivity.onBackPressed`
-/// when Dart declines it, and that is where a live call becomes the
-/// floating window over the launcher. Answering here — for any reason —
-/// swallows the press, and the call quietly stops being able to float. The
-/// feature is native, so nothing in this file would fail if it broke.
-///
-/// ⚠️ Home returns null too, so from there back really does close, on the
-/// first press. That is Android's convention for the root of an app, and a
-/// "press again to exit" toast trades a thing to learn for a guard against
-/// a press people meant.
-String? backFallbackRoute(String here, {required bool callActive}) =>
-    callActive || here == Routes.home ? null : Routes.home;
+/// ⚠️ Home returns null, meaning "not handled" — the press falls through to
+/// the Activity, which is how the app closes and how a live call becomes the
+/// floating window over the launcher. Answering it here would keep the press
+/// inside Dart and quietly cost both.
+String? backFallbackRoute(String here) =>
+    here == Routes.home ? null : Routes.home;
 
 class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
   _UpdateBackButtonDispatcher(this._ref);
@@ -744,13 +737,24 @@ class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
     // launcher. Leaving Chat, Memories or Together should land on Home, the
     // same as pressing Home in the bar.
     final router = _ref.read(routerProvider);
-    final call = _ref.read(callNotifierProvider);
-    final fallback = backFallbackRoute(
-      router.routeInformationProvider.value.uri.path,
-      callActive: call != null && !call.status.isTerminal,
-    );
+    final fallback =
+        backFallbackRoute(router.routeInformationProvider.value.uri.path);
     if (fallback != null) {
       router.go(fallback);
+      return true;
+    }
+
+    // 🔴 The press would leave the app. With a call up that is the moment it
+    // becomes the floating window over the launcher — not a moment sooner.
+    //
+    // ⚠️ Asked for from here rather than from `onBackPressed`, which is
+    // where it used to live and where it fired far too early: that check ran
+    // *before* the press was handed to Flutter, so during a call the call
+    // screen never popped and the app just left. Everything above this line
+    // — popping the call screen back to the conversation, then leaving the
+    // section — now happens first, exactly as it does without a call.
+    final call = _ref.read(callNotifierProvider);
+    if (call != null && !call.status.isTerminal && await CallPip.enter()) {
       return true;
     }
 
