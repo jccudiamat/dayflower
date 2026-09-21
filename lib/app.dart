@@ -409,7 +409,15 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         // Answered, declined, or gave up — all of them arrive here as the
         // provider going null, and the notification is `ongoing`, so
         // nothing else would ever take it off the lock screen.
-        CallAlerts.stop();
+        //
+        // ⚠️ `settle` rather than `stop`: it takes the ring down either
+        // way, and when nothing here ended the call it leaves a missed-call
+        // notice behind. Told which call from `previous`, because `next` is
+        // null by definition at this point.
+        CallAlerts.settle(
+          callerName: _partnerName,
+          isVideo: previous?.call == CallMode.video,
+        );
         return;
       }
       _settled(() => CallAlerts.ring(

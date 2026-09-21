@@ -619,7 +619,11 @@ class _CallMiniBar extends ConsumerStatefulWidget {
 }
 
 class _CallMiniBarState extends ConsumerState<_CallMiniBar> {
-  static const _size = Size(116, 164);
+  /// ⚠️ 4:3, matching the aspect the Activity asks for when the call
+  /// floats outside — see enterPip in MainActivity. The two windows are the
+  /// same thing to whoever is holding the phone, and they used to be two
+  /// different shapes: this was 116x164 and the system one was 9:16.
+  static const _size = Size(160, 120);
   static const _margin = 12.0;
 
   /// ⚠️ Bottom **right**, and low enough to clear the tab bar. The left is

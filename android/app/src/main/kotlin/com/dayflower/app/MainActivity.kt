@@ -108,10 +108,17 @@ class MainActivity : FlutterActivity() {
         return try {
             enterPictureInPictureMode(
                 PictureInPictureParams.Builder()
-                    // Portrait, because the call screen is. A ratio that
-                    // disagrees with the content gets letterboxed by the
-                    // system rather than cropped.
-                    .setAspectRatio(Rational(9, 16))
+                    // Landscape, and the same 4:3 the in-app window uses -
+                    // the two are one object as far as anyone holding the
+                    // phone is concerned, so they should not be two shapes.
+                    //
+                    // WARNING: this was 9:16, "portrait because the call
+                    // screen is", which put a tall sliver down the edge of
+                    // the launcher. What it actually shows is a face or an
+                    // avatar, not a screen, and a face wants width. Android
+                    // accepts 1:2.39 to 2.39:1, so there is room to go
+                    // wider still.
+                    .setAspectRatio(Rational(4, 3))
                     .build(),
             )
         } catch (e: Throwable) {

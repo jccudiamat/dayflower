@@ -29,7 +29,13 @@ class CallAlerts {
   /// creation. Bump `_v` to change any of them; an existing install keeps
   /// the old channel's settings forever otherwise.
   static const _channelId = 'incoming_calls_v2';
+  static const _missedChannelId = 'missed_calls_v1';
   static const _notificationId = 4501;
+
+  /// ⚠️ Its own id, so a missed call is not cancelled by the same [stop]
+  /// that takes the ring down — the ring ending is precisely when this one
+  /// is raised.
+  static const _missedNotificationId = 4502;
   static const actionAnswer = 'call_answer';
   static const actionDecline = 'call_decline';
   static String? pendingAnswerId;
@@ -57,6 +63,16 @@ class CallAlerts {
   /// the same call twice and a *different* call still gets through.
   static String? _ringingId;
 
+  /// ⚠️ Test seams. [settle] decides "missed" from [_ringingId] alone, and
+  /// that decision is worth pinning: reporting a missed call for one the
+  /// user declined is worse than reporting nothing.
+  @visibleForTesting
+  static bool get debugWouldReportMissed => _ringingId != null;
+  @visibleForTesting
+  static void debugStartRinging(String id) => _ringingId = id;
+  @visibleForTesting
+  static void debugResetRinging() => _ringingId = null;
+
   static bool get supported => AppNotifications.supported;
 
   static Future<void> init() async {
@@ -80,6 +96,17 @@ class CallAlerts {
               sound: UriAndroidNotificationSound('content://settings/system/ringtone'),
               audioAttributesUsage: AudioAttributesUsage.notificationRingtone,
               enableVibration: true,
+            ),
+          );
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(
+            const AndroidNotificationChannel(
+              _missedChannelId,
+              'Missed calls',
+              description: 'A call you did not get to.',
+              importance: Importance.defaultImportance,
             ),
           );
       _initialised = true;
@@ -167,6 +194,56 @@ class CallAlerts {
       await _plugin.cancel(id: _notificationId);
     } catch (e) {
       debugPrint('call alert cancel failed: $e');
+    }
+  }
+
+  /// The ring is over. Says so if nobody here ended it.
+  ///
+  /// 🔴 **A call that stops ringing on its own left no trace at all.** The
+  /// row was marked missed and the thread showed it, but the thread is
+  /// somewhere you have to go and look — from outside the app a call in a
+  /// pocket rang, gave up, and vanished.
+  ///
+  /// ⚠️ [_ringingId] is the whole test, and it works because every local
+  /// exit already clears it: answering calls [stop], declining calls
+  /// [stop] through hangUp. So a ring still holding its id when the row
+  /// closes is one the caller gave up on — which is the only case that is
+  /// actually a missed call, and the reason this is not just "the provider
+  /// went null".
+  static Future<void> settle({
+    required String callerName,
+    required bool isVideo,
+  }) async {
+    final missed = _ringingId != null;
+    await stop();
+    if (!missed || !supported) return;
+    try {
+      await init();
+      await _plugin.show(
+        id: _missedNotificationId,
+        title: 'Missed call',
+        body: isVideo
+            ? 'You missed a video call from $callerName'
+            : 'You missed a call from $callerName',
+        notificationDetails: const NotificationDetails(
+          android: AndroidNotificationDetails(
+            _missedChannelId,
+            'Missed calls',
+            // ⚠️ Nothing like the ring channel. This is news about something
+            // that already finished: no ringtone, no insistent flag, no
+            // full-screen intent. It waits in the shade.
+            importance: Importance.defaultImportance,
+            priority: Priority.defaultPriority,
+            category: AndroidNotificationCategory.missedCall,
+            autoCancel: true,
+          ),
+          iOS: DarwinNotificationDetails(),
+        ),
+        // Into the conversation, where the call bubble is.
+        payload: AppNotifications.payloadForRoute(Routes.chat),
+      );
+    } catch (e) {
+      debugPrint('missed call alert failed: $e');
     }
   }
 }
