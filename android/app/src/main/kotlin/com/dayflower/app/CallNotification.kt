@@ -67,8 +67,16 @@ object CallNotification {
         val callId = call.argument<String>("callId") ?: return false
         val channelId = call.argument<String>("channelId") ?: return false
         val avatar = call.argument<ByteArray>("avatar")
-        val answerColor = call.argument<Int>("answerColor") ?: return false
-        val declineColor = call.argument<Int>("declineColor") ?: return false
+        // WARNING: Number, not Int. An ARGB colour with full alpha is above
+        // 2^31 - 0xFF906FE8 is 4,287,655,912 - so Dart sends it as a 64-bit
+        // Long and argument<Int>() comes back null. Read as Int, this
+        // returned false on every call and the notification was never
+        // replaced: the whole feature shipped doing nothing, silently,
+        // because the failure path is "leave Dart's notification alone".
+        val answerColor = call.argument<Number>("answerColor")?.toInt()
+            ?: return false
+        val declineColor = call.argument<Number>("declineColor")?.toInt()
+            ?: return false
 
         return try {
             val person = Person.Builder()

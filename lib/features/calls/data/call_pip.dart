@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Picture-in-picture — the floating call window.
@@ -11,6 +12,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// is a no-op returning false, which the call screen reads as "stay
 /// full-screen" — the honest failure, rather than a Minimise button that
 /// does nothing.
+
+/// The shape of a call when it is not full screen.
+///
+/// 🔴 **One constant, because there are three of them and they drifted.**
+/// The self-view, the window that floats inside the app, and the system
+/// picture-in-picture window are the same object as far as anyone holding
+/// the phone is concerned. They were 150x210, 116x164 and 9:16 — three
+/// shapes, one of them a tall sliver down the edge of the launcher.
+///
+/// ⚠️ 150x210 is exactly 5:7, which is what [pipAspect] hands Android. Keep
+/// them in step: a ratio that disagrees with the content gets letterboxed by
+/// the system rather than cropped.
+const Size callTileSize = Size(150, 210);
+
+/// [callTileSize] as the numerator and denominator Android wants.
+const List<int> pipAspect = [5, 7];
+
 class CallPip {
   CallPip._();
 

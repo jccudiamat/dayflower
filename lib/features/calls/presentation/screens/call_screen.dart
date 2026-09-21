@@ -15,6 +15,8 @@ import '../../../../core/widgets/timezone_picker.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/call_pip.dart';
+import '../widgets/ring_light.dart';
+import '../../data/ring_light_prefs.dart';
 import '../../data/call_alerts.dart';
 import '../../data/call_usage.dart';
 import '../../domain/call.dart';
@@ -236,6 +238,11 @@ class _LiveViewState extends ConsumerState<_LiveView> {
             onTap: () => setState(() => _chrome = !_chrome),
           ),
         ),
+        // 🔴 Over the video, under everything you can press. It is a light,
+        // not a surface: RingLight ignores pointers, so Mute and End are
+        // still exactly where they look.
+        if (session.isVideo && ref.watch(ringLightProvider))
+          const Positioned.fill(child: RingLight()),
         _ReactionOverlay(reactions: session.reactions),
         if (session.isVideo)
           _SelfView(
@@ -329,6 +336,20 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                           tooltip: session.cameraEnabled
                               ? 'Turn camera off'
                               : 'Turn camera on',
+                        ),
+                        const SizedBox(width: 12),
+                        // ⚠️ Only on video, and only here. It is the screen
+                        // at full brightness around your face — it has no
+                        // meaning on a voice call and no business being a
+                        // setting you meet before you need it.
+                        _ControlButton(
+                          icon: CupertinoIcons.light_max,
+                          inverted: ref.watch(ringLightProvider),
+                          onTap: () =>
+                              ref.read(ringLightProvider.notifier).toggle(),
+                          tooltip: ref.watch(ringLightProvider)
+                              ? 'Turn ring light off'
+                              : 'Ring light',
                         ),
                       ],
                       const SizedBox(width: 12),
@@ -845,7 +866,7 @@ class _SelfViewState extends State<_SelfView> {
   // ⚠️ Sized so you can actually read your own framing. It has grown twice
   // — 74×104, then 112×158 — and this is the size at which a glance tells
   // you whether you are in shot.
-  static const _size = Size(150, 210);
+  static const _size = callTileSize;
   static const _hiddenSize = Size(48, 48);
   static const _margin = 14.0;
 
