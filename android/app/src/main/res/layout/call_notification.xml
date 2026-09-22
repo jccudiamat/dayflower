@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The incoming call, drawn by us.
+
+  WARNING: this exists because CallStyle's button colours are hints, and an
+  OEM shade is free to ignore them - which ColorOS does, rendering plain
+  green text actions whatever setAnswerButtonColorHint says. A custom layout
+  is the only way the buttons are actually Dayflower's colours, because the
+  system inflates these views rather than substituting its own.
+
+  WARNING: RemoteViews supports a fixed set of widgets. LinearLayout,
+  TextView, ImageView and Button are on it; ConstraintLayout and anything
+  from Material are not, and a layout using them fails at inflation time
+  inside the system process, where the exception is somebody else's log.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingTop="4dp"
+    android:paddingBottom="4dp">
+
+    <ImageView
+        android:id="@+id/call_avatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginEnd="12dp"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null"/>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/call_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"/>
+
+        <TextView
+            android:id="@+id/call_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textSize="13sp"
+            android:textColor="?android:attr/textColorSecondary"/>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginTop="10dp">
+
+            <!--
+              Decline first, the way it is on the call screen: the
+              destructive one is furthest from the thumb reaching for Answer.
+            -->
+            <TextView
+                android:id="@+id/call_decline"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:layout_marginEnd="8dp"
+                android:gravity="center"
+                android:background="@drawable/call_decline_pill"
+                android:textColor="#FFFFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:text="Decline"/>
+
+            <TextView
+                android:id="@+id/call_answer"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_weight="1"
+                android:gravity="center"
+                android:background="@drawable/call_answer_pill"
+                android:textColor="#FFFFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:text="Answer"/>
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

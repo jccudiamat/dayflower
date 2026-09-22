@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 
@@ -31,6 +30,7 @@ import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
+import 'features/calls/data/caller_avatar.dart';
 import 'features/calls/data/native_calls.dart';
 import 'features/calls/domain/call_notifier.dart';
 import 'features/calls/data/call_pip.dart';
@@ -94,6 +94,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     _wireAlarmTaps();
     _wireNotificationRoutes();
     _wireNativeCallButtons();
+    _rememberCallerFace();
     // ref.listen only fires on change, so seed the widget with whatever is
     // already pinned once the first frame has settled.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -619,33 +620,31 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 
   /// The caller's face, for the call notification.
   ///
-  /// ⚠️ Bytes, not a URL: the notification is built in Kotlin and nothing
-  /// there fetches anything. Cached for the process because a ring is the
-  /// worst moment to wait on a round trip, and null is fine — CallStyle
-  /// falls back to the name alone.
-  Uint8List? _partnerAvatarBytes;
-  String? _partnerAvatarPath;
+  /// 🔴 Read from disk, never fetched here. The first ring after a cold
+  /// start had no photo because the partner's profile had not resolved yet,
+  /// so there was nothing to fetch and the notification went out with no
+  /// icon — the letter circle. Warmed by [_rememberCallerFace] instead, well
+  /// before the phone rings. See CallerAvatar.
+  Future<Uint8List?> _partnerAvatar() => CallerAvatar.cached();
 
-  Future<Uint8List?> _partnerAvatar() async {
-    final path = ref.read(partnerProfileProvider).valueOrNull?.avatarPath;
-    if (path == null || path.isEmpty) return null;
-    if (_partnerAvatarPath == path && _partnerAvatarBytes != null) {
-      return _partnerAvatarBytes;
-    }
-    try {
-      final url = await ref.read(avatarUrlProvider(path).future);
-      if (url == null) return null;
-      final client = HttpClient()
-        ..connectionTimeout = const Duration(seconds: 5);
-      final response = await (await client.getUrl(Uri.parse(url))).close();
-      if (response.statusCode != 200) return null;
-      final bytes = await consolidateHttpClientResponseBytes(response);
-      _partnerAvatarPath = path;
-      return _partnerAvatarBytes = bytes;
-    } catch (e) {
-      debugPrint('caller avatar failed: $e');
-      return null;
-    }
+  /// Keeps the caller's face on disk, so the next ring already has it.
+  ///
+  /// ⚠️ Watches rather than reads: the profile arrives after the first
+  /// frame, and on a cold start it arrives after the call row does.
+  void _rememberCallerFace() {
+    ref.listen<AsyncValue<UserProfile?>>(partnerProfileProvider,
+        (previous, next) {
+      final path = next.valueOrNull?.avatarPath;
+      if (path == null || path.isEmpty) {
+        if (previous?.valueOrNull?.avatarPath != null) CallerAvatar.forget();
+        return;
+      }
+      if (previous?.valueOrNull?.avatarPath == path) return;
+      _settled(() async {
+        final url = await ref.read(avatarUrlProvider(path).future);
+        if (url != null) await CallerAvatar.remember(url);
+      });
+    });
   }
 
   void _syncWidget(FlowerMessage? received) {

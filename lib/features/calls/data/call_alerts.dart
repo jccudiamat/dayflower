@@ -201,6 +201,7 @@ class CallAlerts {
       // the working notification is still on screen. See CallNotification.
       await NativeCalls.invoke<bool>('styleIncoming', {
         'name': callerName,
+        'subtitle': isVideo ? 'Incoming video call' : 'Incoming call',
         'callId': callId,
         'channelId': _channelId,
         'answerColor': _answerColor,
@@ -209,6 +210,23 @@ class CallAlerts {
       });
     } catch (e) {
       debugPrint('call alert failed: $e');
+    }
+  }
+
+  /// Takes the banner down without deciding the call is over.
+  ///
+  /// 🔴 **Not [stop].** The ring screen was showing with the heads-up banner
+  /// still sitting on top of it — the app telling you about something you
+  /// were already looking at. The obvious fix is to call stop(), and it is
+  /// wrong: stop() clears [_ringingId], which is the only evidence [settle]
+  /// has that nobody here answered. A call ignored from the ring screen
+  /// would then never be reported missed.
+  static Future<void> dismissBanner() async {
+    if (!supported) return;
+    try {
+      await _plugin.cancel(id: _notificationId);
+    } catch (e) {
+      debugPrint('call banner dismiss failed: $e');
     }
   }
 

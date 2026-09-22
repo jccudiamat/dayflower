@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Decline button. #E2447C is AppColors.danger, the same colour the End
+  button wears on the call screen. See call_answer_pill for why this is a
+  literal rather than a theme attribute.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FFE2447C"/>
+    <corners android:radius="22dp"/>
+</shape>

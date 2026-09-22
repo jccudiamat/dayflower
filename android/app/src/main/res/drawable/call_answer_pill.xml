@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Answer button on the incoming call notification.
+
+  WARNING: a literal, not a theme colour. A notification's views are inflated
+  by the system UI process, which has no access to the app's theme, so
+  ?attr/ lookups resolve against the shade rather than against Dayflower.
+
+  #906FE8 is the purple end of AppGradients.cta - the answer button on the
+  call screen runs pink to purple, and a notification button takes one flat
+  colour. The pink end is too close to the decline pink to tell apart at a
+  glance. Kept in step with _answerColor in call_alerts.dart.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF906FE8"/>
+    <corners android:radius="22dp"/>
+</shape>

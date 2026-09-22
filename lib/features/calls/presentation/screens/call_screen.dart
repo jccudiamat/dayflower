@@ -39,6 +39,14 @@ class CallScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(callNotifierProvider);
+    // ⚠️ The banner goes as soon as this screen is up. It was staying on
+    // top of the ring screen — the same call announced twice, once as a
+    // notification over the thing it was announcing. Dismissed rather than
+    // stopped: stop() would forget that nobody has answered yet, and a call
+    // ignored from here would never be reported missed.
+    if (session != null && session.status == CallStatus.ringing) {
+      CallAlerts.dismissBanner();
+    }
     if (session != null && session.status == CallStatus.ringing &&
         CallAlerts.pendingAnswerId == session.messageId) {
       CallAlerts.pendingAnswerId = null;

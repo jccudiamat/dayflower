@@ -7,13 +7,18 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.os.Build
+import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.app.Person
-import androidx.core.graphics.drawable.IconCompat
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+
 
 /**
  * Re-posts the incoming call as a CallStyle notification: the caller's face
@@ -72,14 +77,11 @@ object CallNotification {
      * own notification is still on screen, which is the point.
      */
     private fun styleIncoming(context: Context, call: MethodCall): Boolean {
-        // CallStyle needs API 31 to render as the real call UI. Below that
-        // NotificationCompat falls back to an ordinary notification whose
-        // actions are plain text - no worse than the plugin's, but no better
-        // either, so it is not worth replacing a working one.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            lastStatus = "skipped: android ${Build.VERSION.SDK_INT} < 31"
-            return false
-        }
+        // WARNING: no API gate any more. This used CallStyle, which needs
+        // 31 and whose button colours an OEM shade may ignore - ColorOS
+        // does. RemoteViews are inflated by the system rather than
+        // substituted, so the buttons are ours, and they have worked since
+        // long before 31.
 
         val name = call.argument<String>("name")
         val callId = call.argument<String>("callId")
@@ -109,35 +111,48 @@ object CallNotification {
             // exactly what Android draws when a Person has no icon - which
             // is indistinguishable from bytes that failed to decode.
             val bitmap = avatar?.let { decode(it) }
-            val person = Person.Builder()
-                .setName(name)
-                // createWithBitmap, not createWithAdaptiveBitmap: adaptive
-                // insets and masks a face until it is a sliver of cheek.
-                .setIcon(bitmap?.let { IconCompat.createWithBitmap(it) })
-                .setImportant(true)
-                .build()
-
-            val style = NotificationCompat.CallStyle.forIncomingCall(
-                person,
-                pendingIntent(context, callId, ACTION_DECLINE),
+            val views = RemoteViews(context.packageName, R.layout.call_notification)
+            views.setTextViewText(R.id.call_name, name)
+            views.setTextViewText(
+                R.id.call_subtitle,
+                call.argument<String>("subtitle") ?: "Incoming call",
+            )
+            if (bitmap != null) {
+                views.setImageViewBitmap(R.id.call_avatar, circle(bitmap))
+            } else {
+                views.setImageViewResource(R.id.call_avatar, R.mipmap.ic_launcher)
+            }
+            // The colours are baked into the two pill drawables; these only
+            // have to agree with them. Set anyway so a future change in Dart
+            // is not silently ignored by a drawable nobody remembered.
+            views.setInt(R.id.call_answer, "setBackgroundColor", answerColor)
+            views.setInt(R.id.call_decline, "setBackgroundColor", declineColor)
+            views.setOnClickPendingIntent(
+                R.id.call_answer,
                 pendingIntent(context, callId, ACTION_ANSWER),
             )
-                .setAnswerButtonColorHint(answerColor)
-                .setDeclineButtonColorHint(declineColor)
+            views.setOnClickPendingIntent(
+                R.id.call_decline,
+                pendingIntent(context, callId, ACTION_DECLINE),
+            )
 
             val notification = NotificationCompat.Builder(context, channelId)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setStyle(style)
-                // WARNING: CallStyle refuses to render without this, silently
-                // falling back to a plain notification.
+                // WARNING: custom views instead of CallStyle. CallStyle's
+                // button colours are hints and ColorOS ignores them, drawing
+                // plain green text actions whatever they are set to. The
+                // system inflates these views rather than substituting its
+                // own, which is the only way the buttons are actually ours.
+                .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+                .setCustomContentView(views)
+                .setCustomBigContentView(views)
+                .setCustomHeadsUpContentView(views)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 // Not swipeable. A ringing call you can flick away is a call
                 // you never knew about.
                 .setOngoing(true)
                 .setAutoCancel(false)
-                // Lets the colours above actually reach the buttons.
-                .setColorized(true)
                 .setFullScreenIntent(
                     pendingIntent(context, callId, ACTION_ANSWER),
                     true,
@@ -197,6 +212,30 @@ object CallNotification {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
+    }
+
+    /**
+     * A round face.
+     *
+     * WARNING: done to the bitmap, not with a clip. RemoteViews cannot round
+     * an ImageView - there is no outline provider across the process
+     * boundary - so a square photo stays square however the layout is
+     * written.
+     */
+    private fun circle(source: Bitmap): Bitmap {
+        val size = minOf(source.width, source.height)
+        val output = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(output)
+        val paint = Paint().apply { isAntiAlias = true }
+        val rect = Rect(0, 0, size, size)
+        val radius = size / 2f
+        canvas.drawCircle(radius, radius, radius, paint)
+        paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+        // Centre-cropped: a portrait squashed into a square is a wide face.
+        val left = (source.width - size) / 2
+        val top = (source.height - size) / 2
+        canvas.drawBitmap(source, Rect(left, top, left + size, top + size), rect, paint)
+        return output
     }
 
     private fun decode(bytes: ByteArray): Bitmap? = try {
