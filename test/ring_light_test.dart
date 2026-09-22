@@ -39,7 +39,7 @@ void main() {
     // ⚠️ Pinned as a number because "edges only" is the whole feature. A
     // reach past half the short side would meet in the middle and become a
     // white overlay over the person you called.
-    const light = RingLight(thickness: 64);
+    const light = RingLight(thickness: 32);
     await tester.pumpWidget(const MaterialApp(
       home: Stack(children: [Positioned.fill(child: light)]),
     ));

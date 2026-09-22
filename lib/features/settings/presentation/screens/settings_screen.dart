@@ -29,6 +29,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/services/legal_links.dart';
+import '../../../calls/data/native_calls.dart';
 import '../../../../core/theme/app_colors.dart';
 import 'settings_sections.dart';
 import '../../../../core/models/user_profile.dart';
@@ -263,6 +264,8 @@ class SettingsScreen extends ConsumerWidget {
             SettingsCard(
               children: [
                 const _VersionRow(),
+                const SettingsLine(),
+                const _CallNotificationRow(),
                 if (UpdateRepository.supported) ...[
                   const SettingsLine(),
                   const _CheckForUpdatesRow(),
@@ -556,6 +559,38 @@ class _ProfileHeader extends StatelessWidget {
 /// The build actually installed, not a constant in the source. Once the
 /// build number is what decides whether an update exists, showing anything
 /// else here would be showing a number that can lie.
+/// What the last incoming call notification actually did.
+///
+/// ⚠️ Diagnostics, deliberately in plain sight. The native half that draws
+/// the caller's face and the coloured buttons fails silently on purpose —
+/// its fallback is the plain notification, which still rings — so a phone
+/// whose OEM or permissions refuse it looks identical to one where the
+/// feature was never written. It hid a real bug for a whole release.
+class _CallNotificationRow extends StatefulWidget {
+  const _CallNotificationRow();
+
+  @override
+  State<_CallNotificationRow> createState() => _CallNotificationRowState();
+}
+
+class _CallNotificationRowState extends State<_CallNotificationRow> {
+  String _status = '…';
+
+  @override
+  void initState() {
+    super.initState();
+    NativeCalls.callStyleStatus()
+        .then((s) => mounted ? setState(() => _status = s) : null);
+  }
+
+  @override
+  Widget build(BuildContext context) => SettingsRow(
+        title: 'Call notification',
+        subtitle: _status,
+        chevron: false,
+      );
+}
+
 class _VersionRow extends ConsumerWidget {
   const _VersionRow();
 

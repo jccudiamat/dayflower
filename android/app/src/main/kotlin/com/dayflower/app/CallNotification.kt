@@ -1,6 +1,7 @@
 package com.dayflower.app
 
 import android.app.Notification
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -45,9 +46,23 @@ object CallNotification {
     const val ACTION_ANSWER = "answer"
     const val ACTION_DECLINE = "decline"
 
+    /**
+     * Why the last attempt did or did not replace the notification.
+     *
+     * WARNING: every failure path here is silent by design - the fallback is
+     * "leave Dart's working notification alone" - which already hid a real
+     * bug once, where an ARGB colour arrived as a Long and the whole feature
+     * did nothing on every call while looking exactly like it had not been
+     * built. This is how that gets noticed next time.
+     */
+    @Volatile
+    var lastStatus: String = "not attempted"
+        private set
+
     fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "styleIncoming" -> result.success(styleIncoming(context, call))
+            "callStyleStatus" -> result.success(lastStatus)
             else -> result.notImplemented()
         }
     }
@@ -61,11 +76,18 @@ object CallNotification {
         // NotificationCompat falls back to an ordinary notification whose
         // actions are plain text - no worse than the plugin's, but no better
         // either, so it is not worth replacing a working one.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            lastStatus = "skipped: android ${Build.VERSION.SDK_INT} < 31"
+            return false
+        }
 
-        val name = call.argument<String>("name") ?: return false
-        val callId = call.argument<String>("callId") ?: return false
-        val channelId = call.argument<String>("channelId") ?: return false
+        val name = call.argument<String>("name")
+        val callId = call.argument<String>("callId")
+        val channelId = call.argument<String>("channelId")
+        if (name == null || callId == null || channelId == null) {
+            lastStatus = "bad args: name/callId/channelId"
+            return false
+        }
         val avatar = call.argument<ByteArray>("avatar")
         // WARNING: Number, not Int. An ARGB colour with full alpha is above
         // 2^31 - 0xFF906FE8 is 4,287,655,912 - so Dart sends it as a 64-bit
@@ -74,9 +96,11 @@ object CallNotification {
         // replaced: the whole feature shipped doing nothing, silently,
         // because the failure path is "leave Dart's notification alone".
         val answerColor = call.argument<Number>("answerColor")?.toInt()
-            ?: return false
         val declineColor = call.argument<Number>("declineColor")?.toInt()
-            ?: return false
+        if (answerColor == null || declineColor == null) {
+            lastStatus = "bad args: colours"
+            return false
+        }
 
         return try {
             val person = Person.Builder()
@@ -115,10 +139,29 @@ object CallNotification {
 
             NotificationManagerCompat.from(context)
                 .notify(NOTIFICATION_ID, notification)
+            // WARNING: posting is not the same as rendering. CallStyle needs
+            // a full-screen intent or a foreground service to be shown as a
+            // call, and on Android 14 the full-screen permission is not
+            // granted to an app that is not a dialler unless the user turns
+            // it on. Reported so that "posted but looks ordinary" is
+            // distinguishable from "never posted".
+            val fsi = if (Build.VERSION.SDK_INT >= 34) {
+                context.getSystemService(NotificationManager::class.java)
+                    ?.canUseFullScreenIntent() ?: false
+            } else {
+                true
+            }
+            lastStatus = if (fsi) {
+                "posted, avatar=${avatar != null}"
+            } else {
+                "posted WITHOUT full-screen permission, avatar=${avatar != null}"
+            }
             true
         } catch (e: Throwable) {
             // Missing POST_NOTIFICATIONS, a channel that does not exist, a
-            // ByteArray that is not an image. Dart's notification stays.
+            // ByteArray that is not an image, CallStyle missing from an old
+            // androidx.core. Dart's notification stays.
+            lastStatus = "failed: ${e.javaClass.simpleName}: ${e.message}"
             false
         }
     }

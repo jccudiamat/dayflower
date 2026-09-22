@@ -109,6 +109,15 @@ class CallAlerts {
               importance: Importance.defaultImportance,
             ),
           );
+      // ⚠️ The channel this replaced, still sitting in the phone's settings
+      // as a second "Incoming calls" with its own switches. Android keeps a
+      // channel until the app is uninstalled, so bumping _v left the old one
+      // behind — two identical-looking entries, one of them dead and one of
+      // them the one that matters.
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.deleteNotificationChannel(channelId: 'incoming_calls');
       _initialised = true;
     } catch (e) {
       debugPrint('call alerts init failed: $e');

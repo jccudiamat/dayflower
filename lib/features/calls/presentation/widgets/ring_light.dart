@@ -17,12 +17,15 @@ import 'package:flutter/material.dart';
 class RingLight extends StatelessWidget {
   const RingLight({
     super.key,
-    this.thickness = 64,
+    this.thickness = 32,
     this.cornerRadius = 44,
     this.intensity = 1,
   });
 
   /// How far the light reaches inward before it is gone.
+  ///
+  /// ⚠️ 32, halved from 64. At 64 it was a lit border rather than a rim —
+  /// it ate the corners of the video and the controls sat inside a glow.
   final double thickness;
 
   /// Rounded to sit inside the display's own curve.

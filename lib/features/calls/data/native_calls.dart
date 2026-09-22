@@ -17,6 +17,14 @@ class NativeCalls {
     }
   }
 
+  /// Why the last incoming call notification did or did not get restyled.
+  ///
+  /// ⚠️ Worth surfacing because every failure in that path is silent: the
+  /// fallback is "leave the working notification alone", which once hid the
+  /// whole feature doing nothing on every call.
+  static Future<String> callStyleStatus() async =>
+      await invoke<String>('callStyleStatus') ?? 'unavailable';
+
   /// Answer or Decline, tapped on the notification's own buttons.
   ///
   /// 🔴 CallStyle draws its own buttons, so their taps arrive as Activity
