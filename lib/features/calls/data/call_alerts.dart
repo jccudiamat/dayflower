@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../app_router.dart';
 import '../../../core/services/app_notifications.dart';
@@ -61,7 +62,46 @@ class CallAlerts {
 
   /// The call currently being rung for, so a re-emitted row does not raise
   /// the same call twice and a *different* call still gets through.
+  ///
+  /// 🔴 **Mirrored to disk, because there are two isolates.** The realtime
+  /// socket rings from the app's isolate and FCM rings from the background
+  /// one, and a static is per-isolate: each saw a null here and each rang.
+  /// One call arrived as two notifications — the push one plain and
+  /// avatarless, because that isolate has no Activity and so cannot reach
+  /// the native restyling either.
   static String? _ringingId;
+
+  static const _claimKey = 'ringing_call_id';
+  static const _claimAtKey = 'ringing_call_at';
+
+  /// True if this isolate is the one that gets to ring [callId].
+  ///
+  /// ⚠️ reload() first: SharedPreferences caches per isolate, so without it
+  /// the background isolate reads the value it had at startup, which is the
+  /// whole bug again with extra steps.
+  ///
+  /// ⚠️ Claims expire. A crash mid-ring would otherwise silence the next
+  /// call from the same person forever; the window matches the 60s the
+  /// notification itself times out after.
+  static Future<bool> _claim(String callId) async {
+    if (_ringingId == callId) return false;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.reload();
+      final held = prefs.getString(_claimKey);
+      final at = prefs.getInt(_claimAtKey) ?? 0;
+      final age = DateTime.now().millisecondsSinceEpoch - at;
+      if (held == callId && age < 70000) return false;
+      await prefs.setString(_claimKey, callId);
+      await prefs.setInt(
+          _claimAtKey, DateTime.now().millisecondsSinceEpoch);
+    } catch (e) {
+      // No preferences is not a reason to drop a call — ring, and accept
+      // that it may be the second notification.
+      debugPrint('ring claim failed: $e');
+    }
+    return true;
+  }
 
   /// ⚠️ Test seams. [settle] decides "missed" from [_ringingId] alone, and
   /// that decision is worth pinning: reporting a missed call for one the
@@ -144,10 +184,8 @@ class CallAlerts {
   }) async {
     if (!supported) return;
 
-    // On screen already: the call screen is showing, with the same two
-    // buttons and their faces on it. A notification over that would be the
-    // app telling you about something you are looking at.
-    if (_ringingId == callId) return;
+    // On screen already, or the other isolate got there first.
+    if (!await _claim(callId)) return;
     _ringingId = callId;
 
     await init();
@@ -238,6 +276,15 @@ class CallAlerts {
   /// ringing here forever.
   static Future<void> stop() async {
     _ringingId = null;
+    // ⚠️ Released for the other isolate too, or the next call from the same
+    // person inside the claim window would be swallowed.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_claimKey);
+      await prefs.remove(_claimAtKey);
+    } catch (e) {
+      debugPrint('ring claim release failed: $e');
+    }
     if (!supported) return;
     try {
       await _plugin.cancel(id: _notificationId);

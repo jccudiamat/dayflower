@@ -9,6 +9,7 @@ import '../../../core/services/app_notifications.dart';
 import '../../../core/services/partner_alerts.dart';
 import '../../../core/services/pulse_alerts.dart';
 import '../../calls/data/call_alerts.dart';
+import '../../calls/data/caller_avatar.dart';
 import '../domain/push_message.dart';
 import 'push_repository.dart';
 
@@ -143,14 +144,17 @@ class PushService {
     }
 
     if (!push.isActionableCall) return;
-    CallAlerts.ring(
-      callId: push.messageId!,
-      callerName: push.title,
-      isVideo: push.isVideoCall,
-      // Foreground, but a call still has to ring — the whole point is that
-      // it expires if it is not seen while it is happening.
-      foreground: false,
-    );
+    // ⚠️ Awaited now, for the face. The claim inside ring() is what stops
+    // this and the realtime socket both raising the same call.
+    unawaited(CallerAvatar.cached().then((avatar) => CallAlerts.ring(
+          callId: push.messageId!,
+          callerName: push.title,
+          isVideo: push.isVideoCall,
+          // Foreground, but a call still has to ring — the whole point is
+          // that it expires if it is not seen while it is happening.
+          foreground: false,
+          callerAvatar: avatar,
+        )));
   }
 
   /// A notification the user tapped.
@@ -207,6 +211,10 @@ Future<void> pushBackgroundHandler(RemoteMessage remote) async {
         callerName: push.title,
         isVideo: push.isVideoCall,
         foreground: false,
+        // ⚠️ Read from disk, which works here. This isolate has no Activity,
+        // so it cannot reach the native restyling and its notification stays
+        // the plain one — but it can still show a face rather than a letter.
+        callerAvatar: await CallerAvatar.cached(),
       );
       return;
     }
