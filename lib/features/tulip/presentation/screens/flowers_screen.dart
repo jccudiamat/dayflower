@@ -16,6 +16,7 @@ import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../presence/data/presence_repository.dart';
 import '../../../presence/domain/presence.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
@@ -48,6 +49,10 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   bool _panelOpen = false;
   bool _sending = false;
   bool _marking = false;
+
+  /// A picked photo is uploading. The icon greys and stops taking taps —
+  /// the picker takes long enough to return that a second press is easy.
+  bool _attaching = false;
 
   /// The message being replied to, held while the reply is typed.
   ///
@@ -438,13 +443,20 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                             onChanged: (_) => setState(() {}),
                           ),
                         ),
-                        // The paperclip is gone. It never did anything, and
-                        // the camera screen it would have duplicated already
-                        // has a gallery picker of its own — two doors to one
-                        // room, one of them locked.
+                        // ⚠️ Two doors, and they now lead to different
+                        // rooms. The paperclip was removed when it only
+                        // duplicated the camera screen's own gallery
+                        // picker; this one skips that screen entirely and
+                        // sends what you pick.
+                        _ComposerIcon(
+                          icon: CupertinoIcons.photo,
+                          tooltip: 'Attach a photo',
+                          onTap: _attaching ? () {} : _attachPhoto,
+                          color: _attaching ? AppColors.muted : null,
+                        ),
                         _ComposerIcon(
                           icon: CupertinoIcons.camera,
-                          tooltip: 'Send a photo',
+                          tooltip: 'Take a photo',
                           onTap: _openCamera,
                         ),
                         const SizedBox(width: 4),
@@ -501,6 +513,54 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     _focus.unfocus();
     ref.read(dayPhotoTargetProvider.notifier).state = DayPhotoTarget.chat;
     context.push(Routes.flowers);
+  }
+
+  /// Straight from the gallery into the conversation.
+  ///
+  /// 🔴 **Chat only.** A photo attached to a message is a message, not a
+  /// day on their home screen — see DayPhotoTarget, which lost its "Both"
+  /// for the same reason. The camera screen still offers My Day; this does
+  /// not, because nobody attaching a picture mid-sentence means to park it
+  /// on somebody's home screen for a day.
+  ///
+  /// ⚠️ Sent on pick, with no review step. The camera screen deliberately
+  /// holds a picked photo for confirmation, on the grounds that picking the
+  /// wrong thumbnail is as easy as mis-tapping the shutter — that reasoning
+  /// still stands, and this is the deliberate exception: the point of the
+  /// button is to be quicker than the screen that reviews.
+  Future<void> _attachPhoto() async {
+    if (_attaching) return;
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    final userId = ref.read(currentUserIdProvider);
+    if (pair == null || userId == null) return;
+
+    _focus.unfocus();
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        // ⚠️ The same ceiling the camera uses. This is the only copy that
+        // will exist, and a 12MP original helps nobody read a message.
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 82,
+      );
+      if (file == null || !mounted) return;
+      setState(() => _attaching = true);
+      final bytes = await file.readAsBytes();
+      final sent = await ref.read(flowerRepositoryProvider).sendDayPhotoTo(
+            pairId: pair.id,
+            senderId: userId,
+            bytes: bytes,
+            fileExtension:
+                file.path.split('.').last.toLowerCase() == 'png' ? 'png' : 'jpg',
+            target: DayPhotoTarget.chat,
+          );
+      if (mounted) setState(() => _pending.add(sent));
+    } catch (_) {
+      if (mounted) _showError("Couldn't send that photo. Try again?");
+    } finally {
+      if (mounted) setState(() => _attaching = false);
+    }
   }
 
   /// Starts a call, or joins the one already running.

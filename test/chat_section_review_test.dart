@@ -105,7 +105,11 @@ void main() {
       expect(find.byType(AppBottomNav), findsNothing);
       expect(find.byTooltip('Voice call'), findsOneWidget);
       expect(find.byTooltip('Video call'), findsOneWidget);
-      expect(find.byTooltip('Send a photo'), findsOneWidget);
+      // ⚠️ Two ways to send a picture, and they are different: the
+      // camera opens the shooting screen, the other picks from the
+      // gallery and sends it straight into the conversation.
+      expect(find.byTooltip('Take a photo'), findsOneWidget);
+      expect(find.byTooltip('Attach a photo'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
       if (const bool.fromEnvironment('CAPTURE_REVIEW')) {
         await tester.runAsync(() async {
