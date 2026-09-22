@@ -249,6 +249,12 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
           DayPhotoTarget.myDay => 'On their home screen for 24 hours 🌼',
           DayPhotoTarget.chat => 'Sent to the conversation 💬',
         });
+        // 🔴 Straight back where the camera was opened from. Sending used to
+        // leave you on a live viewfinder with a toast over it, so the only
+        // way to see what you had just sent was to find your own way back —
+        // and the obvious reading of a still camera is that nothing was
+        // sent at all.
+        if (Navigator.of(context).canPop()) Navigator.of(context).pop();
       }
     } catch (_) {
       // A Storage 404 here almost always means migration 0013 has not run.
@@ -581,12 +587,12 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                         },
                         style: AppText.title(Colors.white),
                       ),
+                      // 🔴 The destination pill is gone. Where a photo
+                      // goes is decided by where the camera was opened
+                      // from — the thread, or My Day — and asking again
+                      // here only offered a way to contradict that. The
+                      // title beside it already says which one this is.
                       const Spacer(),
-                      _TargetPill(
-                        target: ref.watch(dayPhotoTargetProvider),
-                        onChanged: (t) =>
-                            ref.read(dayPhotoTargetProvider.notifier).state = t,
-                      ),
                     ],
                   ),
                 ),
@@ -1600,71 +1606,6 @@ class _TemplateDot extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Where the next photo goes, as a pill in the spot TikTok gives "Add
-/// sound".
-///
-/// A dropdown rather than a sheet after the shutter: the choice is nearly
-/// always the same one, and a confirmation on every send taxes the common
-/// case. Having it visible while framing also means the answer is decided
-/// before the moment you are trying to catch has passed.
-class _TargetPill extends StatelessWidget {
-  const _TargetPill({required this.target, required this.onChanged});
-
-  final DayPhotoTarget target;
-  final ValueChanged<DayPhotoTarget> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return PopupMenuButton<DayPhotoTarget>(
-      initialValue: target,
-      onSelected: onChanged,
-      tooltip: 'Where it goes',
-      color: AppColors.darkSurface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.md),
-      ),
-      itemBuilder: (context) => [
-        for (final t in DayPhotoTarget.values)
-          PopupMenuItem(
-            value: t,
-            height: 42,
-            child: Row(
-              children: [
-                Text(t.emoji, style: const TextStyle(fontSize: 15)),
-                const SizedBox(width: AppSpace.xs),
-                Text(t.label, style: AppText.body(AppColors.onDark)),
-                if (t == target) ...[
-                  const SizedBox(width: AppSpace.xs),
-                  const AppIcon(CupertinoIcons.checkmark_alt,
-                      size: 14, color: AppColors.brandLight),
-                ],
-              ],
-            ),
-          ),
-      ],
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: .42),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: Colors.white.withValues(alpha: .22)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(target.emoji, style: const TextStyle(fontSize: 13)),
-            const SizedBox(width: 6),
-            Text(target.label, style: AppText.caption(Colors.white)),
-            const SizedBox(width: 3),
-            const AppIcon(CupertinoIcons.chevron_down,
-                size: 11, color: Colors.white),
-          ],
         ),
       ),
     );

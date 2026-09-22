@@ -1,5 +1,3 @@
-import 'package:dayflower/core/widgets/app_icon.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
@@ -271,7 +269,6 @@ class _FlowerSendSheetState extends State<_FlowerSendSheet> {
   /// threw the first away. Sending a flower is a message; putting one on
   /// somebody's home screen for a day is a second, deliberate act, and the
   /// toggle is still right there for it.
-  bool _toWidget = false;
 
   @override
   void dispose() {
@@ -343,61 +340,18 @@ class _FlowerSendSheetState extends State<_FlowerSendSheet> {
                 ),
               ),
               const SizedBox(height: AppSpace.xs),
-              // The one thing that makes this different from a chat sticker:
-              // it can take over their home screen.
-              GestureDetector(
-                onTap: () => setState(() => _toWidget = !_toWidget),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpace.sm,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color:
-                        _toWidget ? AppColors.blush : AppColors.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(AppRadius.sm),
-                  ),
-                  child: Row(
-                    children: [
-                      AppIcon(
-                        CupertinoIcons.device_phone_portrait,
-                        size: 20,
-                        color: _toWidget ? AppColors.brand : AppColors.muted,
-                      ),
-                      const SizedBox(width: AppSpace.xs),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'Put it on their home screen',
-                              style: AppText.caption(AppColors.ink)
-                                  .copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              _toWidget
-                                  ? "Replaces what's on ${widget.partnerName}'s widget now"
-                                  : 'Stays in the conversation only',
-                              style: AppText.caption(),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Switch(
-                        value: _toWidget,
-                        onChanged: (v) => setState(() => _toWidget = v),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              // 🔴 The choice is gone: a flower always goes to all three
+              // places — the conversation, My Day, and the home screen
+              // widget. A flower is the one thing here whose point is to
+              // be seen without opening the app, and this toggle defaulted
+              // to off, so most of them never reached the home screen they
+              // were made for.
               const SizedBox(height: AppSpace.sm),
               GradientButton(
                 label: 'Send ${widget.flower.name}',
                 onPressed: () => Navigator.of(context).pop(
-                  (note: _note.text, toWidget: _toWidget),
+                  // ⚠️ Always true. See the note where the toggle used to be.
+                  (note: _note.text, toWidget: true),
                 ),
               ),
               const SizedBox(height: AppSpace.xs),

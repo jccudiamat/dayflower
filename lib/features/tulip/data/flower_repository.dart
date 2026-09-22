@@ -97,6 +97,22 @@ class FlowerMessage {
   /// A "Share your day" photo.
   bool get isPhoto => imagePath != null;
 
+  /// A card made in the card maker, rather than a picture of a day.
+  ///
+  /// ⚠️ Told apart by the filename prefix [PhotoOrigin] writes, because
+  /// nothing in the row says which it is. A card is chat-only and carries
+  /// its message in `note`, so it is the one chat photo whose text must
+  /// still be shown — see the bubble, where every other chat photo now
+  /// renders bare.
+  bool get isCard =>
+      isPhoto && imagePath!.split('/').last.startsWith('card-');
+
+  /// A photo strip from the booth, by the same means.
+  bool get isStrip =>
+      isPhoto &&
+      (imagePath!.split('/').last.startsWith('strip-') ||
+          imagePath!.split('/').last.startsWith('booth-'));
+
   /// A text-only message — no flower, no photo, no call.
   ///
   /// ⚠️ The call clause is load-bearing: a call row carries none of the

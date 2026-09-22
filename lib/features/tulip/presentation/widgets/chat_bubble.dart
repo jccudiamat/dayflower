@@ -281,19 +281,37 @@ class ChatBubble extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  expired
-                      ? 'Your day · expired'
-                      : 'Your day · on the home screen',
-                  style: AppText.label(
-                      expired ? AppColors.muted : AppColors.secondary),
-                ),
-                if (message.note != null && message.note!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text('“${message.note}”',
-                      style: AppText.note().copyWith(fontSize: 14.5)),
+                // 🔴 A picture sent to the conversation is just a picture.
+                // This footer said "Your day · on the home screen" under
+                // every photo in the thread, including ones that had
+                // deliberately not been sent there — a caption describing
+                // somewhere the photo never went.
+                if (message.toWidget) ...[
+                  Text(
+                    expired
+                        ? 'Your day · expired'
+                        : 'Your day · on the home screen',
+                    style: AppText.label(
+                        expired ? AppColors.muted : AppColors.secondary),
+                  ),
+                  if (message.note != null && message.note!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text('“${message.note}”',
+                        style: AppText.note().copyWith(fontSize: 14.5)),
+                  ],
+                  const SizedBox(height: 2),
+                ]
+                // ⚠️ Except a card, which is chat-only by design and whose
+                // whole message lives in that note. Its first line is the
+                // occasion written by the card maker, so only the rest is
+                // the person talking.
+                else if (message.isCard && (message.note ?? '').isNotEmpty) ...[
+                  Text(
+                    message.note!.split('\n').skip(1).join('\n').trim(),
+                    style: AppText.note().copyWith(fontSize: 14.5),
+                  ),
+                  const SizedBox(height: 2),
                 ],
-                const SizedBox(height: 2),
                 _MetaRow(message: message, isMine: isMine, time: _time),
               ],
             ),
