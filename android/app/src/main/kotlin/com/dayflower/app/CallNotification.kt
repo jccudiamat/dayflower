@@ -143,7 +143,12 @@ object CallNotification {
                 // plain green text actions whatever they are set to. The
                 // system inflates these views rather than substituting its
                 // own, which is the only way the buttons are actually ours.
-                .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+                // WARNING: bare custom views, no DecoratedCustomViewStyle.
+                // The decorated style wraps our layout in the platform's own
+                // chrome and falls back to the standard template if anything
+                // about the custom view displeases it - which is
+                // indistinguishable, from the outside, from our layout never
+                // being used. Bare is the literal "draw this".
                 .setCustomContentView(views)
                 .setCustomBigContentView(views)
                 .setCustomHeadsUpContentView(views)
@@ -160,6 +165,17 @@ object CallNotification {
                 .build()
                 .apply { flags = flags or Notification.FLAG_INSISTENT }
 
+            val manager = context.getSystemService(NotificationManager::class.java)
+            // WARNING: the plugin's notification is cancelled by hand first.
+            // Posting the same id is supposed to replace it, and that
+            // assumes the plugin posts without a tag. If it does not, its
+            // notification is a different one that ours never replaced -
+            // which would look exactly like ours never being drawn.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                manager?.activeNotifications
+                    ?.filter { it.id == NOTIFICATION_ID }
+                    ?.forEach { manager.cancel(it.tag, it.id) }
+            }
             NotificationManagerCompat.from(context)
                 .notify(NOTIFICATION_ID, notification)
             // WARNING: posting is not the same as rendering. CallStyle needs
@@ -179,8 +195,19 @@ object CallNotification {
                 bitmap == null -> "avatar sent but would not decode"
                 else -> "avatar ${bitmap.width}x${bitmap.height}"
             }
-            lastStatus = if (fsi) "posted, $face"
-            else "posted, no full-screen permission, $face"
+            // What is actually in the shade, rather than what we asked for.
+            val live = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                manager?.activeNotifications
+                    ?.joinToString(",") { "${it.id}${it.tag?.let { t -> "/$t" } ?: ""}" }
+                    ?: "?"
+            } else {
+                "?"
+            }
+            lastStatus = buildString {
+                append(if (fsi) "posted" else "posted, no full-screen permission")
+                append(", ").append(face)
+                append(", custom views, shade=[").append(live).append("]")
+            }
             true
         } catch (e: Throwable) {
             // Missing POST_NOTIFICATIONS, a channel that does not exist, a

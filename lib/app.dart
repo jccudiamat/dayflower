@@ -94,7 +94,6 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     _wireAlarmTaps();
     _wireNotificationRoutes();
     _wireNativeCallButtons();
-    _rememberCallerFace();
     // ref.listen only fires on change, so seed the widget with whatever is
     // already pinned once the first frame has settled.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -396,6 +395,8 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // on Home/recents. `onUserLeaveHint` fires on every exit from the app,
     // so without this leaving the home screen would float a call that is
     // not happening. Only Dart knows one is live.
+    _rememberCallerFace();
+
     ref.listen<CallSession?>(callNotifierProvider, (_, session) {
       CallPip.setCallActive(
         session != null && !session.status.isTerminal,
@@ -628,6 +629,11 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   Future<Uint8List?> _partnerAvatar() => CallerAvatar.cached();
 
   /// Keeps the caller's face on disk, so the next ring already has it.
+  ///
+  /// 🔴 **Called from build, and it has to be.** ref.listen is only legal
+  /// during a build; from initState it does nothing useful, which is exactly
+  /// what it did — the cache was never written and the first ring still had
+  /// no photo, reported as "no avatar sent".
   ///
   /// ⚠️ Watches rather than reads: the profile arrives after the first
   /// frame, and on a cold start it arrives after the call row does.
