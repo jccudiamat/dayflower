@@ -103,9 +103,17 @@ object CallNotification {
         }
 
         return try {
+            // WARNING: decoded up front so the status can say whether the
+            // face actually became a bitmap. "avatar=true" only ever meant
+            // "bytes arrived", and a green circle with a letter in it is
+            // exactly what Android draws when a Person has no icon - which
+            // is indistinguishable from bytes that failed to decode.
+            val bitmap = avatar?.let { decode(it) }
             val person = Person.Builder()
                 .setName(name)
-                .setIcon(avatar?.let { bitmapIcon(it) })
+                // createWithBitmap, not createWithAdaptiveBitmap: adaptive
+                // insets and masks a face until it is a sliver of cheek.
+                .setIcon(bitmap?.let { IconCompat.createWithBitmap(it) })
                 .setImportant(true)
                 .build()
 
@@ -151,11 +159,13 @@ object CallNotification {
             } else {
                 true
             }
-            lastStatus = if (fsi) {
-                "posted, avatar=${avatar != null}"
-            } else {
-                "posted WITHOUT full-screen permission, avatar=${avatar != null}"
+            val face = when {
+                avatar == null -> "no avatar sent"
+                bitmap == null -> "avatar sent but would not decode"
+                else -> "avatar ${bitmap.width}x${bitmap.height}"
             }
+            lastStatus = if (fsi) "posted, $face"
+            else "posted, no full-screen permission, $face"
             true
         } catch (e: Throwable) {
             // Missing POST_NOTIFICATIONS, a channel that does not exist, a
@@ -189,10 +199,8 @@ object CallNotification {
         )
     }
 
-    /** A round icon, which is how CallStyle draws a face. */
-    private fun bitmapIcon(bytes: ByteArray): IconCompat? = try {
-        val bitmap: Bitmap? = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        bitmap?.let { IconCompat.createWithAdaptiveBitmap(it) }
+    private fun decode(bytes: ByteArray): Bitmap? = try {
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
     } catch (e: Throwable) {
         null
     }
