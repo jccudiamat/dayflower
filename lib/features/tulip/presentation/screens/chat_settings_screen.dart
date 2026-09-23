@@ -11,7 +11,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 import '../../../../core/widgets/progress_ring.dart';
-import '../../../../core/widgets/user_avatar.dart';
 import '../../../calls/data/call_usage.dart';
 import '../../../calls/domain/call.dart';
 import '../../../onboarding/data/user_repository.dart';
@@ -20,6 +19,7 @@ import '../../data/reaction_choices.dart';
 import '../widgets/media_viewer.dart';
 import '../widgets/share_your_day.dart';
 import '../../../../core/widgets/storage_image.dart';
+import '../../../../core/widgets/profile_photo.dart';
 
 /// What sits behind the two of you: how much calling is left this month, and
 /// everything either of you has sent.
@@ -48,7 +48,7 @@ class ChatSettingsScreen extends ConsumerWidget {
       body: ListView(
         padding: AppSpace.screen,
         children: [
-          _PartnerCard(partner: partner, name: name),
+          _PartnerHeader(partner: partner, name: name),
           const SizedBox(height: AppSpace.md),
           const _CallUsage(),
           const SizedBox(height: AppSpace.md),
@@ -89,35 +89,35 @@ class SharedPhotosScreen extends ConsumerWidget {
 }
 
 /* ── Who this conversation is with ──────────────────── */
-class _PartnerCard extends StatelessWidget {
-  const _PartnerCard({required this.partner, required this.name});
+/// Their face, large and centred, with their name under it - the way
+/// WhatsApp opens a contact. No card around it: the person is the page's
+/// heading, not one more panel among the settings below.
+class _PartnerHeader extends StatelessWidget {
+  const _PartnerHeader({required this.partner, required this.name});
 
   final UserProfile? partner;
   final String name;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(AppSpace.sm),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-      ),
-      child: Row(
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.xs, bottom: AppSpace.xs),
+      child: Column(
         children: [
-          UserAvatar(partner, size: 54),
-          const SizedBox(width: AppSpace.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(name, style: AppText.hero()),
-                Text('Just the two of you', style: AppText.caption()),
-              ],
-            ),
+          // Pressed, it opens the picture itself.
+          ProfilePhotoButton(profile: partner, name: name, size: 116),
+          const SizedBox(height: AppSpace.sm),
+          Text(
+            name,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.display(),
           ),
+          const SizedBox(height: AppSpace.xxs),
+          Text('Just the two of you',
+              textAlign: TextAlign.center,
+              style: AppText.body(AppColors.muted)),
         ],
       ),
     );

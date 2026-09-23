@@ -63,7 +63,7 @@ class _ChaptersScreenState extends ConsumerState<ChaptersScreen> {
                   const Expanded(
                     child: FeatureScreenHeader(
                       title: 'Journal',
-                      subtitle: 'Twelve months, twelve stories',
+                      subtitle: 'Twelve months, endless stories',
                     ),
                   ),
                 ],

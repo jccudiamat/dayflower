@@ -8,7 +8,6 @@ import '../../../../app_router.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/user_avatar.dart';
 import '../../../calls/data/call_repository.dart';
 import '../../../calls/domain/call.dart';
 import '../../../calls/domain/call_notifier.dart';
@@ -23,6 +22,7 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
+import '../../../../core/widgets/profile_photo.dart';
 
 /// The Chat tab: the couple's conversation.
 ///
@@ -671,16 +671,17 @@ class _ChatHeader extends ConsumerWidget {
             icon:
                 AppIcon(CupertinoIcons.chevron_back, color: AppColors.muted),
           ),
-          // Their face and their name are one tap target, not two: people
-          // press the person when they want to know about the person, and
-          // splitting it means half the presses land on nothing.
+          // Two targets now, as WhatsApp has them: their face opens their
+          // photo, their name opens chat settings. It used to be one target,
+          // on the grounds that people press the person - but pressing the
+          // picture is how everyone expects to see the picture.
+          ProfilePhotoButton(profile: partner, name: name, size: 40),
+          const SizedBox(width: AppSpace.xs),
           Expanded(
             child: InkWell(
               onTap: () => context.push(Routes.chatSettings),
               borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Row(children: [
-                UserAvatar(partner, size: 40),
-                const SizedBox(width: AppSpace.xs),
                 Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
