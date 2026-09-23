@@ -96,13 +96,13 @@ class HeartbeatWidget : HomeWidgetProvider() {
                 if (mine == "0") {
                     context.getString(R.string.heartbeat_widget_prompt)
                 } else {
-                    "Tapped $mine× today"
+                    "You sent $mine"
                 },
             )
             views.setTextViewText(
                 R.id.beat_partner,
                 if (partner == "0") {
-                    "$partnerName hasn't tapped yet today"
+                    "Nothing from $partnerName yet"
                 } else {
                     "$partnerName sent $partner today"
                 },

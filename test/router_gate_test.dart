@@ -227,4 +227,66 @@ void main() {
       );
     });
   });
+
+  // 🔴 Every notification tapped on a closed app landed on Home: the tap
+  // arrives before the gates are known, go(route) was redirected to the
+  // splash, and the destination was lost. goWhenReady holds it on the gate,
+  // and leaving the splash goes there instead of Home.
+  group('a notification tapped on a closed app', () {
+    String? coldStart(String location, {required bool known, String? held}) =>
+        gateRedirect(
+          location: location,
+          authKnown: known,
+          signedIn: true,
+          profileKnown: known,
+          hasProfile: true,
+          pairKnown: known,
+          isLinked: true,
+          held: held,
+        );
+
+    test('waits on the splash while the gates are still loading', () {
+      expect(coldStart(Routes.chat, known: false, held: Routes.chat),
+          Routes.splash);
+      expect(coldStart(Routes.splash, known: false, held: Routes.chat),
+          isNull);
+    });
+
+    test('then goes where it was tapped, not Home', () {
+      for (final destination in [
+        Routes.chat,
+        Routes.call,
+        Routes.reminders,
+        Routes.alarmFor('r1'),
+        Routes.settings,
+      ]) {
+        expect(coldStart(Routes.splash, known: true, held: destination),
+            destination);
+      }
+    });
+
+    test('with nothing held, Home as before', () {
+      expect(coldStart(Routes.splash, known: true), Routes.home);
+    });
+
+    test('a signed-out phone still goes to Welcome, held or not', () {
+      expect(
+        gateRedirect(
+          location: Routes.splash,
+          authKnown: true,
+          signedIn: false,
+          profileKnown: false,
+          hasProfile: false,
+          pairKnown: false,
+          isLinked: false,
+          held: Routes.chat,
+        ),
+        Routes.welcome,
+      );
+    });
+
+    test('a settled user on a screen is still left alone', () {
+      expect(coldStart(Routes.chat, known: true, held: Routes.chat), isNull);
+    });
+  });
 }

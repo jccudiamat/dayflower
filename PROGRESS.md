@@ -13,6 +13,11 @@
 
 ## Recent app work
 
+### Notification taps land where they point (2026-09-23)
+
+- 🔴 **Every notification tapped on a closed app opened Home.** The tap arrives at startup before auth/profile/pair are known; `go(route)` was redirected to the splash and the destination dropped, then the splash sent everyone Home. It hit messages, photos, missed calls, update notices, reminder alarms (full-screen) and Answer/open on an incoming call. `goWhenReady(ref, route)` (app_router.dart) holds the route on the router gate; `gateRedirect(held:)` takes you there out of the splash instead of Home; the redirect clears it once every gate passes. `_openPendingRoute` and `_openRingingAlarm` use it. Tests: `router_gate_test.dart` group "a notification tapped on a closed app". Warm taps (app open) already worked.
+- Heartbeat widget copy shortened: "Tap to send" / "You sent N"; "Nothing from X yet" / "X sent N today".
+
 ### Photos stop blinking: private images cached by path (2026-09-23)
 
 🔴 Every photo blinked, worst when scrolling back up the chat. Three causes:

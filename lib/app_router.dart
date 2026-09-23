@@ -186,6 +186,7 @@ String? gateRedirect({
   required bool hasProfile,
   required bool pairKnown,
   required bool isLinked,
+  String? held,
 }) {
   // Gate order: auth → onboarding (profile) → pairing → app.
   String gateTarget;
@@ -223,7 +224,9 @@ String? gateRedirect({
     Routes.onboarding,
     Routes.pair,
   };
-  if (gateRoutes.contains(location)) return Routes.home;
+  // 🔴 Out of the gates to where a notification asked, if one did - not
+  // Home. See [goWhenReady].
+  if (gateRoutes.contains(location)) return held ?? Routes.home;
   return null;
 }
 
@@ -242,6 +245,10 @@ class _RouterGate {
   AsyncValue<UserProfile?> profile = const AsyncValue.loading();
   AsyncValue<Pair?> pair = const AsyncValue.loading();
   GoRouter? router;
+
+  /// Where a notification tapped before the gates were known wants to go.
+  /// See [goWhenReady].
+  String? heldRoute;
 
   /// Bumped every time the snapshot changes, purely so [routerGateProvider]
   /// has a value that differs — a provider returning the same thing notifies
@@ -278,6 +285,20 @@ class _RouterGate {
       router?.refresh();
     });
   }
+}
+
+/// Opens [route] now, or the moment the app is past its gates.
+///
+/// 🔴 **Every notification tapped on a closed app landed on Home.** The tap
+/// arrives at startup, before sign-in, profile and pair are known, so
+/// `go(route)` was redirected to the splash - and the destination was simply
+/// gone. When the gates cleared, the splash sent everyone to Home: the
+/// message, the photo, the missed call, a reminder's alarm, Answer on an
+/// incoming call. The route is held on the gate now, and the redirect that
+/// takes you out of the splash takes you there instead of Home.
+void goWhenReady(WidgetRef ref, String route) {
+  ref.read(_gateProvider).heldRoute = route;
+  ref.read(routerProvider).go(route);
 }
 
 final _gateProvider = Provider<_RouterGate>((ref) {
@@ -373,19 +394,36 @@ final routerProvider = Provider<GoRouter>((ref) {
 
   return gate.router = GoRouter(
     initialLocation: Routes.splash,
-    redirect: (context, state) => gateRedirect(
-      location: state.matchedLocation,
+    redirect: (context, state) {
       // Not `!isLoading`: a refreshing provider still knows the answer, and
       // treating it as unknown is what sent this to the splash on every
       // profile edit. Not plain `hasValue` either — see isGateValueUsable
       // for the null that hides in there.
-      authKnown: gate.auth.hasValue,
-      signedIn: gate.auth.valueOrNull?.session != null,
-      profileKnown: isGateValueUsable(gate.profile),
-      hasProfile: gate.profile.valueOrNull != null,
-      pairKnown: isGateValueUsable(gate.pair),
-      isLinked: gate.pair.valueOrNull?.isLinked == true,
-    ),
+      final authKnown = gate.auth.hasValue;
+      final signedIn = gate.auth.valueOrNull?.session != null;
+      final profileKnown = isGateValueUsable(gate.profile);
+      final hasProfile = gate.profile.valueOrNull != null;
+      final pairKnown = isGateValueUsable(gate.pair);
+      final isLinked = gate.pair.valueOrNull?.isLinked == true;
+      final target = gateRedirect(
+        location: state.matchedLocation,
+        authKnown: authKnown,
+        signedIn: signedIn,
+        profileKnown: profileKnown,
+        hasProfile: hasProfile,
+        pairKnown: pairKnown,
+        isLinked: isLinked,
+        held: gate.heldRoute,
+      );
+      // Through every gate: the held destination is either being taken
+      // right now, or was already reached directly. Spent either way - a
+      // later sign-out and back in must not jump to last week's message.
+      if (authKnown && signedIn && profileKnown && hasProfile &&
+          pairKnown && isLinked) {
+        gate.heldRoute = null;
+      }
+      return target;
+    },
     routes: [
       GoRoute(
         path: Routes.splash,

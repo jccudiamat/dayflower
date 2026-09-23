@@ -158,8 +158,9 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // this same notifier firing again on a later rebuild.
     ringingReminderId.value = null;
     // Router gates still apply — an alarm on a signed-out phone lands on
-    // Welcome rather than on a screen with nothing behind it.
-    ref.read(routerProvider).go(Routes.alarmFor(id));
+    // Welcome rather than on a screen with nothing behind it. Held through
+    // them, or an alarm that launched the app lands on Home.
+    goWhenReady(ref, Routes.alarmFor(id));
   }
 
   /// Every notification that is not a reminder alarm: a message, a photo,
@@ -179,8 +180,9 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // notifier firing on a later rebuild — same reasoning as the alarm.
     AppNotifications.pendingRoute.value = null;
     // Router gates still apply: a tap on a signed-out phone lands on
-    // Welcome rather than on a screen with nothing behind it.
-    ref.read(routerProvider).go(route);
+    // Welcome rather than on a screen with nothing behind it. And the
+    // destination is held through them - see goWhenReady.
+    goWhenReady(ref, route);
   }
 
   /// Runs a provider-listener body once the container has settled.
