@@ -112,6 +112,7 @@ flutter:
     - assets/images/
     - assets/images/flowers/
     - assets/images/gifts/
+    - assets/images/together/
     - assets/fonts/tiktok/OFL.txt
     - .env
 

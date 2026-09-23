@@ -13,6 +13,19 @@
 
 ## Recent app work
 
+### Together tab: the bento redesign (2026-09-23)
+
+Rebuilt from `design/together_mockup.png` (main checkout). `ActivitiesScreen` keeps its name, route and bottom bar; everything above the bar is new, one widget file per section under `lib/features/activities/presentation/widgets/together_*.dart`.
+
+- **Layout:** header (bell → notifications, avatar → Us) · hero "What's next for us?" · Events | Gifts · Our Map · Reminders | Our Savings · Play Together. Two-column rows are `TogetherBentoRow`: equal heights via `IntrinsicHeight`, and **stacked** below 300pt of content or at large text. ⚠️ Nothing inside a bento card may use a `LayoutBuilder` — intrinsic sizing cannot ask it, and the row throws. ⚠️ Text inside a shrink-to-fit `FittedBox` needs `softWrap: false`, or the row is sized for the wrapped height and every card grows a blank strip (a test holds this).
+- **Real data everywhere except Play Together.** Hero and Events read `homeMomentsProvider` (same list as Home); next trip = newest unvisited map pin (pins have no date, so none is shown). Gifts = my `giftFavoritesProvider` count. Map = `journeyBetween` (same miles as Home and the travel map), west-most person on the left. Reminders = `pairOpenRemindersProvider`. Savings = the nearest-deadline **shared** `FinanceGoal`, with linked-account progress computed exactly as Finances does (`together_savings.dart`). Play Together is mock, all of it in `together_mock_data.dart`; tiles say "coming soon".
+- **Shared Goals is deliberately absent** (user's call: goals live in each month's chapter). Its slot holds Reminders, which otherwise had no way in once the old list went. Finances is reached through Our Savings.
+- **Illustrations:** originals in `design/together/` (main checkout, 8 MB); shipped as trimmed WebP by `tool/shrink_together.py` (~280 KB). Paths in `TogetherAssets`; `TogetherArt` draws a gradient placeholder for any missing file. Still awaiting art: `heart.png` (monthsary row), `map_background.png`.
+- **The calendar says the current month.** The art was drawn with "OCT"; the shrink script erases it and `TogetherCalendarArt` paints the month in the art's ink at the fractions the script prints. Replace the calendar art → re-run the script and update those fractions.
+- Tokens: `TogetherStyle` (+ `TogetherTint`, `TogetherTile`) in `design_tokens.dart`; every colour has a dark counterpart.
+- Tests: `test/together_screen_test.dart` (412/390/360/320pt, 200% text, dark, empty, every card's destination, TalkBack node for the avatar). Review images: add `--dart-define=CAPTURE_REVIEW=true`, output in `build/review/`. ⚠️ ₱ renders as a box in those images only — TikTok Sans has the glyph; the test renderer does not draw it.
+- **Not yet published.**
+
 ### TikTok Sans and Instagram-style icons (2026-09-14)
 
 - **Published as build 68 (1.0.0+68)** through the optional Android updater. Public manifest and APK verified (HTTP 200, 52,206,339 bytes); TikTok Sans registration and font bytes verified inside the APK. Three release notes included; normal retention kept builds 64–68.

@@ -619,7 +619,9 @@ void main() {
     for (final (label, path, type) in [
       ('Events', Routes.events, EventsScreen),
       ('Reminders', Routes.reminders, RemindersScreen),
-      ('Finances', Routes.finance, FinanceScreen),
+      // Finances has no row of its own since the bento redesign; the
+      // savings card is the way in.
+      ('Our Savings', Routes.finance, FinanceScreen),
       ('Gifts', Routes.gifts, GiftsScreen)]) {
       await _reveal(tester, find.text(label));
       await tester.tap(find.text(label));
