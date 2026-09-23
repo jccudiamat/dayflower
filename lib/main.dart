@@ -22,6 +22,11 @@ import 'features/widget/widget_sync.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Room for a thread's worth of photos in memory at once. The default
+  // 100 MB held two full-size phone photos; decoded at screen width they are
+  // ~4 MB each (see StorageImage), and scrolling back up a chat should find
+  // them still here rather than blinking while they decode again.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 200 << 20;
 
   // IANA timezone database for the dual clocks
   tzdata.initializeTimeZones();

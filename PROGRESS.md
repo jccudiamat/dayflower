@@ -13,6 +13,22 @@
 
 ## Recent app work
 
+### Photos stop blinking: private images cached by path (2026-09-23)
+
+🔴 Every photo blinked, worst when scrolling back up the chat. Three causes:
+- **The chat signed a new URL inside `build()`** for every photo bubble (a `FutureBuilder` on `signedPhotoUrl`), so a photo scrolled off and back came back under a new address: spinner, full re-download, layout jump. The viewer and the My Day full view did the same.
+- **Everything else used `Image.network`**: no disk cache, so every launch re-downloaded every photo; avatars used CachedNetworkImage but keyed by signed URL, which changes each session.
+- **Full-size decodes**: a 12 MP photo is ~48 MB decoded against Flutter's 100 MB image cache, so a few photos evicted each other mid-scroll.
+
+Now `lib/core/widgets/storage_image.dart`:
+- `StorageImageProvider` — identity is (bucket, path); a URL is signed **only on a disk miss**. Its own `CacheManager` (`dayflower_private_images`, 60 days / 800 files). Paths are never reused (uuid per upload) so a cached file is never stale.
+- `StorageImage` / `StorageImage.dayPhoto` — decodes at the drawn width (bucketed to 64px, capped 2048 via `decodePixels`), placeholder only on a first load, an error state with retry. **Use it for anything in the day-photo or avatar bucket; never `Image.network` with a signed URL.**
+- `imageCache.maximumSizeBytes` = 200 MB in `main()`.
+- Sign-out empties the cache (`AuthRepository.signOut` → `StorageImageCache.clear`).
+- Switched: chat bubble, media viewer, My Day full view, Home day photo, throwback, memory tiles, booth previews and archive, map pin thumbnails, chat-settings media grid, `UserAvatar`. Public bouquet cards moved to `CachedNetworkImage`. `dayPhotoUrlProvider` is now unused in `lib/` (only test stubs).
+- Tests: `test/storage_image_test.dart` (one sign + one download ever; a remounted photo draws on the first frame with no placeholder). ⚠️ `test/flutter_test_config.dart` makes every test's private-image cache refuse at once — the real one sits on plugins with no answer in tests and its decode needs the real clock, so spinner placeholders would never settle. A test that wants a real photo installs its own manager **inside `runAsync`** (created on the fake clock, its futures never resolve).
+- Verified by tests, not yet on a device.
+
 ### Incoming calls ring natively, from the push (2026-09-23)
 
 🔴 **Why every call to a closed app was a "W" with no buttons, then a second, styled notification once the app opened.** Diagnosed from the code and verified on the emulator:

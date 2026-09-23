@@ -12,6 +12,7 @@ import '../../../booth/domain/booth_design.dart';
 import '../../../booth/presentation/screens/booth_studio_screen.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/media_viewer.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 class PendingStripsPreview extends ConsumerWidget {
   const PendingStripsPreview({super.key});
@@ -288,21 +289,13 @@ class BoothStoredPhoto extends ConsumerWidget {
   final String path;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(dayPhotoUrlProvider(path)).when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => IconButton(
-                tooltip: 'Retry photo',
-                onPressed: () => ref.invalidate(dayPhotoUrlProvider(path)),
-                icon: const Icon(Icons.refresh)),
-            data: (url) => url == null
-                ? const Center(child: Icon(Icons.image_not_supported_outlined))
-                : Image.network(url,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => IconButton(
-                        tooltip: 'Retry photo',
-                        onPressed: () =>
-                            ref.invalidate(dayPhotoUrlProvider(path)),
-                        icon: const Icon(Icons.refresh))),
-          );
+  Widget build(BuildContext context, WidgetRef ref) => StorageImage.dayPhoto(
+        path,
+        fit: BoxFit.contain,
+        placeholder: const Center(child: CircularProgressIndicator()),
+        error: (retry) => IconButton(
+            tooltip: 'Retry photo',
+            onPressed: retry,
+            icon: const Icon(Icons.refresh)),
+      );
 }

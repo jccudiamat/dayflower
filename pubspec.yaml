@@ -25,6 +25,9 @@ dependencies:
   # ── UI & fonts ───────────────────────────────
   google_fonts: ^8.0.2
   cached_network_image: ^3.3.1
+  # Used directly by StorageImage for the private-photo disk cache. Already
+  # here through cached_network_image; pinned to the same line.
+  flutter_cache_manager: ^3.4.1
   flutter_svg: ^2.0.10+1
 
   # ── Image / Camera ───────────────────────────

@@ -8,8 +8,8 @@ import '../../../../app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_icon.dart';
-import '../../../tulip/data/flower_repository.dart';
 import '../../domain/throwback.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// A photo from this same day, an earlier year.
 ///
@@ -97,14 +97,11 @@ class _Photo extends ConsumerWidget {
           child: const Center(child: AppIcon(CupertinoIcons.photo, size: 20)),
         );
 
-    return ref.watch(dayPhotoUrlProvider(path)).when(
-          loading: () => ColoredBox(color: AppColors.surfaceSubtle),
-          error: (_, __) => unavailable(),
-          data: (url) => url == null
-              ? unavailable()
-              : Image.network(url,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => unavailable()),
-        );
+    return StorageImage.dayPhoto(
+      path,
+      fit: BoxFit.cover,
+      placeholder: ColoredBox(color: AppColors.surfaceSubtle),
+      error: (retry) => GestureDetector(onTap: retry, child: unavailable()),
+    );
   }
 }

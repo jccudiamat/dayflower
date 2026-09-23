@@ -536,7 +536,9 @@ void main() {
         await _screenshot(tester, 'collection-detail-filled');
         final title = find.text(_boothPhotos.first.note!);
         await _reveal(tester, title);
-        await tester.tap(find.ancestor(of: title, matching: find.byType(InkWell)).first);
+        // The title, not the card's centre: with no photo in a test the
+        // centre holds the strip's Retry button, which takes that tap.
+        await tester.tap(title);
         await tester.pumpAndSettle();
         final viewer = tester.widget<MediaViewer>(find.byType(MediaViewer));
         expect(viewer.imagePath, _boothPhotos.first.imagePath);

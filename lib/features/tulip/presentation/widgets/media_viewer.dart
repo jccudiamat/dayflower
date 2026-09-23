@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/flower_repository.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// Saving a picture into the phone's own gallery.
 ///
@@ -167,29 +168,18 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
     if (asset != null) {
       return Image.asset(asset, fit: BoxFit.contain);
     }
-    return FutureBuilder<String>(
-      future: ref
-          .read(flowerRepositoryProvider)
-          .signedPhotoUrl(widget.imagePath!, ttl: const Duration(hours: 1)),
-      builder: (context, snap) {
-        // A finished failure is not still-loading. See the same fix in
-        // share_your_day.dart.
-        if (snap.hasError) {
-          return Text('Photo unavailable',
-              style: AppText.body(AppColors.onDarkMuted));
-        }
-        if (!snap.hasData) {
-          return const CircularProgressIndicator(color: Colors.white);
-        }
-        return Image.network(
-          snap.data!,
-          fit: BoxFit.contain,
-          errorBuilder: (_, __, ___) => Text(
-            'Photo unavailable',
-            style: AppText.body(AppColors.onDarkMuted),
-          ),
-        );
-      },
+    // The same cached photo the bubble drew - opening it is instant - but
+    // decoded larger, because this one can be pinched to 4x.
+    return StorageImage.dayPhoto(
+      widget.imagePath!,
+      fit: BoxFit.contain,
+      decodeWidth: MediaQuery.sizeOf(context).width * 2,
+      placeholder: const CircularProgressIndicator(color: Colors.white),
+      error: (retry) => GestureDetector(
+        onTap: retry,
+        child: Text('Photo unavailable',
+            style: AppText.body(AppColors.onDarkMuted)),
+      ),
     );
   }
 }

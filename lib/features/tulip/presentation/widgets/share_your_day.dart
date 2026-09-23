@@ -23,6 +23,7 @@ import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/camera_lifecycle.dart';
 import '../../domain/day_reactions.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// Where the next shot goes.
 ///
@@ -1158,33 +1159,24 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
             ),
           ),
           Expanded(
-            child: FutureBuilder<String>(
-              future: ref
-                  .read(flowerRepositoryProvider)
-                  .signedPhotoUrl(message.imagePath!),
-              builder: (context, snap) {
-                // 🔴 `hasError` first. Signing a URL for an object that
-                // no longer exists throws, and `!hasData` alone treats a
-                // finished failure as still-loading — which is why deleting
-                // your own day left this spinning forever instead of saying
-                // the photo was gone.
-                if (snap.hasError) {
-                  return Center(
+            // ⚠️ A photo that no longer exists still ends in "unavailable",
+            // never a spinner that runs forever - StorageImage's error path
+            // is a finished state, as the old hasError check made this one.
+            child: InteractiveViewer(
+              child: Center(
+                child: StorageImage.dayPhoto(
+                  message.imagePath!,
+                  fit: BoxFit.contain,
+                  decodeWidth: MediaQuery.sizeOf(context).width * 2,
+                  placeholder:
+                      const CircularProgressIndicator(color: Colors.white),
+                  error: (retry) => GestureDetector(
+                    onTap: retry,
                     child: Text('Photo unavailable',
                         style: AppText.body(AppColors.onDarkMuted)),
-                  );
-                }
-                if (!snap.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
-                  );
-                }
-                return InteractiveViewer(
-                  child: Center(
-                    child: Image.network(snap.data!, fit: BoxFit.contain),
                   ),
-                );
-              },
+                ),
+              ),
             ),
           ),
           if (message.note != null && message.note!.isNotEmpty)

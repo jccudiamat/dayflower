@@ -22,6 +22,7 @@ import '../../domain/strip_templates.dart';
 import '../../domain/booth_design.dart';
 import 'booth_studio_screen.dart';
 import '../../../../core/widgets/ios_back_button.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// Activities uses the same compositor, repository and private photos as
 /// the Camera. There is no second collection of pretend memories.
@@ -405,19 +406,11 @@ class _StoredPhoto extends ConsumerWidget {
   const _StoredPhoto({required this.path});
   final String path;
   @override
-  Widget build(BuildContext context, WidgetRef ref) =>
-      ref.watch(dayPhotoUrlProvider(path)).when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => TextButton(
-                onPressed: () => ref.invalidate(dayPhotoUrlProvider(path)),
-                child: const Text('Retry photo')),
-            data: (url) => url == null
-                ? const Text('Photo unavailable')
-                : Image.network(url,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => TextButton(
-                        onPressed: () =>
-                            ref.invalidate(dayPhotoUrlProvider(path)),
-                        child: const Text('Retry photo'))),
-          );
+  Widget build(BuildContext context, WidgetRef ref) => StorageImage.dayPhoto(
+        path,
+        fit: BoxFit.contain,
+        placeholder: const Center(child: CircularProgressIndicator()),
+        error: (retry) =>
+            TextButton(onPressed: retry, child: const Text('Retry photo')),
+      );
 }

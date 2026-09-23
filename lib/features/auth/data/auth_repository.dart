@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/providers/supabase_provider.dart';
+import '../../../core/widgets/storage_image.dart';
 
 class AuthRepository {
   AuthRepository(this._client);
@@ -45,6 +46,10 @@ class AuthRepository {
 
   Future<void> signOut() async {
     await _client.auth.signOut();
+    // Every private photo and face this account has seen is on disk now
+    // (see StorageImage). Signing out takes them with it, so whoever signs
+    // in next on this phone starts with nothing of the last person's.
+    await StorageImageCache.clear();
   }
 
   Session? get currentSession => _client.auth.currentSession;

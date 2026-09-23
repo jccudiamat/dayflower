@@ -19,6 +19,7 @@ import '../../data/flower_repository.dart';
 import '../../data/reaction_choices.dart';
 import '../widgets/media_viewer.dart';
 import '../widgets/share_your_day.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// What sits behind the two of you: how much calling is left this month, and
 /// everything either of you has sent.
@@ -259,7 +260,6 @@ class _Thumb extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final url = ref.watch(dayPhotoUrlProvider(path));
     return GestureDetector(
       onTap: () => Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => MediaViewer(title: 'Your photo', imagePath: path,
@@ -269,13 +269,14 @@ class _Thumb extends ConsumerWidget {
       borderRadius: BorderRadius.circular(AppRadius.sm),
       child: Container(
         color: AppColors.surfaceSubtle,
-        child: url.maybeWhen(
-          // Null and error both mean "draw the empty panel", which is the
-          // right answer to a dead connection and to an object that is gone.
-          data: (link) => link == null
-              ? const SizedBox.shrink()
-              : Image.network(link, fit: BoxFit.cover),
-          orElse: () => const SizedBox.shrink(),
+        // A dead connection and an object that is gone both draw the empty
+        // panel. A third of the screen at most: the grid is three across.
+        child: StorageImage.dayPhoto(
+          path,
+          fit: BoxFit.cover,
+          decodeWidth: MediaQuery.sizeOf(context).width / 3,
+          placeholder: const SizedBox.expand(),
+          error: (_) => const SizedBox.expand(),
         ),
       ),
       ),

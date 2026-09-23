@@ -16,6 +16,7 @@ import '../../domain/flower_catalog.dart';
 import 'media_viewer.dart';
 import 'message_quote.dart';
 import 'call_bubble.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// One message in the thread — a flower or a line of text.
 ///
@@ -235,44 +236,26 @@ class ChatBubble extends StatelessWidget {
             ),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 320),
-              child: FutureBuilder<String>(
-                future: ref
-                    .read(flowerRepositoryProvider)
-                    .signedPhotoUrl(message.imagePath!),
-                builder: (context, snap) {
-                  if (snap.hasError) {
-                    return Container(
-                      height: 160,
-                      color: AppColors.surfaceSubtle,
-                      alignment: Alignment.center,
-                      child:
-                          Text('Photo unavailable', style: AppText.caption()),
-                    );
-                  }
-                  if (!snap.hasData) {
-                    return const SizedBox(
-                      height: 180,
-                      child: Center(
-                        child: SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    );
-                  }
-                  return Image.network(
-                    snap.data!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Container(
-                      height: 160,
-                      color: AppColors.surfaceSubtle,
-                      alignment: Alignment.center,
-                      child:
-                          Text("Photo unavailable", style: AppText.caption()),
-                    ),
-                  );
-                },
+              // 🔴 Cached by path. This used to sign a fresh URL inside
+              // build(), so every photo scrolled off and back arrived under
+              // a new address - a spinner and a full re-download each time,
+              // which is the blinking. See StorageImage.
+              child: StorageImage.dayPhoto(
+                message.imagePath!,
+                fit: BoxFit.cover,
+                // ⚠️ Screen width, the default - not the bubble's. A photo
+                // with no fixed size takes the size it was decoded at, and
+                // decoding smaller than the bubble made the bubble shrink.
+                placeholderHeight: 180,
+                error: (retry) => GestureDetector(
+                  onTap: retry,
+                  child: Container(
+                    height: 160,
+                    color: AppColors.surfaceSubtle,
+                    alignment: Alignment.center,
+                    child: Text('Photo unavailable', style: AppText.caption()),
+                  ),
+                ),
               ),
             ),
           ),

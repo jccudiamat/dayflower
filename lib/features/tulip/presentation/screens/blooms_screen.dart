@@ -15,6 +15,7 @@ import '../../../../core/widgets/feature_cards.dart';
 import '../../../../core/widgets/flower_image.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 /// The Dayflower center, reusing the existing flowers and bouquet collection.
 class BloomsScreen extends ConsumerWidget {
@@ -186,12 +187,14 @@ class _Bouquets extends StatelessWidget {
                     child: Container(
                       width: 186,
                       color: AppColors.surfaceSubtle,
-                      child: Image.network(
-                        message.bouquetCardUrl!,
+                      // A public page's picture, so the plain URL cache is
+                      // right - but a disk-backed one, not Image.network.
+                      child: CachedNetworkImage(
+                        imageUrl: message.bouquetCardUrl!,
                         fit: BoxFit.cover,
                         // Fetched from the website, so a dead connection has
                         // to read as a bouquet rather than a broken tile.
-                        errorBuilder: (_, __, ___) => const Center(
+                        errorWidget: (_, __, ___) => const Center(
                           child: Text('💐', style: TextStyle(fontSize: 32)),
                         ),
                       ),

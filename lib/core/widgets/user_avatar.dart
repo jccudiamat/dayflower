@@ -1,10 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/onboarding/data/user_repository.dart';
 import '../models/user_profile.dart';
 import 'flower_avatar.dart';
+import 'storage_image.dart';
 
 /// This person, however they have chosen to appear: their photo if they
 /// uploaded one, their flower otherwise.
@@ -31,30 +30,27 @@ class UserAvatar extends ConsumerWidget {
     final path = profile?.avatarPath;
     if (path == null || path.isEmpty) return flower;
 
-    final url = ref.watch(avatarUrlProvider(path)).valueOrNull;
-    if (url == null) return flower;
-
     return ClipOval(
       child: SizedBox(
         width: size,
         height: size,
-        child: CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
+        // 🔴 By path, like every private image now. The face used to be
+        // cached under its signed URL, which changes every session - so
+        // each launch fetched every avatar again and drew the flower until
+        // it arrived. The flower is still what shows while a face never
+        // seen on this phone loads, and if it cannot.
+        child: StorageImage(
+          bucket: StorageBucket.avatars,
+          path: path,
           width: size,
           height: size,
-          // Both fall back to the flower rather than to a spinner or a
-          // broken-image glyph: an avatar is furniture on every screen it
-          // appears on, and furniture that flickers is worse than furniture
-          // that is briefly the old thing.
-          placeholder: (_, __) => flower,
-          errorWidget: (_, __, ___) => flower,
-          // The bytes are already 512² (see squareAvatarJpeg); this caps
-          // what gets decoded into memory for the 22pt cases, where a full
-          // decode would be ~20× more pixels than any of them draw.
-          memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
-              .round()
-              .clamp(44, avatarDecodeCap),
+          fit: BoxFit.cover,
+          // The bytes are already 512² (see squareAvatarJpeg); a 22pt
+          // header avatar decoding all of them would be ~20x more pixels
+          // than it draws.
+          decodeWidth: size.clamp(22, avatarDecodeCap.toDouble()),
+          placeholder: flower,
+          error: (_) => flower,
         ),
       ),
     );

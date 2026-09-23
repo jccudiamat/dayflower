@@ -17,10 +17,10 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../onboarding/data/user_repository.dart';
-import '../../../tulip/data/flower_repository.dart';
 import '../../data/map_pin_repository.dart';
 import '../../domain/journey.dart';
 import '../widgets/add_pin_sheet.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 /// Everywhere the two of you have been, and where you are right now.
 ///
@@ -371,17 +371,16 @@ class _PinPhoto extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final path = ref.watch(pinPhotoPathProvider(messageId)).valueOrNull;
     if (path == null) return const SizedBox.shrink();
-    final url = ref.watch(dayPhotoUrlProvider(path)).valueOrNull;
-    if (url == null) return const SizedBox.shrink();
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(6),
-      child: Image.network(
-        url,
+      child: StorageImage.dayPhoto(
+        path,
         width: 26,
         height: 26,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+        decodeWidth: 26,
+        error: (_) => const SizedBox.shrink(),
       ),
     );
   }

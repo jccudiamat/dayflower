@@ -31,6 +31,7 @@ import '../widgets/home_map_card.dart';
 import '../widgets/home_widget_gallery.dart';
 import '../../domain/home_moments.dart';
 import '../../../../core/widgets/user_avatar.dart';
+import '../../../../core/widgets/storage_image.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -874,24 +875,20 @@ class HomeDayPhoto extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final path = message.imagePath;
     if (path == null) return const Center(child: AppIcon(CupertinoIcons.photo));
-    final url = ref.watch(dayPhotoUrlProvider(path));
     Widget unavailable() => Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
           const AppIcon(CupertinoIcons.photo),
           const SizedBox(height: 8),
           Text('Photo unavailable', style: AppText.caption()),
         ]));
-    return url.when(
-        loading: () =>
+    return StorageImage.dayPhoto(path,
+        width: double.infinity,
+        height: double.infinity,
+        fit: BoxFit.cover,
+        placeholder:
             Center(child: Text('Loading photo…', style: AppText.caption())),
-        error: (_, __) => unavailable(),
-        data: (value) => value == null
-            ? unavailable()
-            : Image.network(value,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => unavailable()));
+        error: (retry) =>
+            GestureDetector(onTap: retry, child: unavailable()));
   }
 }
 

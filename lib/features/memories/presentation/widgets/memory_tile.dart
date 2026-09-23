@@ -10,8 +10,9 @@ import '../../../../core/widgets/app_icon.dart';
 import '../../../../core/widgets/flower_image.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../onboarding/data/user_repository.dart';
-import '../../../tulip/data/flower_repository.dart';
 import '../../data/relationship_memory.dart';
+import '../../../../core/widgets/storage_image.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class MemoryTile extends StatelessWidget {
   const MemoryTile({super.key, required this.memory});
@@ -74,9 +75,9 @@ class MemoryArtwork extends ConsumerWidget {
     final m = memory.message;
     if (m?.flower != null) return FlowerImage(flower: m!.flower!, size: size);
     final path = m?.imagePath;
-    final url = path == null
-        ? m?.bouquetCardUrl
-        : ref.watch(dayPhotoUrlProvider(path)).valueOrNull;
+    // A bouquet card is a public page on the website; everything else with
+    // a picture is a private object, drawn through the path cache.
+    final url = path == null ? m?.bouquetCardUrl : null;
     final icon = switch (memory.kind) {
       MemoryKind.photos || MemoryKind.booth => CupertinoIcons.photo,
       MemoryKind.flowers => CupertinoIcons.gift,
@@ -93,15 +94,27 @@ class MemoryArtwork extends ConsumerWidget {
             color: AppColors.blush,
             borderRadius: BorderRadius.circular(AppRadius.sm)),
         child: AppIcon(icon, color: AppColors.brand, size: size * .4));
+    final fit = size > 120 ? BoxFit.contain : BoxFit.cover;
+    if (path != null) {
+      return ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: StorageImage.dayPhoto(path,
+              width: size,
+              height: size,
+              fit: fit,
+              decodeWidth: size,
+              semanticLabel: memory.title,
+              error: (_) => fallback));
+    }
     if (url == null) return fallback;
     return ClipRRect(
         borderRadius: BorderRadius.circular(AppRadius.sm),
-        child: Image.network(url,
+        child: CachedNetworkImage(
+            imageUrl: url,
             width: size,
             height: size,
-            fit: size > 120 ? BoxFit.contain : BoxFit.cover,
-            semanticLabel: memory.title,
-            errorBuilder: (_, __, ___) => fallback));
+            fit: fit,
+            errorWidget: (_, __, ___) => fallback));
   }
 }
 
