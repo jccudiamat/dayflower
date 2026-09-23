@@ -1,5 +1,6 @@
 package com.dayflower.app
 
+import com.dayflower.calls.ActiveCallService
 import android.app.KeyguardManager
 import android.app.PictureInPictureParams
 import android.content.Context
@@ -38,6 +39,18 @@ class MainActivity : FlutterActivity() {
      * screen on a cold start opened the app and did nothing.
      */
     private var pendingCallAction: Pair<String, String>? = null
+
+    /**
+     * Whether Dart has said it is listening for [pendingCallAction]s.
+     *
+     * 🔴 An engine existing is not Dart listening. A tap on Answer with the
+     * app closed launches us, configureFlutterEngine builds the channel, and
+     * the tap was sent down it at once - before main() had run far enough to
+     * register a handler. Flutter drops a call nobody handles, so answering
+     * from a closed app opened it and answered nothing. Held until Dart asks
+     * with "callActionsReady" now.
+     */
+    private var dartListening = false
 
     /**
      * Whether a call is live right now.
@@ -91,21 +104,53 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        // The incoming call, restyled. Dart posts the ring first and this
-        // replaces it in place - see CallNotification, and the warning there
-        // about why that order matters.
+        // The incoming call - see CallNotification. Also where Dart collects
+        // an Answer or Decline tapped before it was listening.
+        dartListening = false
         callChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             CallNotification.CHANNEL,
         ).apply {
             setMethodCallHandler { call, result ->
-                CallNotification.handle(applicationContext, call, result)
+                when (call.method) {
+                    "callActionsReady" -> {
+                        dartListening = true
+                        val held = pendingCallAction
+                        pendingCallAction = null
+                        result.success(
+                            held?.let { mapOf("action" to it.first, "callId" to it.second) },
+                        )
+                    }
+                    // 🔴 This channel shares its name with the
+                    // dayflower_calls plugin's, and registering it here
+                    // replaced the plugin's handler in this engine. The
+                    // plugin was what started the in-call foreground service
+                    // - so once this existed, startActive and stopActive fell
+                    // through to notImplemented and a call in the background
+                    // ran with nothing keeping its microphone alive. Handled
+                    // here now, with the plugin's own service.
+                    "startActive" -> {
+                        val service = Intent(applicationContext, ActiveCallService::class.java)
+                            .putExtra("video", call.argument<Boolean>("video") == true)
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            applicationContext.startForegroundService(service)
+                        } else {
+                            applicationContext.startService(service)
+                        }
+                        result.success(null)
+                    }
+                    "stopActive" -> {
+                        applicationContext.stopService(
+                            Intent(applicationContext, ActiveCallService::class.java),
+                        )
+                        result.success(null)
+                    }
+                    else -> CallNotification.handle(applicationContext, call, result)
+                }
             }
         }
-        // A tap that arrived before the engine existed has been waiting.
-        pendingCallAction?.let { deliverCallAction(it.first, it.second) }
-        pendingCallAction = null
-        // And the intent that launched us may itself be an Answer.
+        // The intent that launched us may itself be an Answer. Parked until
+        // Dart says it is listening.
         readCallAction(intent)
 
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
@@ -206,12 +251,21 @@ class MainActivity : FlutterActivity() {
         // Cleared so a rotation or a resume does not answer the call twice.
         intent.removeExtra(CallNotification.EXTRA_ACTION)
         intent.removeExtra(CallNotification.EXTRA_ID)
+        // Answered or declined: the ringtone stops now, not when Dart gets
+        // round to it. On a cold start that is seconds of an insistent ring
+        // after the person has already picked up. "open" decides nothing, so
+        // it keeps ringing until the ring screen takes the banner down.
+        if (action == CallNotification.ACTION_ANSWER ||
+            action == CallNotification.ACTION_DECLINE
+        ) {
+            CallNotification.stop(applicationContext)
+        }
         deliverCallAction(action, id)
     }
 
     private fun deliverCallAction(action: String, id: String) {
         val sink = callChannel
-        if (sink == null) {
+        if (sink == null || !dartListening) {
             pendingCallAction = action to id
             return
         }

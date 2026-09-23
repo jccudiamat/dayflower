@@ -4,7 +4,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Master switch for the dev convenience login. Set false to always see
 /// the real Welcome → Sign in flow.
-const kDevAutoLogin = true;
+///
+/// ⚠️ Off with `--dart-define=DEV_AUTO_LOGIN=false` — always, for a build
+/// that goes on an emulator for testing. DEV_EMAIL is a real account paired
+/// with a real person; a debug build opened on an emulator signs in as them,
+/// registers its push token under them, and can mark their messages seen.
+const kDevAutoLogin = bool.fromEnvironment('DEV_AUTO_LOGIN', defaultValue: true);
 
 /// Signs in with DEV_EMAIL / DEV_PASSWORD from `.env` so the app opens
 /// straight on the Nest with real data, skipping the login screen.

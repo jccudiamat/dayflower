@@ -17,6 +17,27 @@ class NativeCalls {
     }
   }
 
+  /// Rings for [callId] natively: the caller's face and the app's own
+  /// Answer and Decline. "posted", "already" when it is ringing already
+  /// (the push got there first), "failed", or null where there is no native
+  /// side to ask - the FCM background isolate, where the push service has
+  /// normally rung before Dart even starts. See CallNotification.kt.
+  static Future<String?> ring({
+    required String callId,
+    required String name,
+    required String subtitle,
+    Uint8List? avatar,
+  }) =>
+      invoke<String>('ring', {
+        'callId': callId,
+        'name': name,
+        'subtitle': subtitle,
+        if (avatar != null) 'avatar': avatar,
+      });
+
+  /// Takes the native ring down and releases its claim.
+  static Future<void> stopRinging() => invoke<void>('stopRinging');
+
   /// Why the last incoming call notification did or did not get restyled.
   ///
   /// ⚠️ Worth surfacing because every failure in that path is silent: the
@@ -32,14 +53,24 @@ class NativeCalls {
   /// only way back from them.
   static void onAction(void Function(String action, String callId) handler) {
     if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
-    _channel.setMethodCallHandler((call) async {
-      if (call.method != 'callAction') return null;
-      final args = (call.arguments as Map?)?.cast<String, Object?>();
+    void deliver(Object? arguments) {
+      final args = (arguments as Map?)?.cast<String, Object?>();
       final action = args?['action'] as String?;
       final callId = args?['callId'] as String?;
-      if (action == null || callId == null) return null;
+      if (action == null || callId == null) return;
+      debugPrint('call notification: $action ($callId)');
       handler(action, callId);
+    }
+
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'callAction') deliver(call.arguments);
       return null;
     });
+    // 🔴 Then say so, and collect whatever was tapped before now. Answer
+    // tapped on a closed app launches it, and the tap used to be sent down
+    // the channel before this handler existed - Flutter drops a call nobody
+    // handles, so the app opened and answered nothing. MainActivity holds it
+    // until this asks.
+    invoke<Object?>('callActionsReady').then(deliver);
   }
 }

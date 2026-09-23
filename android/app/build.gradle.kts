@@ -100,4 +100,11 @@ dependencies {
     // to be that new, and a missing class here fails at runtime rather than
     // at build. See CallNotification.kt.
     implementation("androidx.core:core-ktx:1.13.1")
+    // CallPushService extends the firebase_messaging plugin's service, and
+    // the plugin keeps Firebase as an `implementation` dependency - invisible
+    // to this module. The same BoM firebase_core pins (FirebaseSDKVersion in
+    // its gradle.properties), so there is one Firebase on the classpath, not
+    // two that disagree. Move it with firebase_core.
+    implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
+    implementation("com.google.firebase:firebase-messaging")
 }

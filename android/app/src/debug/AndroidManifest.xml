@@ -4,4 +4,16 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Debug only: rings a pretend incoming call for testing the call
+         notification without Firebase. See DebugCallReceiver. -->
+    <application>
+        <receiver
+            android:name=".DebugCallReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.dayflower.app.DEBUG_RING" />
+            </intent-filter>
+        </receiver>
+    </application>
 </manifest>

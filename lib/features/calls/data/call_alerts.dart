@@ -113,6 +113,11 @@ class CallAlerts {
   @visibleForTesting
   static void debugResetRinging() => _ringingId = null;
 
+  /// Whether this isolate would get to ring [callId] — the question the FCM
+  /// background isolate asks after the push service has already rung.
+  @visibleForTesting
+  static Future<bool> debugClaim(String callId) => _claim(callId);
+
   static bool get supported => AppNotifications.supported;
 
   static Future<void> init() async {
@@ -165,16 +170,14 @@ class CallAlerts {
   }
 
   /// Rings for [callId], unless it is already the one ringing.
-  /// The app's own answer and end-call colours, for the notification's two
-  /// buttons.
   ///
-  /// ⚠️ Not the usual green and red, and not the gradient either — a colour
-  /// hint takes one value. The answer button on the call screen runs pink to
-  /// purple, and the purple end is the half that does not read as the same
-  /// colour as Decline at a glance.
-  static const _answerColor = 0xFF906FE8; // AppGradients.cta, purple end
-  static const _declineColor = 0xFFE2447C; // AppColors.danger
-
+  /// 🔴 **Native first.** The real notification - the caller's face, the
+  /// app's own Answer and Decline - is built in Kotlin (CallNotification),
+  /// and for a call to a closed app it has usually been posted already, by
+  /// the push service, before this runs at all. Only when native is out of
+  /// reach (the FCM background isolate has no channel to it) or fails does
+  /// this post the plugin's plain notification - and then only if nobody has
+  /// claimed the call, so a call the push service rang stays one ring.
   static Future<void> ring({
     required String callId,
     required String callerName,
@@ -184,7 +187,21 @@ class CallAlerts {
   }) async {
     if (!supported) return;
 
-    // On screen already, or the other isolate got there first.
+    final subtitle = isVideo ? 'Incoming video call' : 'Incoming call';
+    final native = await NativeCalls.ring(
+      callId: callId,
+      name: callerName,
+      subtitle: subtitle,
+      avatar: callerAvatar,
+    );
+    if (native == 'posted' || native == 'already') {
+      // Held here too: settle() decides "missed" from it.
+      _ringingId = callId;
+      return;
+    }
+
+    // On screen already, or the push service or the other isolate got
+    // there first.
     if (!await _claim(callId)) return;
     _ringingId = callId;
 
@@ -193,7 +210,7 @@ class CallAlerts {
       await _plugin.show(
         id: _notificationId,
         title: callerName,
-        body: isVideo ? 'Incoming video call' : 'Incoming call',
+        body: subtitle,
         notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             _channelId,
@@ -206,6 +223,10 @@ class CallAlerts {
             // rather than a message — it is what keeps it at the top of
             // the shade and lets it through some Do Not Disturb settings.
             category: AndroidNotificationCategory.call,
+            // Their face even on the fallback, rather than a letter.
+            largeIcon: callerAvatar == null
+                ? null
+                : ByteArrayAndroidBitmap(callerAvatar),
             actions: [
               const AndroidNotificationAction(actionDecline, 'Decline',
                   showsUserInterface: false, cancelNotification: true),
@@ -233,19 +254,6 @@ class CallAlerts {
         // row, so by the time this lands the ring screen is what is there.
         payload: 'dayflower://call?id=${Uri.encodeComponent(callId)}',
       );
-      // 🔴 After the plugin's notification, never instead of it. This
-      // replaces it in place with a CallStyle one — the caller's face and
-      // two round buttons in the app's colours — and if any of that fails
-      // the working notification is still on screen. See CallNotification.
-      await NativeCalls.invoke<bool>('styleIncoming', {
-        'name': callerName,
-        'subtitle': isVideo ? 'Incoming video call' : 'Incoming call',
-        'callId': callId,
-        'channelId': _channelId,
-        'answerColor': _answerColor,
-        'declineColor': _declineColor,
-        if (callerAvatar != null) 'avatar': callerAvatar,
-      });
     } catch (e) {
       debugPrint('call alert failed: $e');
     }
@@ -276,6 +284,8 @@ class CallAlerts {
   /// ringing here forever.
   static Future<void> stop() async {
     _ringingId = null;
+    // The native ring and its claim, whichever door it came in by.
+    await NativeCalls.stopRinging();
     // ⚠️ Released for the other isolate too, or the next call from the same
     // person inside the claim window would be swallowed.
     try {

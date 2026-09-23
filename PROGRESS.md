@@ -13,6 +13,30 @@
 
 ## Recent app work
 
+### Incoming calls ring natively, from the push (2026-09-23)
+
+🔴 **Why every call to a closed app was a "W" with no buttons, then a second, styled notification once the app opened.** Diagnosed from the code and verified on the emulator:
+- A call to a closed app was rung by FCM's **background isolate**. Its engine has the `dayflower_calls` plugin but not MainActivity's channel, so `styleIncoming` reached the **plugin**, which rebuilt the ring as a `CallStyle` with a nameless-face Person — Android draws that as an initial letter, and ColorOS drops its buttons. The app's own styled notification (MainActivity → CallNotification) only ran once the app was open, as a second ring.
+- MainActivity registering the same channel name **replaced the plugin's handler** in the main engine, so `startActive`/`stopActive` (the in-call foreground service) silently hit notImplemented from build ~95 on.
+
+Now:
+- `CallPushService` subclasses the plugin's `FlutterFirebaseMessagingService` (swapped in with `tools:node="remove"`; the plugin's version ignores messages, its receiver forwards them) and rings **natively in `onMessageReceived`**, before any engine exists: face from `filesDir/caller_avatar`, Answer/Decline pills, 60s timeout. `firebase-messaging` added to the app at the BoM firebase_core pins (33.16.0) — move them together.
+- `CallNotification.ring` owns the claim: in-process (push service and Activity share a process) and written to `FlutterSharedPreferences` as `flutter.ringing_call_id` / `flutter.ringing_call_at` (Long) so the Dart background isolate's `_claim` stays quiet. Dart's `CallAlerts.ring` asks native first; the plugin's plain notification (now with a largeIcon face) is only the fallback.
+- Full-screen intent and card tap → **open** (ring screen). It was **Answer** — on a locked phone Android fires it at once, i.e. auto-answer.
+- Answer/Decline stop the ring natively the instant they are tapped. A tap on a cold start is held by MainActivity until Dart calls `callActionsReady` — before, it was sent before Dart listened and dropped.
+- MainActivity handles `startActive`/`stopActive` itself. Plugin `styleIncoming` deleted; ActiveCallService's id 4502 → 4503 (4502 is the missed-call notification).
+- Verified on the emulator with the app process dead: ring from the push path with face and pills; repeat push → "already"; Decline/Answer stop the ring and reach Dart after a cold start; locked phone → "open", not "answer"; gone at 60s; claim file format as Dart reads it. **Not yet confirmed on a ColorOS phone.**
+- Test a call without ringing anyone: debug builds carry `DebugCallReceiver` (src/debug only) — `adb shell am broadcast -a com.dayflower.app.DEBUG_RING -n com.dayflower.app/.DebugCallReceiver --es id x --es name Wifey`.
+- ⚠️ **Build emulator APKs with `--dart-define=DEV_AUTO_LOGIN=false`.** Debug builds sign in as DEV_EMAIL, which is the partner account of a real pair: on 2026-09-23 an emulator run signed in as it for ~20s and registered a push token under it (it self-prunes on the next push as UNREGISTERED; presence and read receipts were checked and untouched).
+
+### Flowers on the widget, stems in the chat, squarer widgets (2026-09-23)
+
+- 🔴 **Every flower sent to a home screen drew as the fallback card** — the bare emoji and name, no painting, no sender header. Root cause **observed, not inferred**: reproduced on an emulator (AVD `dayflower_test`, Android 37 x86_64, made by hand in `~/.android/avd` since there is no avdmanager) with a debug build and the widget prefs written through `run-as`. Logcat: `ClassCastException: Integer cannot be cast to Long` at `SharedPreferences.getLong`. `HomeWidget.saveWidgetData<int>` stores by **value**: ≤32-bit → `putInt`, larger → `putLong`. A day photo's expiry is epoch millis (Long, fine); a flower's is **0** (Int), and `getLong` on an Int throws. `renderSafely` caught it and drew the fallback. `reunion_at = 0` (reunion cleared) had the same fault.
+  - Fix: `WidgetPrefs.kt` — `longOf` / `intOf` read either width (and a string). **Never `getLong`/`getInt` a key Dart wrote.** Verified on the emulator over the old stored Integer: the daisy, the "Wifey" header and the caption all render; logcat clean.
+  - How to repeat: `emulator -avd dayflower_test -no-window`, `adb install -r` a `flutter build apk --debug --target-platform android-x64`, push prefs to `shared_prefs/HomeWidgetPreferences.xml` via `run-as com.dayflower.app`, add the widget through the launcher's picker (uiautomator dump for coordinates; `am broadcast APPWIDGET_UPDATE` is refused from the shell — reinstalling re-renders instead).
+- **Cut-out stems were cropped in the chat.** Every flower was `cover` in a square; a 3:4 stem lost its bloom's top and its foot. Stems now draw `contain` at `Flower.cutoutAspect` (3:4) in the bubble and the picker tile. A test holds every cut-out's art at 3:4.
+- **Widget corners 34dp → 20dp** (`CORNER_DP` and `widget_background.xml`, kept in step). Sticky notes keep their 5dp paper corner.
+
 ### Together tab: the bento redesign (2026-09-23)
 
 Rebuilt from `design/together_mockup.png` (main checkout). `ActivitiesScreen` keeps its name, route and bottom bar; everything above the bar is new, one widget file per section under `lib/features/activities/presentation/widgets/together_*.dart`.

@@ -16,7 +16,7 @@ public class ActiveCallService extends Service {
             manager.createNotificationChannel(new NotificationChannel(channel, "Active calls", NotificationManager.IMPORTANCE_LOW));
         }
         Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        PendingIntent open = PendingIntent.getActivity(this, 4502, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        PendingIntent open = PendingIntent.getActivity(this, 4503, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder builder = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, channel) : new Notification.Builder(this);
         Notification notification = builder.setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle("Dayflower call in progress")
@@ -25,8 +25,11 @@ public class ActiveCallService extends Service {
         if (Build.VERSION.SDK_INT >= 30) {
             int types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
             if (video) types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA;
-            startForeground(4502, notification, types);
-        } else startForeground(4502, notification);
+            // 4503, not 4502: that id is the missed-call notification's, and
+            // posting over it here - or stopForeground taking it down -
+            // erased a missed call from the shade.
+            startForeground(4503, notification, types);
+        } else startForeground(4503, notification);
         return START_NOT_STICKY;
     }
     @Override public IBinder onBind(Intent intent) { return null; }

@@ -606,6 +606,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         ref.read(callNotifierProvider.notifier).decline();
         return;
       }
+      // The card rather than a button - or the full-screen intent on a
+      // locked phone: the ring screen, with nothing decided.
+      if (action == 'open') {
+        AppNotifications.pendingRoute.value = Routes.call;
+        return;
+      }
       // ⚠️ Parked rather than answered here. The call screen answers it on
       // the way in, which is the same path the lock-screen Answer already
       // took, and it works whether or not a session exists yet.
