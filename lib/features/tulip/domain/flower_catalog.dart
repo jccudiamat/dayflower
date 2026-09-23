@@ -56,6 +56,11 @@ class Flower {
   /// the top. See [FlowerImage].
   final bool cutout;
 
+  /// Width over height of every cut-out stem's artwork. The stems ship at
+  /// 313x418, 314x418 and 384x512 — all 3:4 — and a frame of this shape
+  /// shows one whole, where a square crops it.
+  static const double cutoutAspect = 3 / 4;
+
   /// Artwork path, by convention `<id>.webp`. Render with `FlowerImage`,
   /// which falls back to [emoji] if the file isn't there.
   String get asset => 'assets/images/flowers/$id.webp';

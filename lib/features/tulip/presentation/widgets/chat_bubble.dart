@@ -12,6 +12,7 @@ import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
 import '../../data/reaction_choices.dart';
 import '../../data/reaction_repository.dart';
+import '../../domain/flower_catalog.dart';
 import 'media_viewer.dart';
 import 'message_quote.dart';
 import 'call_bubble.dart';
@@ -364,13 +365,18 @@ class ChatBubble extends StatelessWidget {
               asset: flower.asset,
               fileName: 'dayflower-${flower.id}.jpg',
             ),
+            // 🔴 A cut-out stem is drawn at its own shape, whole. It was
+            // `cover` in a square like the scene paintings, and a 3:4 stem
+            // scaled to fill a square loses the top of its bloom and the
+            // foot of its stem — a daisy arrived with its petals sliced
+            // flat. Scenes are square paintings and still fill the frame.
             child: AspectRatio(
-              aspectRatio: 1,
+              aspectRatio: flower.cutout ? Flower.cutoutAspect : 1,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(2),
                 child: Image.asset(
                   flower.asset,
-                  fit: BoxFit.cover,
+                  fit: flower.cutout ? BoxFit.contain : BoxFit.cover,
                   semanticLabel: flower.name,
                   errorBuilder: (_, __, ___) => Container(
                     color: flower.color.withValues(alpha: .14),

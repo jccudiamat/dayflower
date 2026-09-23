@@ -282,8 +282,13 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             )
         }
 
-        /** Matches @drawable/widget_background's corner radius. */
-        private const val CORNER_DP = 34f
+        /**
+         * Matches @drawable/widget_background's corner radius.
+         *
+         * 20, down from 34 at the user's request: at 34 the cards read as
+         * pills beside the launcher's own icons and folders.
+         */
+        private const val CORNER_DP = 20f
 
         /**
          * Cuts the photo to the widget's own shape, with rounded corners.
@@ -360,9 +365,9 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 //
                 // The bitmap is smaller than the widget: capped to the
                 // source's own size and to TARGET_PX. So the ImageView
-                // scales it up, and the baked radius scales with it. A 34dp
+                // scales it up, and the baked radius scales with it. A 20dp
                 // corner cut into a 540-wide bitmap shown in a 1080-wide
-                // widget lands at 68dp - twice as round as the card behind
+                // widget lands at 40dp - twice as round as the card behind
                 // it, and twice as round as the heartbeat widget beside it.
                 //
                 // Above API 31 the outline clip is exact and the view does
@@ -430,7 +435,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 return
             }
 
-            val seconds = widgetData.getInt("widget_rotate_seconds", 0)
+            val seconds = widgetData.intOf("widget_rotate_seconds")
             val rotating = seconds > 0 && photos.size > 1
 
             // Emptied either way. A flipper left holding last sync's bitmaps
@@ -463,7 +468,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
          * individually every time it shrank.
          */
         fun loadDayPhotos(widgetData: SharedPreferences): List<Bitmap> {
-            val expiresAt = widgetData.getLong("day_photo_expires_at", 0L)
+            val expiresAt = widgetData.longOf("day_photo_expires_at")
             if (expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
                 return emptyList()
             }
@@ -548,7 +553,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             }
             views.setTextViewText(
                 R.id.widget_left,
-                timeLeftLabel(widgetData.getLong("day_photo_expires_at", 0L)),
+                timeLeftLabel(widgetData.longOf("day_photo_expires_at")),
             )
         }
 
@@ -593,7 +598,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // leaves the home screen within half an hour of its 24h mark
             // even if the app is never opened again — which is the only way
             // the "lasts a day" promise actually holds.
-            val expiresAt = widgetData.getLong("day_photo_expires_at", 0L)
+            val expiresAt = widgetData.longOf("day_photo_expires_at")
             if (expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
                 return null
             }

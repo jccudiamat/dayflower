@@ -168,9 +168,11 @@ class _CatalogTile extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
+            // Contained, for the same reason as the chat bubble: the tile
+            // is squarer than a stem, and `cover` trims its bloom.
             Image.asset(
               flower.asset,
-              fit: BoxFit.cover,
+              fit: flower.cutout ? BoxFit.contain : BoxFit.cover,
               semanticLabel: flower.name,
               errorBuilder: (_, __, ___) => Container(
                 color: flower.color.withValues(alpha: .12),

@@ -149,7 +149,7 @@ class ReunionWidget : HomeWidgetProvider() {
          * draws — on the 30-minute update, on a resize, on a reboot.
          */
         fun renderCountdown(views: RemoteViews, widgetData: SharedPreferences) {
-            val happensAt = widgetData.getLong("reunion_at", 0L)
+            val happensAt = widgetData.longOf("reunion_at")
             val title = widgetData.getString("reunion_title", "") ?: ""
             val place = widgetData.getString("reunion_place", "") ?: ""
 
