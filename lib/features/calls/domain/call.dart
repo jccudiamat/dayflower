@@ -91,7 +91,7 @@ enum CallFailure {
   unreachable(
     'Couldn’t reach them',
     'Video and voice calls don’t work on every network. Your message still '
-        'sent — they’ll see it.',
+        'sent, and they’ll see it.',
   ),
 
   /// The microphone (or camera) was refused at the OS level.

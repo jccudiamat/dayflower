@@ -170,7 +170,7 @@ class ReminderScheduler {
           _countdownChannelId,
           'Reminder countdown',
           description:
-              'The run-up to a reminder — hourly, then every five minutes in '
+              'The run-up to a reminder: hourly, then every five minutes in '
               'the last hour, on both phones.',
           importance: Importance.high,
           enableVibration: true,

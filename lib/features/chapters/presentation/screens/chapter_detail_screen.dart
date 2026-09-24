@@ -168,8 +168,8 @@ class ChapterDetailScreen extends ConsumerWidget {
                     const _EmptyHint(
                       emoji: '✨',
                       title: 'Nothing logged yet',
-                      body: 'Add the things worth remembering as they happen '
-                          '— the review writes itself later.',
+                      body: 'Add the things worth remembering as they happen, '
+                          'and the review writes itself later.',
                     )
                   else
                     ...moments.map((moment) => Padding(
@@ -664,7 +664,7 @@ class _ReviewCard extends StatelessWidget {
                   child: Text(
                     chapter!.isClosed
                         ? 'Month complete'
-                        : 'Still open — keep adding to it',
+                        : 'Still open. Keep adding to it',
                     style: AppText.caption(),
                   ),
                 ),
@@ -1250,7 +1250,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
             ),
           ),
           const SizedBox(height: 2),
-          Text('Closing is a milestone, not a lock — you can still edit it.',
+          Text('Closing is a milestone, not a lock. You can still edit it.',
               style: AppText.caption()),
           const SizedBox(height: AppSpace.md),
           GradientButton(label: 'Save review', onPressed: _save),

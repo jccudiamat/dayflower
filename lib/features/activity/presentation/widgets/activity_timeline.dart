@@ -477,8 +477,8 @@ class _FeedEmpty extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           Text(
-            'Set a reminder, add a goal or start a photo strip — '
-            'it turns up here for both of you.',
+            'Set a reminder, add a goal or start a photo strip. '
+            'It turns up here for both of you.',
             textAlign: TextAlign.center,
             style: AppText.caption(AppColors.muted),
           ),

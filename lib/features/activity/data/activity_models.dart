@@ -130,7 +130,7 @@ class Activity {
     // so the actor's own copy says what they actually did.
     if (kind == ActivityKind.stripWaiting) {
       return mine
-          ? 'You started a strip — waiting on them'
+          ? 'You started a strip, waiting on them'
           : '$who is waiting on your half';
     }
 

@@ -168,7 +168,7 @@ class _InsightsScreenState extends ConsumerState<InsightsScreen> {
                     _Warning(
                       text: 'Amounts in '
                           '${insights.unconvertible.join(', ')} are left out '
-                          '— there is no rate on file for them yet.',
+                          'because there is no rate on file for them yet.',
                     ),
                   ],
                 ],

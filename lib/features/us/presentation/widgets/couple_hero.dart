@@ -244,13 +244,13 @@ class _StatStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // A dash, not a zero. "0 hearts" is a claim; while the count is in
-    // flight the app does not have one to make.
-    String show(int? n) => n == null ? '—' : '$n';
+    // An ellipsis, not a zero. "0 hearts" is a claim; while the count is
+    // in flight the app does not have one to make.
+    String show(int? n) => n == null ? '…' : '$n';
 
     final items = <(String, String)>[
       (
-        start == null ? '—' : '${daysBetween(start!, DateTime.now())}',
+        start == null ? '…' : '${daysBetween(start!, DateTime.now())}',
         'DAYS',
       ),
       (show(stats?.flowers), 'FLOWERS'),

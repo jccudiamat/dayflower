@@ -261,7 +261,7 @@ class FlowerCatalog {
       emoji: '💜',
       name: 'Lavender Fields',
       color: Color(0xFF8B72E0),
-      meaning: "Rest — I've got you",
+      meaning: "Rest, I've got you",
       category: FlowerCategory.scene,
     ),
     Flower(

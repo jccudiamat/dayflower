@@ -63,7 +63,7 @@ class TogetherRemindersCard extends ConsumerWidget {
           if (loading)
             const TogetherSkeleton(lines: 3)
           else if (open.isEmpty)
-            Text('Set a nudge for each other — a call, a pill, a date.',
+            Text('Set a nudge for each other: a call, a pill, a date.',
                 style: TogetherStyle.tagline())
           else ...[
             for (final reminder in open.take(_shown))

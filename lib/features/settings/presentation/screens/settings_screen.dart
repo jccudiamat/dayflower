@@ -77,7 +77,7 @@ class SettingsScreen extends ConsumerWidget {
           padding: const EdgeInsets.fromLTRB(20, AppSpace.xs, 20, AppSpace.lg),
           children: [
             _ProfileHeader(
-              name: profile?.displayName ?? '—',
+              name: profile?.displayName ?? '…',
               petName: profile?.petName,
               profile: profile,
               email: email,
@@ -194,13 +194,13 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 SettingsRow(
                   title: 'Connected with',
-                  value: partner?.petName ?? partner?.displayName ?? '—',
+                  value: partner?.petName ?? partner?.displayName ?? '…',
                   chevron: false,
                 ),
                 const SettingsLine(),
                 SettingsRow(
                   title: 'Invite code',
-                  value: pair?.inviteCode ?? '—',
+                  value: pair?.inviteCode ?? '…',
                   chevron: false,
                   onTap: pair == null
                       ? null
@@ -598,7 +598,7 @@ class _VersionRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SettingsRow(
       title: 'Version',
-      value: ref.watch(installedVersionProvider).valueOrNull ?? '—',
+      value: ref.watch(installedVersionProvider).valueOrNull ?? '…',
       chevron: false,
     );
   }
@@ -620,7 +620,7 @@ class _CheckForUpdatesRow extends ConsumerWidget {
       subtitle: switch (state.stage) {
         UpdateStage.checking => 'Checking…',
         UpdateStage.downloading => 'Downloading…',
-        UpdateStage.ready => 'Downloaded — tap to install',
+        UpdateStage.ready => 'Downloaded. Tap to install',
         UpdateStage.available =>
           'Build ${state.release?.buildNumber} is available',
         _ => null,
@@ -792,7 +792,7 @@ Future<void> _pickAvatar(
                 Text('Your picture', style: AppText.hero()),
                 const SizedBox(height: 4),
                 Text(
-                  'It stands in for you everywhere — the chat, their home '
+                  'It stands in for you everywhere: the chat, their home '
                   'screen.',
                   style: AppText.caption(),
                 ),

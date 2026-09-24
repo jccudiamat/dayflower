@@ -150,7 +150,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Nudged — it is on their phone now.')),
+          const SnackBar(content: Text('Nudged. It is on their phone now.')),
         );
       }
     } catch (e) {
@@ -176,7 +176,7 @@ class _RemindersScreenState extends ConsumerState<RemindersScreen> {
         if (mounted && reminder.repeats) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Done — back again ${reminder.repeat.label
+              content: Text('Done. Back again ${reminder.repeat.label
                   .toLowerCase()}.'),
             ),
           );

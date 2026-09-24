@@ -97,7 +97,7 @@ class _CityPickerSheetState extends State<CityPickerSheet> {
             ],
           ),
           Text(
-            'Your town or city — it sets the distance between you and the '
+            'Your town or city. It sets the distance between you and the '
             'clock on their side.',
             style: AppText.caption(),
           ),

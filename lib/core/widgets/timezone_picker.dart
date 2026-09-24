@@ -76,7 +76,7 @@ class _TimezonePickerSheetState extends State<TimezonePickerSheet> {
           TextField(
             autofocus: true,
             onChanged: (v) => setState(() => _query = v),
-            decoration: const InputDecoration(hintText: 'Search — e.g. Manila'),
+            decoration: const InputDecoration(hintText: 'Search, e.g. Manila'),
           ),
           const SizedBox(height: AppSpace.xs),
           ConstrainedBox(

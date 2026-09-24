@@ -69,7 +69,7 @@ class _PairingScreenState extends ConsumerState<PairingScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _MyCodeCard(code: state.myInvite?.inviteCode ?? '——————'),
+          _MyCodeCard(code: state.myInvite?.inviteCode ?? '······'),
           const SizedBox(height: AppSpace.md),
           Row(
             children: [

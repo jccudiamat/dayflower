@@ -80,7 +80,7 @@ class _CurrencySheetState extends ConsumerState<CurrencySheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(count == 0
-              ? 'Nothing to update — every rate is pinned or already yours.'
+              ? 'Nothing to update. Every rate is pinned or already yours.'
               : 'Updated $count rate${count == 1 ? '' : 's'}.'),
         ),
       );
@@ -235,7 +235,7 @@ class _CurrencySheetState extends ConsumerState<CurrencySheet> {
               child: Text(
                 'No rate for ${missing.join(', ')} → $main. '
                 'Those accounts are left out of the totals until there is '
-                'one — a net worth quietly missing an account would be worse '
+                'one. A net worth quietly missing an account would be worse '
                 'than one that says so.',
                 style: AppText.caption(AppColors.danger),
               ),
@@ -331,7 +331,7 @@ class _RateRow extends StatelessWidget {
               children: [
                 Text(
                   converted == null
-                      ? '1 $currency = —'
+                      ? '1 $currency = ?'
                       : '1 $currency = ${converted.toStringAsFixed(4)} $main',
                   style: AppText.body(
                     converted == null ? AppColors.danger : AppColors.ink,
@@ -339,7 +339,7 @@ class _RateRow extends StatelessWidget {
                 ),
                 Text(
                   rate == null
-                      ? 'No rate yet — tap to add one'
+                      ? 'No rate yet. Tap to add one'
                       : rate!.pinned
                           ? 'Yours · pinned'
                           : 'Live · ${DateFormat('d MMM').format(rate!.asOf)}',

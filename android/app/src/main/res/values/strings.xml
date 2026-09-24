@@ -14,8 +14,8 @@
     <string name="reunion_widget_description">How long until you are in the same place.</string>
     <string name="sticky_note_widget_description">One reminder, stuck where you will see it.</string>
     <string name="reunion_widget_label">NEXT REUNION</string>
-    <string name="reunion_widget_empty">No countdown yet — tap to set one</string>
+    <string name="reunion_widget_empty">No countdown yet. Tap to set one</string>
 
     <!-- Adaptive widget (follows the in-app Settings preference) -->
-    <string name="adaptive_widget_description">Flower, heartbeat or reunion — your choice in Settings.</string>
+    <string name="adaptive_widget_description">Flower, heartbeat or reunion. Your choice in Settings.</string>
 </resources>

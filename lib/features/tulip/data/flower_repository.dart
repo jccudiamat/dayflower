@@ -196,7 +196,7 @@ class FlowerMessage {
     // someone for, so it says what it wants rather than what it is.
     if (isCall) {
       final kind = call == CallMode.video ? 'Video call' : 'Voice call';
-      return isLiveCall ? '$kind — tap to join' : '$kind ended';
+      return isLiveCall ? '$kind · tap to join' : '$kind ended';
     }
 
     if (isBouquet) return 'Sent you a bouquet 💐';
@@ -209,7 +209,7 @@ class FlowerMessage {
     // So an unrecognised flower is named as a tulip, never as a crash.
     final bloom = flower!;
     final sent = 'Sent you a ${bloom.name} ${bloom.emoji}';
-    return note.isEmpty ? sent : '$sent — $note';
+    return note.isEmpty ? sent : '$sent · $note';
   }
 
   /// One line for a conversation list, from the reader's side.
@@ -227,13 +227,13 @@ class FlowerMessage {
     }
     if (isCall) {
       final kind = call == CallMode.video ? 'Video call' : 'Voice call';
-      return isLiveCall ? '$kind — happening now' : kind;
+      return isLiveCall ? '$kind · happening now' : kind;
     }
     if (isText) return note;
     final bloom = flower!;
     final line = mine ? 'You sent ${bloom.name} ${bloom.emoji}'
                       : '${bloom.name} ${bloom.emoji}';
-    return note.isEmpty ? line : '$line — $note';
+    return note.isEmpty ? line : '$line · $note';
   }
 
   /// A bouquet made on the website, recognised by its gift link.

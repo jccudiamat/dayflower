@@ -207,7 +207,7 @@ class _MissingPlaceNote extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: Text(
-        '${missing.join(' and ')} not set a city yet — '
+        '${missing.join(' and ')} not set a city yet. '
         'Settings → Where you are puts you both on the map.',
         style: AppText.caption(),
       ),

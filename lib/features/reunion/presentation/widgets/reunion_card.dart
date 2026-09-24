@@ -291,7 +291,7 @@ class _EditReunionSheetState extends State<_EditReunionSheet> {
           const SizedBox(height: AppSpace.sm),
           TextField(
             controller: _title,
-            decoration: const InputDecoration(hintText: 'Title — e.g. Manila!'),
+            decoration: const InputDecoration(hintText: 'Title, e.g. Manila!'),
           ),
           const SizedBox(height: AppSpace.xs),
           TextField(

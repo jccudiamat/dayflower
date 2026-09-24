@@ -356,7 +356,7 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'This one comes from your profiles — change it in Settings, '
+            'This one comes from your profiles. Change it in Settings, '
             'or change your start date on Us.',
           ),
         ),

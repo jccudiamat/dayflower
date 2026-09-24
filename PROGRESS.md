@@ -13,6 +13,23 @@
 
 ## Recent app work
 
+### Chats list, reply jump, reminder taps on a closed app, no em dashes (2026-09-24)
+
+**Chat tab is a list now** (WhatsApp/Instagram style), `Routes.chats = '/app/chats'`, `ChatsScreen`:
+- Their row (`ConversationRow`, was the unused `ConversationCard`): face (opens their photo), name, last message, time, unread count, green dot when active now. Tapping the row **pushes** `Routes.chat`, so back returns to the list.
+- Reserved, greyed, not tappable: **Channels** (tips from couples) and **Reads** (LDR articles) under "Coming soon" (`ComingSoonRow`). No gesture, no ink; screen readers hear "coming soon". Styling in `ChatsStyle` (design_tokens.dart).
+- Camera icon top right opens My Day (`Routes.flowers`). Bottom-nav label stays "Chat".
+- `Routes.chat` keeps `/app/flowers/chat`: notifications and old payloads still open the conversation directly. Back from it with nothing under it goes to the list (`backFallbackRoute`, and the header's back button), then Home.
+- ⚠️ go_router 13 `push` does not change `routeInformationProvider`'s URI; tests assert on screens, not the URL, after a push.
+
+**Pressing a reply's quote takes you to what it answers** (`_showQuoted` in flowers_screen.dart): walks the lazy reversed list one viewport per frame until the target's `GlobalKey` has a context, `Scrollable.ensureVisible(alignment: .5)`, then a 1.4 s brand tint behind the bubble. A quoted My Day photo that is not in the chat opens in the media viewer; a deleted one shows "That message is no longer here".
+
+🔴 **A tapped "new reminder" on a closed app opened Home.** Run-up pings (`dayflower://reminder-soon/<id>`) were understood only by the warm tap handler; the cold-start path read payloads with `AppNotifications.routeOf` alone. Both now go through `tapRouteOf` (reminder_scheduler.dart). Test in reminder_countdown_test.dart.
+
+**No em dashes in UI copy** (user rule, 2026-09-24). Swept every user-visible string in lib/, Kotlin and res/values: sentences reworded; placeholders became "…" (loading values), "······" (invite code), "1 USD = ?" (no rate), "♡" (empty reunion widget). Comments are exempt. Release notes passed to publish_update count as UI too.
+
+Tests: test/chats_screen_test.dart (list, inert reserved rows, push/back, photo, 360/320@2x, reply jump + tint, missing quote); home/back/navigation tests updated. Screenshots: `flutter test test/chats_screen_test.dart --dart-define=CAPTURE_REVIEW=true` writes build/review/chats-list*.png and reply-*.png. Not yet on a device.
+
 ### Notification taps land where they point (2026-09-23)
 
 - 🔴 **Every notification tapped on a closed app opened Home.** The tap arrives at startup before auth/profile/pair are known; `go(route)` was redirected to the splash and the destination dropped, then the splash sent everyone Home. It hit messages, photos, missed calls, update notices, reminder alarms (full-screen) and Answer/open on an incoming call. `goWhenReady(ref, route)` (app_router.dart) holds the route on the router gate; `gateRedirect(held:)` takes you there out of the splash instead of Home; the redirect clears it once every gate passes. `_openPendingRoute` and `_openRingingAlarm` use it. Tests: `router_gate_test.dart` group "a notification tapped on a closed app". Warm taps (app open) already worked.

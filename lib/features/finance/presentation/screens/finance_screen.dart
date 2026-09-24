@@ -375,7 +375,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                             body: readOnly
                                 ? "They haven't set any up."
                                 : 'Rent, salary, subscriptions, a loan '
-                                    'payment — set it once and it posts '
+                                    'payment: set it once and it posts '
                                     'itself, or waits for you to confirm.',
                           )
                         else
@@ -473,8 +473,8 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
                               title: 'No positions yet',
                               body: readOnly
                                   ? "They haven't added any."
-                                  : 'Add what you actually hold — coins, '
-                                      'grams, shares — and the account is '
+                                  : 'Add what you actually hold (coins, '
+                                      'grams, shares) and the account is '
                                       'valued at what it is worth today '
                                       'instead of what you paid in.',
                             )
@@ -852,7 +852,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           final ok = await showConfirmDialog(
             context,
             title: 'Delete ${existing!.name}?',
-            message: 'Spending logged against it stays — the entries lose '
+            message: 'Spending logged against it stays. The entries lose '
                 'the label, not the money.',
             confirmLabel: 'Delete',
           );
@@ -945,7 +945,7 @@ class _FinanceScreenState extends ConsumerState<FinanceScreen> {
           final ok = await showConfirmDialog(
             context,
             title: 'Delete ${existing!.name}?',
-            message: 'The money stays exactly where it is — this removes the '
+            message: 'The money stays exactly where it is. This removes the '
                 'goal, not the savings.',
             confirmLabel: 'Delete',
           );
@@ -1180,7 +1180,7 @@ class _NetWorthCard extends StatelessWidget {
           if (summary.unconvertible.isNotEmpty) ...[
             const SizedBox(height: 4),
             Text(
-              'No rate for ${summary.unconvertible.join(', ')} — left out',
+              'No rate for ${summary.unconvertible.join(', ')}, left out',
               style: AppText.caption(AppColors.brandLight),
             ),
           ],
@@ -2292,7 +2292,7 @@ class _AccountSheetState extends State<_AccountSheet> {
           const SizedBox(height: AppSpace.xxs),
           Text(
             _class == AccountClass.liability
-                ? 'Enter what you owe as a positive number — it is '
+                ? 'Enter what you owe as a positive number. It is '
                     'subtracted from net worth.'
                 : 'Added to net worth.',
             style: AppText.caption(),
@@ -2335,7 +2335,7 @@ class _AccountSheetState extends State<_AccountSheet> {
             const AppFieldLabel('Target'),
             AppSheetField(
               controller: _target,
-              hint: 'e.g. 100000 — leave blank for none',
+              hint: 'e.g. 100000, or leave blank for none',
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
             ),
@@ -2565,7 +2565,7 @@ class _EntrySheetState extends State<_EntrySheet> {
     return AppBottomSheet(
       title: isNew ? 'Log an entry' : 'Edit entry',
       subtitle: isTransfer
-          ? 'Moving your own money — it never counts as income or spending'
+          ? 'Moving your own money never counts as income or spending'
           : 'Money in, money out',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2752,7 +2752,7 @@ class _AccountPicker extends StatelessWidget {
     if (accounts.isEmpty) {
       return Text(
         allowNone
-            ? 'No accounts yet — this still counts toward the month.'
+            ? 'No accounts yet. This still counts toward the month.'
             : 'Add a second account before transferring between them.',
         style: AppText.caption(),
       );
@@ -3690,8 +3690,8 @@ class _RecurringSheetState extends State<_RecurringSheet> {
                         _autoPost
                             ? 'Written the next time you open Finance, '
                                 'dated the day it was due.'
-                            : 'Shows up as due and waits for you to confirm '
-                                '— better when the amount varies.',
+                            : 'Shows up as due and waits for you to confirm. '
+                                'Better when the amount varies.',
                         style: AppText.caption(),
                       ),
                     ],
@@ -3952,7 +3952,7 @@ class _HoldingSheetState extends State<_HoldingSheet> {
 
     return AppBottomSheet(
       title: isNew ? 'Add a holding' : 'Edit holding',
-      subtitle: 'Quantity × price — gold in grams, crypto in coins',
+      subtitle: 'Quantity × price: gold in grams, crypto in coins',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -3966,7 +3966,7 @@ class _HoldingSheetState extends State<_HoldingSheet> {
               ),
               child: Text(
                 'No investment accounts yet. Add an account of kind '
-                '"Investment" first — a position has to live somewhere.',
+                '"Investment" first. A position has to live somewhere.',
                 style: AppText.caption(AppColors.danger),
               ),
             )
@@ -4070,8 +4070,8 @@ class _HoldingSheetState extends State<_HoldingSheet> {
           ),
           const SizedBox(height: AppSpace.xxs),
           Text(
-            'Both per unit, in $_currency. Prices are yours to update — '
-            'nothing fetches a crypto or metal price for you.',
+            'Both per unit, in $_currency. Prices are yours to update. '
+            'Nothing fetches a crypto or metal price for you.',
             style: AppText.caption(),
           ),
 

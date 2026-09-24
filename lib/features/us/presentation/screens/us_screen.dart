@@ -275,7 +275,7 @@ class _MilestonesCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpace.xs),
           Text(
-            'Both are worked out from your start date — they appear on '
+            'Both are worked out from your start date and appear on '
             'Events on their own.',
             style: AppText.caption(),
           ),
@@ -396,7 +396,7 @@ class _PersonRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                profile?.petName ?? profile?.displayName ?? '—',
+                profile?.petName ?? profile?.displayName ?? '…',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppText.subtitle(),
@@ -466,7 +466,7 @@ class _PremiumCard extends StatelessWidget {
                     Text(
                       // Spelled out because it is the unusual half of the
                       // pricing and the thing most likely to be misread.
-                      r'$4.99 / month — for the two of you',
+                      r'$4.99 / month for the two of you',
                       style: AppText.caption(AppColors.onDarkMuted),
                     ),
                   ],
@@ -500,7 +500,7 @@ class _PremiumCard extends StatelessWidget {
                 // so is better than a tap that appears to fail.
                 onTap: () => ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Not available yet — nothing is charged.'),
+                    content: Text('Not available yet. Nothing is charged.'),
                   ),
                 ),
                 child: Padding(

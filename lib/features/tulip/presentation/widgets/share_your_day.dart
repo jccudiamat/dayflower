@@ -369,8 +369,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             content: Text(
               'You can have $maxLiveDays days up at once. Posting this one '
               'takes your oldest off the home screen'
-              '${left == null ? '' : ' — it had '
-                  '${left.inHours >= 1 ? '${left.inHours} h' : '${left.inMinutes} m'} left'}'
+              '${left == null ? '' : ' (it had '
+                  '${left.inHours >= 1 ? '${left.inHours} h' : '${left.inMinutes} m'} left)'}'
               '.\n\nIt stays in your conversation either way.',
               style: AppText.body(),
             ),
@@ -450,7 +450,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             template: t,
             bytes: bytes,
           );
-      if (mounted) _toast('Your half is up — waiting for theirs 💞');
+      if (mounted) _toast('Your half is up. Waiting for theirs 💞');
     } catch (_) {
       if (mounted) _toast("Couldn't start that strip. Try again?");
     } finally {
@@ -1504,7 +1504,7 @@ class _StripBanner extends ConsumerWidget {
             Expanded(
               child: Text(
                 joining
-                    ? '$name started a ${strip.style.name} — shoot your half'
+                    ? '$name started a ${strip.style.name}. Shoot your half'
                     : 'Waiting for $name to add their half',
                 maxLines: 2,
                 style: AppText.caption(Colors.white)

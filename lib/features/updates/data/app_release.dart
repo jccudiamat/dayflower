@@ -46,7 +46,7 @@ class AppRelease {
     final rawNotes = map['notes'];
     return AppRelease(
       buildNumber: _asInt(map['buildNumber']),
-      versionName: map['versionName'] as String? ?? '—',
+      versionName: map['versionName'] as String? ?? '?',
       fileName: map['apk'] as String? ?? '',
       sizeBytes: _asInt(map['sizeBytes']),
       notes: rawNotes is List

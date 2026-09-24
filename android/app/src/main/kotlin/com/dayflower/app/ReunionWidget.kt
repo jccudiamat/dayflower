@@ -155,7 +155,7 @@ class ReunionWidget : HomeWidgetProvider() {
 
             if (happensAt <= 0L) {
                 views.setTextViewText(R.id.reunion_title, "Nothing planned yet")
-                views.setTextViewText(R.id.reunion_count, "—")
+                views.setTextViewText(R.id.reunion_count, "♡")
                 views.setTextViewText(R.id.reunion_unit, "")
                 views.setTextViewText(
                     R.id.reunion_when,

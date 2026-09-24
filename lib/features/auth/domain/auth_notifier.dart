@@ -164,7 +164,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       return 'Wrong email or password.';
     }
     if (msg.contains('already registered')) {
-      return 'That email already has an account — sign in instead.';
+      return 'That email already has an account. Sign in instead.';
     }
     if (msg.contains('network')) return 'No internet connection.';
     if (msg.contains('rate')) return 'Too many attempts. Try again later.';
