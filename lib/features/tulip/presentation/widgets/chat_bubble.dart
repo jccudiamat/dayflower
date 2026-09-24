@@ -17,6 +17,25 @@ import 'media_viewer.dart';
 import 'message_quote.dart';
 import 'call_bubble.dart';
 import '../../../../core/widgets/storage_image.dart';
+import '../../domain/photo_shape.dart';
+
+/// The tallest a photo stands in the thread.
+const _photoMaxHeight = 320.0;
+
+/// The box a photo takes in a bubble [maxWidth] wide: the full width, or
+/// narrower for a tall photo that would pass [_photoMaxHeight]. Exactly the
+/// size a loaded photo settles at, so the loading box can be it too. Null
+/// [aspect] (a photo with no recorded shape) gets a 4:3 box.
+@visibleForTesting
+Size chatPhotoBox(double maxWidth, double? aspect) {
+  final a = aspect ?? 4 / 3;
+  var width = maxWidth, height = maxWidth / a;
+  if (height > _photoMaxHeight) {
+    height = _photoMaxHeight;
+    width = _photoMaxHeight * a;
+  }
+  return Size(width, height);
+}
 
 /// One message in the thread — a flower or a line of text.
 ///
@@ -235,6 +254,17 @@ class ChatBubble extends StatelessWidget {
     // it. A chat-only photo never went, so saying it expired invents a
     // history the sender did not choose.
     final expired = message.toWidget && !message.isFreshForWidget;
+    final note = (message.note ?? '').trim();
+    // What was said with it. A card's first line is the occasion its maker
+    // wrote, so only the rest is the person talking.
+    final caption =
+        message.isCard ? note.split('\n').skip(1).join('\n').trim() : note;
+    // 🔴 A photo with nothing written under it is all photo. It used to sit
+    // on a white strip that held only the time: a band of empty bubble
+    // under every picture. Now the picture runs to the bubble's edge and
+    // the time sits on it, where it was. Only a photo that says something
+    // (a caption, a card's message, a My Day label) keeps a footer.
+    final described = message.toWidget || caption.isNotEmpty;
     return Consumer(
       builder: (context, ref, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -243,83 +273,129 @@ class ChatBubble extends StatelessWidget {
           GestureDetector(
             // Tapping a picture opens it. Obvious enough that its absence
             // read as the thumbnail being all there was.
-            onTap: () => showMediaViewer(
-              context,
-              title: isMine ? 'Your day' : 'Their day',
-              subtitle: message.note,
-              imagePath: message.imagePath,
-              fileName: 'dayflower-day-${message.id}.jpg',
-            ),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 320),
-              // 🔴 Cached by path. This used to sign a fresh URL inside
-              // build(), so every photo scrolled off and back arrived under
-              // a new address - a spinner and a full re-download each time,
-              // which is the blinking. See StorageImage.
-              child: StorageImage.dayPhoto(
-                message.imagePath!,
-                fit: BoxFit.cover,
-                // ⚠️ Screen width, the default - not the bubble's. A photo
-                // with no fixed size takes the size it was decoded at, and
-                // decoding smaller than the bubble made the bubble shrink.
-                placeholderHeight: 180,
-                error: (retry) => GestureDetector(
-                  onTap: retry,
-                  child: Container(
-                    height: 160,
-                    color: AppColors.surfaceSubtle,
-                    alignment: Alignment.center,
-                    child: Text('Photo unavailable', style: AppText.caption()),
-                  ),
-                ),
+            onTap: () => showPhotoMessage(context, ref, message),
+            child: described
+                ? _photo()
+                : Stack(children: [
+                    _photo(),
+                    // Where the footer's time was: bottom left, the same
+                    // inset. On a dark pill, since the photo under it can
+                    // be any colour at all.
+                    Positioned(
+                      left: 8,
+                      bottom: 6,
+                      child: IgnorePointer(
+                        child: _MetaRow(
+                          message: message,
+                          isMine: isMine,
+                          time: _time,
+                          onPhoto: true,
+                        ),
+                      ),
+                    ),
+                  ]),
+          ),
+          if (described)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // 🔴 A picture sent to the conversation is just a picture.
+                  // This footer said "Your day · on the home screen" under
+                  // every photo in the thread, including ones that had
+                  // deliberately not been sent there — a caption describing
+                  // somewhere the photo never went.
+                  if (message.toWidget) ...[
+                    Text(
+                      expired
+                          ? 'Your day · expired'
+                          : 'Your day · on the home screen',
+                      style: AppText.label(
+                          expired ? AppColors.muted : AppColors.secondary),
+                    ),
+                    if (note.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text('“$note”',
+                          style: AppText.note().copyWith(fontSize: 14.5)),
+                    ],
+                    const SizedBox(height: 2),
+                  ]
+                  // A card's message keeps the handwriting face it was
+                  // written in; a caption reads like any other message.
+                  else ...[
+                    Text(
+                      caption,
+                      style: message.isCard
+                          ? AppText.note().copyWith(fontSize: 14.5)
+                          : AppText.body(AppColors.ink),
+                    ),
+                    const SizedBox(height: 2),
+                  ],
+                  _MetaRow(message: message, isMine: isMine, time: _time),
+                ],
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 7),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // 🔴 A picture sent to the conversation is just a picture.
-                // This footer said "Your day · on the home screen" under
-                // every photo in the thread, including ones that had
-                // deliberately not been sent there — a caption describing
-                // somewhere the photo never went.
-                if (message.toWidget) ...[
-                  Text(
-                    expired
-                        ? 'Your day · expired'
-                        : 'Your day · on the home screen',
-                    style: AppText.label(
-                        expired ? AppColors.muted : AppColors.secondary),
-                  ),
-                  if (message.note != null && message.note!.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text('“${message.note}”',
-                        style: AppText.note().copyWith(fontSize: 14.5)),
-                  ],
-                  const SizedBox(height: 2),
-                ]
-                // ⚠️ Except a card, which is chat-only by design and whose
-                // whole message lives in that note. Its first line is the
-                // occasion written by the card maker, so only the rest is
-                // the person talking.
-                else if (message.isCard && (message.note ?? '').isNotEmpty) ...[
-                  Text(
-                    message.note!.split('\n').skip(1).join('\n').trim(),
-                    style: AppText.note().copyWith(fontSize: 14.5),
-                  ),
-                  const SizedBox(height: 2),
-                ],
-                _MetaRow(message: message, isMine: isMine, time: _time),
-              ],
-            ),
-          ),
         ],
       ),
     );
   }
+
+  /// The picture itself, at its final size from the first frame.
+  Widget _photo() =>
+      // 🔴 Sized before it loads. The loading box used to have a
+      // height and no width, so the bubble shrank to its time line: a
+      // grey sliver that then burst out to the photo's width. The
+      // photo's shape is in its path now, so the box it loads into is
+      // the box it ends up in. See photo_shape.dart.
+      LayoutBuilder(builder: (context, box) {
+        final path = message.imagePath!;
+        final aspect = photoAspectOf(path);
+        final size = chatPhotoBox(box.maxWidth, aspect);
+        Widget unavailable(VoidCallback retry) => GestureDetector(
+              onTap: retry,
+              child: Container(
+                width: size.width,
+                height: size.height,
+                color: AppColors.surfaceSubtle,
+                alignment: Alignment.center,
+                child:
+                    Text('Photo unavailable', style: AppText.caption()),
+              ),
+            );
+        // 🔴 Cached by path. This used to sign a fresh URL inside
+        // build(), so every photo scrolled off and back arrived under
+        // a new address - a spinner and a full re-download each time,
+        // which is the blinking. See StorageImage.
+        if (aspect != null) {
+          return StorageImage.dayPhoto(
+            path,
+            fit: BoxFit.cover,
+            width: size.width,
+            height: size.height,
+            error: unavailable,
+          );
+        }
+        // Sent before shapes were recorded: the full width while it
+        // loads, then whatever shape it turns out to be.
+        return ConstrainedBox(
+          constraints:
+              const BoxConstraints(maxHeight: _photoMaxHeight),
+          child: StorageImage.dayPhoto(
+            path,
+            fit: BoxFit.cover,
+            // ⚠️ Screen width, the default - not the bubble's. A photo
+            // with no fixed size takes the size it was decoded at,
+            // and decoding smaller than the bubble made it shrink.
+            placeholder: SizedBox.fromSize(
+              size: size,
+              child: ColoredBox(color: AppColors.surfaceSubtle),
+            ),
+            error: unavailable,
+          ),
+        );
+      });
 
   // ── Flower message ────────────────────────────────
   /// A flower arrives as a Polaroid.
@@ -542,31 +618,52 @@ class _MetaRow extends StatelessWidget {
     required this.message,
     required this.isMine,
     required this.time,
+    this.onPhoto = false,
   });
 
   final FlowerMessage message;
   final bool isMine;
   final DateFormat time;
 
+  /// Drawn over a picture: light on a dark pill, legible on any photo.
+  final bool onPhoto;
+
+  /// Seen, on a photo: the purple lifted enough to read on the dark pill.
+  static final _seenOnPhoto = Color.lerp(AppColors.secondary, Colors.white, .5)!;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final row = Row(
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.end,
       children: [
         Text(
           time.format(message.sentAt),
-          style: AppText.caption().copyWith(fontSize: 10.5),
+          style: AppText.caption(onPhoto ? Colors.white : null)
+              .copyWith(fontSize: 10.5),
         ),
         if (isMine) ...[
           const SizedBox(width: 4),
           AppIcon(
             message.isSeen ? Icons.done_all_rounded : Icons.done_rounded,
             size: 14,
-            color: message.isSeen ? AppColors.secondary : AppColors.muted,
+            color: message.isSeen
+                ? (onPhoto ? _seenOnPhoto : AppColors.secondary)
+                : (onPhoto ? Colors.white : AppColors.muted),
           ),
         ],
       ],
+    );
+    if (!onPhoto) return row;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: .38),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        child: row,
+      ),
     );
   }
 }

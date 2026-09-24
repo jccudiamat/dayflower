@@ -8,6 +8,8 @@ import '../../../core/providers/supabase_provider.dart';
 import '../../calls/domain/call.dart';
 import '../../pairing/data/pair_repository.dart';
 import '../domain/flower_catalog.dart';
+import '../../../core/widgets/storage_image.dart';
+import '../domain/photo_shape.dart';
 
 /// One message in the couple's conversation.
 ///
@@ -190,7 +192,14 @@ class FlowerMessage {
     // The caption leads for a photo: "📷 at the beach" says more than
     // "shared their day" ever does, and the emoji keeps it obvious that
     // there is a picture behind it.
-    if (isPhoto) return note.isEmpty ? 'Shared their day 📷' : '📷  $note';
+    // 🔴 A chat photo is not a day. Every photo used to announce itself as
+    // "Shared their day", including the ones sent straight into the
+    // conversation from the chat's own camera and gallery buttons, which
+    // never went near the home screen. Only a My Day post is a day.
+    if (isPhoto) {
+      if (note.isNotEmpty) return '📷  $note';
+      return toWidget ? 'Shared their day 📷' : 'Sent a photo 📷';
+    }
 
     // A live call is the one message in this app that is worth interrupting
     // someone for, so it says what it wants rather than what it is.
@@ -407,7 +416,11 @@ class FlowerRepository {
     // An ordinary day photo stays unprefixed, so every path
     // already in the bucket keeps meaning what it meant.
     final prefix = origin == PhotoOrigin.daily ? '' : '${origin.name}-';
-    final path = '$pairId/$prefix${_uuid()}.$ext';
+    // The shape rides in the name, so the thread can draw the bubble at its
+    // final size before the photo arrives. See photo_shape.dart.
+    final shape = await measurePhoto(bytes);
+    final base = '$pairId/$prefix${_uuid()}.$ext';
+    final path = shape == null ? base : withPhotoShape(base, shape.$1, shape.$2);
 
     await _client.storage.from(dayPhotoBucket).uploadBinary(
           path,
@@ -417,6 +430,10 @@ class FlowerRepository {
             upsert: false,
           ),
         );
+    // The sender already has every byte of it. Cached under its path now,
+    // their own photo lands in the thread from the phone rather than
+    // downloading back down what was just uploaded.
+    await StorageImageCache.prime(StorageBucket.dayPhotos, path, bytes);
 
     return _insert({
       'pair_id': pairId,

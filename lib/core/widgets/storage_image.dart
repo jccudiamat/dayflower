@@ -38,6 +38,24 @@ class StorageImageCache {
   @visibleForTesting
   static set debugManager(BaseCacheManager value) => _manager = value;
 
+  /// Files [bytes] under [path] as though it had been downloaded.
+  ///
+  /// For a photo this phone just uploaded: the next time anything draws
+  /// that path it reads it from disk, with no signing and no download.
+  /// Never throws; a cache that could not take it only costs a download.
+  static Future<void> prime(
+      StorageBucket bucket, String path, Uint8List bytes) async {
+    try {
+      final key = '${bucket.name}/$path';
+      final dot = path.lastIndexOf('.');
+      await manager.putFile(key, bytes,
+          key: key,
+          fileExtension: dot < 0 ? 'jpg' : path.substring(dot + 1));
+    } catch (e) {
+      debugPrint('private image cache prime failed: $e');
+    }
+  }
+
   /// Signing out: another account on this phone must not find these.
   static Future<void> clear() async {
     try {

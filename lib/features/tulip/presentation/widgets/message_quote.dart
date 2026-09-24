@@ -62,7 +62,17 @@ class MessageQuote extends ConsumerWidget {
               // of the loaded window, or deleted since. `reply_to` is set
               // null rather than cascaded, so a reply outlives what it
               // answered — and "unavailable" is true of both.
-              quoted == null ? 'Message unavailable' : quoted.alertLine,
+              quoted == null
+                  ? 'Message unavailable'
+                  // A photo: its caption, or just "Photo". The icon in
+                  // front already says it is one, and alertLine's "Shared
+                  // their day 📷" said it twice, and wrongly for a chat
+                  // photo, and as "their" even when it was your own.
+                  : quoted.isPhoto
+                      ? ((quoted.note ?? '').trim().isEmpty
+                          ? 'Photo'
+                          : quoted.note!.trim())
+                      : quoted.alertLine,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: AppText.caption(tint.withValues(alpha: .75)),

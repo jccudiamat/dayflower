@@ -104,7 +104,7 @@ async function fcmAccessToken(serviceAccount: {
 /// A call is the one thing here allowed to take over the screen — it expires
 /// if it is not seen while it is happening. Everything else is a banner that
 /// waits, matching how the in-app alerts already behave.
-function describe(payload: Payload, name: string) {
+function describe(payload: Payload, name: string, note: string | null) {
   switch (payload.kind) {
     case "call":
       return {
@@ -114,8 +114,16 @@ function describe(payload: Payload, name: string) {
           : "is calling you",
         priority: "high" as const,
       };
+    // 🔴 Only chat photos reach here (the trigger fires on to_chat), and a
+    // chat photo is not a day: this said "shared their day" for photos sent
+    // from the chat's own camera and gallery buttons. The caption leads when
+    // there is one, as it does in the app's own alert (alertLine).
     case "photo":
-      return { title: name, body: "shared their day 📷", priority: "normal" as const };
+      return {
+        title: name,
+        body: note ? `📷  ${note}` : "Sent a photo 📷",
+        priority: "normal" as const,
+      };
     case "flower":
       return { title: name, body: "sent you a flower 🌷", priority: "normal" as const };
     // ⚠️ The title and body here are a *fallback*. A heartbeat reaching a
@@ -165,7 +173,17 @@ Deno.serve(async (req) => {
   if (!tokens?.length) return new Response("no devices", { status: 200 });
 
   const name = sender?.pet_name ?? sender?.display_name ?? "Someone";
-  const { title, body, priority } = describe(payload, name);
+  // A photo's caption is its best line. Only a photo pays for this read.
+  let note: string | null = null;
+  if (payload.kind === "photo") {
+    const { data: message } = await supabase
+      .from("flower_messages")
+      .select("note")
+      .eq("id", payload.message_id)
+      .maybeSingle();
+    note = message?.note?.trim() || null;
+  }
+  const { title, body, priority } = describe(payload, name, note);
 
   const serviceAccount = JSON.parse(Deno.env.get("FCM_SERVICE_ACCOUNT")!);
   const accessToken = await fcmAccessToken(serviceAccount);

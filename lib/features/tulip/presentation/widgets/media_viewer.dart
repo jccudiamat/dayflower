@@ -8,6 +8,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../data/flower_repository.dart';
 import '../../../../core/widgets/storage_image.dart';
+import 'package:intl/intl.dart';
+import '../../../../core/providers/supabase_provider.dart';
+import '../../../onboarding/data/user_repository.dart';
 
 /// Saving a picture into the phone's own gallery.
 ///
@@ -49,6 +52,7 @@ class MediaViewer extends ConsumerStatefulWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.caption,
     this.imagePath,
     this.asset,
     required this.fileName,
@@ -63,6 +67,9 @@ class MediaViewer extends ConsumerStatefulWidget {
 
   final String title;
   final String? subtitle;
+
+  /// What the sender wrote with it, under the picture.
+  final String? caption;
   final String fileName;
 
   @override
@@ -157,6 +164,20 @@ class _MediaViewerState extends ConsumerState<MediaViewer> {
                 child: Center(child: _image()),
               ),
             ),
+            if (widget.caption != null && widget.caption!.trim().isNotEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpace.md, AppSpace.xs, AppSpace.md, AppSpace.sm),
+                  child: Text(
+                    widget.caption!.trim(),
+                    maxLines: 6,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.body(Colors.white),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -242,6 +263,7 @@ Future<void> showMediaViewer(
   BuildContext context, {
   required String title,
   String? subtitle,
+  String? caption,
   String? imagePath,
   String? asset,
   required String fileName,
@@ -252,10 +274,68 @@ Future<void> showMediaViewer(
       builder: (_) => MediaViewer(
         title: title,
         subtitle: subtitle,
+        caption: caption,
         imagePath: imagePath,
         asset: asset,
         fileName: fileName,
       ),
     ),
   );
+}
+
+/// Opens a photo from the thread the way WhatsApp heads one: who sent it
+/// and when, with the caption under the picture.
+///
+/// 🔴 Every photo used to open as "Your day" or "Their day", including the
+/// ones sent from the chat's own camera and gallery buttons, which are
+/// photos from a person and never went near the home screen. Only a My Day
+/// post is a day, and says so.
+Future<void> showPhotoMessage(
+  BuildContext context,
+  WidgetRef ref,
+  FlowerMessage message,
+) async {
+  final mine = message.senderId == ref.read(currentUserIdProvider);
+  // Loaded already wherever the chat is on screen; waited for briefly
+  // anywhere it is not, rather than heading their photo "Your partner".
+  final partner = ref.read(partnerProfileProvider).valueOrNull ??
+      await ref
+          .read(partnerProfileProvider.future)
+          .timeout(const Duration(seconds: 2), onTimeout: () => null)
+          .catchError((Object _) => null);
+  if (!context.mounted) return;
+  final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
+  final note = (message.note ?? '').trim();
+  // A card's note opens with the occasion its maker wrote; only the rest is
+  // the person talking, as in the bubble.
+  final caption =
+      message.isCard ? note.split('\n').skip(1).join('\n').trim() : note;
+  await showMediaViewer(
+    context,
+    title: message.toWidget
+        ? (mine ? 'Your day' : '$name’s day')
+        : (mine ? 'You' : name),
+    subtitle: sentAtLabel(message.sentAt),
+    caption: caption.isEmpty ? null : caption,
+    imagePath: message.imagePath,
+    fileName: message.toWidget
+        ? 'dayflower-day-${message.id}.jpg'
+        : 'dayflower-photo-${message.id}.jpg',
+  );
+}
+
+/// When something was sent, for a header: "Today, 9:41 AM", "Yesterday,
+/// 9:41 AM", the weekday inside a week, then the date.
+String sentAtLabel(DateTime sentAt, {DateTime? now}) {
+  final at = sentAt.toLocal();
+  final clock = now ?? DateTime.now();
+  final days = DateTime(clock.year, clock.month, clock.day)
+      .difference(DateTime(at.year, at.month, at.day))
+      .inDays;
+  final time = DateFormat('h:mm a').format(at);
+  if (days <= 0) return 'Today, $time';
+  if (days == 1) return 'Yesterday, $time';
+  if (days < 7) return '${DateFormat('EEEE').format(at)}, $time';
+  if (at.year == clock.year) return '${DateFormat('d MMM').format(at)}, $time';
+  return '${DateFormat('d MMM y').format(at)}, $time';
 }

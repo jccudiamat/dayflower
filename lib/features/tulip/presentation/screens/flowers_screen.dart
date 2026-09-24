@@ -149,16 +149,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
       // viewer never is (see chatMessagesProvider), but it still exists:
       // open the photo itself rather than saying it is gone.
       final quoted = ref.read(quotedMessageProvider(id));
-      final path = quoted?.imagePath;
-      if (quoted != null && quoted.isPhoto && path != null) {
-        final mine = quoted.senderId == ref.read(currentUserIdProvider);
-        showMediaViewer(
-          context,
-          title: mine ? 'Your day' : 'Their day',
-          subtitle: quoted.note,
-          imagePath: path,
-          fileName: 'dayflower-day-${quoted.id}.jpg',
-        );
+      if (quoted != null && quoted.isPhoto && quoted.imagePath != null) {
+        showPhotoMessage(context, ref, quoted);
         return;
       }
       ScaffoldMessenger.of(context)

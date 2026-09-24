@@ -165,7 +165,10 @@ void main() {
 
   group('the message line', () {
     test('a photo leads with its caption when it has one', () {
-      expect(_message(imagePath: 'p/x.jpg').alertLine, 'Shared their day 📷');
+      // A chat photo is a photo; only a My Day post is a day.
+      expect(_message(imagePath: 'p/x.jpg').alertLine, 'Sent a photo 📷');
+      expect(_message(imagePath: 'p/x.jpg', toWidget: true).alertLine,
+          'Shared their day 📷');
       expect(_message(imagePath: 'p/x.jpg', note: 'at the beach').alertLine,
           contains('at the beach'));
     });
@@ -178,7 +181,7 @@ void main() {
       // Otherwise the notification body is a blank line, which on Android
       // renders as a title with nothing under it.
       expect(_message(imagePath: 'p/x.jpg', note: '   ').alertLine,
-          'Shared their day 📷');
+          'Sent a photo 📷');
     });
 
     test('a flower id the catalog has never heard of still reads', () {
@@ -203,6 +206,7 @@ FlowerMessage _message({
   String? flowerType,
   String? imagePath,
   String? note,
+  bool toWidget = false,
 }) =>
     FlowerMessage(
       id: 'm1',
@@ -212,5 +216,6 @@ FlowerMessage _message({
       imagePath: imagePath,
       note: note,
       sentAt: DateTime(2026, 9, 3),
+      toWidget: toWidget,
     );
 
