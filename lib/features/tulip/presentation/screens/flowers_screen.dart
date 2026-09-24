@@ -52,6 +52,17 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   bool _sending = false;
   bool _marking = false;
 
+  /// The last read receipt did not reach the database. The list already
+  /// counts these read (threadReadUpToProvider), so the unread count no
+  /// longer prompts a retry; this does.
+  bool _receiptFailed = false;
+
+  /// The newest of their messages a receipt has been written for. The
+  /// receipt is owed for anything of theirs newer than this, whatever the
+  /// unread badge says: the badge counts replying as reading, and the
+  /// database's receipts should not.
+  DateTime? _receiptsUpTo;
+
   /// A picked photo is uploading. The icon greys and stops taking taps —
   /// the picker takes long enough to return that a second press is easy.
   bool _attaching = false;
@@ -214,19 +225,44 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   /// Opening the thread is what "read" means, so the receipts fire here for
   /// everything unseen, not just the newest message.
   Future<void> _markThreadSeen() async {
+    final userId = ref.read(currentUserIdProvider);
+    if (userId == null) return;
+    // Read on this phone the moment it is on screen, before the receipt
+    // round-trips. See threadReadUpToProvider.
+    FlowerMessage? newest;
+    for (final m in ref.read(flowerMessagesProvider).valueOrNull ?? const []) {
+      if (m.senderId != userId) {
+        if (newest == null || m.sentAt.isAfter(newest.sentAt)) newest = m;
+      }
+    }
+    if (newest != null) {
+      final read = ref.read(threadReadUpToProvider);
+      if (read == null ||
+          read.pairId != newest.pairId ||
+          newest.sentAt.isAfter(read.at)) {
+        ref.read(threadReadUpToProvider.notifier).state =
+            (pairId: newest.pairId, at: newest.sentAt);
+      }
+    }
+
     if (_marking) return;
     final pair = ref.read(currentPairProvider).valueOrNull;
-    final userId = ref.read(currentUserIdProvider);
-    if (pair == null || userId == null) return;
+    if (pair == null) return;
 
     _marking = true;
     try {
       await ref
           .read(flowerRepositoryProvider)
           .markThreadSeen(pairId: pair.id, userId: userId);
+      _receiptFailed = false;
+      if (newest != null &&
+          (_receiptsUpTo == null || newest.sentAt.isAfter(_receiptsUpTo!))) {
+        _receiptsUpTo = newest.sentAt;
+      }
     } catch (_) {
       // A failed receipt is not worth interrupting anyone over; the next
-      // stream tick will try again.
+      // build will try again.
+      _receiptFailed = true;
     } finally {
       _marking = false;
     }
@@ -346,7 +382,23 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   Widget build(BuildContext context) {
     final keyboardUp = MediaQuery.viewInsetsOf(context).bottom > 0;
 
-    if (ref.watch(unreadMessageCountProvider) > 0) {
+    // Receipts for anything of theirs still unseen in the chat, once per
+    // new message, and again only after a write that failed. Not the unread
+    // count: that treats your reply as reading, which the database's
+    // receipts (their ticks) must not assume.
+    final me = ref.watch(currentUserIdProvider);
+    DateTime? owed;
+    for (final m in ref.watch(flowerMessagesProvider).valueOrNull ?? const []) {
+      if (m.senderId != me && m.toChat && !m.isSeen &&
+          (owed == null || m.sentAt.isAfter(owed))) {
+        owed = m.sentAt;
+      }
+    }
+    if (me != null &&
+        owed != null &&
+        (_receiptFailed ||
+            _receiptsUpTo == null ||
+            owed.isAfter(_receiptsUpTo!))) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _markThreadSeen());
     }
 

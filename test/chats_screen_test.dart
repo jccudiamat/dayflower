@@ -213,6 +213,94 @@ void main() {
       expect(find.byType(FlowersScreen), findsNothing);
     });
 
+    testWidgets('back from the conversation, what you saw is not unread',
+        (tester) async {
+      // 🔴 The list stayed bold with a badge after you had read and even
+      // answered: it waited for the database to echo the read receipts
+      // back, and here, as on a dropped connection, the echo never comes.
+      await _pump(tester, at: Routes.chats, messages: thread);
+      Finder badge() => find.descendant(
+          of: find.byType(ConversationRow), matching: find.text('2'));
+      expect(badge(), findsOneWidget);
+
+      await tester.tap(find.text('Call me when you land 💕'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ChatsScreen), findsOneWidget);
+      expect(badge(), findsNothing);
+      // Not bold either: the preview is drawn as read.
+      final preview =
+          tester.widget<Text>(find.text('Call me when you land 💕'));
+      expect(preview.style?.fontWeight, FontWeight.w500);
+    });
+
+    testWidgets('a chat you spoke last in is never unread', (tester) async {
+      // 🔴 Your own last message showed the chat as unread. Here their two
+      // messages even still say unseen, as a lagging copy on the phone
+      // would: replying is reading, so the row is read anyway.
+      await _pump(tester, at: Routes.chats, messages: [
+        _text('mine', 'me', 'On my way!', now),
+        ...thread.take(2).map((m) => _text(m.id, 'them', m.note!,
+            m.sentAt.subtract(const Duration(minutes: 5)),
+            seen: false)),
+      ]);
+      expect(find.text('You: On my way!'), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(ConversationRow), matching: find.text('2')),
+          findsNothing);
+      final preview = tester.widget<Text>(find.text('You: On my way!'));
+      expect(preview.style?.fontWeight, FontWeight.w500, reason: 'not bold');
+    });
+
+    group('what counts as unread', () {
+      Future<int> unread(List<FlowerMessage> messages,
+          {String? me = 'me'}) async {
+        final container = ProviderContainer(overrides: [
+          currentUserIdProvider.overrideWithValue(me),
+          flowerMessagesProvider.overrideWith((ref) => Stream.value(messages)),
+        ]);
+        addTearDown(container.dispose);
+        container.listen(unreadMessageCountProvider, (_, __) {});
+        await container.read(flowerMessagesProvider.future);
+        return container.read(unreadMessageCountProvider);
+      }
+
+      final t = DateTime(2026, 9, 24, 12);
+      test('only theirs after your latest message', () async {
+        expect(
+            await unread([
+              _text('a', 'them', 'one', t, seen: false),
+              _text('b', 'me', 'reply', t.add(const Duration(minutes: 1))),
+              _text('c', 'them', 'two', t.add(const Duration(minutes: 2)),
+                  seen: false),
+            ]),
+            1);
+      });
+
+      test('nothing while the phone does not know who you are', () async {
+        // With no user id your own unseen messages looked like theirs.
+        expect(
+            await unread([_text('a', 'me', 'hi', t, seen: false)], me: null),
+            0);
+      });
+
+      test('a My Day photo for the home screen is not unread chat',
+          () async {
+        final day = FlowerMessage(
+            id: 'd',
+            pairId: 'pair',
+            senderId: 'them',
+            imagePath: 'pair/d.jpg',
+            sentAt: t,
+            toWidget: true,
+            toChat: false);
+        expect(await unread([day]), 0);
+      });
+    });
+
     testWidgets('their face opens their photo, not the conversation',
         (tester) async {
       await _pump(tester, at: Routes.chats, messages: thread);

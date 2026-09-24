@@ -697,11 +697,57 @@ final sentFlowerTodayProvider = Provider.autoDispose<bool>((ref) {
       m.sentAt.day == now.day);
 });
 
-/// Unread messages from my partner — the badge on the Flowers tab.
+/// How far into a pair's thread this phone has shown you their messages:
+/// the newest one on screen when the conversation last marked itself read.
+///
+/// 🔴 **The Chats list said unread after you had answered.** Opening the
+/// conversation writes the read receipts at once, but this phone only
+/// learns they were written when the database sends the change back down
+/// the live stream, and until that echo lands its own copy still says
+/// unread. Back out to the list inside that gap, or on a connection that
+/// dropped the echo, and a conversation you had just replied in was bold
+/// with a badge. Reading is something this phone did, so it knows it
+/// without being told: anything of theirs sent up to here is read.
+final threadReadUpToProvider =
+    StateProvider<({String pairId, DateTime at})?>((ref) => null);
+
+/// Unread messages from my partner: the badge on the Chat tab and the list.
+///
+/// 🔴 **A conversation whose last word was yours showed as unread.** The
+/// count trusted each message's receipt alone, and this phone's copy of
+/// their receipts can lag (see [threadReadUpToProvider]). WhatsApp's rule
+/// is the right one and needs no receipt at all: **replying is reading.**
+/// Only what they sent after your latest message can be unread, so a chat
+/// you spoke last in is never bold and never badged.
+///
+/// Also not unread:
+///  * anything, while this phone does not know who you are. With no user
+///    id every message looks like theirs, and your own unseen ones were
+///    counted as unread to you.
+///  * a My Day photo sent only to the home screen. The chat cannot show it,
+///    so the chat cannot owe you it.
 final unreadMessageCountProvider = Provider.autoDispose<int>((ref) {
   final userId = ref.watch(currentUserIdProvider);
+  if (userId == null) return 0;
   final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
-  return messages.where((m) => m.senderId != userId && !m.isSeen).length;
+  final read = ref.watch(threadReadUpToProvider);
+  DateTime? mineLast;
+  for (final m in messages) {
+    if (m.senderId == userId &&
+        (mineLast == null || m.sentAt.isAfter(mineLast))) {
+      mineLast = m.sentAt;
+    }
+  }
+  return messages
+      .where((m) =>
+          m.senderId != userId &&
+          m.toChat &&
+          !m.isSeen &&
+          (mineLast == null || m.sentAt.isAfter(mineLast)) &&
+          !(read != null &&
+              m.pairId == read.pairId &&
+              !m.sentAt.isAfter(read.at)))
+      .length;
 });
 
 /// A signed URL for one day photo, minted once and kept.

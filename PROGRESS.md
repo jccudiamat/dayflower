@@ -13,6 +13,23 @@
 
 ## Recent app work
 
+### Chat photos are photos, not days; the loading box is the photo's box (2026-09-24)
+
+🔴 Every photo was worded as a My Day post, including ones sent from the chat's own camera and gallery buttons (`DayPhotoTarget.chat`, `to_widget = false`):
+- Viewer: now `showPhotoMessage` (media_viewer.dart). Chat photo: title "You" / their name, subtitle `sentAtLabel` ("Today, 9:41 AM"), caption at the foot of the viewer. A My Day post (`toWidget`) keeps "Your day" / "Wifey’s day".
+- `alertLine`: "Sent a photo 📷" for a chat photo, "Shared their day 📷" only for a My Day post; a caption still leads.
+- Push (supabase/functions/push/index.ts): "Sent a photo 📷", or the caption (it now reads `note` for photos). ⚠️ **Needs deploying** (`tool/deploy_function.dart`); until then phones keep getting "shared their day".
+- Reply quote of a photo: its caption or "Photo" (the icon already says photo).
+
+🔴 **The loading box was a sliver**: it had a height and no width, so the bubble shrank to its time line. The photo's shape now rides in its storage path, `<pair>/<uuid>_240x320.jpg` (lib/features/tulip/domain/photo_shape.dart; measured on a small decode in `sendDayPhoto`, so EXIF rotation is applied). `chatPhotoBox` gives the exact box, loading and loaded. Photos from before this have no shape: full width 4:3 while loading, then their own shape. In the path rather than a column to avoid a hand-run migration; every reader treats the path as opaque.
+- The sender's own photo is cached from the bytes it just uploaded (`StorageImageCache.prime`), so it lands without downloading back.
+
+- **A photo with nothing written under it is all photo**: no white strip holding only the time. The time and ticks sit on the picture, bottom left where the footer's were, on a dark pill (`_MetaRow(onPhoto: true)`). A caption, a card's message or a My Day label keeps the footer; plain chat captions now show there (they were never drawn before).
+
+🔴 **A chat whose last message was yours showed as unread.** `unreadMessageCountProvider` now follows WhatsApp: **replying is reading**, so only their messages sent after your latest one can be unread; a chat you spoke last in is never bold or badged. It also counts nothing while the user id is unknown (every message looked like theirs, so your own unseen ones counted) and skips home-only My Day photos (the chat cannot show them). `threadReadUpToProvider` additionally marks what the open conversation has shown as read on this phone, without waiting for the receipt's realtime echo. Receipts (their ticks) have their own trigger in flowers_screen (`_receiptsUpTo`, `_receiptFailed`): written once per new message of theirs, retried only after a failure, and not suppressed by the replying-is-reading rule.
+
+Tests: test/chat_photo_test.dart (shape, loading box, overlay vs footer, viewer titles, quote, alert wording); chats_screen_test (back from the conversation shows read); activity_test wording. Not yet on a device.
+
 ### Chats list, reply jump, reminder taps on a closed app, no em dashes (2026-09-24)
 
 **Chat tab is a list now** (WhatsApp/Instagram style), `Routes.chats = '/app/chats'`, `ChatsScreen`:
