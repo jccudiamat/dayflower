@@ -23,7 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('every section falls back to Home', () {
     for (final route in [
-      Routes.chat,
+      Routes.chats,
       Routes.dayflower,
       Routes.memories,
       Routes.together,
@@ -34,6 +34,15 @@ void main() {
     ]) {
       expect(backFallbackRoute(route), Routes.home, reason: route);
     }
+  });
+
+  test('the conversation falls back to the Chats list, not Home', () {
+    // Opened from a notification there is nothing under it. WhatsApp's
+    // back goes to the list of chats, and so does this; the list's own
+    // back then goes Home.
+    expect(backFallbackRoute(Routes.chat), Routes.chats);
+    expect(backFallbackRoute('${Routes.chat}?compose=flowers'), Routes.chats);
+    expect(backFallbackRoute(Routes.chatSettings), Routes.chats);
   });
 
   test('Home gives up, so the press can leave the app', () {

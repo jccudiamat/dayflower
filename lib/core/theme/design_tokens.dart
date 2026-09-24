@@ -522,3 +522,68 @@ enum TogetherTint { plain, lavender, blush, sky }
 
 /// Which wash a Play Together tile sits on.
 enum TogetherTile { lavender, pink, peach }
+
+/// The Chats list: WhatsApp's proportions in Dayflower's colours.
+///
+/// Flat rows on the page rather than cards, the way every messaging app
+/// draws its list: the faces and names carry it, and a border round each
+/// row would make one conversation look like one more panel on a dashboard.
+class ChatsStyle {
+  /// Page edge to avatar, and the last word to the edge.
+  static const double gutter = 16;
+
+  /// WhatsApp's list face, near enough; big enough to know them by it.
+  static const double avatar = 56;
+
+  /// Avatar to text.
+  static const double avatarGap = 14;
+
+  /// Above and below each row's content.
+  static const double rowPad = 10;
+
+  /// How far a reserved row is faded. Legible, but plainly not live.
+  static const double soonOpacity = .5;
+
+  /// The green of "they are here right now", on the corner of their face.
+  static const Color online = AppColors.success;
+
+  static TextStyle pageTitle() => AppTypography.style(
+        fontSize: 32,
+        height: 1.1,
+        fontWeight: FontWeight.w700,
+        letterSpacing: -0.4,
+        color: AppColors.ink,
+      );
+
+  static TextStyle name() => AppTypography.style(
+        fontSize: 16.5,
+        height: 1.25,
+        fontWeight: FontWeight.w600,
+        color: AppColors.ink,
+      );
+
+  /// The last message. Ink and bold while it is unread, as WhatsApp does,
+  /// so the row you have not answered is the row that stands out.
+  static TextStyle preview({required bool unread}) => AppTypography.style(
+        fontSize: 14.5,
+        height: 1.3,
+        fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+        color: unread ? AppColors.ink : AppColors.muted,
+      );
+
+  static TextStyle stamp({required bool unread}) => AppTypography.style(
+        fontSize: 12.5,
+        height: 1.3,
+        fontWeight: unread ? FontWeight.w700 : FontWeight.w500,
+        color: unread ? AppColors.brand : AppColors.muted,
+      );
+
+  /// "Coming soon" over the reserved rows.
+  static TextStyle sectionLabel() => AppTypography.style(
+        fontSize: 12,
+        height: 1.2,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 0.8,
+        color: AppColors.muted,
+      );
+}

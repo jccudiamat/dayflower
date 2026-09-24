@@ -41,6 +41,10 @@ void main() {
     ]) {
       expect(sectionForLocation(route), AppSection.together);
     }
+    // The list is the tab; the conversation and its settings stay in it.
+    expect(Routes.chats, '/app/chats');
+    expect(sectionForLocation(Routes.chats), AppSection.chat);
+    expect(sectionForLocation(Routes.chat), AppSection.chat);
     expect(
         sectionForLocation('${Routes.chat}?compose=flowers'), AppSection.chat);
     expect(sectionForLocation(Routes.chatSettings), AppSection.chat);

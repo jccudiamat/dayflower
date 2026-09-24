@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +24,7 @@ import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
 import '../../../../core/widgets/profile_photo.dart';
+import '../widgets/media_viewer.dart';
 
 /// The Chat tab: the couple's conversation.
 ///
@@ -73,6 +75,22 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   /// behaves exactly as before.
   final List<FlowerMessage> _pending = [];
 
+  /// The thread's scroll, for taking you to the message a reply quotes.
+  final _thread = ScrollController();
+
+  /// One key per message the thread has drawn, so a quoted one can be found
+  /// on screen and scrolled into the middle of it.
+  final _bubbleKeys = <String, GlobalKey>{};
+
+  /// What the thread last drew, newest first. A tapped quote looks up where
+  /// its message sits in this.
+  List<FlowerMessage> _shown = const [];
+
+  /// The message a quote just took you to, tinted for a moment so the eye
+  /// lands on it rather than hunting for it.
+  String? _highlightId;
+  Timer? _highlightTimer;
+
   /// Remembered so the catalog drawer opens at exactly the height the
   /// keyboard just vacated — otherwise swapping between the two makes the
   /// whole conversation jump. Seeded with a sane guess for the first open
@@ -110,7 +128,83 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   void dispose() {
     _composer.dispose();
     _focus.dispose();
+    _thread.dispose();
+    _highlightTimer?.cancel();
     super.dispose();
+  }
+
+  /// Takes you to the message a reply is answering, as WhatsApp does when
+  /// you press the quote: scrolled into the middle and briefly tinted.
+  ///
+  /// ⚠️ The thread is a lazy list, so a message far up has not been built
+  /// and has no position to scroll to. This walks toward it a screen at a
+  /// time, each step short enough that nothing between two steps is skipped
+  /// unbuilt, until its key has a context; then eases it into view. A quote
+  /// always answers something older, so up is tried first; down covers the
+  /// rare case where it is not.
+  Future<void> _showQuoted(String id) async {
+    final index = _shown.indexWhere((m) => m.id == id);
+    if (index < 0) {
+      // Not in the conversation. A My Day photo answered from the story
+      // viewer never is (see chatMessagesProvider), but it still exists:
+      // open the photo itself rather than saying it is gone.
+      final quoted = ref.read(quotedMessageProvider(id));
+      final path = quoted?.imagePath;
+      if (quoted != null && quoted.isPhoto && path != null) {
+        final mine = quoted.senderId == ref.read(currentUserIdProvider);
+        showMediaViewer(
+          context,
+          title: mine ? 'Your day' : 'Their day',
+          subtitle: quoted.note,
+          imagePath: path,
+          fileName: 'dayflower-day-${quoted.id}.jpg',
+        );
+        return;
+      }
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+            const SnackBar(content: Text('That message is no longer here')));
+      return;
+    }
+
+    BuildContext? built() {
+      final context = _bubbleKeys[id]?.currentContext;
+      return context != null && context.mounted ? context : null;
+    }
+
+    for (final up in [true, false]) {
+      for (var step = 0; step < 600 && built() == null && mounted; step++) {
+        if (!_thread.hasClients) return;
+        final position = _thread.position;
+        // Newest is at offset 0 in this reversed list, so older is higher.
+        final edge = up ? position.maxScrollExtent : position.minScrollExtent;
+        if (position.pixels == edge) break;
+        // One screen: the list builds a margin past each edge, so a stride
+        // of one viewport leaves no gap between what two steps built.
+        final stride = position.viewportDimension;
+        _thread.jumpTo((position.pixels + (up ? stride : -stride))
+            .clamp(position.minScrollExtent, position.maxScrollExtent)
+            .toDouble());
+        await WidgetsBinding.instance.endOfFrame;
+      }
+      if (built() != null) break;
+    }
+
+    final target = built();
+    if (target == null || !target.mounted) return;
+    await Scrollable.ensureVisible(
+      target,
+      alignment: .5,
+      duration: AppMotion.standard,
+      curve: AppMotion.easeOut,
+    );
+    if (!mounted) return;
+    _highlightTimer?.cancel();
+    setState(() => _highlightId = id);
+    _highlightTimer = Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => _highlightId = null);
+    });
   }
 
   // ── Actions ───────────────────────────────────────
@@ -317,9 +411,16 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
       ),
       data: (streamed) {
         final list = _withPending(streamed);
+        _shown = list;
+        // Keys for messages since deleted would otherwise pile up forever.
+        if (_bubbleKeys.length > list.length + 64) {
+          final live = {for (final m in list) m.id};
+          _bubbleKeys.removeWhere((id, _) => !live.contains(id));
+        }
         if (list.isEmpty) return const _EmptyThread();
 
         return ListView.builder(
+          controller: _thread,
           // Newest at index 0, pinned to the bottom: a new message slides in
           // without shifting anything above it.
           reverse: true,
@@ -336,16 +437,46 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             return Column(
               children: [
                 if (startsDay) ChatDateDivider(date: message.sentAt),
-                ChatBubble(
-                  message: message,
-                  isMine: message.senderId == userId,
-                  onReply: () => _startReply(message),
-                  // ⚠️ Yours only. Deleting is taking back something you
-                  // said, and nobody gets to take back what somebody else
-                  // said.
-                  onDelete: message.senderId == userId
-                      ? () => _deleteMessage(message)
-                      : null,
+                // The key is how a quote finds this message; the tint is
+                // how you do, once it has scrolled you here. Drawn behind
+                // the bubble and past it evenly on every side: the bubble
+                // carries its own gap below, and a tint cut to its box
+                // hugged the top and sagged at the bottom.
+                Stack(
+                  key: _bubbleKeys.putIfAbsent(message.id, GlobalKey.new),
+                  clipBehavior: Clip.none,
+                  children: [
+                    Positioned(
+                      top: -6,
+                      bottom: 0,
+                      left: -8,
+                      right: -8,
+                      child: IgnorePointer(
+                        child: AnimatedContainer(
+                          duration: AppMotion.emotional,
+                          curve: AppMotion.easeOut,
+                          decoration: BoxDecoration(
+                            color: AppColors.brand.withValues(
+                                alpha: _highlightId == message.id ? .16 : 0),
+                            borderRadius:
+                                BorderRadius.circular(AppRadius.md),
+                          ),
+                        ),
+                      ),
+                    ),
+                    ChatBubble(
+                    message: message,
+                    isMine: message.senderId == userId,
+                    onReply: () => _startReply(message),
+                    onQuoteTap: _showQuoted,
+                    // ⚠️ Yours only. Deleting is taking back something you
+                    // said, and nobody gets to take back what somebody else
+                    // said.
+                    onDelete: message.senderId == userId
+                        ? () => _deleteMessage(message)
+                        : null,
+                  ),
+                  ],
                 ),
               ],
             );
@@ -657,13 +788,13 @@ class _ChatHeader extends ConsumerWidget {
       ),
       child: Row(
         children: [
-          // Home, not `Routes.flowers` — that path is the Camera tab now
-          // (see messages_screen.dart), so backing out of the conversation
-          // used to drop you into a viewfinder. The chat is a top-level tab
-          // in its own right, so its way out is the same as the camera's ×.
+          // Back to the Chats list, which is where the conversation is
+          // opened from. Not `Routes.flowers`: that path is the camera (see
+          // messages_screen.dart). Opened from a notification there is
+          // nothing to pop, so it goes to the list rather than Home.
           IconButton(
             onPressed: () =>
-                context.canPop() ? context.pop() : context.go(Routes.home),
+                context.canPop() ? context.pop() : context.go(Routes.chats),
             tooltip: 'Back',
             iconSize: 20,
             padding: const EdgeInsets.only(right: AppSpace.xs),

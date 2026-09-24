@@ -30,10 +30,15 @@ class ChatBubble extends StatelessWidget {
     required this.isMine,
     this.onReply,
     this.onDelete,
+    this.onQuoteTap,
   });
 
   /// Null where a thread has no composer to reply into.
   final VoidCallback? onReply;
+
+  /// Pressing the quote above a reply: given the id of the message it
+  /// answers, so the thread can take you there. Null leaves the quote inert.
+  final ValueChanged<String>? onQuoteTap;
 
   /// Null on their messages. See _showActions.
   final VoidCallback? onDelete;
@@ -106,8 +111,19 @@ class ChatBubble extends StatelessWidget {
                   if (message.replyTo != null)
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                      child:
-                          MessageQuote(replyTo: message.replyTo, onDark: false),
+                      child: onQuoteTap == null
+                          ? MessageQuote(
+                              replyTo: message.replyTo, onDark: false)
+                          : Semantics(
+                              button: true,
+                              onTapHint: 'show the message this answers',
+                              child: GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: () => onQuoteTap!(message.replyTo!),
+                                child: MessageQuote(
+                                    replyTo: message.replyTo, onDark: false),
+                              ),
+                            ),
                     ),
                   message.isPhoto ? _buildPhoto(context) : _buildText(),
                 ],

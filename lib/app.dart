@@ -45,6 +45,7 @@ import 'features/updates/data/update_repository.dart';
 import 'features/updates/presentation/widgets/update_screen.dart';
 import 'features/reunion/data/reunion_repository.dart';
 import 'features/widget/widget_sync.dart';
+import 'core/widgets/app_bottom_nav.dart';
 
 class DayflowerApp extends ConsumerStatefulWidget {
   const DayflowerApp({super.key});
@@ -788,8 +789,17 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
 /// the Activity, which is how the app closes and how a live call becomes the
 /// floating window over the launcher. Answering it here would keep the press
 /// inside Dart and quietly cost both.
-String? backFallbackRoute(String here) =>
-    here == Routes.home ? null : Routes.home;
+///
+/// The conversation, opened straight from a notification, has nothing under
+/// it either. Back goes to the Chats list, as it does in WhatsApp, and from
+/// there to Home.
+String? backFallbackRoute(String here) {
+  if (here == Routes.home) return null;
+  if (here != Routes.chats && sectionForLocation(here) == AppSection.chat) {
+    return Routes.chats;
+  }
+  return Routes.home;
+}
 
 class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
   _UpdateBackButtonDispatcher(this._ref);

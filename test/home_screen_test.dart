@@ -23,6 +23,8 @@ import 'package:dayflower/features/finance/presentation/screens/finance_screen.d
 import 'package:dayflower/features/reminders/presentation/screens/reminders_screen.dart';
 import 'package:dayflower/features/activities/presentation/screens/activities_screen.dart';
 import 'package:dayflower/features/tulip/presentation/screens/flowers_screen.dart';
+import 'package:dayflower/features/tulip/presentation/screens/chats_screen.dart';
+import 'package:dayflower/features/tulip/presentation/widgets/conversation_row.dart';
 import 'package:dayflower/features/tulip/presentation/screens/blooms_screen.dart';
 import 'package:dayflower/features/booth/presentation/screens/booth_screen.dart';
 import 'package:dayflower/features/booth/data/strip_repository.dart';
@@ -382,7 +384,8 @@ void main() {
   _homeTest('Reorganized roots render at phone widths and large text', (tester) async {
     for (final (width, scale) in [(390.0, 1.0), (320.0, 1.0), (320.0, 2.0)]) {
       for (final (route, name) in [
-        (Routes.chat, 'chat'), (Routes.dayflower, 'dayflower'),
+        (Routes.chats, 'chats'), (Routes.chat, 'chat'),
+        (Routes.dayflower, 'dayflower'),
         (Routes.memories, 'memories'), (Routes.together, 'together')]) {
         await _pump(tester, route, width: width, textScale: scale,
             productionRoutes: true, filled: true);
@@ -456,18 +459,22 @@ void main() {
   _homeTest('Five tabs and legacy roots reach the correct sections', (tester) async {
     final router = await _pump(tester, Routes.home, productionRoutes: true);
     for (final (label, path) in [
-      ('Chat', Routes.chat), ('Dayflower', Routes.dayflower),
+      ('Chat', Routes.chats), ('Dayflower', Routes.dayflower),
       ('Memories', Routes.memories), ('Together', Routes.together), ('Home', Routes.home)]) {
       await tester.tap(tab(label));
       await tester.pumpAndSettle();
       expect(router.routeInformationProvider.value.uri.path, path);
+      expect((tester.widget(tab(label)) as Semantics).properties.selected, isTrue);
       if (label == 'Chat') {
+        // The tab is the list now. The conversation is one tap in, has no
+        // bar, and its back returns to the list rather than Home.
+        await tester.tap(find.byType(ConversationRow));
+        await tester.pumpAndSettle();
+        expect(find.byType(FlowersScreen), findsOneWidget);
         expect(find.byType(AppBottomNav), findsNothing);
         await tester.tap(find.byTooltip('Back'));
         await tester.pumpAndSettle();
-        expect(find.byType(HomeScreen), findsOneWidget);
-      } else {
-        expect((tester.widget(tab(label)) as Semantics).properties.selected, isTrue);
+        expect(find.byType(ChatsScreen), findsOneWidget);
       }
       expect(tester.takeException(), isNull);
     }

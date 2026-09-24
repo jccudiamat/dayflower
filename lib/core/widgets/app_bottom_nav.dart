@@ -30,7 +30,7 @@ class AppBottomNav extends ConsumerWidget {
 
   static const _destinations = <_Destination>[
     _Destination(AppSection.home, CupertinoIcons.house_fill, 'Home', Routes.home),
-    _Destination(AppSection.chat, CupertinoIcons.chat_bubble_2, 'Chat', Routes.chat),
+    _Destination(AppSection.chat, CupertinoIcons.chat_bubble_2, 'Chat', Routes.chats),
     _Destination(AppSection.dayflower, null, 'Dayflower', Routes.dayflower),
     _Destination(AppSection.memories, CupertinoIcons.book, 'Memories', Routes.memories),
     _Destination(AppSection.together, Icons.join_full, 'Together', Routes.together),
@@ -274,7 +274,7 @@ enum AppSection { home, chat, dayflower, memories, together }
 AppSection sectionForLocation(String location) {
   final path = Uri.parse(location).path;
   bool inside(String root) => path == root || path.startsWith('$root/');
-  if (inside(Routes.chat)) return AppSection.chat;
+  if (inside(Routes.chats) || inside(Routes.chat)) return AppSection.chat;
   // 🔴 Ownership follows what a page is *for*, not where its path sits.
   // Making a strip, writing this month and growing the garden are all
   // Dayflower, even though the booth and the journal still answer on the

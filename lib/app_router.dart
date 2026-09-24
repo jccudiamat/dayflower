@@ -52,6 +52,7 @@ import 'features/tulip/presentation/screens/chat_settings_screen.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
 import 'features/us/presentation/screens/us_screen.dart';
+import 'features/tulip/presentation/screens/chats_screen.dart';
 
 // ── Route names ──────────────────────────────
 // Tabs: Home, Chat, Dayflower, Memories, Together. Legacy paths stay valid.
@@ -78,7 +79,12 @@ class Routes {
   /// Legacy Flowers hub URL redirects to the Dayflower center.
   static const blooms = '/app/blooms';
 
-  /// Direct Chat tab; retain the original URL for notifications.
+  /// The Chat tab: the list of conversations (and, reserved, Channels and
+  /// Reads). The conversation itself is [chat], one tap in.
+  static const chats = '/app/chats';
+
+  /// The conversation. Retains the original URL for notifications, which
+  /// open it directly; back from it goes to [chats].
   static const chat = '/app/flowers/chat';
 
   /// The couple's own page — both of you, the numbers, and the date
@@ -480,6 +486,10 @@ List<RouteBase> appFeatureRoutes() => [
           path: Routes.activityFeed,
           builder: (_, __) => const ActivityFeedScreen()),
       GoRoute(path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
+      GoRoute(
+          path: Routes.chats,
+          builder: (_, __) => const SectionScrollScope(
+              route: Routes.chats, child: ChatsScreen())),
       // 🔴 Blooms is a destination again, not a redirect. It was folded
       // into the Dayflower tab when that tab *was* the garden; Dayflower is
       // now a hub whose 'Your Garden — See all' opens this, and a redirect
