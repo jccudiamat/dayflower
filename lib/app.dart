@@ -801,6 +801,36 @@ String? backFallbackRoute(String here) {
   return Routes.home;
 }
 
+/// Closes whatever is open over the whole app, if anything is: a dialog, a
+/// popup, a full-screen photo. True when it took the press.
+///
+/// 🔴 **Back went past them and closed the page underneath.** Long-press a
+/// message, press the phone's back, and the conversation closed while the
+/// reaction bar stayed floating over the Chats list. go_router's back pops
+/// the deepest navigator that can pop, and inside the app shell with a page
+/// pushed (the conversation over the list) that is the shell's. It never
+/// looks at the root navigator above it, which is where showDialog,
+/// showGeneralDialog and every `rootNavigator: true` push put their routes:
+/// the reaction bar, both photo viewers, every confirmation.
+///
+/// ⚠️ Only routes that are not pages. The router's own pages (a call, an
+/// alarm) sit on the root navigator too, and popping those is the router's
+/// job, with its own rules.
+Future<bool> popRootOverlay(NavigatorState? root) async {
+  if (root == null) return false;
+  Route<dynamic>? top;
+  // Visits the top route and stops there: nothing is popped.
+  root.popUntil((route) {
+    top = route;
+    return true;
+  });
+  if (top == null || top!.settings is Page) return false;
+  // maybePop, so a dialog that refuses to close still keeps the press:
+  // it must not fall through to the page under it.
+  await root.maybePop();
+  return true;
+}
+
 class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
   _UpdateBackButtonDispatcher(this._ref);
 
@@ -814,6 +844,12 @@ class _UpdateBackButtonDispatcher extends RootBackButtonDispatcher {
       // a screen it cannot see. A required update simply has no way past it;
       // mid-download there is no half of a download worth going back to.
       if (!state.mandatory && !state.busy) dismissUpdate(_ref);
+      return true;
+    }
+
+    // Anything opened over the whole app closes first. See popRootOverlay.
+    if (await popRootOverlay(
+        _ref.read(routerProvider).routerDelegate.navigatorKey.currentState)) {
       return true;
     }
 
