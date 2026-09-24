@@ -169,7 +169,10 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   Future<void> _wireNotificationRoutes() async {
     AppNotifications.pendingRoute.addListener(_openPendingRoute);
     final launch = await AppNotifications.launchResponse();
-    final route = AppNotifications.routeOf(launch?.payload);
+    // tapRouteOf, not AppNotifications.routeOf: a reminder's run-up ping
+    // has its own payload, and reading it with routeOf alone is what opened
+    // a tapped "new reminder" on Home when the app had been closed.
+    final route = tapRouteOf(launch?.payload);
     if (route != null) AppNotifications.pendingRoute.value = route;
   }
 

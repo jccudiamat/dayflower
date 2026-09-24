@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:dayflower/app_router.dart';
+import 'package:dayflower/core/services/app_notifications.dart';
 import 'package:dayflower/features/reminders/data/reminder_scheduler.dart';
 import 'package:dayflower/features/reminders/data/reminder_repository.dart';
 import 'package:dayflower/features/reminders/domain/reminder_countdown.dart';
@@ -262,6 +263,20 @@ void main() {
           isNull);
       expect(ReminderScheduler.reminderIdOf('dayflower://reminder/abc'), 'abc');
       expect(ReminderScheduler.isCountdown('dayflower://reminder/abc'), isFalse);
+    });
+
+    test('a tapped "new reminder" lands on the list, app open or closed', () {
+      // 🔴 The launch path used to read payloads with routeOf alone, which
+      // does not know the run-up shape: tapped on a closed app, "new
+      // reminder" opened Home. Both paths go through tapRouteOf now.
+      expect(tapRouteOf('dayflower://reminder-soon/abc'), Routes.reminders);
+      // The shared "open this route" shape still works through it.
+      expect(tapRouteOf(AppNotifications.payloadForRoute(Routes.chat)),
+          Routes.chat);
+      // A ringing alarm is not a destination: it has its own screen and
+      // its own path in (ringingReminderId).
+      expect(tapRouteOf('dayflower://reminder/abc'), isNull);
+      expect(tapRouteOf(null), isNull);
     });
   });
 

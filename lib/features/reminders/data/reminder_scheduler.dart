@@ -693,18 +693,28 @@ void handleNotificationTap(NotificationResponse response) {
     return;
   }
 
-  // A run-up ping. It opens the list, NOT the ringing-alarm screen — there
-  // is nothing ringing yet, and a full-screen Snooze/Done for a reminder
-  // that is still an hour away would be nonsense.
-  if (ReminderScheduler.isCountdown(response.payload)) {
-    AppNotifications.pendingRoute.value = ReminderScheduler.remindersRoute;
-    return;
-  }
-
-  // A message, a photo, an activity, a new build — anything whose whole
-  // intent is a destination.
-  final route = AppNotifications.routeOf(response.payload);
+  final route = tapRouteOf(response.payload);
   if (route != null) AppNotifications.pendingRoute.value = route;
+}
+
+/// Where a tap on a notification carrying [payload] should land, for every
+/// notification whose whole intent is a destination: a message, a photo, an
+/// activity, a new build, a reminder's run-up ping. Null for the ones that
+/// are not a place (a ringing alarm, a call) and for payloads not ours.
+///
+/// 🔴 **One answer for both ways a tap arrives.** The run-up ping ("new
+/// reminder", "in 1 hour") was understood only by the tap handler for an
+/// app that was already running. Tapped with the app closed, the launch
+/// path read the payload with [AppNotifications.routeOf] alone, did not
+/// recognise it, and the app opened on Home. Both paths ask this now.
+String? tapRouteOf(String? payload) {
+  // A run-up ping opens the list, NOT the ringing-alarm screen: there is
+  // nothing ringing yet, and a full-screen Snooze/Done for a reminder that
+  // is still an hour away would be nonsense.
+  if (ReminderScheduler.isCountdown(payload)) {
+    return ReminderScheduler.remindersRoute;
+  }
+  return AppNotifications.routeOf(payload);
 }
 
 /// Handles Snooze / Done **when the app is not running**.
