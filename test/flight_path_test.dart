@@ -21,14 +21,40 @@ void main() {
 
   test('the line bows away from the straight one, which is the whole point',
       () {
-    // A great circle between two points at similar latitudes passes nearer
-    // the pole than the straight line on the projection does. If this ever
+    // Bowed north of the straight line on the projection. If this ever
     // comes out flat, the curve has quietly become a two-point line again.
     final route = FlightPath.between(_dubai, _manila);
     final mid = FlightPath.midpoint(route);
     final straight = (_dubai.latitude + _manila.latitude) / 2;
     expect(mid.latitude, greaterThan(straight + 0.5),
         reason: 'the flown path should ride north of the straight line');
+  });
+
+  test('the arc is even: it rises and falls the same either side', () {
+    // 🔴 The great circle it replaced ran flat for half its length and bent
+    // at the plane, which read as two lines meeting at an angle. Measured
+    // on the projection the maps draw on, a quarter of the way in and a
+    // quarter from the end stand equally far above the straight line.
+    double mercY(LatLng p) =>
+        math.log(math.tan(math.pi / 4 + p.latitude * math.pi / 360));
+    double rise(LatLng p) {
+      final ax = _dubai.longitude * math.pi / 180, ay = mercY(_dubai);
+      final bx = _manila.longitude * math.pi / 180, by = mercY(_manila);
+      final px = p.longitude * math.pi / 180, py = mercY(p);
+      final dx = bx - ax, dy = by - ay;
+      return ((px - ax) * -dy + (py - ay) * dx) / math.sqrt(dx * dx + dy * dy);
+    }
+
+    final route = FlightPath.between(_dubai, _manila);
+    final q1 = rise(route[route.length ~/ 4]);
+    final q3 = rise(route[route.length * 3 ~/ 4]);
+    expect(q1, greaterThan(0), reason: 'bowed north');
+    expect(q1, closeTo(q3, 1e-6));
+    // And the peak is halfway, where the aircraft is drawn.
+    final peak = rise(FlightPath.midpoint(route));
+    for (final p in route) {
+      expect(rise(p), lessThanOrEqualTo(peak + 1e-9));
+    }
   });
 
   test('the plane faces along the curve, not at the far end', () {

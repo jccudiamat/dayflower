@@ -2,20 +2,32 @@ import 'dart:math' as math;
 
 import 'package:latlong2/latlong.dart';
 
-/// The line drawn between two people on a map.
+/// The line drawn between two people on a map: one even arc.
 ///
-/// 🔴 **The curve is the real path, not a decorative bow.** Two points make a
-/// straight line on the projection, which is not how anybody flies: the
-/// shortest route over a sphere bends poleward, and drawing it honestly gives
-/// the arc the design wants for free. Bending a straight line by an arbitrary
-/// amount would look the same at one zoom and be a lie at every other.
+/// 🔴 **It was the great circle, and it read as a kink.** The true flown
+/// path between two cities at different latitudes is lopsided on the
+/// projection: Dubai to Manila runs nearly flat for half its length, then
+/// bends down, and the bend sat right under the aircraft. What people saw
+/// was two straight lines meeting at an angle. This is the arc route maps
+/// actually draw: symmetric, bowed north, with its peak halfway, where the
+/// aircraft sits.
 ///
-/// Lives in core because both maps draw it, and a curve on one screen with a
-/// straight line on the other would read as two different products.
+/// ⚠️ Built on the Web Mercator projection the maps use, not on raw
+/// degrees. Mercator scales evenly at every zoom, so an arc even on the
+/// projection is even on screen however far in you pinch; bent in degrees,
+/// it would lean the further from the equator it ran.
+///
+/// Lives in core because both maps draw it, and a curve on one screen with
+/// a different one on the other would read as two different products.
 class FlightPath {
   const FlightPath._();
 
-  /// Points along the great circle from [a] to [b], ends included.
+  /// How far the arc rises above the straight line, as a share of that
+  /// line's length: enough to read as a flight, not so much it loops.
+  static const bow = .18;
+
+  /// Points along an even arc from [a] to [b], ends included, peaking
+  /// halfway ([midpoint]).
   ///
   /// ⚠️ Does not split at the antimeridian. A pair either side of the Pacific
   /// draws the long way round the map rather than the short way across the
@@ -23,34 +35,53 @@ class FlightPath {
   /// agree; fixing it means splitting the line and the bounds together.
   static List<LatLng> between(LatLng a, LatLng b, {int segments = 48}) {
     assert(segments > 0);
-    final f1 = a.latitudeInRad, l1 = a.longitudeInRad;
-    final f2 = b.latitudeInRad, l2 = b.longitudeInRad;
+    final (ax, ay) = _project(a);
+    final (bx, by) = _project(b);
+    final dx = bx - ax, dy = by - ay;
+    final length = math.sqrt(dx * dx + dy * dy);
+    // The same place, or near enough that there is no line to bow.
+    if (length < 1e-9) return [a, b];
 
-    final d = 2 *
-        math.asin(math.sqrt(math.pow(math.sin((f1 - f2) / 2), 2) +
-            math.cos(f1) *
-                math.cos(f2) *
-                math.pow(math.sin((l1 - l2) / 2), 2)));
-    // The same place, or near enough that interpolating would divide by zero.
-    if (d.abs() < 1e-9) return [a, b];
-
-    final points = <LatLng>[];
-    for (var i = 0; i <= segments; i++) {
-      final t = i / segments;
-      final x = math.sin((1 - t) * d) / math.sin(d);
-      final y = math.sin(t * d) / math.sin(d);
-      final px =
-          x * math.cos(f1) * math.cos(l1) + y * math.cos(f2) * math.cos(l2);
-      final py =
-          x * math.cos(f1) * math.sin(l1) + y * math.cos(f2) * math.sin(l2);
-      final pz = x * math.sin(f1) + y * math.sin(f2);
-      points.add(LatLng(
-        math.atan2(pz, math.sqrt(px * px + py * py)) * 180 / math.pi,
-        math.atan2(py, px) * 180 / math.pi,
-      ));
+    // The perpendicular that points north, so every arc bows the same way
+    // up; due east for a line running straight north-south.
+    var nx = -dy / length, ny = dx / length;
+    if (ny < 0 || (ny == 0 && nx < 0)) {
+      nx = -nx;
+      ny = -ny;
     }
-    return points;
+    // A quadratic curve peaks halfway between its chord and its control
+    // point, so the control sits twice the rise out.
+    final cx = (ax + bx) / 2 + nx * 2 * bow * length;
+    final cy = (ay + by) / 2 + ny * 2 * bow * length;
+
+    return [
+      for (var i = 0; i <= segments; i++)
+        () {
+          final t = i / segments, u = 1 - t;
+          return _unproject(u * u * ax + 2 * u * t * cx + t * t * bx,
+              u * u * ay + 2 * u * t * cy + t * t * by);
+        }(),
+    ];
   }
+
+  /// Web Mercator, in radians: x is longitude, y the stretched latitude.
+  static (double, double) _project(LatLng p) {
+    final lat = p.latitude.clamp(-_maxLatitude, _maxLatitude) * math.pi / 180;
+    return (
+      p.longitude * math.pi / 180,
+      math.log(math.tan(math.pi / 4 + lat / 2)),
+    );
+  }
+
+  static LatLng _unproject(double x, double y) {
+    final lat = (2 * math.atan(math.exp(y)) - math.pi / 2) * 180 / math.pi;
+    final lon = x * 180 / math.pi;
+    return LatLng(lat.clamp(-_maxLatitude, _maxLatitude),
+        ((lon + 180) % 360 + 360) % 360 - 180);
+  }
+
+  /// Where Web Mercator stops: the top and bottom edge of every tile set.
+  static const _maxLatitude = 85.05112878;
 
   /// The route split in two, with a hole in the middle for the aircraft.
   ///

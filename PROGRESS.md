@@ -13,6 +13,22 @@
 
 ## Recent app work
 
+### Back closes popups first; the travel map is the whole screen; the arc is even (2026-09-24)
+
+🔴 **Phone back closed the page under a popup.** Long-press a message, press back: the conversation closed and the reaction bar stayed floating over the Chats list. go_router 13's `popRoute` pops the deepest navigator that can pop (the shell, with the conversation pushed over the list) and never looks at the root navigator, where `showDialog`, `showGeneralDialog` and every `rootNavigator: true` push live: the reaction bar, both photo viewers, every confirmation. `popRootOverlay` (app.dart) now runs first in the back dispatcher and pops a non-page route on the root navigator. test/back_overlay_test.dart pins both the go_router behaviour and the fix.
+
+**Travel map, full screen like Google Maps** (travel_map_screen.dart): no app bar or card; the map runs under the status bar to the bottom nav, with a floating back button and title, the credit bottom left (it had none) and Add a place bottom right.
+- `CameraConstraint.containLatitude()` plus `minZoom = worldFillZoom(height)`: it cannot be dragged or pinched past the world's top and bottom (no grey), and repeats sideways. Rotation off.
+- ⚠️ The constraint is asserted from the first frame: an opening camera outside it throws "MapCamera is no longer within the cameraConstraint" on the next options change. `fitCentre` moves the opening centre just inside; `openingCamera` frames the two of you, the arc and pins inside padding for the floating controls.
+- ⚠️ The body stack needs `SizedBox.expand`: loose, it sized to the floating controls and the map was a 100 px strip.
+- The distance label hangs below the chord's midpoint; a plane sits on the arc's peak, as on Home.
+
+**The arc** (`FlightPath.between`): the great circle was lopsided on the projection (flat, then bending at the plane) and read as a kink. Now an even quadratic arc on Web Mercator, bowed north by `FlightPath.bow` (0.18 of the chord), peak at the midpoint. Even at every zoom because Mercator scales uniformly.
+
+**Home map card from the partner's side**: city labels were "me left, partner right", so on the phone in the Philippines Bulacan sat over the face in Dubai. Now west left, east right, each over its own face. The camera fits the whole arc (`CameraFit.coordinates`), peak included.
+
+Tests: back_overlay_test, maps_test (labels from Wifey's side, world-fill zoom, fitCentre, opening frame, full-screen layout), flight_path_test (even arc). Not yet on a device.
+
 ### Chat photos are photos, not days; the loading box is the photo's box (2026-09-24)
 
 🔴 Every photo was worded as a My Day post, including ones sent from the chat's own camera and gallery buttons (`DayPhotoTarget.chat`, `to_widget = false`):

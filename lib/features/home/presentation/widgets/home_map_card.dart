@@ -129,6 +129,9 @@ class _Band extends StatelessWidget {
     final mid = FlightPath.midpoint(route);
 
     final (before, after) = FlightPath.splitAtMidpoint(route);
+    final (west, east) = here.at.longitude <= there.at.longitude
+        ? (here, there)
+        : (there, here);
 
     return SizedBox(
       height: 178,
@@ -139,10 +142,11 @@ class _Band extends StatelessWidget {
           child: IgnorePointer(
             child: FlutterMap(
               options: MapOptions(
-                // Frames both people whatever the gap, so neighbours and
-                // opposite hemispheres both fill the strip.
-                initialCameraFit: CameraFit.bounds(
-                    bounds: LatLngBounds(here.at, there.at),
+                // Frames both people and the whole arc between them, peak
+                // included, whatever the gap: neighbours and opposite
+                // hemispheres both fill the strip.
+                initialCameraFit: CameraFit.coordinates(
+                    coordinates: route,
                     padding: const EdgeInsets.fromLTRB(56, 52, 56, 30)),
                 interactionOptions:
                     const InteractionOptions(flags: InteractiveFlag.none),
@@ -179,8 +183,12 @@ class _Band extends StatelessWidget {
             ),
           ),
         ),
-        _label(here, Alignment.topLeft),
-        _label(there, Alignment.topRight),
+        // 🔴 West on the left, east on the right, so each city and clock sit
+        // over the face that is actually there. It was always "me" on the
+        // left: right on a phone in Dubai, and swapped on the one in the
+        // Philippines, which showed its own city above the other face.
+        _label(west, Alignment.topLeft),
+        _label(east, Alignment.topRight),
         Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
