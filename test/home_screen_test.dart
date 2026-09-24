@@ -9,7 +9,7 @@ import 'package:dayflower/app_router.dart';
 import 'package:dayflower/core/widgets/app_bottom_nav.dart';
 import 'package:dayflower/core/widgets/section_scroll_scope.dart';
 import 'package:dayflower/features/tulip/presentation/widgets/flower_catalog_panel.dart';
-import 'package:dayflower/features/memories/presentation/widgets/memory_tile.dart';
+import 'package:dayflower/features/memories/presentation/views/all_memories_view.dart';
 import 'package:dayflower/features/dayflower/presentation/dayflower_screen.dart';
 import 'package:dayflower/features/travel/data/map_pin_repository.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
@@ -499,10 +499,10 @@ void main() {
           width: width, textScale: scale, height: 844,
           productionRoutes: true, filled: true, boothFilled: true);
       await tester.pumpAndSettle();
-      // The filter row and at least one dated entry: the two things the
-      // timeline is made of.
+      // The category row and at least one dated entry: the two things the
+      // All timeline is made of.
       expect(find.text('All'), findsOneWidget);
-      expect(find.byType(MemoryTile), findsWidgets);
+      expect(find.byType(MemoryTimelineItem), findsWidgets);
       await _screenshot(tester, 'memories-new-${width.toInt()}');
       expect(tester.takeException(), isNull, reason: 'memories $width/$scale');
       await tester.pumpWidget(const SizedBox());
@@ -600,6 +600,11 @@ void main() {
           BoothScreen),
     ]) {
       final router = await _pump(tester, hub, productionRoutes: true);
+      if (hub == Routes.memories) {
+        // The kept prints live with the photos, not in the header.
+        await tester.tap(find.text('Photos'));
+        await tester.pumpAndSettle();
+      }
       await _reveal(tester, find.text(label));
       await tester.tap(find.text(label));
       await tester.pumpAndSettle();

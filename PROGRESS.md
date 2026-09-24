@@ -13,6 +13,20 @@
 
 ## Recent app work
 
+### Memories: six views, one per kind of memory (2026-09-24)
+
+Implemented from the approved reference, with its two corrections: **search is on All only**, and **no avatar in the header**. `memories_screen.dart` only chooses; each category is its own body widget in `lib/features/memories/presentation/views/`. Data helpers (pure, tested) in `data/memory_views.dart`; styles in `MemoriesStyle` (design_tokens.dart). All six read `relationshipMemoriesProvider`, plus goals/moments for journal counts and pins for places.
+- **All**: search (title, note, flower name, dates; plain matching) then a timeline: date column, thin thread, a node per memory, soft card tinted by kind (pink given, lavender journal). `MemoryTimelineItem`.
+- **Photos**: month sections ("September 2026 · 7 moments", View all past 10 → Routes.photos) as a controlled mosaic (`mosaicBlocks`: hero + stacked, strip blocks with strips tall, rows). **Prints** moved here from the old header (the only way into the booth collection).
+- **Flowers**: Our Garden (count, See all → Blooms), `GardenHero`, family filters with real counts (`flowerFamily` reads the flower id; top three + More), 3/2-column botanical tiles.
+  - `GardenHero` is the supplied painting (`assets/images/memories/garden_hero.webp`, aspect 1000/260, never cropped).
+- **Cards**: masonry (`masonryColumns`) of the card artwork at its own shape (path shape, else 4:5) in a paper edge, date underneath.
+- **Journal**: Our Journal (See all → chapters), closed chapters only, a shelf per year (the covers name the month, not the year). Each is that month's supplied painted cover; its painted "goals · highlights" line (no numbers, ~3pt at shelf size) was erased by the asset script and the app writes the real counts there in the cover's ink (`MemoriesAssets.coverLabels`). A drawn pastel cover is the fallback.
+- **Artwork** (`lib/features/memories/data/memories_assets.dart`, made by `tool/shrink_memories.py` from `design/memories/` in the main checkout): 12 covers at 300px, the garden at 1000px, and three 180px timeline thumbnails (notebook for journal entries, envelope for a card that cannot load, tulips for a website bouquet): 253 KB in all against ~530 KB of APK headroom. ⚠️ Not shipped: the supplied sample photos, illustrated map and place photos (example content; Memories shows only the couple's own) and the flower paintings (a flower card shows the flower actually sent).
+- **Places**: inert memory map (visited pins only, hearts, dotted route in visit order, note), "N places together" + Sort (recent, A to Z, most), a row per place grouped by `MapPin.place`. ⚠️ Counts are stories (pins) and photos (pins with a photo): photos, flowers and journals carry no location, so "23 photos · 3 flowers" per place cannot be computed honestly.
+- ⚠️ Keep the search slot in the list even when hidden (SizedBox.shrink): removing it shifted the category row's index, the ListView rebuilt it and its scroll reset. The row is always ShaderMasked for the same reason.
+- Tests: test/memories_screen_test.dart (header, search only on All, each view, empty states, 360 and 320@2x, helpers); home tests updated (timeline item, Prints via Photos). Screenshots: `--dart-define=CAPTURE_REVIEW=true` → build/review/memories-*.png. Not yet on a device.
+
 ### Back closes popups first; the travel map is the whole screen; the arc is even (2026-09-24)
 
 🔴 **Phone back closed the page under a popup.** Long-press a message, press back: the conversation closed and the reaction bar stayed floating over the Chats list. go_router 13's `popRoute` pops the deepest navigator that can pop (the shell, with the conversation pushed over the list) and never looks at the root navigator, where `showDialog`, `showGeneralDialog` and every `rootNavigator: true` push live: the reaction bar, both photo viewers, every confirmation. `popRootOverlay` (app.dart) now runs first in the back dispatcher and pops a non-page route on the root navigator. test/back_overlay_test.dart pins both the go_router behaviour and the fix.

@@ -10,61 +10,10 @@ import '../../../../core/widgets/app_icon.dart';
 import '../../../../core/widgets/flower_image.dart';
 import '../../../../core/providers/supabase_provider.dart';
 import '../../../onboarding/data/user_repository.dart';
+import '../../data/memories_assets.dart';
 import '../../data/relationship_memory.dart';
 import '../../../../core/widgets/storage_image.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-
-class MemoryTile extends StatelessWidget {
-  const MemoryTile({super.key, required this.memory});
-  final RelationshipMemory memory;
-  @override
-  Widget build(BuildContext context) =>
-      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        SizedBox(
-            width: 52,
-            child: Padding(
-                padding: const EdgeInsets.only(top: AppSpace.sm),
-                child: Text(DateFormat('d MMM').format(memory.date),
-                    style: AppText.caption(AppColors.body)))),
-        Expanded(
-            child: Container(
-                padding: const EdgeInsets.only(
-                    left: AppSpace.sm, bottom: AppSpace.sm),
-                decoration: BoxDecoration(
-                    border: Border(
-                        left: BorderSide(color: AppColors.blushMid, width: 2))),
-                child: Material(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                    child: InkWell(
-                        borderRadius: BorderRadius.circular(AppRadius.lg),
-                        onTap: () => openMemory(context, memory),
-                        child: Padding(
-                            padding: const EdgeInsets.all(AppSpace.compact),
-                            child: Row(children: [
-                              MemoryArtwork(memory: memory, size: 64),
-                              const SizedBox(width: AppSpace.compact),
-                              Expanded(
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                    Text(memory.title,
-                                        style: AppText.body(AppColors.ink)
-                                            .copyWith(
-                                                fontWeight: FontWeight.w600)),
-                                    if (memory.body.isNotEmpty) ...[
-                                      const SizedBox(height: AppSpace.xxs),
-                                      Text(memory.body,
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style:
-                                              AppText.caption(AppColors.body))
-                                    ],
-                                  ]))
-                            ]))))))
-      ]);
-}
 
 class MemoryArtwork extends ConsumerWidget {
   const MemoryArtwork({super.key, required this.memory, required this.size});
@@ -86,7 +35,7 @@ class MemoryArtwork extends ConsumerWidget {
       MemoryKind.places => CupertinoIcons.map,
       MemoryKind.events => CupertinoIcons.calendar,
     };
-    final fallback = Container(
+    final iconTile = Container(
         width: size,
         height: size,
         alignment: Alignment.center,
@@ -94,6 +43,26 @@ class MemoryArtwork extends ConsumerWidget {
             color: AppColors.blush,
             borderRadius: BorderRadius.circular(AppRadius.sm)),
         child: AppIcon(icon, color: AppColors.brand, size: size * .4));
+    // A picture for what has none of its own: a journal entry, a card whose
+    // image cannot be read, a bouquet from the website before its card
+    // loads. Only kinds with nothing better to show; a place or an event
+    // keeps its icon rather than borrowing somebody else's picture.
+    final art = switch (memory.kind) {
+      MemoryKind.journal => MemoriesAssets.timelineJournal,
+      MemoryKind.cards => MemoriesAssets.timelineCard,
+      MemoryKind.flowers => MemoriesAssets.timelineBouquet,
+      _ => null,
+    };
+    final fallback = art == null
+        ? iconTile
+        : ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.sm),
+            child: Image.asset(art,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                excludeFromSemantics: true,
+                errorBuilder: (_, __, ___) => iconTile));
     final fit = size > 120 ? BoxFit.contain : BoxFit.cover;
     if (path != null) {
       return ClipRRect(

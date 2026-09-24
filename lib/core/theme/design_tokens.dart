@@ -587,3 +587,160 @@ class ChatsStyle {
         color: AppColors.muted,
       );
 }
+
+/// Memories: one header, six ways of looking back.
+///
+/// Each category reads its own way (a timeline, a photo wall, a garden, a
+/// box of cards, a shelf of books, a map), but they share one page, so the
+/// type and spacing below are shared too.
+class MemoriesStyle {
+  /// Page edge.
+  static const double gutter = 16;
+
+  /// Between tiles in every grid.
+  static const double gap = 8;
+
+  static const double tileRadius = 14;
+  static const double photoRadius = 12;
+
+  /// The same title every tab root draws.
+  static TextStyle pageTitle() => ChatsStyle.pageTitle();
+
+  static TextStyle pageSubtitle() => AppTypography.style(
+        fontSize: 14.5,
+        height: 1.35,
+        fontWeight: FontWeight.w500,
+        color: AppColors.muted,
+      );
+
+  /// "September 2026", "Our Garden", "Our Journal".
+  static TextStyle sectionTitle() => AppTypography.style(
+        fontSize: 20,
+        height: 1.2,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      );
+
+  static TextStyle sectionMeta() => AppTypography.style(
+        fontSize: 12.5,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        color: AppColors.muted,
+      );
+
+  /// "View all", "See all": purple, like every utility link.
+  static TextStyle link() => AppTypography.style(
+        fontSize: 13,
+        height: 1.2,
+        fontWeight: FontWeight.w600,
+        color: AppColors.secondary,
+      );
+
+  // ── Category chips ─────────────────────────────────────────
+  static Color get chipFill => AppColors.surfaceSubtle;
+  static const Color chipSelectedFill = AppColors.brand;
+
+  static TextStyle chipLabel({required bool selected}) => AppTypography.style(
+        fontSize: 13.5,
+        height: 1.2,
+        fontWeight: FontWeight.w600,
+        color: selected ? Colors.white : AppColors.body,
+      );
+
+  // ── The All timeline ───────────────────────────────────────
+  /// The thread the nodes hang on: there, and no more than that.
+  static Color get timelineLine => AppColors.blushMid;
+
+  /// A flower or a card: the warm pink of a thing given.
+  static Color get givenTint => AppColors.blush;
+
+  /// The journal: a lavender page.
+  static Color get journalTint =>
+      Color.alphaBlend(AppColors.secondary.withValues(alpha: .09),
+          AppColors.surface);
+
+  static TextStyle timelineDay() => AppTypography.style(
+        fontSize: 17,
+        height: 1.1,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      );
+
+  static TextStyle timelineMonth() => AppTypography.style(
+        fontSize: 11,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        color: AppColors.muted,
+      );
+
+  /// "You sent a flower", over the title.
+  static TextStyle itemKind() => AppTypography.style(
+        fontSize: 12,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        color: AppColors.body,
+      );
+
+  static TextStyle itemTitle() => AppTypography.style(
+        fontSize: 14.5,
+        height: 1.3,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      );
+
+  /// What they wrote: quoted, and in the voice notes are read in.
+  static TextStyle itemNote() => AppTypography.style(
+        fontSize: 12.5,
+        height: 1.35,
+        fontWeight: FontWeight.w500,
+        fontStyle: FontStyle.italic,
+        color: AppColors.body,
+      );
+
+  static TextStyle itemMeta() => AppTypography.style(
+        fontSize: 12.5,
+        height: 1.35,
+        fontWeight: FontWeight.w500,
+        color: AppColors.body,
+      );
+
+  // ── Tiles: flowers, cards, places ──────────────────────────
+  static TextStyle tileTitle() => AppTypography.style(
+        fontSize: 13,
+        height: 1.25,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      );
+
+  static TextStyle tileMeta() => AppTypography.style(
+        fontSize: 11.5,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        color: AppColors.muted,
+      );
+
+  static TextStyle tileNote() => AppTypography.style(
+        fontSize: 11.5,
+        height: 1.3,
+        fontWeight: FontWeight.w500,
+        fontStyle: FontStyle.italic,
+        color: AppColors.body,
+      );
+
+  // ── Journal covers ─────────────────────────────────────────
+  /// The month on a cover, set like a title written on it.
+  static TextStyle coverMonth(Color ink) => AppTypography.style(
+        fontSize: 15,
+        height: 1.1,
+        fontWeight: FontWeight.w700,
+        fontStyle: FontStyle.italic,
+        color: ink,
+      );
+
+  static TextStyle coverMeta(Color ink) => AppTypography.style(
+        fontSize: 9.5,
+        height: 1.2,
+        fontWeight: FontWeight.w600,
+        color: ink,
+      );
+}

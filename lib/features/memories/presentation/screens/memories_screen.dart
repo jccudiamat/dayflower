@@ -1,17 +1,38 @@
-import '../../../dates/data/event_repository.dart';
-import '../../../tulip/data/flower_repository.dart';
-import '../../../chapters/data/chapter_repository.dart';
-import '../../../travel/data/map_pin_repository.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
-import '../../../../app_router.dart';
-import '../../../../core/theme/design_tokens.dart';
-import '../../../../core/widgets/story_components.dart';
-import '../../data/relationship_memory.dart';
-import '../widgets/memory_tile.dart';
 
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/app_icon.dart';
+import '../../../../core/widgets/story_components.dart';
+import '../../../chapters/data/chapter_repository.dart';
+import '../../../dates/data/event_repository.dart';
+import '../../../travel/data/map_pin_repository.dart';
+import '../../../tulip/data/flower_repository.dart';
+import '../../data/memory_views.dart';
+import '../../data/relationship_memory.dart';
+import '../views/all_memories_view.dart';
+import '../views/card_memories_view.dart';
+import '../views/flower_memories_view.dart';
+import '../views/journal_memories_view.dart';
+import '../views/photo_memories_view.dart';
+import '../views/place_memories_view.dart';
+import '../widgets/memory_category_tabs.dart';
+
+/// Memories: the relationship's kept history. Dayflower makes; Memories
+/// keeps.
+///
+/// 🔴 **Six ways of looking, not one list six ways filtered.** It was a
+/// single timeline with filter pills, so a photo, a card and a place all
+/// read as the same row. Each category now has the view its kind of memory
+/// wants: All is a timeline, Photos a photo wall, Flowers a garden, Cards a
+/// box of letters, Journal a bookshelf, Places a map. Each is its own
+/// widget in `views/`; this screen only chooses.
+///
+/// ⚠️ Search is All's alone, and the header has no avatar. Both are
+/// deliberate departures from the reference the design was drawn from.
 class MemoriesScreen extends ConsumerStatefulWidget {
   const MemoriesScreen({super.key});
   @override
@@ -19,142 +40,155 @@ class MemoriesScreen extends ConsumerStatefulWidget {
 }
 
 class _MemoriesScreenState extends ConsumerState<MemoriesScreen> {
-  MemoryKind? _filter;
-  @override
-  Widget build(BuildContext context) {
-    final memories = ref.watch(relationshipMemoriesProvider);
-    return StoryScaffold(
-        title: 'Memories',
-        subtitle: 'Little moments. Yours to keep.',
-        // 🔴 The saved prints have no other way in. The timeline below
-        // shows every strip as it happened; this opens the ones kept as
-        // prints, which is a different thing and used to live on the old
-        // Memories screen that this one replaced.
-        actions: [
-          TextButton(
-              onPressed: () => context.push(Routes.boothCollection),
-              child: const Text('Prints'))
-        ],
-        children: [
-          _FilterBar(
-              selected: _filter,
-              onSelected: (kind) => setState(() => _filter = kind)),
-          const SizedBox(height: AppSpace.sm),
-          memories.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => StoryEmptyState(
-                  title: 'Your story couldn’t load.',
-                  body: 'Please check your connection and try again.',
-                  action: TextButton(
-                      onPressed: () {
-                        ref.invalidate(flowerMessagesProvider);
-                        ref.invalidate(monthlyChaptersProvider);
-                        ref.invalidate(chapterMomentsProvider);
-                        ref.invalidate(mapPinsProvider);
-                        ref.invalidate(customEventsProvider);
-                      },
-                      child: const Text('Try again'))),
-              data: (all) {
-                final filtered = all
-                    .where((m) => _filter == null || m.kind == _filter)
-                    .toList();
-                if (filtered.isEmpty) {
-                  return StoryEmptyState(
-                      title: 'Your story will grow here.',
-                      body:
-                          'Photos, flowers and little moments you keep will appear here.',
-                      action: TextButton(
-                          onPressed: () => context.go(Routes.dayflower),
-                          child: const Text('Make a little something')));
-                }
-                return Column(children: [
-                  for (var i = 0; i < filtered.length; i++) ...[
-                    if (i == 0 ||
-                        filtered[i].date.year != filtered[i - 1].date.year ||
-                        filtered[i].date.month != filtered[i - 1].date.month)
-                      StorySection(
-                          DateFormat('MMMM y').format(filtered[i].date)),
-                    MemoryTile(memory: filtered[i]),
-                  ]
-                ]);
-              }),
-        ]);
-  }
-}
-
-/// The filter pills.
-///
-/// ⚠️ There are seven of them and they do not fit on a 390pt screen, so the
-/// row scrolls. The naive version clipped the seventh mid-word against the
-/// scaffold's inset with nothing to say it could move, which reads as a
-/// layout bug rather than as an affordance. This fades the trailing edge
-/// while there is more to reach, and drops the fade once you get there.
-class _FilterBar extends StatefulWidget {
-  const _FilterBar({required this.selected, required this.onSelected});
-
-  final MemoryKind? selected;
-  final ValueChanged<MemoryKind?> onSelected;
-
-  @override
-  State<_FilterBar> createState() => _FilterBarState();
-}
-
-class _FilterBarState extends State<_FilterBar> {
-  final _controller = ScrollController();
-  bool _more = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.addListener(_sync);
-    // The extent is unknown until the first layout, so ask again after it.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _sync());
-  }
-
-  void _sync() {
-    if (!_controller.hasClients) return;
-    final more = _controller.offset < _controller.position.maxScrollExtent - 1;
-    if (more != _more) setState(() => _more = more);
-  }
+  MemoryCategory _category = MemoryCategory.all;
+  final _search = TextEditingController();
+  String _query = '';
 
   @override
   void dispose() {
-    _controller.removeListener(_sync);
-    _controller.dispose();
+    _search.dispose();
     super.dispose();
   }
 
-  static String _label(MemoryKind kind) =>
-      '${kind.name[0].toUpperCase()}${kind.name.substring(1)}';
-
   @override
   Widget build(BuildContext context) {
-    final row = SingleChildScrollView(
-        controller: _controller,
-        scrollDirection: Axis.horizontal,
-        // Lets the last pill clear the scaffold inset instead of sitting
-        // hard against it.
-        padding: const EdgeInsets.only(right: AppSpace.screenInset),
-        child: Row(children: [
-          for (final kind in <MemoryKind?>[null, ...MemoryKind.values])
-            Padding(
-                padding: const EdgeInsets.only(right: AppSpace.xs),
-                child: ChoiceChip(
-                    label: Text(kind == null ? 'All' : _label(kind)),
-                    selected: widget.selected == kind,
-                    onSelected: (_) => widget.onSelected(kind))),
-        ]));
-
-    if (!_more) return row;
-    return ShaderMask(
-        shaderCallback: (bounds) => const LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            // Opaque until the last stretch, so only the overflowing pill
-            // softens rather than the whole row losing contrast.
-            colors: [Colors.white, Colors.white, Colors.transparent],
-            stops: [0, 0.88, 1]).createShader(bounds),
-        blendMode: BlendMode.dstIn,
-        child: row);
+    final memories = ref.watch(relationshipMemoriesProvider);
+    return Scaffold(
+      bottomNavigationBar: const AppBottomNav(),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(MemoriesStyle.gutter, AppSpace.xs,
+              MemoriesStyle.gutter, AppSpace.lg),
+          children: [
+            _Header(category: _category),
+            const SizedBox(height: 14),
+            // ⚠️ A slot for search whether it shows or not. Dropping it off
+            // the list shifted everything after it by one, and the list
+            // rebuilt the category row from scratch, losing its scroll.
+            _category == MemoryCategory.all
+                ? Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpace.compact),
+                    child: MemorySearchField(
+                      controller: _search,
+                      onChanged: (q) => setState(() => _query = q),
+                    ),
+                  )
+                : const SizedBox.shrink(),
+            MemoryCategoryTabs(
+              selected: _category,
+              onSelected: (c) => setState(() => _category = c),
+            ),
+            const SizedBox(height: 20),
+            memories.when(
+              loading: () => const Padding(
+                padding: EdgeInsets.only(top: AppSpace.xl),
+                child: Center(child: CircularProgressIndicator()),
+              ),
+              error: (_, __) => StoryEmptyState(
+                title: 'Your story couldn’t load.',
+                body: 'Please check your connection and try again.',
+                action: TextButton(
+                  onPressed: () {
+                    ref.invalidate(flowerMessagesProvider);
+                    ref.invalidate(monthlyChaptersProvider);
+                    ref.invalidate(chapterMomentsProvider);
+                    ref.invalidate(mapPinsProvider);
+                    ref.invalidate(customEventsProvider);
+                  },
+                  child: const Text('Try again'),
+                ),
+              ),
+              data: _body,
+            ),
+          ],
+        ),
+      ),
+    );
   }
+
+  Widget _body(List<RelationshipMemory> all) {
+    switch (_category) {
+      case MemoryCategory.all:
+        if (all.isEmpty) {
+          return MemoryEmpty(
+              title: MemoryCategory.all.emptyTitle,
+              body: MemoryCategory.all.emptyBody);
+        }
+        final shown = [for (final m in all) if (memoryMatches(m, _query)) m];
+        if (shown.isEmpty) {
+          return MemoryEmpty(
+              title: 'Nothing matches “${_query.trim()}”.',
+              body: 'Try a flower, a place, a word you wrote, or a month.');
+        }
+        return AllMemoriesTimeline(
+          memories: shown,
+          books: {
+            for (final b in _books()) 'journal:${b.chapter.id}': b,
+          },
+        );
+      case MemoryCategory.photos:
+        final strips = {
+          for (final m in all)
+            if (m.kind == MemoryKind.booth && m.message != null) m.message!.id,
+        };
+        return PhotoMemoryGrid(
+          photos: photoMemories(all),
+          isStrip: (m) => strips.contains(m.id),
+        );
+      case MemoryCategory.flowers:
+        return FlowerMemoriesView(flowers: [
+          for (final m in all)
+            if (m.kind == MemoryKind.flowers && m.message != null) m,
+        ]);
+      case MemoryCategory.cards:
+        return CardMemoryGrid(cards: cardMemories(all));
+      case MemoryCategory.journal:
+        return JournalBookGrid(books: _books());
+      case MemoryCategory.places:
+        return PlaceMemoriesView(
+          pins: ref.watch(mapPinsProvider).valueOrNull ?? const [],
+          messages: ref.watch(flowerMessagesProvider).valueOrNull ?? const [],
+        );
+    }
+  }
+
+  /// Finished months, with their goal and highlight counts.
+  List<JournalBook> _books() => journalBooks(
+        ref.watch(monthlyChaptersProvider).valueOrNull ?? const [],
+        ref.watch(monthlyGoalsProvider).valueOrNull ?? const [],
+        ref.watch(chapterMomentsProvider).valueOrNull ?? const [],
+      );
+}
+
+/// "Memories", and what the chosen category is for. Nothing on the right:
+/// no avatar, no shortcut. The page is about the two of you, not a profile.
+class _Header extends StatelessWidget {
+  const _Header({required this.category});
+
+  final MemoryCategory category;
+
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Shrinks rather than truncates at large text sizes.
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('Memories',
+                maxLines: 1,
+                softWrap: false,
+                style: MemoriesStyle.pageTitle()),
+          ),
+          const SizedBox(height: 3),
+          Row(children: [
+            Flexible(
+              child: Text(category.subtitle,
+                  style: MemoriesStyle.pageSubtitle()),
+            ),
+            const SizedBox(width: 5),
+            AppIcon(CupertinoIcons.heart, size: 14, color: AppColors.muted),
+          ]),
+        ],
+      );
 }
