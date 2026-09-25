@@ -11,15 +11,44 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 import '../../../../core/widgets/progress_ring.dart';
+import '../../../calls/data/call_repository.dart';
 import '../../../calls/data/call_usage.dart';
 import '../../../calls/domain/call.dart';
+import '../../../calls/presentation/start_call.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../data/flower_repository.dart';
 import '../../data/reaction_choices.dart';
 import '../widgets/media_viewer.dart';
 import '../widgets/share_your_day.dart';
+import '../../../../core/widgets/app_icon.dart';
 import '../../../../core/widgets/storage_image.dart';
 import '../../../../core/widgets/profile_photo.dart';
+
+/// What the conversation does when chat settings closes back into it. A
+/// plain back returns nothing, and the conversation does nothing.
+class ChatReturn {
+  /// Put the cursor in the message field, ready to write.
+  const ChatReturn.write() : showId = null;
+
+  /// Take you to this message, the way a tapped quote does.
+  const ChatReturn.show(String this.showId);
+
+  final String? showId;
+}
+
+/// Back into the conversation this was opened from, to do [back] there.
+///
+/// ⚠️ Opened any other way (a link straight here), there is no
+/// conversation underneath to hand [back] to. It goes to the conversation
+/// instead, and whatever was asked for is simply not done: nothing is lost
+/// but a scroll.
+void _backToChat(BuildContext context, ChatReturn back) {
+  if (context.canPop()) {
+    context.pop(back);
+  } else {
+    context.go(Routes.chat);
+  }
+}
 
 /// What sits behind the two of you: how much calling is left this month, and
 /// everything either of you has sent.
@@ -89,9 +118,10 @@ class SharedPhotosScreen extends ConsumerWidget {
 }
 
 /* ── Who this conversation is with ──────────────────── */
-/// Their face, large and centred, with their name under it - the way
-/// WhatsApp opens a contact. No card around it: the person is the page's
-/// heading, not one more panel among the settings below.
+/// Their face, large and centred, with their name under it and the four
+/// things you came to do with them - the way WhatsApp opens a contact. No
+/// card around it: the person is the page's heading, not one more panel
+/// among the settings below.
 class _PartnerHeader extends StatelessWidget {
   const _PartnerHeader({required this.partner, required this.name});
 
@@ -114,11 +144,133 @@ class _PartnerHeader extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: AppText.display(),
           ),
-          const SizedBox(height: AppSpace.xxs),
-          Text('Just the two of you',
-              textAlign: TextAlign.center,
-              style: AppText.body(AppColors.muted)),
+          // Buttons where a line about them used to be. "Just the two of
+          // you" was true of every couple in the app, so it told nobody
+          // anything; these are what people open a contact to do.
+          const SizedBox(height: AppSpace.sm),
+          const _ContactActions(),
         ],
+      ),
+    );
+  }
+}
+
+/// Call, Video, Message, Search: one row of equal tiles under their name.
+class _ContactActions extends ConsumerWidget {
+  const _ContactActions();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // During a call both call tiles are the way back into it, tinted as the
+    // chat header's are. Offering a fresh call beside a live one invites a
+    // second, empty room.
+    final live = ref.watch(liveCallProvider) != null;
+    final callTint = live ? AppColors.brand : null;
+
+    final actions = [
+      _ContactAction(
+        icon: CupertinoIcons.phone,
+        label: 'Call',
+        hint: live ? 'Join the call' : 'Voice call',
+        color: callTint,
+        onTap: () => startOrJoinCall(context, ref, CallMode.voice),
+      ),
+      _ContactAction(
+        icon: CupertinoIcons.video_camera,
+        label: 'Video',
+        hint: live ? 'Join the call' : 'Video call',
+        color: callTint,
+        onTap: () => startOrJoinCall(context, ref, CallMode.video),
+      ),
+      _ContactAction(
+        icon: CupertinoIcons.chat_bubble,
+        label: 'Message',
+        onTap: () => _backToChat(context, const ChatReturn.write()),
+      ),
+      _ContactAction(
+        icon: CupertinoIcons.search,
+        label: 'Search',
+        hint: 'Search messages',
+        onTap: () => _search(context),
+      ),
+    ];
+    return Row(
+      children: [
+        for (final (i, action) in actions.indexed) ...[
+          if (i > 0) const SizedBox(width: AppSpace.xs),
+          Expanded(child: action),
+        ],
+      ],
+    );
+  }
+
+  /// A found message is shown in the conversation itself, where what was
+  /// said around it can be read too.
+  Future<void> _search(BuildContext context) async {
+    final id = await context.push<String>(Routes.chatSearch);
+    if (id == null || !context.mounted) return;
+    _backToChat(context, ChatReturn.show(id));
+  }
+}
+
+class _ContactAction extends StatelessWidget {
+  const _ContactAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.hint,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  /// What a screen reader says, when the label alone is too short.
+  final String? hint;
+
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      side: BorderSide(color: AppColors.border),
+    );
+    return Semantics(
+      button: true,
+      label: hint ?? label,
+      excludeSemantics: true,
+      child: Material(
+        color: AppColors.surface,
+        shape: shape,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          customBorder: shape,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AppSpace.xxs, vertical: AppSpace.compact),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AppIcon(icon, size: 22, color: color ?? AppColors.secondary),
+                const SizedBox(height: 6),
+                // Scaled down rather than cut: four across leaves little
+                // room once the text is set large.
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: AppText.caption(AppColors.ink)
+                        .copyWith(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

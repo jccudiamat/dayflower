@@ -108,7 +108,7 @@ class ConversationRow extends ConsumerWidget {
                       ),
                       if (hasUnread) ...[
                         const SizedBox(width: AppSpace.xs),
-                        _UnreadBadge(unread),
+                        UnreadBadge(unread),
                       ],
                     ]),
                   ],
@@ -159,8 +159,10 @@ String conversationStamp(DateTime? sentAt, {DateTime? now}) {
   return DateFormat('d MMM').format(at);
 }
 
-class _UnreadBadge extends StatelessWidget {
-  const _UnreadBadge(this.count);
+/// How many are waiting, in the brand pill. The chat list's row and the
+/// thread's way back down both wear it.
+class UnreadBadge extends StatelessWidget {
+  const UnreadBadge(this.count, {super.key});
 
   final int count;
 

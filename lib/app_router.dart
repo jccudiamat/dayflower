@@ -48,6 +48,7 @@ import 'features/settings/presentation/screens/notification_settings_screen.dart
 import 'features/settings/presentation/screens/widget_settings_screen.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/tulip/presentation/screens/blooms_screen.dart';
+import 'features/tulip/presentation/screens/chat_search_screen.dart';
 import 'features/tulip/presentation/screens/chat_settings_screen.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
@@ -126,6 +127,10 @@ class Routes {
   /// and everything either of you has sent. Reached by tapping their name in
   /// the chat header, which is where people look for it.
   static const chatSettings = '/app/flowers/chat/settings';
+
+  /// Finding a message by a word in it, from Search in chat settings. A
+  /// result is handed back down to the conversation, which shows it.
+  static const chatSearch = '/app/flowers/chat/search';
 
   static const settings = '/app/settings';
   static const widgetSettings = '/app/settings/widgets';
@@ -517,6 +522,9 @@ List<RouteBase> appFeatureRoutes() => [
       GoRoute(
           path: Routes.chatSettings,
           builder: (_, __) => const ChatSettingsScreen()),
+      GoRoute(
+          path: Routes.chatSearch,
+          builder: (_, __) => const ChatSearchScreen()),
       GoRoute(
           path: Routes.events,
           builder: (_, state) =>

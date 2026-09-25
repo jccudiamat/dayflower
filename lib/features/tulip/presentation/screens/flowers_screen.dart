@@ -11,7 +11,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../calls/data/call_repository.dart';
 import '../../../calls/domain/call.dart';
-import '../../../calls/domain/call_notifier.dart';
+import '../../../calls/presentation/start_call.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../presence/data/presence_repository.dart';
@@ -20,9 +20,11 @@ import 'package:image_picker/image_picker.dart';
 import '../../data/flower_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/conversation_row.dart';
 import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
+import 'chat_settings_screen.dart';
 import '../../../../core/widgets/profile_photo.dart';
 import '../widgets/media_viewer.dart';
 
@@ -102,6 +104,18 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   String? _highlightId;
   Timer? _highlightTimer;
 
+  /// How far up from the newest message before the way back down appears.
+  /// About two bubbles: a nudge while reading is not reading back.
+  static const _readingBackAfter = 320.0;
+
+  /// Scrolled up through older messages, so the arrow down is showing. A
+  /// notifier rather than state: scrolling must not rebuild the thread.
+  final _readingBack = ValueNotifier<bool>(false);
+
+  /// The newest message there was when you scrolled up. Anything of theirs
+  /// after it arrived while you were reading back, and counts on the arrow.
+  DateTime? _readingBackFrom;
+
   /// Remembered so the catalog drawer opens at exactly the height the
   /// keyboard just vacated — otherwise swapping between the two makes the
   /// whole conversation jump. Seeded with a sane guess for the first open
@@ -112,6 +126,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   void initState() {
     super.initState();
     _panelOpen = widget.openFlowers;
+    _thread.addListener(_onThreadScroll);
     _focus.addListener(() {
       // Tapping the field means "I want the keyboard", so the drawer yields.
       if (_focus.hasFocus && _panelOpen) setState(() => _panelOpen = false);
@@ -140,8 +155,42 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     _composer.dispose();
     _focus.dispose();
     _thread.dispose();
+    _readingBack.dispose();
     _highlightTimer?.cancel();
     super.dispose();
+  }
+
+  void _onThreadScroll() {
+    final away = _thread.hasClients &&
+        _thread.position.pixels > _readingBackAfter;
+    if (away == _readingBack.value) return;
+    if (away) _readingBackFrom = _shown.isEmpty ? null : _shown.first.sentAt;
+    _readingBack.value = away;
+  }
+
+  /// Back down to the newest message, as WhatsApp's arrow does.
+  Future<void> _toNewest() async {
+    if (!_thread.hasClients) return;
+    final position = _thread.position;
+    // From far up, most of the way in one jump: easing through a long
+    // history is a wait, not an animation.
+    final screen = position.viewportDimension;
+    if (position.pixels > 3 * screen) _thread.jumpTo(screen);
+    await _thread.animateTo(0,
+        duration: AppMotion.emotional, curve: AppMotion.easeOut);
+  }
+
+  /// Theirs, newer than where you were when you scrolled up. [shown] is
+  /// newest first, so the count stops at the first one that is not.
+  int _arrivedWhileReadingBack(List<FlowerMessage> shown, String? me) {
+    final from = _readingBackFrom;
+    if (from == null) return 0;
+    var count = 0;
+    for (final m in shown) {
+      if (!m.sentAt.isAfter(from)) break;
+      if (m.senderId != me) count++;
+    }
+    return count;
   }
 
   /// Takes you to the message a reply is answering, as WhatsApp does when
@@ -305,6 +354,9 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     // send a bare message where a reply was meant.
     final replyTo = _replyingTo;
     _composer.clear();
+    // Sent from up in the history, it still lands at the bottom: go there
+    // with it, as every chat does.
+    if (_readingBack.value) _toNewest();
     setState(() {
       _sending = true;
       _replyingTo = null;
@@ -348,6 +400,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     // before it opened — the sheet is where the caption was actually written.
     final note = result.note;
     _composer.clear();
+    if (_readingBack.value) _toNewest();
     setState(() {
       _panelOpen = false;
       _sending = true;
@@ -423,6 +476,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             _ChatHeader(
               onVoiceCall: () => _startCall(CallMode.voice),
               onVideoCall: () => _startCall(CallMode.video),
+              onOpenSettings: _openSettings,
             ),
             Expanded(child: _buildThread()),
             _buildComposer(),
@@ -463,7 +517,30 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         }
         if (list.isEmpty) return const _EmptyThread();
 
-        return ListView.builder(
+        return Stack(children: [
+          _threadList(list, userId),
+          // The way back down once you are reading back, carrying how many
+          // of theirs came in meanwhile. Rebuilt with the thread, so a
+          // message that lands while you are up there counts at once.
+          Positioned(
+            right: 12,
+            bottom: 12,
+            child: ValueListenableBuilder<bool>(
+              valueListenable: _readingBack,
+              builder: (context, away, _) => _ToNewestButton(
+                visible: away,
+                arrived: away ? _arrivedWhileReadingBack(list, userId) : 0,
+                onTap: _toNewest,
+              ),
+            ),
+          ),
+        ]);
+      },
+    );
+  }
+
+  Widget _threadList(List<FlowerMessage> list, String? userId) {
+    return ListView.builder(
           controller: _thread,
           // Newest at index 0, pinned to the bottom: a new message slides in
           // without shifting anything above it.
@@ -526,8 +603,6 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             );
           },
         );
-      },
-    );
   }
 
   /// The streamed thread plus anything sent this session that hasn't come
@@ -720,6 +795,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         imageQuality: 82,
       );
       if (file == null || !mounted) return;
+      if (_readingBack.value) _toNewest();
       setState(() => _attaching = true);
       final bytes = await file.readAsBytes();
       final sent = await ref.read(flowerRepositoryProvider).sendDayPhotoTo(
@@ -738,28 +814,25 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     }
   }
 
-  /// Starts a call, or joins the one already running.
-  ///
-  /// Joining wins over starting whenever a live call is in the thread —
-  /// otherwise tapping the header during a call would open a second room
-  /// beside the one your partner is sitting in, which is the worst possible
-  /// outcome of a button labelled "call".
-  ///
-  /// Navigation happens before the call connects, deliberately: dialling,
-  /// connecting and failing are all states the call screen draws, and
-  /// holding the user on the thread until the media is up would make a
-  /// failed call look like a button that does nothing.
+  /// Starts a call, or joins the one already running. See startOrJoinCall.
   void _startCall(CallMode mode) {
     _focus.unfocus();
-    final notifier = ref.read(callNotifierProvider.notifier);
-    final live = ref.read(liveCallProvider);
+    startOrJoinCall(context, ref, mode);
+  }
 
-    if (live != null) {
-      notifier.join(live);
-    } else {
-      notifier.place(mode);
+  /// Chat settings, and whatever it sends you back here to do: write to
+  /// them, or look at a message a search found.
+  Future<void> _openSettings() async {
+    _focus.unfocus();
+    final back = await context.push<ChatReturn>(Routes.chatSettings);
+    if (!mounted || back == null) return;
+    switch (back) {
+      case ChatReturn(showId: final id?):
+        await _showQuoted(id);
+      case _:
+        setState(() => _panelOpen = false);
+        _focus.requestFocus();
     }
-    context.push(Routes.call);
   }
 }
 
@@ -800,7 +873,11 @@ class _ComposerIcon extends StatelessWidget {
 
 /* ── Header ──────────────────────────────────────── */
 class _ChatHeader extends ConsumerWidget {
-  const _ChatHeader({required this.onVoiceCall, required this.onVideoCall});
+  const _ChatHeader({
+    required this.onVoiceCall,
+    required this.onVideoCall,
+    required this.onOpenSettings,
+  });
 
   /// Start a call, or join the one already running — see `_startCall`.
   ///
@@ -811,6 +888,10 @@ class _ChatHeader extends ConsumerWidget {
   /// invitation even on a build (or a network) where the audio never comes
   /// up. See the header of migration 0025.
   final VoidCallback onVoiceCall, onVideoCall;
+
+  /// Their name opens chat settings; see `_openSettings` for what comes
+  /// back from it.
+  final VoidCallback onOpenSettings;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -854,7 +935,7 @@ class _ChatHeader extends ConsumerWidget {
           const SizedBox(width: AppSpace.xs),
           Expanded(
             child: InkWell(
-              onTap: () => context.push(Routes.chatSettings),
+              onTap: onOpenSettings,
               borderRadius: BorderRadius.circular(AppRadius.sm),
               child: Row(children: [
                 Expanded(
@@ -931,6 +1012,78 @@ class _HeaderAction extends StatelessWidget {
       padding: const EdgeInsets.all(8),
       constraints: const BoxConstraints(),
       icon: AppIcon(icon, color: color ?? AppColors.secondary),
+    );
+  }
+}
+
+/* ── Back to the newest ──────────────────────────── */
+/// The round arrow in the corner of the thread while you read back, as
+/// WhatsApp has it. Carries a count when theirs arrived meanwhile.
+class _ToNewestButton extends StatelessWidget {
+  const _ToNewestButton({
+    required this.visible,
+    required this.arrived,
+    required this.onTap,
+  });
+
+  final bool visible;
+  final int arrived;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !visible,
+      child: AnimatedOpacity(
+        opacity: visible ? 1 : 0,
+        duration: AppMotion.micro,
+        child: AnimatedScale(
+          scale: visible ? 1 : .6,
+          duration: AppMotion.standard,
+          curve: AppMotion.easeOut,
+          child: Semantics(
+            button: true,
+            label: arrived > 0
+                ? '$arrived new, go to the newest message'
+                : 'Go to the newest message',
+            excludeSemantics: true,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                DecoratedBox(
+                  // The card's shadow, not the lift's: this floats over
+                  // bubbles, and a deep shadow smudged the one under it.
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: AppElevation.card,
+                  ),
+                  child: Material(
+                    color: AppColors.surface,
+                    shape: CircleBorder(
+                        side: BorderSide(color: AppColors.border)),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      onTap: onTap,
+                      child: SizedBox(
+                        width: 42,
+                        height: 42,
+                        child: AppIcon(CupertinoIcons.chevron_down,
+                            size: 18, color: AppColors.body),
+                      ),
+                    ),
+                  ),
+                ),
+                if (arrived > 0)
+                  Positioned(
+                    top: -8,
+                    right: -6,
+                    child: UnreadBadge(arrived),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
