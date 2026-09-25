@@ -13,9 +13,9 @@
 
 ## Recent app work
 
-### Peer calls on Cloudflare TURN; typing footer; voice messages; new composer; promo slots (2026-09-25, not yet published)
+### Peer calls (off), typing footer, voice messages, new composer, promo slots (2026-09-25, build 113)
 
-🔴 **Nothing here is applied or published.** Order: deploy `push` and `turn`, apply **0050** and **0051**, set the Cloudflare secrets, flip `CALL_TRANSPORT=peer`, then publish.
+**Shipped as build 113**, in this order: `push` deployed (v7), `turn` deployed (v1, `--verify-jwt`), **0050** and **0051** applied and read back, then published. 🔴 **Peer calling is built but OFF**: `.env` is still `CALL_TRANSPORT=livekit`, so calls run through the media server exactly as in 112 and LiveKit usage is unchanged. What remains is a Cloudflare TURN key (`CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` via `supabase secrets set`), then flip `CALL_TRANSPORT=peer` and republish.
 
 - **Peer calls** (`peer_call_transport.dart`, migration **0050**). Every room holds exactly two people by construction, so the SFU was ~90% of the modelled cost for a job the app never needs. Same `CallTransport` interface, so this is one new file rather than a rewrite.
   - Signalling is **Realtime broadcast on a private channel** `call:<pairId>`, authorised by RLS on `realtime.messages` through `is_my_pair_topic()`. Ephemeral: ICE candidates in a table would be millions of rows a month describing dead connections. ⚠️ `alter table realtime.messages enable row level security` is **not** in the migration — already on, and the table is Supabase's, so it fails with "must be owner".
@@ -32,6 +32,7 @@
 - **Composer rebuilt, stacked** (Claude's shape): the text owns the full width on top, the controls sit in their own row underneath (flower, photo, camera, voice, then send) and stay put as the text grows to six lines. Previously the field shared one row with five icons and had about half the width.
   - 🔴 **Photos are attachments now, up to four.** They used to upload the instant you picked one, with no review and no caption — the only place in the app where a mis-tap posted something irreversible. Thumbnails sit above the field with a remove button, the typed words caption the **first** picture only, and a failed send puts them back on the composer. `sendDayPhotoTo` gained `replyTo`.
 - **Promo slots** (`core/widgets/promo_slot.dart`). `PromoPlace` is a closed enum — create, together, reads — and `neverPromoted` writes down the refusals (Home, inside a conversation, the Chats list, Memories, a call) with the reasoning. Its own section under a "SPONSORED" overline, last on the page, below everything the couple came for. `promosHiddenProvider` is already read by every slot so subscriptions are one provider later. ⚠️ **No ad network, and none is possible yet**: the smallest SDK is megabytes against 76 KB of headroom. Dropping `livekit_client` once peer calling is proven is what makes room. House promos until then.
+- 🔴 **The APK went 4,666 bytes OVER Play's 50 MB ceiling on the first publish attempt** and the publisher refused it, which is the guard working. Fixed by re-encoding the four `home_event_*` artworks to webp at quality 88 (they were 1254x1254 PNGs, and `monthsary` was already webp but saved near-lossless): **2.9 MB down to 0.42 MB**, mean pixel difference 3-5/255 and alpha preserved, checked against the originals side by side. The APK is now **49,074,033 bytes, 3.2 MB clear**. ⚠️ That headroom is what makes an ad SDK possible without dropping livekit_client first.
 - 575 tests passing, Kotlin compiles. 🔴 **Nothing has run on a phone**: a peer call needs two devices, recording needs a microphone.
 
 ### Tabs say Create and Chats; moods notify; the ring light reaches the edges (2026-09-25)

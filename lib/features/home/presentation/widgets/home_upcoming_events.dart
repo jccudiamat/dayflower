@@ -162,7 +162,12 @@ class _HomeUpcomingEventsState extends ConsumerState<HomeUpcomingEvents>
                                                   AppColors.brandDark)),
                                         ]);
                                     final art = Image.asset(
-                                        'assets/images/home_event_${event?.artwork ?? 'calendar'}.${event?.artwork == 'monthsary' ? 'webp' : 'png'}',
+                                        // All four are webp now. The three
+                                        // that were PNG cost 2.9 MB between
+                                        // them and now cost 0.3 MB, which is
+                                        // what put the APK back under Play's
+                                        // 50 MB ceiling.
+                                        'assets/images/home_event_${event?.artwork ?? 'calendar'}.webp',
                                         width: 116,
                                         height: 140,
                                         fit: BoxFit.contain,
