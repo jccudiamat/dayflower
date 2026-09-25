@@ -1,0 +1,258 @@
+import 'dart:async';
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/design_tokens.dart';
+import '../../../../core/widgets/app_icon.dart';
+import '../../data/flower_repository.dart';
+import '../../data/voice_notes.dart';
+
+/// A voice message in the thread: play, a bar you can scrub, and its length.
+///
+/// ⚠️ **The bars are not the sound.** Drawing a real waveform would mean
+/// downloading and decoding every voice note in the thread just to render
+/// it, which is a lot of bytes and battery for decoration. These are a fixed
+/// shape derived from the message id, so each note looks like itself and
+/// nothing has to be fetched to draw one. The honest information is the
+/// length and the progress, and both are real.
+class VoiceBubble extends ConsumerStatefulWidget {
+  const VoiceBubble({
+    super.key,
+    required this.message,
+    required this.isMine,
+    required this.meta,
+  });
+
+  final FlowerMessage message;
+  final bool isMine;
+
+  /// The time and ticks row, built by the bubble that owns this.
+  final Widget meta;
+
+  @override
+  ConsumerState<VoiceBubble> createState() => _VoiceBubbleState();
+}
+
+class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
+  Duration _at = Duration.zero;
+  bool _loading = false;
+  Timer? _ticker;
+  StreamSubscription<void>? _ended;
+
+  String get _id => widget.message.id;
+  Duration get _length => widget.message.audioLength;
+
+  @override
+  void initState() {
+    super.initState();
+    _ended = VoiceNotes.playbackFinished.listen((_) {
+      // Only ours: one player, and whichever bubble owns it is the one that
+      // should reset.
+      if (!mounted || ref.read(playingVoiceProvider) != _id) return;
+      _stopTicking();
+      setState(() => _at = Duration.zero);
+      ref.read(playingVoiceProvider.notifier).state = null;
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _ended?.cancel();
+    super.dispose();
+  }
+
+  void _stopTicking() {
+    _ticker?.cancel();
+    _ticker = null;
+  }
+
+  void _startTicking() {
+    _stopTicking();
+    _ticker = Timer.periodic(const Duration(milliseconds: 120), (_) async {
+      final where = await VoiceNotes.position();
+      if (!mounted) return;
+      setState(() => _at = where.at);
+    });
+  }
+
+  Future<void> _toggle() async {
+    final playing = ref.read(playingVoiceProvider) == _id;
+    if (playing) {
+      await VoiceNotes.pause();
+      _stopTicking();
+      ref.read(playingVoiceProvider.notifier).state = null;
+      return;
+    }
+
+    // One voice at a time, everywhere.
+    if (ref.read(playingVoiceProvider) != null) await VoiceNotes.stopPlaying();
+
+    setState(() => _loading = true);
+    try {
+      final path = widget.message.audioPath;
+      if (path == null) return;
+      final repo = ref.read(flowerRepositoryProvider);
+      final local =
+          await VoiceNoteFiles.local(path, () => repo.downloadVoiceNote(path));
+      if (!mounted || local == null) {
+        if (mounted) _say("Couldn't play that. Try again?");
+        return;
+      }
+      await VoiceNotes.play(local);
+      if (!mounted) return;
+      ref.read(playingVoiceProvider.notifier).state = _id;
+      _startTicking();
+    } catch (e) {
+      if (mounted) _say("Couldn't play that. Try again?");
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _say(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text)));
+
+  @override
+  Widget build(BuildContext context) {
+    final playing = ref.watch(playingVoiceProvider) == _id;
+    final total = _length.inMilliseconds;
+    final progress =
+        total <= 0 ? 0.0 : (_at.inMilliseconds / total).clamp(0.0, 1.0);
+    final ink = AppColors.ink;
+    final tint = widget.isMine ? AppColors.brand : AppColors.secondary;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 7),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Semantics(
+                button: true,
+                label: playing ? 'Pause voice message' : 'Play voice message',
+                excludeSemantics: true,
+                child: GestureDetector(
+                  onTap: _loading ? null : _toggle,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: tint),
+                    child: _loading
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : AppIcon(
+                            playing
+                                ? CupertinoIcons.pause_fill
+                                : CupertinoIcons.play_fill,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              // Scrubbing: the bar is the position, so dragging it moves
+              // playback. Only meaningful once it is playing, and harmless
+              // before.
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapDown: (d) => _scrub(d.localPosition.dx),
+                onHorizontalDragUpdate: (d) => _scrub(d.localPosition.dx),
+                child: SizedBox(
+                  width: _barsWidth,
+                  height: 26,
+                  child: CustomPaint(
+                    painter: _WavePainter(
+                      seed: _id,
+                      progress: progress,
+                      played: tint,
+                      unplayed: AppColors.muted.withValues(alpha: .45),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                // Counts down while playing, the way a player does, and
+                // shows the whole length at rest.
+                voiceLength(playing || _at > Duration.zero
+                    ? (_length - _at)
+                    : _length),
+                style: AppText.caption(ink).copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          widget.meta,
+        ],
+      ),
+    );
+  }
+
+  static const _barsWidth = 118.0;
+
+  Future<void> _scrub(double dx) async {
+    if (ref.read(playingVoiceProvider) != _id) return;
+    final fraction = (dx / _barsWidth).clamp(0.0, 1.0);
+    final to = _length * fraction;
+    await VoiceNotes.seek(to);
+    if (mounted) setState(() => _at = to);
+  }
+}
+
+/// The bars. A fixed shape per message, so one voice note always looks the
+/// same and no audio has to be decoded to draw it.
+class _WavePainter extends CustomPainter {
+  _WavePainter({
+    required this.seed,
+    required this.progress,
+    required this.played,
+    required this.unplayed,
+  });
+
+  final String seed;
+  final double progress;
+  final Color played, unplayed;
+
+  static const _count = 27;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Deterministic from the id: the same note draws identically on both
+    // phones and after a restart.
+    final random = math.Random(seed.hashCode);
+    final gap = size.width / _count;
+    final paint = Paint()..strokeCap = StrokeCap.round..strokeWidth = 2.6;
+    for (var i = 0; i < _count; i++) {
+      // Never a flat line and never full height: a voice note looks like
+      // speech, which is mostly middling with a few peaks.
+      final height = size.height * (0.22 + random.nextDouble() * 0.78);
+      final x = gap * (i + .5);
+      paint.color = (i + .5) / _count <= progress ? played : unplayed;
+      canvas.drawLine(
+        Offset(x, (size.height - height) / 2),
+        Offset(x, (size.height + height) / 2),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WavePainter old) =>
+      old.progress != progress || old.seed != seed || old.played != played;
+}

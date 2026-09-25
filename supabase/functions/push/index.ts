@@ -28,7 +28,7 @@ interface Payload {
   message_id: string;
   pair_id: string;
   sender_id: string;
-  kind: "call" | "photo" | "flower" | "message" | "heartbeat" | "mood";
+  kind: "call" | "photo" | "flower" | "message" | "heartbeat" | "mood" | "voice";
   call_mode: "voice" | "video" | null;
   /// Heartbeats only: when the tap happened, in epoch millis. The app uses
   /// it to tell a push apart from the same tap arriving over realtime, so
@@ -139,6 +139,15 @@ function describe(payload: Payload, name: string, note: string | null) {
       };
     case "flower":
       return { title: name, body: "sent you a flower 🌷", priority: "normal" as const };
+    // ⚠️ No length here. It is on the row, and reading it would cost a
+    // query for every voice note just to put ":07" in a banner; the app's
+    // own list line (previewFor) carries it, where it is already loaded.
+    case "voice":
+      return {
+        title: name,
+        body: "Sent a voice message 🎤",
+        priority: "normal" as const,
+      };
     // ⚠️ The title and body here are a *fallback*. A heartbeat reaching a
     // live app is drawn by PulseAlerts, which counts and collapses a burst;
     // this copy is what a phone shows if it ever renders the payload

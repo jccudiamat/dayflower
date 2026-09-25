@@ -15,6 +15,7 @@ import '../../data/reaction_repository.dart';
 import '../../domain/flower_catalog.dart';
 import 'media_viewer.dart';
 import 'message_quote.dart';
+import 'voice_bubble.dart';
 import 'call_bubble.dart';
 import '../../../../core/widgets/storage_image.dart';
 import '../../domain/photo_shape.dart';
@@ -144,7 +145,17 @@ class ChatBubble extends StatelessWidget {
                               ),
                             ),
                     ),
-                  message.isPhoto ? _buildPhoto(context) : _buildText(),
+                  if (message.isPhoto)
+                    _buildPhoto(context)
+                  else if (message.isVoice)
+                    VoiceBubble(
+                      message: message,
+                      isMine: isMine,
+                      meta:
+                          _MetaRow(message: message, isMine: isMine, time: _time),
+                    )
+                  else
+                    _buildText(),
                 ],
               ),
             ),

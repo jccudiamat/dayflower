@@ -99,6 +99,18 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Recording and playing a voice message - see VoiceNotes. Its own
+        // channel for the same reason as the others: MediaRecorder is an
+        // Android API, and the pub packages that wrap it carry a whole
+        // audio engine the APK has no room for.
+        voiceChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, VoiceNotes.CHANNEL)
+                .apply {
+                    setMethodCallHandler { call, result ->
+                        VoiceNotes.handle(applicationContext, call, result)
+                    }
+                }
+
         // Whether a person is actually here, for the chat header's "Active
         // now". Its own channel because it has nothing to do with calls --
         // see DevicePresence.
@@ -255,7 +267,15 @@ class MainActivity : FlutterActivity() {
 
     override fun onStop() {
         screenshots.stop()
+        // Nothing should hold the microphone once the app is away, and a
+        // voice note playing on into the launcher is nobody's intention.
+        VoiceNotes.releaseAll()
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        voiceChannel = null
+        super.onDestroy()
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -348,5 +368,16 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "dayflower/pip"
         private const val PRESENCE_CHANNEL = "dayflower/presence"
         private const val STICKY_NOTE_CHANNEL = "dayflower/sticky_note"
+
+        /**
+         * How VoiceNotes tells Dart that playback reached the end.
+         *
+         * WARNING: static, because MediaPlayer's completion callback fires
+         * on the player and not on an activity, and the object that owns it
+         * is a singleton. Cleared in onDestroy so a finished activity's
+         * channel is never invoked.
+         */
+        @JvmStatic
+        var voiceChannel: MethodChannel? = null
     }
 }

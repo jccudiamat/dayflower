@@ -28,7 +28,11 @@ enum PushKind {
 
   /// They picked a mood, or changed it (migration 0049). Quiet, on the
   /// activity channel: worth knowing, not worth a heads-up.
-  mood;
+  mood,
+
+  /// A voice message (migration 0051). An ordinary message as far as the
+  /// phone is concerned: a banner that waits, and opens the thread.
+  voice;
 
   static PushKind? byId(String? id) {
     for (final kind in PushKind.values) {

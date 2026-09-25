@@ -37,6 +37,8 @@ class FlowerMessage {
     required this.senderId,
     this.flowerType,
     this.imagePath,
+    this.audioPath,
+    this.audioMs,
     this.note,
     required this.sentAt,
     this.seenAt,
@@ -59,6 +61,18 @@ class FlowerMessage {
   /// `<pairId>/<uuid>.jpg`. Not a URL — the bucket is private, so the app
   /// mints a short-lived signed URL when it actually needs to render this.
   final String? imagePath;
+
+  /// A voice message, in the private `voice_notes` bucket (migration 0051).
+  /// `<pair_id>/<name>.m4a`, like a photo's path and for the same reason:
+  /// the leading segment is what the Storage policy reads.
+  final String? audioPath;
+
+  /// How long it runs, in milliseconds.
+  ///
+  /// ⚠️ Carried on the row so the bubble draws at its real width before a
+  /// byte has downloaded — the same reason a photo's shape rides in its
+  /// path. Without it every voice note would appear empty and then jump.
+  final int? audioMs;
 
   /// The flower's caption, or — when [flowerType] is null — the message text.
   final String? note;
@@ -99,6 +113,12 @@ class FlowerMessage {
   /// A "Share your day" photo.
   bool get isPhoto => imagePath != null;
 
+  /// A voice message.
+  bool get isVoice => audioPath != null;
+
+  /// How long it runs. Zero for anything that is not a voice note.
+  Duration get audioLength => Duration(milliseconds: audioMs ?? 0);
+
   /// A card made in the card maker, rather than a picture of a day.
   ///
   /// ⚠️ Told apart by the filename prefix [PhotoOrigin] writes, because
@@ -120,7 +140,8 @@ class FlowerMessage {
   /// ⚠️ The call clause is load-bearing: a call row carries none of the
   /// other three, so without it every call would report as text and render
   /// as an empty bubble.
-  bool get isText => flowerType == null && imagePath == null && !isCall;
+  bool get isText =>
+      flowerType == null && imagePath == null && audioPath == null && !isCall;
 
   /// A call — live or long finished.
   bool get isCall => call != null;
@@ -210,6 +231,10 @@ class FlowerMessage {
 
     if (isBouquet) return 'Sent you a bouquet 💐';
 
+    // The length is the only thing worth saying about a voice note you
+    // cannot hear yet, and it is what decides whether you open it now.
+    if (isVoice) return 'Sent a voice message 🎤 · ${voiceLength(audioLength)}';
+
     if (isText) return note;
 
     // Non-null by here: the two returns above cover every case where
@@ -237,6 +262,10 @@ class FlowerMessage {
     if (isCall) {
       final kind = call == CallMode.video ? 'Video call' : 'Voice call';
       return isLiveCall ? '$kind · happening now' : kind;
+    }
+    if (isVoice) {
+      final line = '🎤  ${voiceLength(audioLength)}';
+      return mine ? 'You: $line' : line;
     }
     if (isText) return note;
     final bloom = flower!;
@@ -288,6 +317,9 @@ class FlowerMessage {
         flowerType: map['flower_type'] as String?,
         // Rows written before 0013 ran have no column at all.
         imagePath: map['image_path'] as String?,
+        // Absent on rows written before migration 0051.
+        audioPath: map['audio_path'] as String?,
+        audioMs: (map['audio_ms'] as num?)?.toInt(),
         note: map['note'] as String?,
         sentAt: DateTime.parse(map['sent_at'] as String).toLocal(),
         seenAt: map['seen_at'] == null
@@ -309,6 +341,16 @@ class FlowerMessage {
 
 /// Private Storage bucket created by migration 0013.
 const dayPhotoBucket = 'day_photos';
+
+/// Private Storage bucket created by migration 0051.
+const voiceNoteBucket = 'voice_notes';
+
+/// "0:07", "1:42". The only thing worth saying about a voice note before
+/// you play it, so it is said the way a player says it.
+String voiceLength(Duration d) {
+  final seconds = d.inSeconds;
+  return '${seconds ~/ 60}:${(seconds % 60).toString().padLeft(2, '0')}';
+}
 
 class FlowerRepository {
   FlowerRepository(this._client);
@@ -389,12 +431,14 @@ class FlowerRepository {
     required String fileExtension,
     required DayPhotoTarget target,
     String? note,
+    String? replyTo,
   }) =>
       sendDayPhoto(
         pairId: pairId,
         senderId: senderId,
         bytes: bytes,
         fileExtension: fileExtension,
+        replyTo: replyTo,
         note: note,
         toWidget: target.toWidget,
         toChat: target.toChat,
@@ -408,6 +452,7 @@ class FlowerRepository {
     String? note,
     bool toWidget = true,
     bool toChat = true,
+    String? replyTo,
     PhotoOrigin origin = PhotoOrigin.daily,
   }) async {
     // <pair_id>/<uuid>.<ext> — the leading segment is what the Storage RLS
@@ -440,10 +485,49 @@ class FlowerRepository {
       'sender_id': senderId,
       'image_path': path,
       if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+      if (replyTo != null) 'reply_to': replyTo,
       'to_widget': toWidget,
       'to_chat': toChat,
     });
   }
+
+  /// Sends a voice message.
+  ///
+  /// ⚠️ Chat only, and deliberately not offered a home-screen destination.
+  /// The widget draws flowers and photos; a sound has nothing to show there.
+  Future<FlowerMessage> sendVoiceNote({
+    required String pairId,
+    required String senderId,
+    required Uint8List bytes,
+    required Duration length,
+    String? replyTo,
+  }) async {
+    final path = '$pairId/${_uuid()}.m4a';
+    await _client.storage.from(voiceNoteBucket).uploadBinary(
+          path,
+          bytes,
+          fileOptions: const FileOptions(
+            contentType: 'audio/mp4',
+            upsert: false,
+          ),
+        );
+
+    return _insert({
+      'pair_id': pairId,
+      'sender_id': senderId,
+      'audio_path': path,
+      // Clamped to what the column allows, so a timer that overran by a
+      // frame cannot make the insert fail after the upload succeeded.
+      'audio_ms': length.inMilliseconds.clamp(1, 130000),
+      if (replyTo != null) 'reply_to': replyTo,
+      'to_widget': false,
+      'to_chat': true,
+    });
+  }
+
+  /// The bytes of a voice note, for playing it.
+  Future<Uint8List> downloadVoiceNote(String path) =>
+      _client.storage.from(voiceNoteBucket).download(path);
 
   /// A readable URL for a private object, valid for [ttl].
   ///
@@ -478,7 +562,12 @@ class FlowerRepository {
     );
     if (path == null || path.isEmpty) return;
     try {
-      await _client.storage.from(dayPhotoBucket).remove([path]);
+      // ⚠️ The row owned one object or the other, and `delete_message`
+      // returns whichever it was (migration 0051). The extension is what
+      // says which bucket it came out of.
+      final bucket =
+          path.endsWith('.m4a') ? voiceNoteBucket : dayPhotoBucket;
+      await _client.storage.from(bucket).remove([path]);
     } catch (e) {
       // Best effort. The message is already gone, which is what was asked
       // for; a leftover object is a housekeeping problem, not a failure the
