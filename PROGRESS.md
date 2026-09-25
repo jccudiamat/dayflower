@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### A screenshot offers to become a bug report (2026-09-25, not yet published)
+### A screenshot offers to become a bug report (2026-09-25, build 112)
 
 - **Native** (`ScreenshotWatcher.kt`, started and stopped with the activity): Android 14+ uses `registerScreenCaptureCallback` (manifest `DETECT_SCREEN_CAPTURE`, install-time, no prompt). **Below 14 there is no screenshot event**, so a new picture inserted into MediaStore while the app is in front stands in for one (API 30+: inserts only; older: any change, folded by a 3 s quiet window). Our own gallery saves are skipped (`MediaSaver.lastSavedAt`, 5 s). ⚠️ On older Android something else saving a picture at that moment can raise it too; the card offers, it does not assume. Channel `dayflower/screenshots`, one method `taken`.
 - **Dart** (`feedback/presentation/screenshot_report.dart`, `ScreenshotReportGate` in the app builder inside UpdateGate): nothing is read from the gallery. The gate wraps the app in a RepaintBoundary and captures **its own screen** as PNG (at most 1.75x) the moment the event lands, then shows a card at the bottom: thumbnail, "Screenshot taken", **Report** and ✕; gone after 8 s. Report pushes `Routes.feedback` with the picture as `extra`, and `FeedbackScreen(initialImages:)` opens with it attached. No offer while a report is being written (`FeedbackScreen.showing`), signed out, or within 8 s of the last. Settings → More → **Offer after a screenshot** switches it off (`screenshotPromptProvider`, local, awaited before offering so "off" holds on the first screenshot after launch). No tooltips in the card: it sits above the Navigator, where there is no Overlay.
