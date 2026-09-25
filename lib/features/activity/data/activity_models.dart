@@ -90,6 +90,10 @@ class Activity {
       case ActivityKind.reunionSet:
         return Routes.events;
 
+      // Home, where their mood sits beside yours and you can answer it.
+      case ActivityKind.moodSet:
+        return Routes.home;
+
       // The camera, not the thread: a strip waiting on you is a thing to
       // *do*, and the shutter is the only place you can do it.
       case ActivityKind.stripWaiting:
@@ -133,6 +137,9 @@ class Activity {
           ? 'You started a strip, waiting on them'
           : '$who is waiting on your half';
     }
+    if (kind == ActivityKind.moodSet && mine) {
+      return 'You shared how you feel';
+    }
 
     return '$who ${kind.verb}';
   }
@@ -162,6 +169,10 @@ enum ActivityKind {
   savingGoalSet(
       'saving_goal_set', 'Goal', 'started saving for something',
       AppColors.amber),
+
+  /// Picking a mood, or changing it. Logged by migration 0049's trigger on
+  /// `users.mood`, which folds changes made within ten minutes into one row.
+  moodSet('mood_set', 'Mood', 'shared how they feel', AppColors.brand),
 
   /// A kind this build has never heard of — a newer app wrote it. Renders
   /// as a plain, untappable card rather than throwing, which is the whole

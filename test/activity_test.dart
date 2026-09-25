@@ -49,6 +49,8 @@ void main() {
         'account_added',
         'budget_set',
         'saving_goal_set',
+        // 0049, on users.mood rather than in 0019.
+        'mood_set',
       ];
       for (final id in emittedByTriggers) {
         expect(ActivityKind.fromId(id), isNot(ActivityKind.unknown),
@@ -134,6 +136,18 @@ void main() {
           'Sheena is waiting on your half');
       expect(a.sentence(myUserId: _them, partnerName: 'Sheena'),
           contains('waiting on them'));
+    });
+  });
+
+  group('a mood', () {
+    test('reads as theirs to them, and goes Home', () {
+      final a = _activity(kind: 'mood_set', title: 'Feeling loved');
+      expect(a.kind, ActivityKind.moodSet);
+      expect(a.route, Routes.home);
+      expect(a.sentence(myUserId: _me, partnerName: 'Sheena'),
+          'Sheena shared how they feel');
+      expect(a.sentence(myUserId: _them, partnerName: 'Sheena'),
+          'You shared how you feel');
     });
   });
 

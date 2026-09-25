@@ -165,8 +165,11 @@ class PushService {
     // second route mechanism. app.dart already watches it and navigates once
     // the router exists — which matters most here, because a tap that opens
     // the app from dead arrives long before there is anything to navigate.
-    AppNotifications.pendingRoute.value =
-        push.isActionableCall ? Routes.call : Routes.chat;
+    AppNotifications.pendingRoute.value = push.isActionableCall
+        ? Routes.call
+        : push.kind == PushKind.mood
+            ? Routes.home
+            : Routes.chat;
   }
 }
 
@@ -215,6 +218,18 @@ Future<void> pushBackgroundHandler(RemoteMessage remote) async {
         // so it cannot reach the native restyling and its notification stays
         // the plain one — but it can still show a face rather than a letter.
         callerAvatar: await CallerAvatar.cached(),
+      );
+      return;
+    }
+    // Home, where their mood is, and on the activity channel under the
+    // activity id: the realtime path raises the same news there when the
+    // app is still alive, and one must replace the other.
+    if (push.kind == PushKind.mood) {
+      await PartnerAlerts.pushed(
+        title: push.title,
+        body: push.body,
+        route: Routes.home,
+        activity: true,
       );
       return;
     }

@@ -28,13 +28,26 @@ interface Payload {
   message_id: string;
   pair_id: string;
   sender_id: string;
-  kind: "call" | "photo" | "flower" | "message" | "heartbeat";
+  kind: "call" | "photo" | "flower" | "message" | "heartbeat" | "mood";
   call_mode: "voice" | "video" | null;
   /// Heartbeats only: when the tap happened, in epoch millis. The app uses
   /// it to tell a push apart from the same tap arriving over realtime, so
   /// one heart is never counted twice.
   sent_at_ms?: number;
+  /// Moods only (migration 0049): the Mood enum's name, "loved".
+  mood?: string | null;
 }
+
+/// The app's Mood enum, for the one line a mood push needs. A mood a newer
+/// build adds still gets a line, with a sparkle for its face.
+const MOOD_EMOJI: Record<string, string> = {
+  happy: "😊",
+  loved: "🥰",
+  calm: "😌",
+  low: "😔",
+  stressed: "😤",
+  tired: "😴",
+};
 
 // Cached across warm invocations. Google's tokens last an hour; minting one
 // per notification would double the latency of every push and hammer an
@@ -132,6 +145,19 @@ function describe(payload: Payload, name: string, note: string | null) {
     // directly. Keep it in step with PulseAlerts.copy.
     case "heartbeat":
       return { title: name, body: "sent you a heartbeat 💗", priority: "high" as const };
+    // ⚠️ Worded as the app words the same news from its activity feed
+    // (app.dart, _alertActivity): the two can reach one phone, share an id,
+    // and the second replaces the first.
+    case "mood": {
+      const mood = (payload.mood ?? "").toLowerCase();
+      return {
+        title: name,
+        body: mood
+          ? `Feeling ${mood} ${MOOD_EMOJI[mood] ?? "✨"}`
+          : "shared how they feel",
+        priority: "normal" as const,
+      };
+    }
     default:
       return { title: name, body: "sent you a message", priority: "normal" as const };
   }
@@ -224,10 +250,14 @@ Deno.serve(async (req) => {
             // A heartbeat is nearly the same: "they were thinking of you"
             // is worth waking a phone for now, and worth nothing tomorrow
             // morning, so it is not stored for a day the way a message is.
+            // A mood is today's, and gone blank by tomorrow on their own
+            // screen; announcing it a day late would be announcing nothing.
             ttl: payload.kind === "call"
               ? "60s"
               : payload.kind === "heartbeat"
               ? "900s"
+              : payload.kind === "mood"
+              ? "43200s"
               : "86400s",
           },
         },

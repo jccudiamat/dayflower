@@ -152,27 +152,39 @@ class PartnerAlerts {
   /// ⚠️ Same channel as [messages], not a new one. A second channel would
   /// appear in Android's settings as a separate switch for the same thing,
   /// and somebody muting "Messages" would still be woken by "Push".
+  ///
+  /// [activity] puts it on the Activity channel under the activity id, for a
+  /// push that is news rather than a message (a mood): quieter, and
+  /// replaced by the realtime path's copy of the same thing, not stacked.
   static Future<void> pushed({
     required String title,
     required String body,
     required String route,
+    bool activity = false,
   }) async {
     if (!supported) return;
     await init();
     try {
       await _plugin.show(
-        id: _messageNotificationId,
+        id: activity ? _activityNotificationId : _messageNotificationId,
         title: title,
         body: body,
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            _messageChannelId,
-            'Messages',
-            importance: Importance.high,
-            priority: Priority.high,
-            category: AndroidNotificationCategory.message,
-          ),
-          iOS: DarwinNotificationDetails(),
+        notificationDetails: NotificationDetails(
+          android: activity
+              ? const AndroidNotificationDetails(
+                  _activityChannelId,
+                  'Activity',
+                  importance: Importance.defaultImportance,
+                  priority: Priority.defaultPriority,
+                )
+              : const AndroidNotificationDetails(
+                  _messageChannelId,
+                  'Messages',
+                  importance: Importance.high,
+                  priority: Priority.high,
+                  category: AndroidNotificationCategory.message,
+                ),
+          iOS: const DarwinNotificationDetails(),
         ),
         payload: AppNotifications.payloadForRoute(route),
       );

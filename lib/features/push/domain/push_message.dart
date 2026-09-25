@@ -24,7 +24,11 @@ enum PushKind {
   /// it has its own sound, its own vibration waveform, and a count that
   /// accumulates across a burst. See migration 0046 for why it pushes at
   /// all, having deliberately not done so since 0031.
-  heartbeat;
+  heartbeat,
+
+  /// They picked a mood, or changed it (migration 0049). Quiet, on the
+  /// activity channel: worth knowing, not worth a heads-up.
+  mood;
 
   static PushKind? byId(String? id) {
     for (final kind in PushKind.values) {

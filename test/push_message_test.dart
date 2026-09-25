@@ -23,8 +23,16 @@ void main() {
       expect(push.isActionableCall, isTrue);
     });
 
+    test('a mood is its own quiet kind', () {
+      final push = PushMessage.parse(
+          {'kind': 'mood', 'title': 'Wifey', 'body': 'Feeling loved 🥰'})!;
+      expect(push.kind, PushKind.mood);
+      expect(push.kind.interrupts, isFalse);
+      expect(push.body, 'Feeling loved 🥰');
+    });
+
     test('nothing but a call takes over the screen', () {
-      for (final kind in ['message', 'flower', 'photo']) {
+      for (final kind in ['message', 'flower', 'photo', 'mood']) {
         final push = PushMessage.parse({'kind': kind, 'title': 'a', 'body': 'b'})!;
         expect(push.kind.interrupts, isFalse, reason: '$kind must not ring');
       }

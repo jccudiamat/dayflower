@@ -583,8 +583,16 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
           if (!a.isMine(myId) && a.actorId != null)
             (
               at: a.createdAt,
-              title: a.sentence(myUserId: myId, partnerName: from),
-              body: a.title,
+              // A mood reads as the push for it does ("Wifey", "Feeling
+              // loved 🥰"): the two can land on the same phone, and they
+              // share a notification id, so the second replaces the first
+              // and must say the same thing.
+              title: a.kind == ActivityKind.moodSet
+                  ? from
+                  : a.sentence(myUserId: myId, partnerName: from),
+              body: a.kind == ActivityKind.moodSet
+                  ? '${a.title} ${a.emoji}'
+                  : a.title,
               // Straight to the thing itself — the reminder, the chapter,
               // the camera — rather than to the list it is listed in.
               route: a.route ?? Routes.activityFeed,
