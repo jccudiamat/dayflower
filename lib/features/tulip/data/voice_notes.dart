@@ -57,6 +57,23 @@ class VoiceNotes {
     return (path: path, length: Duration(milliseconds: ms));
   }
 
+  /// Pauses the recording and returns how much has actually been captured.
+  ///
+  /// ⚠️ The length comes back from the recorder rather than being counted
+  /// here: a paused recorder writes nothing, so a timer on this side would
+  /// claim seconds of audio the file does not contain.
+  static Future<Duration> pauseRecording() async {
+    if (!supported) return Duration.zero;
+    final ms = await _channel.invokeMethod<int>('pauseRecording');
+    return Duration(milliseconds: ms ?? 0);
+  }
+
+  static Future<Duration> resumeRecording() async {
+    if (!supported) return Duration.zero;
+    final ms = await _channel.invokeMethod<int>('resumeRecording');
+    return Duration(milliseconds: ms ?? 0);
+  }
+
   static Future<void> cancelRecording() async {
     if (!supported) return;
     await _channel.invokeMethod<void>('cancel');

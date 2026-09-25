@@ -28,6 +28,7 @@ import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
 import '../widgets/composer_attachment.dart';
+import '../widgets/voice_preview.dart';
 import '../widgets/typing_bubble.dart';
 import '../widgets/voice_recorder_bar.dart';
 import '../../data/voice_notes.dart';
@@ -91,6 +92,10 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
   /// A voice note is uploading.
   bool _sendingVoice = false;
+
+  /// Recorded and waiting on the composer, to be listened to and captioned
+  /// before it goes. Null when there is none.
+  ({String path, Duration length})? _pendingVoice;
 
   /// A picked photo is uploading. The icon greys and stops taking taps —
   /// the picker takes long enough to return that a second press is easy.
@@ -372,6 +377,10 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   /// four would read as having said the same thing four times.
   Future<void> _sendText() async {
     final text = _composer.text.trim();
+    if (_pendingVoice != null) {
+      await _sendVoice(text);
+      return;
+    }
     if (_attachments.isNotEmpty) {
       await _sendAttachments(text);
       return;
@@ -737,7 +746,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
           if (_recording)
             VoiceRecorderBar(
               onCancel: () => setState(() => _recording = false),
-              onSend: _sendVoice,
+              onSend: _heldVoice,
             )
           else
             // A Material rather than a decorated Container so the icons
@@ -754,9 +763,16 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Pictures waiting to go, above the words that will
-                    // caption them.
-                    if (_attachments.isNotEmpty) _attachmentStrip(),
+                    // Waiting to go, above the words that will caption it.
+                    if (_pendingVoice != null)
+                      VoicePreview(
+                        key: ValueKey(_pendingVoice!.path),
+                        path: _pendingVoice!.path,
+                        length: _pendingVoice!.length,
+                        onRemove: _discardVoice,
+                      )
+                    else if (_attachments.isNotEmpty)
+                      _attachmentStrip(),
                     Padding(
                       padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
                       child: TextField(
@@ -777,7 +793,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                           enabledBorder: InputBorder.none,
                           focusedBorder: InputBorder.none,
                           contentPadding: EdgeInsets.zero,
-                          hintText: _attachments.isEmpty
+                          hintText: _attachments.isEmpty &&
+                                  _pendingVoice == null
                               ? 'Message'
                               : 'Add a caption',
                           hintStyle: AppText.body(AppColors.muted),
@@ -806,17 +823,25 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                           tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
                           onTap: _togglePanel,
                         ),
+                        // ⚠️ A recorded voice note is the whole message, so
+                        // the other ways to attach stand down until it is
+                        // sent or thrown away. A picture and a voice in one
+                        // bubble is a thing the thread cannot draw.
                         _ComposerIcon(
                           icon: CupertinoIcons.photo,
                           tooltip: 'Attach a photo',
-                          onTap: _attaching || _full ? () {} : _attachPhoto,
-                          color:
-                              _attaching || _full ? AppColors.muted : null,
+                          onTap: _attaching || _full || _hasVoice
+                              ? () {}
+                              : _attachPhoto,
+                          color: _attaching || _full || _hasVoice
+                              ? AppColors.muted
+                              : null,
                         ),
                         _ComposerIcon(
                           icon: CupertinoIcons.camera,
                           tooltip: 'Take a photo',
-                          onTap: _openCamera,
+                          onTap: _hasVoice ? () {} : _openCamera,
+                          color: _hasVoice ? AppColors.muted : null,
                         ),
                         // ⚠️ Only where there is something to record with.
                         // Every other platform gets no button rather than one
@@ -825,13 +850,19 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                           _ComposerIcon(
                             icon: CupertinoIcons.mic,
                             tooltip: 'Record a voice message',
-                            onTap: _sendingVoice ? () {} : _startRecording,
-                            color: _sendingVoice ? AppColors.muted : null,
+                            onTap: _sendingVoice || _hasVoice
+                                ? () {}
+                                : _startRecording,
+                            color: _sendingVoice || _hasVoice
+                                ? AppColors.muted
+                                : null,
                           ),
                         const Spacer(),
                         _SendButton(
                           enabled: canSend &&
-                              (hasWords || _attachments.isNotEmpty),
+                              (hasWords ||
+                                  _attachments.isNotEmpty ||
+                                  _hasVoice),
                           loading: _sending || _sendingVoice,
                           onTap: _sendText,
                         ),
@@ -848,6 +879,9 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
   /// Whether the most pictures one message may carry are already on.
   bool get _full => _attachments.length >= _maxAttachments;
+
+  /// Whether a recording is waiting to be sent.
+  bool get _hasVoice => _pendingVoice != null;
 
   /// Pictures picked but not yet sent, each with a way to take it off again.
   Widget _attachmentStrip() {
@@ -973,40 +1007,75 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     }
   }
 
-  /// Uploads what was recorded and puts it in the thread.
-  Future<void> _sendVoice(({String path, Duration length})? recording) async {
-    setState(() => _recording = false);
-    if (recording == null) return;
+  /// Stopping the recorder parks it on the composer. Nothing is sent until
+  /// it has been listened to and Send is pressed — see VoicePreview.
+  void _heldVoice(({String path, Duration length})? recording) {
+    setState(() {
+      _recording = false;
+      _pendingVoice = recording;
+    });
+    // The caption is typed in the ordinary field, so put the cursor there.
+    if (recording != null) _focus.requestFocus();
+  }
 
+  /// Throws the recording away, file and all.
+  Future<void> _discardVoice() async {
+    final held = _pendingVoice;
+    setState(() => _pendingVoice = null);
+    if (held == null) return;
+    try {
+      await VoiceNotes.stopPlaying();
+      // The file is in the cache directory, so a missed delete is only
+      // untidy; not deleting at all would leave every discarded take there.
+      final file = File(held.path);
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      debugPrint('discarded recording not removed: $e');
+    }
+  }
+
+  /// Uploads the recording on the composer, captioned by the words.
+  Future<void> _sendVoice(String caption) async {
+    final held = _pendingVoice;
+    if (held == null || _sendingVoice) return;
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
     if (pair == null || userId == null) return;
 
     final replyTo = _replyingTo;
+    _composer.clear();
+    ref.read(typingLineProvider)?.stop();
     setState(() {
       _sendingVoice = true;
+      _pendingVoice = null;
       _replyingTo = null;
     });
     if (_readingBack.value) _toNewest();
     try {
-      final file = File(recording.path);
-      final bytes = await file.readAsBytes();
+      await VoiceNotes.stopPlaying();
+      final bytes = await File(held.path).readAsBytes();
       final sent = await ref.read(flowerRepositoryProvider).sendVoiceNote(
             pairId: pair.id,
             senderId: userId,
             bytes: bytes,
-            length: recording.length,
+            length: held.length,
+            note: caption.isEmpty ? null : caption,
             replyTo: replyTo?.id,
           );
       // Their own voice plays from the phone rather than downloading back
       // down what was just uploaded.
       if (sent.audioPath != null) {
-        await VoiceNoteFiles.prime(sent.audioPath!, recording.path);
+        await VoiceNoteFiles.prime(sent.audioPath!, held.path);
       }
       if (mounted) setState(() => _pending.add(sent));
     } catch (e) {
       if (mounted) {
-        setState(() => _replyingTo = replyTo);
+        // Put it back, so trying again does not mean saying it again.
+        setState(() {
+          _pendingVoice = held;
+          _replyingTo = replyTo;
+        });
+        _composer.text = caption;
         _showError("Couldn't send that voice message. Try again?");
       }
     } finally {
@@ -1330,7 +1399,14 @@ class _SendButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedOpacity(
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      // ⚠️ It had no label at all: a screen reader announced the one control
+      // that sends the message as nothing.
+      label: 'Send',
+      excludeSemantics: true,
+      child: AnimatedOpacity(
       duration: AppMotion.micro,
       opacity: enabled ? 1 : 0.4,
       child: Material(
@@ -1366,6 +1442,7 @@ class _SendButton extends StatelessWidget {
           ),
         ),
       ),
+    ),
     );
   }
 }

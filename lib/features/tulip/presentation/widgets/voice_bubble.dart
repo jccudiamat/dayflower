@@ -10,15 +10,16 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_icon.dart';
 import '../../data/flower_repository.dart';
 import '../../data/voice_notes.dart';
+import 'voice_wave.dart';
 
 /// A voice message in the thread: play, a bar you can scrub, and its length.
 ///
-/// ⚠️ **The bars are not the sound.** Drawing a real waveform would mean
+/// ⚠️ **The curve is not the sound.** Drawing a real waveform would mean
 /// downloading and decoding every voice note in the thread just to render
-/// it, which is a lot of bytes and battery for decoration. These are a fixed
+/// it, which is a lot of bytes and battery for decoration. It is a fixed
 /// shape derived from the message id, so each note looks like itself and
 /// nothing has to be fetched to draw one. The honest information is the
-/// length and the progress, and both are real.
+/// length and the progress, and both are real. See waveFor.
 class VoiceBubble extends ConsumerStatefulWidget {
   const VoiceBubble({
     super.key,
@@ -40,6 +41,7 @@ class VoiceBubble extends ConsumerStatefulWidget {
 class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
   Duration _at = Duration.zero;
   bool _loading = false;
+  late final List<double> _wave = waveFor(_id, count: 26);
   Timer? _ticker;
   StreamSubscription<void>? _ended;
 
@@ -176,11 +178,11 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
                   width: _barsWidth,
                   height: 26,
                   child: CustomPaint(
-                    painter: _WavePainter(
-                      seed: _id,
-                      progress: progress,
-                      played: tint,
-                      unplayed: AppColors.muted.withValues(alpha: .45),
+                    painter: VoiceBarsPainter(
+                      samples: _wave,
+                      barColor: AppColors.muted.withValues(alpha: .5),
+                      playedColor: tint,
+                      played: progress,
                     ),
                   ),
                 ),
@@ -197,6 +199,12 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
               ),
             ],
           ),
+          // What they wrote alongside it, if anything.
+          if ((widget.message.note ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text((widget.message.note ?? '').trim(),
+                style: AppText.body(AppColors.ink)),
+          ],
           const SizedBox(height: 2),
           widget.meta,
         ],
@@ -213,46 +221,4 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
     await VoiceNotes.seek(to);
     if (mounted) setState(() => _at = to);
   }
-}
-
-/// The bars. A fixed shape per message, so one voice note always looks the
-/// same and no audio has to be decoded to draw it.
-class _WavePainter extends CustomPainter {
-  _WavePainter({
-    required this.seed,
-    required this.progress,
-    required this.played,
-    required this.unplayed,
-  });
-
-  final String seed;
-  final double progress;
-  final Color played, unplayed;
-
-  static const _count = 27;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Deterministic from the id: the same note draws identically on both
-    // phones and after a restart.
-    final random = math.Random(seed.hashCode);
-    final gap = size.width / _count;
-    final paint = Paint()..strokeCap = StrokeCap.round..strokeWidth = 2.6;
-    for (var i = 0; i < _count; i++) {
-      // Never a flat line and never full height: a voice note looks like
-      // speech, which is mostly middling with a few peaks.
-      final height = size.height * (0.22 + random.nextDouble() * 0.78);
-      final x = gap * (i + .5);
-      paint.color = (i + .5) / _count <= progress ? played : unplayed;
-      canvas.drawLine(
-        Offset(x, (size.height - height) / 2),
-        Offset(x, (size.height + height) / 2),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(_WavePainter old) =>
-      old.progress != progress || old.seed != seed || old.played != played;
 }

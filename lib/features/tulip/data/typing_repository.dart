@@ -136,11 +136,21 @@ final typingLineProvider = Provider.autoDispose<TypingLine?>((ref) {
   final pair = ref.watch(currentPairProvider).valueOrNull;
   final me = ref.watch(currentUserIdProvider);
   if (pair == null || !pair.isLinked || me == null) return null;
-  final line = TypingLine(
-    client: ref.watch(supabaseClientProvider),
-    pairId: pair.id,
-    userId: me,
-  );
+  // 🔴 Guarded. Building the line needs the Supabase client, and an
+  // ellipsis is never worth taking the composer down for: without this, a
+  // build where the client is not up throws on the first keystroke, from
+  // inside `onChanged`.
+  final TypingLine line;
+  try {
+    line = TypingLine(
+      client: ref.watch(supabaseClientProvider),
+      pairId: pair.id,
+      userId: me,
+    );
+  } catch (e) {
+    debugPrint('typing line unavailable: $e');
+    return null;
+  }
   ref.onDispose(line.dispose);
   // Held briefly after the last watcher goes, so stepping from the list into
   // the conversation does not tear the channel down and build it again.

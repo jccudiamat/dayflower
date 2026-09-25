@@ -231,9 +231,13 @@ class FlowerMessage {
 
     if (isBouquet) return 'Sent you a bouquet 💐';
 
-    // The length is the only thing worth saying about a voice note you
-    // cannot hear yet, and it is what decides whether you open it now.
-    if (isVoice) return 'Sent a voice message 🎤 · ${voiceLength(audioLength)}';
+    // The caption leads when there is one, exactly as it does for a photo:
+    // what they wrote says more than the length ever does. Otherwise the
+    // length, which is what decides whether you listen now.
+    if (isVoice) {
+      if (note.isNotEmpty) return '🎤  $note';
+      return 'Sent a voice message 🎤 · ${voiceLength(audioLength)}';
+    }
 
     if (isText) return note;
 
@@ -264,7 +268,8 @@ class FlowerMessage {
       return isLiveCall ? '$kind · happening now' : kind;
     }
     if (isVoice) {
-      final line = '🎤  ${voiceLength(audioLength)}';
+      final line =
+          note.isEmpty ? '🎤  ${voiceLength(audioLength)}' : '🎤  $note';
       return mine ? 'You: $line' : line;
     }
     if (isText) return note;
@@ -500,6 +505,7 @@ class FlowerRepository {
     required String senderId,
     required Uint8List bytes,
     required Duration length,
+    String? note,
     String? replyTo,
   }) async {
     final path = '$pairId/${_uuid()}.m4a';
@@ -519,6 +525,8 @@ class FlowerRepository {
       // Clamped to what the column allows, so a timer that overran by a
       // frame cannot make the insert fail after the upload succeeded.
       'audio_ms': length.inMilliseconds.clamp(1, 130000),
+      // A voice note may carry words too, the way a photo carries a caption.
+      if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
       if (replyTo != null) 'reply_to': replyTo,
       'to_widget': false,
       'to_chat': true,

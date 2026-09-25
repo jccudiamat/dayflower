@@ -39,12 +39,26 @@ object VoiceNotes {
     private var recordingPath: String? = null
     private var startedAt = 0L
 
+    /**
+     * How much was already captured before the current run began.
+     *
+     * WARNING: a paused recorder writes nothing, so elapsed time cannot be
+     * "now minus started" once it has been paused. This banks each run and
+     * the clock restarts from it on resume; without it, a thirty-second
+     * pause would be reported as thirty seconds of audio that is not there,
+     * and audio_ms would disagree with the file.
+     */
+    private var bankedMs = 0L
+    private var paused = false
+
     private var player: MediaPlayer? = null
 
     fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
         try {
             when (call.method) {
                 "start" -> start(context, result)
+                "pauseRecording" -> pauseRecording(result)
+                "resumeRecording" -> resumeRecording(result)
                 "stop" -> stop(result)
                 "cancel" -> cancel(result)
                 "amplitude" -> result.success(amplitude())
@@ -105,7 +119,47 @@ object VoiceNotes {
         // SystemClock, not wall time: a clock correction mid-recording must
         // not make a voice note report a negative length.
         startedAt = SystemClock.elapsedRealtime()
+        bankedMs = 0
+        paused = false
         result.success(null)
+    }
+
+    /** MediaRecorder.pause needs API 24, and the app's floor is 24. */
+    private fun pauseRecording(result: MethodChannel.Result) {
+        val active = recorder
+        if (active == null || paused) {
+            result.success(elapsed())
+            return
+        }
+        try {
+            active.pause()
+            bankedMs += SystemClock.elapsedRealtime() - startedAt
+            paused = true
+        } catch (e: IllegalStateException) {
+            // Nothing captured yet, so there is nothing to pause.
+        }
+        result.success(elapsed())
+    }
+
+    private fun resumeRecording(result: MethodChannel.Result) {
+        val active = recorder
+        if (active == null || !paused) {
+            result.success(elapsed())
+            return
+        }
+        try {
+            active.resume()
+            startedAt = SystemClock.elapsedRealtime()
+            paused = false
+        } catch (e: IllegalStateException) {
+        }
+        result.success(elapsed())
+    }
+
+    /** Milliseconds actually captured, pauses excluded. */
+    private fun elapsed(): Int {
+        val running = if (paused) 0 else SystemClock.elapsedRealtime() - startedAt
+        return (bankedMs + running).toInt()
     }
 
     private fun stop(result: MethodChannel.Result) {
@@ -115,7 +169,7 @@ object VoiceNotes {
             result.success(null)
             return
         }
-        val ms = (SystemClock.elapsedRealtime() - startedAt).toInt()
+        val ms = elapsed()
         try {
             active.stop()
         } catch (e: RuntimeException) {
@@ -169,6 +223,8 @@ object VoiceNotes {
         }
         recorder = null
         recordingPath = null
+        bankedMs = 0
+        paused = false
     }
 
     // ── Playing ─────────────────────────────────────────────────────────
