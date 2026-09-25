@@ -11,6 +11,7 @@ import 'core/models/pair.dart';
 import 'core/models/user_profile.dart';
 import 'core/providers/supabase_provider.dart';
 import 'core/theme/app_colors.dart';
+import 'features/feedback/presentation/feedback_screen.dart';
 import 'features/calls/data/call_pip.dart';
 import 'core/util/clamp_offset.dart';
 import 'core/theme/design_tokens.dart';
@@ -134,6 +135,10 @@ class Routes {
 
   static const settings = '/app/settings';
   static const widgetSettings = '/app/settings/widgets';
+
+  /// Settings → Bugs and suggestions: words and screenshots, sent to the
+  /// people who make Dayflower.
+  static const feedback = '/app/settings/feedback';
   /// Hangs off the notifications list rather than Settings: it is reached
   /// from the bell, which is where people are standing when they decide to
   /// change how they are interrupted.
@@ -486,6 +491,8 @@ List<RouteBase> appFeatureRoutes() => [
       GoRoute(
           path: Routes.widgetSettings,
           builder: (_, __) => const WidgetSettingsScreen()),
+      GoRoute(
+          path: Routes.feedback, builder: (_, __) => const FeedbackScreen()),
       GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
       GoRoute(
           path: Routes.activityFeed,

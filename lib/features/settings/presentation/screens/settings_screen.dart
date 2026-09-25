@@ -254,6 +254,12 @@ class SettingsScreen extends ConsumerWidget {
                   subtitle: 'What reaches you, and how',
                   onTap: () => context.push(Routes.notificationSettings),
                 ),
+                SettingsLine(),
+                SettingsRow(
+                  title: 'Bugs and suggestions',
+                  subtitle: 'Tell us what broke, or what would help',
+                  onTap: () => context.push(Routes.feedback),
+                ),
               ],
             ),
             const SizedBox(height: AppSpace.md),

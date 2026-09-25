@@ -13,6 +13,15 @@
 
 ## Recent app work
 
+### Chat: the arrow down, contact buttons and search; Settings: bugs and suggestions (2026-09-25)
+
+- **Arrow down while reading back** (flowers_screen.dart, `_ToNewestButton`). Shows past 320px from the newest, bottom right of the thread; tap eases to the newest (from far up it jumps to one screen first). Carries an `UnreadBadge` (now public, conversation_row.dart) with how many of *theirs* arrived since you scrolled up. Sending anything while up there takes you down too. The visibility is a ValueNotifier so scrolling never rebuilds the thread.
+- **Chat settings**: "Just the two of you" is gone; under the name sit four tiles, **Call, Video, Message, Search**. Call/Video share `startOrJoinCall` (calls/presentation/start_call.dart) with the chat header, and tint while a call is live. Message and a picked search result go back to the conversation as a `ChatReturn` pop result: the header awaits `push<ChatReturn>(Routes.chatSettings)` (`_openSettings`), then focuses the composer or runs the quote jump (`_showQuoted`) on the found message. ⚠️ Opened without a conversation underneath, they go to the conversation and the jump is dropped.
+- **Search** (`chat_search_screen.dart`, `Routes.chatSearch`): live results as you type over `chatMessagesProvider` (texts, captions, flower names and notes; case-insensitive), newest first, sender and date (year once it is not this one), the match in bold pink, a long message shown from just before the match. Pure helpers `searchableText`, `searchMessages`, `snippetAround`, `searchStamp`.
+- **Settings → More → Bugs and suggestions** (`lib/features/feedback/`, `Routes.feedback`): Bug or Suggestion, text (up to 4000), up to three screenshots from the gallery, Send. Sends app version and OS version with it. On failure everything stays for a retry; uploaded screenshots are removed again.
+  - 🔴 **Migration 0048_feedback.sql is NOT applied yet** (validated in a rolled-back transaction, 2026-09-25). Table `feedback` (insert and read own only), private bucket `feedback` keyed `<user_id>/…`. Apply with the release that ships the screen: `dart run tool/run_sql.dart supabase/migrations/0048_feedback.sql`. Reports are read in the dashboard (Table editor → feedback; screenshots in Storage → feedback).
+- Tests: test/chat_search_test.dart (arrow, count, four tiles, Message focus, search to jump, helpers), test/feedback_test.dart (send, limit of three, failure keeps the draft). Screenshots: `--dart-define=CAPTURE_REVIEW=true` → build/review/chat-arrow*.png, chat-settings-actions.png, chat-search*.png, feedback.png. Full suite 560 passing. Not yet on a device.
+
 ### Memories: six views, one per kind of memory (2026-09-24)
 
 Implemented from the approved reference, with its two corrections: **search is on All only**, and **no avatar in the header**. `memories_screen.dart` only chooses; each category is its own body widget in `lib/features/memories/presentation/views/`. Data helpers (pure, tested) in `data/memory_views.dart`; styles in `MemoriesStyle` (design_tokens.dart). All six read `relationshipMemoriesProvider`, plus goals/moments for journal counts and pins for places.
