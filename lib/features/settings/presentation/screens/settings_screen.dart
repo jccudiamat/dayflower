@@ -46,6 +46,7 @@ import '../../../../core/widgets/timezone_picker.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
+import '../../../feedback/data/screenshot_events.dart';
 import '../../../updates/data/update_repository.dart';
 import '../../../push/data/push_repository.dart';
 import '../../../push/data/push_service.dart';
@@ -259,6 +260,14 @@ class SettingsScreen extends ConsumerWidget {
                   title: 'Bugs and suggestions',
                   subtitle: 'Tell us what broke, or what would help',
                   onTap: () => context.push(Routes.feedback),
+                ),
+                SettingsLine(),
+                SettingsSwitchRow(
+                  title: 'Offer after a screenshot',
+                  subtitle: 'A quick way to send it as a report',
+                  value: ref.watch(screenshotPromptProvider),
+                  onChanged: (on) =>
+                      ref.read(screenshotPromptProvider.notifier).set(on),
                 ),
               ],
             ),

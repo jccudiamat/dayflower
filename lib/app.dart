@@ -40,6 +40,7 @@ import 'features/push/data/push_service.dart';
 import 'features/calls/presentation/screens/call_screen.dart';
 import 'features/calls/data/call_repository.dart';
 import 'features/calls/domain/call.dart';
+import 'features/feedback/presentation/screenshot_report.dart';
 import 'features/updates/data/update_alerts.dart';
 import 'features/updates/data/update_repository.dart';
 import 'features/updates/presentation/widgets/update_screen.dart';
@@ -521,7 +522,8 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // in one.
       builder: (context, child) => DevicePreview.appBuilder(
         context,
-        CallPipGate(child: UpdateGate(child: child)),
+        CallPipGate(
+            child: UpdateGate(child: ScreenshotReportGate(child: child))),
       ),
     );
   }

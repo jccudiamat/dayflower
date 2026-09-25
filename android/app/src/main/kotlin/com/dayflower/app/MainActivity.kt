@@ -30,6 +30,12 @@ class MainActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
     private var callChannel: MethodChannel? = null
+    private var screenshotChannel: MethodChannel? = null
+
+    /** A screenshot taken while the app is in front - see ScreenshotWatcher. */
+    private val screenshots = ScreenshotWatcher(this) {
+        screenshotChannel?.invokeMethod("taken", null)
+    }
 
     /**
      * An Answer or Decline tapped while the app was dead.
@@ -153,6 +159,10 @@ class MainActivity : FlutterActivity() {
         // Dart says it is listening.
         readCallAction(intent)
 
+        // One-way: a screenshot was just taken. Dart offers to report it.
+        screenshotChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ScreenshotWatcher.CHANNEL)
+
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).apply {
             setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -238,6 +248,16 @@ class MainActivity : FlutterActivity() {
      * land here, and Dart does the rest so that answering from the lock
      * screen and answering from the ring screen are the same code path.
      */
+    override fun onStart() {
+        super.onStart()
+        screenshots.start()
+    }
+
+    override fun onStop() {
+        screenshots.stop()
+        super.onStop()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

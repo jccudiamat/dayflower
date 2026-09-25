@@ -25,10 +25,21 @@ object MediaSaver {
 
     const val CHANNEL = "dayflower/media"
 
+    /**
+     * When the last save started, on the elapsedRealtime clock. A picture we
+     * put in the gallery ourselves is not a screenshot; ScreenshotWatcher
+     * checks this before offering a report.
+     */
+    @Volatile
+    var lastSavedAt = 0L
+
     fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "supported" -> result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-            "saveImage" -> saveImage(context, call, result)
+            "saveImage" -> {
+                lastSavedAt = android.os.SystemClock.elapsedRealtime()
+                saveImage(context, call, result)
+            }
             else -> result.notImplemented()
         }
     }

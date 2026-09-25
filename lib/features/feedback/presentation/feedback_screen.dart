@@ -39,7 +39,15 @@ final feedbackImagePickerProvider = Provider<FeedbackImagePicker>(
 /// Settings → Bugs and suggestions: a few words, and screenshots if they
 /// help, sent to the people who make Dayflower.
 class FeedbackScreen extends ConsumerStatefulWidget {
-  const FeedbackScreen({super.key});
+  const FeedbackScreen({super.key, this.initialImages = const []});
+
+  /// Already attached when it opens: the screenshot a report was offered
+  /// for (see ScreenshotReportGate).
+  final List<FeedbackImage> initialImages;
+
+  /// How many are open. A screenshot taken while writing one is probably
+  /// for it, so the gate does not offer another report on top.
+  static int showing = 0;
 
   @override
   ConsumerState<FeedbackScreen> createState() => _FeedbackScreenState();
@@ -53,7 +61,15 @@ class _FeedbackScreenState extends ConsumerState<FeedbackScreen> {
   bool _sending = false;
 
   @override
+  void initState() {
+    super.initState();
+    FeedbackScreen.showing++;
+    _images.addAll(widget.initialImages.take(FeedbackRepository.maxImages));
+  }
+
+  @override
   void dispose() {
+    FeedbackScreen.showing--;
     _message.dispose();
     super.dispose();
   }

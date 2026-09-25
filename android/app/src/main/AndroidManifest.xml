@@ -5,6 +5,11 @@
          fails. Required here for release APKs to work at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Android 14+: told when a screenshot is taken while the app is in
+         front, to offer sending it as a bug report (ScreenshotWatcher).
+         Install-time, no prompt, and it carries no picture. -->
+    <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE"/>
+
     <!-- Incoming-heartbeat alert: the buzz and the notification that carries
          the heartbeat sound. POST_NOTIFICATIONS is requested at runtime on
          API 33+ (see PulseAlerts.requestPermission). -->

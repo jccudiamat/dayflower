@@ -11,6 +11,7 @@ import 'core/models/pair.dart';
 import 'core/models/user_profile.dart';
 import 'core/providers/supabase_provider.dart';
 import 'core/theme/app_colors.dart';
+import 'features/feedback/data/feedback_repository.dart';
 import 'features/feedback/presentation/feedback_screen.dart';
 import 'features/calls/data/call_pip.dart';
 import 'core/util/clamp_offset.dart';
@@ -492,7 +493,11 @@ List<RouteBase> appFeatureRoutes() => [
           path: Routes.widgetSettings,
           builder: (_, __) => const WidgetSettingsScreen()),
       GoRoute(
-          path: Routes.feedback, builder: (_, __) => const FeedbackScreen()),
+          path: Routes.feedback,
+          // A screenshot offered for a report arrives already attached.
+          builder: (_, state) => FeedbackScreen(initialImages: [
+                if (state.extra case final FeedbackImage shot) shot,
+              ])),
       GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
       GoRoute(
           path: Routes.activityFeed,
