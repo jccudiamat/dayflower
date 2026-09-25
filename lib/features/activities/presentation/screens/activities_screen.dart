@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
+import '../../../../core/widgets/promo_slot.dart';
 import '../widgets/together_card.dart';
 import '../widgets/together_events_card.dart';
 import '../widgets/together_gifts_card.dart';
@@ -69,6 +70,8 @@ class ActivitiesScreen extends StatelessWidget {
             ),
             gap,
             TogetherPlayCard(),
+            // ⚠️ Last, below everything the couple came here for.
+            PromoSlot(place: PromoPlace.together),
           ],
         ),
       ),

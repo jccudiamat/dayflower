@@ -10,6 +10,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/design_tokens.dart';
 import '../../../core/widgets/app_icon.dart';
 import '../../../core/widgets/flower_image.dart';
+import '../../../core/widgets/promo_slot.dart';
 import '../../../core/widgets/story_components.dart';
 import '../../chapters/data/chapter_repository.dart';
 import '../../onboarding/data/user_repository.dart';
@@ -128,6 +129,9 @@ class DayflowerScreen extends ConsumerWidget {
                 onTap: () =>
                     context.push(Routes.chapterFor(review.year, review.month)))
           ],
+          // ⚠️ Last, below everything the couple came here for. A slot above
+          // the tools would be the first thing on the page.
+          const PromoSlot(place: PromoPlace.create),
         ]);
   }
 }
