@@ -1,6 +1,41 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:dayflower/features/calls/data/ring_light_prefs.dart';
 import 'package:dayflower/features/calls/presentation/widgets/ring_light.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// The light alone on black, as pixels: alpha is how lit a point is.
+Future<ByteData> _render(WidgetTester tester, double thickness) async {
+  final boundary = GlobalKey();
+  await tester.pumpWidget(Directionality(
+    textDirection: TextDirection.ltr,
+    child: Center(
+      child: RepaintBoundary(
+        key: boundary,
+        child: SizedBox(
+          width: 200,
+          height: 400,
+          child: ColoredBox(
+            color: const Color(0xFF000000),
+            child: RingLight(thickness: thickness),
+          ),
+        ),
+      ),
+    ),
+  ));
+  return (await tester.runAsync(() async {
+    final image = await (boundary.currentContext!.findRenderObject()!
+            as RenderRepaintBoundary)
+        .toImage();
+    return image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  }))!;
+}
+
+/// How bright the red channel is at (x, y), 0 to 255.
+int _lit(ByteData pixels, int x, int y) => pixels.getUint8((y * 200 + x) * 4);
 
 /// ⚠️ The light is painted, so a widget test cannot see it look right. What
 /// it can hold is the two properties that would make it a bug rather than a
@@ -54,5 +89,32 @@ void main() {
           children: [Positioned.fill(child: RingLight(intensity: 0))]),
     ));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('it lights the corners, not only the sides', (tester) async {
+    // 🔴 Rounded all the way out, the four corners were dark wedges on a
+    // phone whose own corners are tighter than the guess, and the light
+    // looked like a frame that stopped short of the edge.
+    final pixels = await _render(tester, 40);
+    final side = _lit(pixels, 1, 200);
+    expect(side, greaterThan(200), reason: 'the rim is bright');
+    for (final (x, y) in [(1, 1), (198, 1), (1, 398), (198, 398)]) {
+      expect(_lit(pixels, x, y), greaterThan(side * .8),
+          reason: 'corner ($x, $y) is as lit as the side');
+    }
+    expect(_lit(pixels, 100, 200), 0, reason: 'the middle is untouched');
+  });
+
+  testWidgets('wider reaches further in', (tester) async {
+    final narrow = await _render(tester, RingLight.minThickness);
+    final wide = await _render(tester, RingLight.maxThickness);
+    expect(_lit(narrow, 30, 200), 0);
+    expect(_lit(wide, 30, 200), greaterThan(40));
+  });
+
+  test('the width stays between the ends of its slider', () {
+    expect(RingLightWidth.clamp(2), RingLight.minThickness);
+    expect(RingLightWidth.clamp(500), RingLight.maxThickness);
+    expect(RingLightWidth.clamp(60), 60);
   });
 }

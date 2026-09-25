@@ -1,6 +1,7 @@
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -223,8 +224,23 @@ class _LiveViewState extends ConsumerState<_LiveView> {
     final notifier = ref.read(callNotifierProvider.notifier);
     final name = partner?.petName ?? partner?.displayName ?? 'Them';
     final elapsed = session.elapsed;
+    final ringOn = session.isVideo && ref.watch(ringLightProvider);
 
-    return Stack(
+    // 🔴 The navigation bar is outside the app's own canvas on most phones,
+    // so a light painted to the bottom of the screen stopped at a black bar
+    // and never reached the bottom edge. While the light is on, the bar is
+    // the light's colour (with dark buttons on it); otherwise the call's.
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: (ringOn ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light)
+          .copyWith(
+        statusBarColor: Colors.transparent,
+        systemNavigationBarColor:
+            ringOn ? RingLight.glow : AppColors.darkCanvas,
+        systemNavigationBarDividerColor:
+            ringOn ? RingLight.glow : AppColors.darkCanvas,
+        systemNavigationBarContrastEnforced: false,
+      ),
+      child: Stack(
       fit: StackFit.expand,
       children: [
         // On video, their camera fills the screen behind everything else.
@@ -249,8 +265,10 @@ class _LiveViewState extends ConsumerState<_LiveView> {
         // 🔴 Over the video, under everything you can press. It is a light,
         // not a surface: RingLight ignores pointers, so Mute and End are
         // still exactly where they look.
-        if (session.isVideo && ref.watch(ringLightProvider))
-          const Positioned.fill(child: RingLight()),
+        if (ringOn)
+          Positioned.fill(
+            child: RingLight(thickness: ref.watch(ringLightWidthProvider)),
+          ),
         _ReactionOverlay(reactions: session.reactions),
         if (session.isVideo)
           _SelfView(
@@ -311,7 +329,17 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 offset: const Offset(0, 1.2),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 0, 14, 26),
-                  child: Row(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                  // Only while the light is on: how wide it is, right where
+                  // it was switched on, and gone with the rest of the
+                  // controls when the picture is tapped.
+                  if (ringOn) ...[
+                    const _RingWidthSlider(),
+                    const SizedBox(height: 14),
+                  ],
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // The one control here that is not about plumbing. First
@@ -369,12 +397,69 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                       ),
                     ],
                   ),
+                    ],
+                  ),
                 ),
               ),
             ],
           ),
         ),
       ],
+    ),
+    );
+  }
+}
+
+/// How wide the ring light is. A slim bar in the controls' own glass,
+/// narrow at the left and wide at the right, as the icons at its ends say.
+class _RingWidthSlider extends ConsumerWidget {
+  const _RingWidthSlider();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final width = ref.watch(ringLightWidthProvider);
+    final notifier = ref.read(ringLightWidthProvider.notifier);
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 340),
+      child: Container(
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: AppColors.darkCanvas.withValues(alpha: .45),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: AppColors.onDark.withValues(alpha: .1)),
+        ),
+        child: Row(
+          children: [
+            const AppIcon(CupertinoIcons.light_min,
+                size: 18, color: AppColors.onDark),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 3,
+                  activeTrackColor: RingLight.glow,
+                  inactiveTrackColor: AppColors.onDark.withValues(alpha: .25),
+                  thumbColor: RingLight.glow,
+                  overlayColor: RingLight.glow.withValues(alpha: .18),
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 9),
+                ),
+                child: Slider(
+                  value: width,
+                  min: RingLight.minThickness,
+                  max: RingLight.maxThickness,
+                  semanticFormatterCallback: (v) =>
+                      'Ring light width ${v.round()}',
+                  onChanged: notifier.preview,
+                  onChangeEnd: notifier.save,
+                ),
+              ),
+            ),
+            const AppIcon(CupertinoIcons.light_max,
+                size: 20, color: AppColors.onDark),
+          ],
+        ),
+      ),
     );
   }
 }
