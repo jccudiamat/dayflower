@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -18,12 +20,17 @@ import '../../../presence/data/presence_repository.dart';
 import '../../../presence/domain/presence.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../data/flower_repository.dart';
+import '../../data/typing_repository.dart';
 import '../../domain/flower_catalog.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/conversation_row.dart';
 import '../widgets/message_quote.dart';
 import '../widgets/share_your_day.dart';
 import '../widgets/flower_catalog_panel.dart';
+import '../widgets/composer_attachment.dart';
+import '../widgets/typing_bubble.dart';
+import '../widgets/voice_recorder_bar.dart';
+import '../../data/voice_notes.dart';
 import 'chat_settings_screen.dart';
 import '../../../../core/widgets/profile_photo.dart';
 import '../widgets/media_viewer.dart';
@@ -64,6 +71,26 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   /// unread badge says: the badge counts replying as reading, and the
   /// database's receipts should not.
   DateTime? _receiptsUpTo;
+
+  /// Pictures picked and waiting to go, with the words being typed as
+  /// their caption.
+  ///
+  /// 🔴 **They used to send the instant you picked one**, with no review and
+  /// no way to say anything about them. That was defended as being quicker
+  /// than the camera screen, and it was — it was also the only place in the
+  /// app where a mis-tap posted something irreversible. Held here instead,
+  /// exactly as every other messenger holds them.
+  final _attachments = <({Uint8List bytes, String extension})>[];
+
+  /// Most pictures one message may carry.
+  static const _maxAttachments = 4;
+
+  /// Recording a voice message right now: the composer becomes the
+  /// recorder bar for as long as this is true.
+  bool _recording = false;
+
+  /// A voice note is uploading.
+  bool _sendingVoice = false;
 
   /// A picked photo is uploading. The icon greys and stops taking taps —
   /// the picker takes long enough to return that a second press is easy.
@@ -338,8 +365,17 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     }
   }
 
+  /// Sends what is in the composer: the pictures on it, captioned by the
+  /// words, or just the words.
+  ///
+  /// ⚠️ The caption goes on the **first** picture only. Repeating it on
+  /// four would read as having said the same thing four times.
   Future<void> _sendText() async {
     final text = _composer.text.trim();
+    if (_attachments.isNotEmpty) {
+      await _sendAttachments(text);
+      return;
+    }
     if (text.isEmpty || _sending) return;
 
     final pair = ref.read(currentPairProvider).valueOrNull;
@@ -354,6 +390,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     // send a bare message where a reply was meant.
     final replyTo = _replyingTo;
     _composer.clear();
+    // The message is the end of the sentence they were watching you write.
+    ref.read(typingLineProvider)?.stop();
     // Sent from up in the history, it still lands at the bottom: go there
     // with it, as every chat does.
     if (_readingBack.value) _toNewest();
@@ -373,6 +411,54 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
       if (mounted) {
         _composer.text = text;
         setState(() => _replyingTo = replyTo);
+        _showError("Couldn't send that. Try again?");
+      }
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
+  /// Uploads the pictures on the composer, oldest first so they land in the
+  /// order they were picked.
+  Future<void> _sendAttachments(String caption) async {
+    if (_sending) return;
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    final userId = ref.read(currentUserIdProvider);
+    if (pair == null || userId == null) return;
+
+    final going = List.of(_attachments);
+    final replyTo = _replyingTo;
+    _composer.clear();
+    ref.read(typingLineProvider)?.stop();
+    setState(() {
+      _sending = true;
+      _attachments.clear();
+      _replyingTo = null;
+    });
+    if (_readingBack.value) _toNewest();
+
+    try {
+      for (final (i, photo) in going.indexed) {
+        final sent = await ref.read(flowerRepositoryProvider).sendDayPhotoTo(
+              pairId: pair.id,
+              senderId: userId,
+              bytes: photo.bytes,
+              fileExtension: photo.extension,
+              note: i == 0 && caption.isNotEmpty ? caption : null,
+              replyTo: i == 0 ? replyTo?.id : null,
+              target: DayPhotoTarget.chat,
+            );
+        if (mounted) setState(() => _pending.add(sent));
+      }
+    } catch (_) {
+      if (mounted) {
+        // Put back what did not go, so trying again is one tap rather than
+        // picking them all over.
+        setState(() {
+          _attachments.addAll(going);
+          _replyingTo = replyTo;
+        });
+        _composer.text = caption;
         _showError("Couldn't send that. Try again?");
       }
     } finally {
@@ -479,6 +565,11 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
               onOpenSettings: _openSettings,
             ),
             Expanded(child: _buildThread()),
+            // ⚠️ At the foot of the conversation, where the next message
+            // will appear, rather than in the header. The header says who
+            // you are talking to; this is a thing happening in the thread,
+            // and it belongs where you are already looking.
+            const TypingFooter(),
             _buildComposer(),
             if (_panelOpen)
               FlowerCatalogPanel(
@@ -620,8 +711,17 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   static bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
+  /// The composer.
+  ///
+  /// 🔴 **Stacked, not a pill.** The field used to share one row with five
+  /// icons, which gave the words about half the width and pushed the icons
+  /// around every time the text grew. Now the text has the full width on
+  /// top and the controls sit in their own row underneath, where they stay
+  /// in the same place whether you have typed one line or five. Claude's
+  /// composer, and every editor that has to hold both text and tools.
   Widget _buildComposer() {
-    final canSend = !_sending;
+    final canSend = !_sending && !_sendingVoice;
+    final hasWords = _composer.text.trim().isNotEmpty;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
@@ -634,32 +734,70 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
         children: [
           // What is being answered, above the field it is answered in.
           if (_replyingTo != null) _replyStrip(_replyingTo!),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Expanded(
-                // A Material rather than a decorated Container so the icons
-                // sitting inside it splash onto the pill itself — ink looks for
-                // the nearest Material, and on a plain Container that's the
-                // Scaffold underneath, where the ripple is hidden.
-                child: Material(
-                  color: AppColors.surfaceSubtle,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  clipBehavior: Clip.antiAlias,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 44),
-                    child: Row(
-                      // Icons hold the bottom line as the field grows to five
-                      // lines, instead of drifting to the vertical middle.
-                      crossAxisAlignment: CrossAxisAlignment.end,
+          if (_recording)
+            VoiceRecorderBar(
+              onCancel: () => setState(() => _recording = false),
+              onSend: _sendVoice,
+            )
+          else
+            // A Material rather than a decorated Container so the icons
+            // inside splash onto the box itself — ink looks for the nearest
+            // Material, and on a plain Container that is the Scaffold
+            // underneath, where the ripple is hidden.
+            Material(
+              color: AppColors.surfaceSubtle,
+              borderRadius: BorderRadius.circular(AppRadius.xl),
+              clipBehavior: Clip.antiAlias,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Pictures waiting to go, above the words that will
+                    // caption them.
+                    if (_attachments.isNotEmpty) _attachmentStrip(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+                      child: TextField(
+                        controller: _composer,
+                        focusNode: _focus,
+                        minLines: 1,
+                        // Taller than the old five: the field owns the full
+                        // width now, so a long message is worth showing.
+                        maxLines: 6,
+                        textCapitalization: TextCapitalization.sentences,
+                        textInputAction: TextInputAction.newline,
+                        keyboardType: TextInputType.multiline,
+                        style: AppText.body(AppColors.ink),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: _attachments.isEmpty
+                              ? 'Message'
+                              : 'Add a caption',
+                          hintStyle: AppText.body(AppColors.muted),
+                        ),
+                        // Rebuilds the send button as the field fills, and
+                        // tells them you are writing. Stopping on an empty
+                        // field matters: clearing what you typed is changing
+                        // your mind, and the ellipsis should go with it.
+                        onChanged: (text) {
+                          final line = ref.read(typingLineProvider);
+                          text.trim().isEmpty ? line?.stop() : line?.poke();
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                    Row(
                       children: [
-                        // Mirrors the trailing gap below — without it the leading
-                        // icon hugs the pill's left curve while the camera icon
-                        // has 4px of air on the right.
-                        const SizedBox(width: 4),
-                        // The catalog opener. Becomes a keyboard glyph while the
-                        // drawer is up, so one button always toggles back to the
-                        // other input.
+                        // The catalog opener. Becomes a keyboard glyph while
+                        // the drawer is up, so one button always toggles back
+                        // to the other input.
                         _ComposerIcon(
                           icon: _panelOpen
                               ? CupertinoIcons.keyboard
@@ -668,62 +806,65 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
                           tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
                           onTap: _togglePanel,
                         ),
-                        Expanded(
-                          child: TextField(
-                            controller: _composer,
-                            focusNode: _focus,
-                            minLines: 1,
-                            maxLines: 5,
-                            textCapitalization: TextCapitalization.sentences,
-                            textInputAction: TextInputAction.newline,
-                            keyboardType: TextInputType.multiline,
-                            style: AppText.body(AppColors.ink),
-                            decoration: InputDecoration(
-                              isDense: true,
-                              filled: false,
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 12, horizontal: 4),
-                              hintText: 'Message',
-                              hintStyle: AppText.body(AppColors.muted),
-                            ),
-                            // Rebuilds the send button as the field fills.
-                            onChanged: (_) => setState(() {}),
-                          ),
-                        ),
-                        // ⚠️ Two doors, and they now lead to different
-                        // rooms. The paperclip was removed when it only
-                        // duplicated the camera screen's own gallery
-                        // picker; this one skips that screen entirely and
-                        // sends what you pick.
                         _ComposerIcon(
                           icon: CupertinoIcons.photo,
                           tooltip: 'Attach a photo',
-                          onTap: _attaching ? () {} : _attachPhoto,
-                          color: _attaching ? AppColors.muted : null,
+                          onTap: _attaching || _full ? () {} : _attachPhoto,
+                          color:
+                              _attaching || _full ? AppColors.muted : null,
                         ),
                         _ComposerIcon(
                           icon: CupertinoIcons.camera,
                           tooltip: 'Take a photo',
                           onTap: _openCamera,
                         ),
-                        const SizedBox(width: 4),
+                        // ⚠️ Only where there is something to record with.
+                        // Every other platform gets no button rather than one
+                        // that fails when pressed.
+                        if (VoiceNotes.supported)
+                          _ComposerIcon(
+                            icon: CupertinoIcons.mic,
+                            tooltip: 'Record a voice message',
+                            onTap: _sendingVoice ? () {} : _startRecording,
+                            color: _sendingVoice ? AppColors.muted : null,
+                          ),
+                        const Spacer(),
+                        _SendButton(
+                          enabled: canSend &&
+                              (hasWords || _attachments.isNotEmpty),
+                          loading: _sending || _sendingVoice,
+                          onTap: _sendText,
+                        ),
                       ],
                     ),
-                  ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 6),
-              _SendButton(
-                enabled: canSend && _composer.text.trim().isNotEmpty,
-                loading: _sending,
-                onTap: _sendText,
-              ),
-            ],
-          ),
+            ),
         ],
+      ),
+    );
+  }
+
+  /// Whether the most pictures one message may carry are already on.
+  bool get _full => _attachments.length >= _maxAttachments;
+
+  /// Pictures picked but not yet sent, each with a way to take it off again.
+  Widget _attachmentStrip() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
+      child: SizedBox(
+        height: ComposerAttachment.size + 6,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: _attachments.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
+          itemBuilder: (context, i) => ComposerAttachment(
+            bytes: _attachments[i].bytes,
+            index: i,
+            onRemove: () => setState(() => _attachments.removeAt(i)),
+          ),
+        ),
       ),
     );
   }
@@ -765,52 +906,111 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     context.push(Routes.flowers);
   }
 
-  /// Straight from the gallery into the conversation.
+  /// Puts pictures from the gallery on the composer, ready to send.
   ///
   /// 🔴 **Chat only.** A photo attached to a message is a message, not a
   /// day on their home screen — see DayPhotoTarget, which lost its "Both"
   /// for the same reason. The camera screen still offers My Day; this does
   /// not, because nobody attaching a picture mid-sentence means to park it
   /// on somebody's home screen for a day.
-  ///
-  /// ⚠️ Sent on pick, with no review step. The camera screen deliberately
-  /// holds a picked photo for confirmation, on the grounds that picking the
-  /// wrong thumbnail is as easy as mis-tapping the shutter — that reasoning
-  /// still stands, and this is the deliberate exception: the point of the
-  /// button is to be quicker than the screen that reviews.
   Future<void> _attachPhoto() async {
-    if (_attaching) return;
-    final pair = ref.read(currentPairProvider).valueOrNull;
-    final userId = ref.read(currentUserIdProvider);
-    if (pair == null || userId == null) return;
-
+    if (_attaching || _full) return;
     _focus.unfocus();
+    setState(() => _attaching = true);
     try {
-      final file = await ImagePicker().pickImage(
-        source: ImageSource.gallery,
+      final picked = await ImagePicker().pickMultiImage(
         // ⚠️ The same ceiling the camera uses. This is the only copy that
         // will exist, and a 12MP original helps nobody read a message.
         maxWidth: 1600,
         maxHeight: 1600,
         imageQuality: 82,
+        limit: _maxAttachments - _attachments.length,
       );
-      if (file == null || !mounted) return;
-      if (_readingBack.value) _toNewest();
-      setState(() => _attaching = true);
+      if (picked.isEmpty || !mounted) return;
+      final read = [
+        for (final file in picked.take(_maxAttachments - _attachments.length))
+          (
+            bytes: await file.readAsBytes(),
+            extension: file.path.split('.').last.toLowerCase() == 'png'
+                ? 'png'
+                : 'jpg',
+          ),
+      ];
+      if (!mounted) return;
+      setState(() => _attachments.addAll(read));
+      _focus.requestFocus();
+    } catch (_) {
+      if (mounted) _showError("Couldn't open your photos. Try again?");
+    } finally {
+      if (mounted) setState(() => _attaching = false);
+    }
+  }
+
+  /// Begins a voice message. The composer becomes the recorder bar.
+  ///
+  /// ⚠️ The keyboard goes first. The bar replaces the field, so leaving the
+  /// keyboard up would leave it pointing at something that is no longer
+  /// there.
+  Future<void> _startRecording() async {
+    if (_recording || _sendingVoice) return;
+    _focus.unfocus();
+    ref.read(typingLineProvider)?.stop();
+    // One sound at a time: recording over a playing voice note would put
+    // their voice into yours.
+    if (ref.read(playingVoiceProvider) != null) {
+      await VoiceNotes.stopPlaying();
+      ref.read(playingVoiceProvider.notifier).state = null;
+    }
+    try {
+      await VoiceNotes.startRecording();
+      if (mounted) setState(() => _recording = true);
+    } catch (e) {
+      // Refused microphone, or a phone that will not record while something
+      // else holds it. Saying so beats a bar that never moves.
+      if (mounted) {
+        _showError('Dayflower needs the microphone to record a voice message.');
+      }
+    }
+  }
+
+  /// Uploads what was recorded and puts it in the thread.
+  Future<void> _sendVoice(({String path, Duration length})? recording) async {
+    setState(() => _recording = false);
+    if (recording == null) return;
+
+    final pair = ref.read(currentPairProvider).valueOrNull;
+    final userId = ref.read(currentUserIdProvider);
+    if (pair == null || userId == null) return;
+
+    final replyTo = _replyingTo;
+    setState(() {
+      _sendingVoice = true;
+      _replyingTo = null;
+    });
+    if (_readingBack.value) _toNewest();
+    try {
+      final file = File(recording.path);
       final bytes = await file.readAsBytes();
-      final sent = await ref.read(flowerRepositoryProvider).sendDayPhotoTo(
+      final sent = await ref.read(flowerRepositoryProvider).sendVoiceNote(
             pairId: pair.id,
             senderId: userId,
             bytes: bytes,
-            fileExtension:
-                file.path.split('.').last.toLowerCase() == 'png' ? 'png' : 'jpg',
-            target: DayPhotoTarget.chat,
+            length: recording.length,
+            replyTo: replyTo?.id,
           );
+      // Their own voice plays from the phone rather than downloading back
+      // down what was just uploaded.
+      if (sent.audioPath != null) {
+        await VoiceNoteFiles.prime(sent.audioPath!, recording.path);
+      }
       if (mounted) setState(() => _pending.add(sent));
-    } catch (_) {
-      if (mounted) _showError("Couldn't send that photo. Try again?");
+    } catch (e) {
+      if (mounted) {
+        setState(() => _replyingTo = replyTo);
+        _showError("Couldn't send that voice message. Try again?");
+      }
     } finally {
-      if (mounted) setState(() => _attaching = false);
+      if (mounted) setState(() => _sendingVoice = false);
     }
   }
 
