@@ -1,0 +1,141 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/painting.dart';
+import 'package:flutter/services.dart' show rootBundle;
+
+import 'photo_frames.dart';
+
+/// Puts a photo behind a frame and bakes the two into one picture.
+///
+/// 🔴 **Baked, not layered at render time.** The result is sent as an
+/// ordinary day photo, so it has to *be* a photo: the widget draws it, the
+/// thread draws it, saving it to the gallery saves what you saw. A frame
+/// kept as a separate layer would mean every one of those surfaces knowing
+/// about frames, and a photo that looked different everywhere it appeared.
+///
+/// The photo is drawn **cover**, centred in the window: a picture is almost
+/// never the window's shape, and letterboxing inside a polaroid would show
+/// the background through the gaps where the paper is transparent.
+class FrameCompositor {
+  FrameCompositor._();
+
+  /// Longest side of the result. Big enough to look right on a phone and to
+  /// survive a crop, small enough that a framed photo is not heavier than
+  /// the unframed one it replaced.
+  static const maxSide = 1280.0;
+
+  /// Frame artwork, decoded once each. There are eleven of them and they are
+  /// small; decoding on every shutter press would stall the capture.
+  static final _frames = <String, ui.Image>{};
+
+  static Future<ui.Image> _frameImage(PhotoFrame frame) async {
+    final known = _frames[frame.id];
+    if (known != null) return known;
+    final data = await rootBundle.load(frame.asset);
+    final image = await decodeImageFromList(data.buffer.asUint8List());
+    return _frames[frame.id] = image;
+  }
+
+  /// [photos] fill the frame's windows in order, largest window first.
+  ///
+  /// ⚠️ Fewer photos than windows is allowed and leaves the rest empty,
+  /// which is what a half-finished two-photo frame looks like. More are
+  /// ignored rather than overflowing onto the paper.
+  static Future<Uint8List> compose({
+    required PhotoFrame frame,
+    required List<Uint8List> photos,
+  }) async {
+    final art = await _frameImage(frame);
+    final scale = maxSide / (art.width > art.height ? art.width : art.height);
+    final width = (art.width * scale).roundToDouble();
+    final height = (art.height * scale).roundToDouble();
+
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, width, height));
+
+    final decoded = <ui.Image>[];
+    try {
+      for (var i = 0; i < frame.windows.length && i < photos.length; i++) {
+        final photo = await decodeImageFromList(photos[i]);
+        decoded.add(photo);
+        final w = frame.windows[i];
+        final box = ui.Rect.fromLTWH(
+          w.left * width,
+          w.top * height,
+          w.width * width,
+          w.height * height,
+        );
+        canvas.save();
+        // Clipped to the window, so a photo wider than its hole cannot
+        // spill over the paper around it.
+        canvas.clipRect(box);
+        // 🔴 And clipped *out* of every window in front of it. On an
+        // overlapping pair the back frame's window is notched by the front
+        // one, so its rectangle reaches across the front frame's hole —
+        // without this the first photo shows through where the second
+        // belongs, and a pair with only one photo taken looks like the same
+        // picture twice.
+        for (var j = i + 1; j < frame.windows.length; j++) {
+          final other = frame.windows[j];
+          canvas.clipRect(
+            ui.Rect.fromLTWH(other.left * width, other.top * height,
+                other.width * width, other.height * height),
+            clipOp: ui.ClipOp.difference,
+          );
+        }
+        canvas.drawImageRect(photo, _coverSource(photo, box), box,
+            ui.Paint()..filterQuality = ui.FilterQuality.high);
+        canvas.restore();
+      }
+
+      // The paper last, over the photos: the art is a cut-out, and its
+      // tape, stickers and torn edges have to sit on top of the picture.
+      canvas.drawImageRect(
+        art,
+        ui.Rect.fromLTWH(0, 0, art.width.toDouble(), art.height.toDouble()),
+        ui.Rect.fromLTWH(0, 0, width, height),
+        ui.Paint()..filterQuality = ui.FilterQuality.high,
+      );
+
+      final picture = recorder.endRecording();
+      final image = await picture.toImage(width.round(), height.round());
+      picture.dispose();
+      try {
+        // ⚠️ PNG, not JPEG. The paper's edges are transparent — a torn note
+        // is not a rectangle — and JPEG would fill that with black.
+        final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+        return bytes!.buffer.asUint8List();
+      } finally {
+        image.dispose();
+      }
+    } finally {
+      for (final image in decoded) {
+        image.dispose();
+      }
+    }
+  }
+
+  /// The part of [photo] that fills [box] without squashing it: the largest
+  /// centred rectangle of the photo with the box's proportions.
+  static ui.Rect _coverSource(ui.Image photo, ui.Rect box) {
+    final photoAspect = photo.width / photo.height;
+    final boxAspect = box.width / box.height;
+    if (photoAspect > boxAspect) {
+      // Wider than the window: take a full-height slice from the middle.
+      final w = photo.height * boxAspect;
+      return ui.Rect.fromLTWH((photo.width - w) / 2, 0, w, photo.height.toDouble());
+    }
+    final h = photo.width / boxAspect;
+    return ui.Rect.fromLTWH(0, (photo.height - h) / 2, photo.width.toDouble(), h);
+  }
+
+  /// Frees the decoded artwork. For tests; the app keeps eleven small images
+  /// for as long as it runs, which is the point of caching them.
+  static void evict() {
+    for (final image in _frames.values) {
+      image.dispose();
+    }
+    _frames.clear();
+  }
+}

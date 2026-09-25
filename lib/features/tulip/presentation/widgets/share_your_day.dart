@@ -18,6 +18,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../booth/data/strip_repository.dart';
 import '../../../booth/domain/strip_templates.dart';
+import '../../../../core/frames/photo_frames.dart';
+import '../../../../core/frames/frame_compositor.dart';
+import '../screens/templates_screen.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/flower_repository.dart';
@@ -99,6 +102,13 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// Null means a plain day photo. Selecting a template routes the next
   /// shot through the booth compositor instead.
   StripTemplate? _template;
+
+  /// The paper the next shot is taken on, or null for a bare photo.
+  PhotoFrame? _frame;
+
+  /// The frames offered under the shutter: the ones that take exactly one
+  /// photo, because one press of the shutter is one photo.
+  static final _quickFrames = framesForPhotos(1).toList();
 
   /// Strip ids already handed to [_recoverStranded], so a failing retry
   /// cannot spin: the provider re-emits on every stream tick.
@@ -414,8 +424,29 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (waiting != null) return _joinStrip(waiting, bytes);
 
     final t = _template;
-    if (t == null) return _shareBytes(bytes, _pendingExt, target: target);
-    return t.isDuo ? _startDuo(t, bytes) : _postSolo(t, bytes);
+    if (t != null) {
+      return t.isDuo ? _startDuo(t, bytes) : _postSolo(t, bytes);
+    }
+
+    // On paper, if paper was chosen. Baked into the picture rather than
+    // kept as a layer: it is sent as an ordinary day photo, so the widget,
+    // the thread and a copy saved to the gallery all have to be the same
+    // image. See FrameCompositor.
+    final frame = _frame;
+    if (frame != null) {
+      try {
+        final framed = await FrameCompositor.compose(
+          frame: frame,
+          photos: [bytes],
+        );
+        return _shareBytes(framed, 'png', target: target);
+      } catch (e) {
+        // The photo is the point and the paper is the decoration, so a
+        // compositor that fails sends the picture rather than nothing.
+        debugPrint('frame compositing failed: $e');
+      }
+    }
+    return _shareBytes(bytes, _pendingExt, target: target);
   }
 
   Future<void> _postSolo(StripTemplate t, Uint8List bytes) async {
@@ -658,8 +689,9 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _StripBanner(onCancelMine: _cancelMyStrip),
-                  _templateRow(),
+                  _chosenBanner(),
                   _controls(),
+                  _modeRow(),
                 ],
               ),
             ),
@@ -727,70 +759,60 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     }
   }
 
-  /// The template picker, as a scrollable row of circles.
+  /// What the shot is being taken on, when it is not a bare photo.
   ///
-  /// The old design hid these behind a chip that opened a sheet, on the
-  /// grounds that a grid would cover the shot you were framing. A single
-  /// row of thumbnails costs one strip of the frame and makes the choice
-  /// visible while you compose, which is how every camera app does it.
-  Widget _templateRow() {
+  /// Says it once, above the controls, rather than relying on a lit ring in
+  /// the row: a strip chosen on the Templates page has no dot to light.
+  Widget _chosenBanner() {
     final awaiting = ref.watch(stripAwaitingMeProvider);
+    // While a half waits on you the template is theirs, not yours to pick.
+    final text = awaiting != null
+        ? 'Joining ${awaiting.style.emoji} ${awaiting.style.name}'
+        : _template != null
+            ? '${_template!.emoji} ${_template!.name}'
+            : null;
+    if (text == null) return const SizedBox.shrink();
 
-    // While a half waits on you the template is theirs, not yours to pick —
-    // the strip becomes a statement of what you are joining.
-    if (awaiting != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(
-            horizontal: AppSpace.md, vertical: AppSpace.xs),
-        child: Align(
-          alignment: Alignment.centerLeft,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-            decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: .38),
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-              border: Border.all(color: AppColors.brandLight),
-            ),
-            child: Text(
-              'Joining ${awaiting.style.emoji} ${awaiting.style.name}',
-              style: AppText.caption(Colors.white),
-            ),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xs),
+      child: GestureDetector(
+        onTap:
+            awaiting != null ? null : () => setState(() => _template = null),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+          decoration: BoxDecoration(
+            color: Colors.black.withValues(alpha: .38),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            border: Border.all(color: AppColors.brandLight),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(text, style: AppText.caption(Colors.white)),
+              if (awaiting == null) ...[
+                const SizedBox(width: 6),
+                const AppIcon(CupertinoIcons.xmark,
+                    size: 11, color: Colors.white),
+              ],
+            ],
           ),
         ),
-      );
-    }
-
-    return SizedBox(
-      height: 74,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpace.sm),
-        children: [
-          _TemplateDot(
-            label: 'Plain',
-            emoji: '📷',
-            selected: _template == null,
-            onTap: () => setState(() => _template = null),
-          ),
-          for (final t in StripTemplate.all)
-            _TemplateDot(
-              label: t.isDuo ? '${t.name} · duo' : t.name,
-              emoji: t.emoji,
-              paper: t.paper,
-              accent: t.accent,
-              selected: _template?.id == t.id,
-              onTap: () => setState(() => _template = t),
-            ),
-        ],
       ),
     );
   }
 
-  /// Upload · shutter · flower, over a scrim so they stay readable against
-  /// whatever the camera happens to be pointing at.
+  /// Upload, the shutter, and the frames beside it.
+  ///
+  /// The frames sit to the right of the shutter and scroll, the way a camera
+  /// app puts its filters there: the choice stays visible while you compose,
+  /// and the row can grow without pushing anything else off the screen. The
+  /// old design gave the whole width to a row of strip styles above the
+  /// controls, which cost a strip of the viewfinder.
   Widget _controls() {
+    final picking = _busy || _pending != null;
     return Container(
-      padding: const EdgeInsets.all(AppSpace.md),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.compact, AppSpace.sm, AppSpace.compact, AppSpace.sm),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -799,27 +821,197 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
         ),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _GlassButton(
             icon: CupertinoIcons.photo_on_rectangle,
             tooltip: 'Upload a photo',
-            big: true,
-            onTap: (_busy || _pending != null)
-                ? null
-                : () => _pickFrom(ImageSource.gallery),
+            onTap: picking ? null : () => _pickFrom(ImageSource.gallery),
           ),
+          const SizedBox(width: AppSpace.xs),
           // The same button in the same place, because it is the same
           // gesture continued: take the picture, then send the picture.
           _ShutterButton(
             sending: _pending != null,
             onTap: _busy ? null : (_pending != null ? _sendPending : _shoot),
           ),
-          // Balances the row where the flower button used to sit. The
-          // flower moved out with the templates coming in — this screen is
-          // the camera now, and sending a flower is a different errand.
-          const SizedBox(width: 46),
+          const SizedBox(width: AppSpace.xs),
+          Expanded(child: _frameRow()),
         ],
+      ),
+    );
+  }
+
+  /// The paper you can shoot onto, as a scrolling row of round previews.
+  Widget _frameRow() {
+    // A strip is already a frame with photos in it, so it takes the row's
+    // place rather than sitting beside it.
+    if (_template != null || ref.watch(stripAwaitingMeProvider) != null) {
+      return const SizedBox.shrink();
+    }
+    return SizedBox(
+      height: 58,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          _FrameDot(
+            label: 'Plain',
+            selected: _frame == null,
+            onTap: () => setState(() => _frame = null),
+          ),
+          for (final frame in _quickFrames)
+            _FrameDot(
+              label: frame.name,
+              frame: frame,
+              selected: _frame?.id == frame.id,
+              onTap: () => setState(() => _frame = frame),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// Camera or Templates, the way a camera app names its modes.
+  ///
+  /// Scrollable rather than a fixed pair, so a third mode could be added
+  /// without redesigning the row. Tapping Templates opens the page and comes
+  /// back with whatever was picked.
+  Widget _modeRow() {
+    return ColoredBox(
+      color: Colors.black,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          // The space at the bottom: the row used to sit against the gesture
+          // bar, where a swipe up was as likely to leave the app as to press
+          // anything.
+          padding: const EdgeInsets.symmetric(vertical: AppSpace.compact),
+          child: SizedBox(
+            height: 24,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              shrinkWrap: true,
+              physics: const ClampingScrollPhysics(),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppSpace.screenInset),
+              children: [
+                const _ModeLabel(label: 'CAMERA', selected: true),
+                const SizedBox(width: 26),
+                _ModeLabel(
+                    label: 'TEMPLATES',
+                    selected: false,
+                    onTap: _openTemplates),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The Templates page, and whatever it hands back.
+  Future<void> _openTemplates() async {
+    final choice = await context.push<TemplateChoice>(Routes.templates);
+    if (!mounted || choice == null) return;
+    setState(() {
+      // Either, never both: see _frame.
+      if (choice is FrameChoice) {
+        _frame = choice.frame;
+        _template = null;
+      } else if (choice is StripChoice) {
+        _template = choice.template;
+        _frame = null;
+      }
+    });
+  }
+}
+
+/// One frame under the shutter: its artwork in a circle, lit when chosen.
+class _FrameDot extends StatelessWidget {
+  const _FrameDot({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.frame,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  /// Null for "Plain", which is a photo with no paper behind it.
+  final PhotoFrame? frame;
+
+  @override
+  Widget build(BuildContext context) {
+    final art = frame;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          child: Container(
+            width: 48,
+            height: 48,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: .14),
+              border: Border.all(
+                color: selected ? Colors.white : Colors.white24,
+                width: selected ? 2.5 : 1,
+              ),
+            ),
+            child: art == null
+                ? const AppIcon(CupertinoIcons.circle,
+                    size: 17, color: Colors.white)
+                : Padding(
+                    padding: const EdgeInsets.all(5),
+                    child: Image.asset(art.asset,
+                        fit: BoxFit.contain, excludeFromSemantics: true),
+                  ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// CAMERA, TEMPLATES. The one you are on is white and the rest are faded,
+/// the way every camera app labels its modes.
+class _ModeLabel extends StatelessWidget {
+  const _ModeLabel({
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Center(
+          child: Text(
+            label,
+            style: AppText.label(selected
+                    ? Colors.white
+                    : Colors.white.withValues(alpha: .45))
+                .copyWith(fontSize: 13, letterSpacing: 1.4),
+          ),
+        ),
       ),
     );
   }

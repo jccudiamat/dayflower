@@ -121,6 +121,7 @@ flutter:
     - assets/images/gifts/
     - assets/images/together/
     - assets/images/memories/
+    - assets/images/frames/
     - assets/fonts/tiktok/OFL.txt
     - .env
 

@@ -51,6 +51,7 @@ import 'features/settings/presentation/screens/widget_settings_screen.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/tulip/presentation/screens/blooms_screen.dart';
 import 'features/tulip/presentation/screens/chat_search_screen.dart';
+import 'features/tulip/presentation/screens/templates_screen.dart';
 import 'features/tulip/presentation/screens/chat_settings_screen.dart';
 import 'features/tulip/presentation/screens/flowers_screen.dart';
 import 'features/tulip/presentation/screens/messages_screen.dart';
@@ -133,6 +134,11 @@ class Routes {
   /// Finding a message by a word in it, from Search in chat settings. A
   /// result is handed back down to the conversation, which shows it.
   static const chatSearch = '/app/flowers/chat/search';
+
+  /// Everything you can put a photo into, at a size where you can see what
+  /// it is. Reached from the camera's own Templates tab, and it hands a
+  /// choice back down to it.
+  static const templates = '/app/flowers/templates';
 
   static const settings = '/app/settings';
   static const widgetSettings = '/app/settings/widgets';
@@ -503,6 +509,8 @@ List<RouteBase> appFeatureRoutes() => [
           path: Routes.activityFeed,
           builder: (_, __) => const ActivityFeedScreen()),
       GoRoute(path: Routes.flowers, builder: (_, __) => const MessagesScreen()),
+      GoRoute(
+          path: Routes.templates, builder: (_, __) => const TemplatesScreen()),
       GoRoute(
           path: Routes.chats,
           builder: (_, __) => const SectionScrollScope(
