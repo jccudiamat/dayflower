@@ -14,6 +14,7 @@ import '../../../onboarding/data/user_repository.dart';
 import '../../../presence/data/presence_repository.dart';
 import '../../../presence/domain/presence.dart';
 import '../../data/flower_repository.dart';
+import '../../data/typing_repository.dart';
 
 /// Your conversation with them, as one row of the Chats list: their face,
 /// their name, the last thing either of you said, when, and how much of it
@@ -32,6 +33,7 @@ class ConversationRow extends ConsumerWidget {
         ref.watch(partnerProfileProvider).valueOrNull;
     final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
     final unread = ref.watch(unreadMessageCountProvider);
+    final typing = ref.watch(partnerTypingProvider).valueOrNull ?? false;
     final userId = ref.watch(currentUserIdProvider);
     final online =
         activeLabel(ref.watch(partnerLastActiveProvider).valueOrNull) ==
@@ -98,13 +100,22 @@ class ConversationRow extends ConsumerWidget {
                     const SizedBox(height: 3),
                     Row(children: [
                       Expanded(
-                        child: Text(
-                          conversationPreview(last,
-                              isMine: last != null && last.senderId == userId),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: ChatsStyle.preview(unread: hasUnread),
-                        ),
+                        // Writing to you replaces the last message, as it
+                        // does in every chat list: what they are about to
+                        // say is worth more than what was already said.
+                        child: typing
+                            ? Text('typing…',
+                                maxLines: 1,
+                                style: ChatsStyle.preview(unread: false)
+                                    .copyWith(color: AppColors.brand))
+                            : Text(
+                                conversationPreview(last,
+                                    isMine:
+                                        last != null && last.senderId == userId),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: ChatsStyle.preview(unread: hasUnread),
+                              ),
                       ),
                       if (hasUnread) ...[
                         const SizedBox(width: AppSpace.xs),
