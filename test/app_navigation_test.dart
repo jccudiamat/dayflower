@@ -17,7 +17,7 @@ void main() {
     ]) {
       expect(sectionForLocation(route), AppSection.memories, reason: route);
     }
-    // Making things is Dayflower, whatever path they answer on. The booth and
+    // Making things is Create, whatever path they answer on. The booth and
     // the journal kept their original /app/activities/... literals because
     // widgets and notifications point at them.
     for (final route in [
@@ -25,7 +25,6 @@ void main() {
       Routes.boothPending,
       Routes.chapters,
       Routes.chapterFor(2026, 9),
-      Routes.blooms,
       Routes.dayflower,
     ]) {
       expect(sectionForLocation(route), AppSection.dayflower, reason: route);
@@ -48,7 +47,9 @@ void main() {
     expect(
         sectionForLocation('${Routes.chat}?compose=flowers'), AppSection.chat);
     expect(sectionForLocation(Routes.chatSettings), AppSection.chat);
-    expect(sectionForLocation(Routes.blooms), AppSection.dayflower);
+    // The garden is looked back on, from Memories' Flowers, so it lights
+    // Memories; Create no longer has a garden section.
+    expect(sectionForLocation(Routes.blooms), AppSection.memories);
     expect(sectionForLocation(Routes.us), AppSection.home);
     expect(sectionForLocation(Routes.notifications), AppSection.home);
     expect(sectionForLocation(Routes.settings), AppSection.home);

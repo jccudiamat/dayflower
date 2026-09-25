@@ -30,8 +30,8 @@ class AppBottomNav extends ConsumerWidget {
 
   static const _destinations = <_Destination>[
     _Destination(AppSection.home, CupertinoIcons.house_fill, 'Home', Routes.home),
-    _Destination(AppSection.chat, CupertinoIcons.chat_bubble_2, 'Chat', Routes.chats),
-    _Destination(AppSection.dayflower, null, 'Dayflower', Routes.dayflower),
+    _Destination(AppSection.chat, CupertinoIcons.chat_bubble_2, 'Chats', Routes.chats),
+    _Destination(AppSection.dayflower, null, 'Create', Routes.dayflower),
     _Destination(AppSection.memories, CupertinoIcons.book, 'Memories', Routes.memories),
     _Destination(AppSection.together, Icons.join_full, 'Together', Routes.together),
   ];
@@ -276,16 +276,18 @@ AppSection sectionForLocation(String location) {
   bool inside(String root) => path == root || path.startsWith('$root/');
   if (inside(Routes.chats) || inside(Routes.chat)) return AppSection.chat;
   // 🔴 Ownership follows what a page is *for*, not where its path sits.
-  // Making a strip, writing this month and growing the garden are all
-  // Dayflower, even though the booth and the journal still answer on the
-  // old /app/activities/... paths they were born under. Looking back at what
-  // you kept is Memories.
+  // Making a strip and writing this month are Create, even though the booth
+  // and the journal still answer on the old /app/activities/... paths they
+  // were born under. Looking back at what you kept is Memories, and that
+  // now includes the garden: Create lost its garden section, and Blooms is
+  // reached from Memories' Flowers only.
   //
   // ⚠️ The collection is a child path of the booth, so it has to be asked
   // about first or `inside(Routes.booth)` would swallow it.
-  if (inside(Routes.boothCollection)) return AppSection.memories;
+  if (inside(Routes.boothCollection) || inside(Routes.blooms)) {
+    return AppSection.memories;
+  }
   if (inside(Routes.dayflower) ||
-      inside(Routes.blooms) ||
       inside(Routes.booth) ||
       inside(Routes.chapters)) {
     return AppSection.dayflower;

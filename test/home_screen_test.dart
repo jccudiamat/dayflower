@@ -396,7 +396,7 @@ void main() {
           expect(find.byType(AppBottomNav), findsNothing);
         } else {
           expect(find.byType(AppBottomNav), findsOneWidget);
-          for (final label in ['Home', 'Chat', 'Dayflower', 'Memories', 'Together']) {
+          for (final label in ['Home', 'Chats', 'Create', 'Memories', 'Together']) {
             expect(tab(label), findsOneWidget);
           }
         }
@@ -409,7 +409,7 @@ void main() {
 
   _homeTest('Reselect scrolls each section to the top without replacing it', (tester) async {
     for (final (route, label) in [
-      (Routes.home, 'Home'), (Routes.dayflower, 'Dayflower'),
+      (Routes.home, 'Home'), (Routes.dayflower, 'Create'),
       (Routes.memories, 'Memories'), (Routes.together, 'Together')]) {
       await _pump(tester, route, height: 500, productionRoutes: true, filled: true);
       await tester.pumpAndSettle();
@@ -446,7 +446,7 @@ void main() {
     await tester.tap(find.text('All months'));
     await tester.pumpAndSettle();
     expect(find.byType(ChaptersScreen), findsOneWidget);
-    await tester.tap(tab('Dayflower'));
+    await tester.tap(tab('Create'));
     await tester.pumpAndSettle();
     expect(find.byType(DayflowerScreen), findsOneWidget);
     expect(find.byType(ChaptersScreen), findsNothing);
@@ -459,13 +459,13 @@ void main() {
   _homeTest('Five tabs and legacy roots reach the correct sections', (tester) async {
     final router = await _pump(tester, Routes.home, productionRoutes: true);
     for (final (label, path) in [
-      ('Chat', Routes.chats), ('Dayflower', Routes.dayflower),
+      ('Chats', Routes.chats), ('Create', Routes.dayflower),
       ('Memories', Routes.memories), ('Together', Routes.together), ('Home', Routes.home)]) {
       await tester.tap(tab(label));
       await tester.pumpAndSettle();
       expect(router.routeInformationProvider.value.uri.path, path);
       expect((tester.widget(tab(label)) as Semantics).properties.selected, isTrue);
-      if (label == 'Chat') {
+      if (label == 'Chats') {
         // The tab is the list now. The conversation is one tap in, has no
         // bar, and its back returns to the list rather than Home.
         await tester.tap(find.byType(ConversationRow));
@@ -482,13 +482,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.routeInformationProvider.value.uri.path, Routes.together);
     expect(router.routeInformationProvider.value.uri.queryParameters['from'], 'old-link');
-    // ⚠️ Blooms no longer bounces to the tab root: it is the garden
-    // itself again. What still has to hold is that it counts as Dayflower,
-    // so the tab under it stays lit.
+    // ⚠️ Blooms is the garden, and the garden lives in Memories now (Create
+    // lost its garden section), so Memories is the tab that stays lit.
     router.go(Routes.blooms);
     await tester.pumpAndSettle();
     expect(router.routeInformationProvider.value.uri.path, Routes.blooms);
-    expect((tester.widget(tab('Dayflower')) as Semantics).properties.selected,
+    expect((tester.widget(tab('Memories')) as Semantics).properties.selected,
         isTrue);
   });
 
@@ -614,7 +613,7 @@ void main() {
       if (type == BoothScreen) {
         expect(find.byType(AppBottomNav), findsNothing, reason: label);
       } else {
-        final owner = hub == Routes.memories ? 'Memories' : 'Dayflower';
+        final owner = hub == Routes.memories ? 'Memories' : 'Create';
         expect((tester.widget(tab(owner)) as Semantics).properties.selected,
             isTrue,
             reason: label);
@@ -649,12 +648,13 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(ActivitiesScreen), findsOneWidget);
     }
-    await tester.tap(tab('Dayflower'));
+    await tester.tap(tab('Create'));
     await tester.pumpAndSettle();
-    // ⚠️ Two things say 'Send a flower' on an empty garden: the tile up
-    // in Today and the empty state's own button. The tile is the one being
-    // tested, and it is the first in the tree.
-    await tester.tap(find.text('Send a flower').first);
+    // One 'Send a flower' now: the garden, and its empty state's button,
+    // moved to Memories.
+    expect(find.text('Send a flower'), findsOneWidget);
+    expect(find.text('Your Garden'), findsNothing);
+    await tester.tap(find.text('Send a flower'));
     await tester.pumpAndSettle();
     // The picker is a sheet over Dayflower now, not a push to Flowers, so
     // the tab stays lit underneath it.

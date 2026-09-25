@@ -17,8 +17,6 @@ import '../../pairing/data/pair_repository.dart';
 import '../../tulip/data/flower_repository.dart';
 import '../../tulip/domain/flower_catalog.dart';
 import '../../tulip/presentation/widgets/flower_catalog_panel.dart';
-import '../../memories/presentation/widgets/memory_tile.dart';
-import '../../memories/data/relationship_memory.dart';
 import 'make_card_screen.dart';
 
 class DayflowerScreen extends ConsumerWidget {
@@ -27,15 +25,14 @@ class DayflowerScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = DateTime.now();
-    final flowers = ref.watch(flowerMessagesProvider);
-    final blooms = (flowers.valueOrNull ?? [])
-        .where((m) => m.flower != null || m.isBouquet)
-        .toList();
     final goals = ref.watch(currentMonthGoalsProvider);
     final review = ref.watch(unwrittenChapterProvider);
     final stem = FlowerCatalog.byId('stem_tulip');
+    // ⚠️ No garden here: Memories has it, under Flowers, with the count and
+    // the way into Blooms. This tab is for making something, not for
+    // looking back at what was made.
     return StoryScaffold(
-        title: 'Dayflower',
+        title: 'Create',
         subtitle: 'Make a little something for each other.',
         children: [
           const StorySection('Today'),
@@ -130,55 +127,6 @@ class DayflowerScreen extends ConsumerWidget {
                 subtitle: 'Look back at your month. Write our review.',
                 onTap: () =>
                     context.push(Routes.chapterFor(review.year, review.month)))
-          ],
-          StorySection('Your Garden',
-              action: 'See all', onTap: () => context.push(Routes.blooms)),
-          if (flowers.isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (flowers.hasError)
-            Text('Your garden couldn’t load. Please try again.',
-                style: AppText.body())
-          else if (blooms.isEmpty)
-            StoryEmptyState(
-                title: 'Your garden starts with one flower.',
-                body: 'Send your first Dayflower.',
-                action: TextButton(
-                    onPressed: () => showDayflowerPicker(context, ref),
-                    child: const Text('Send a flower')))
-          else ...[
-            Text(
-                '${blooms.length} ${blooms.length == 1 ? 'flower' : 'flowers'} grown together',
-                style: AppText.body()),
-            const SizedBox(height: AppSpace.sm),
-            SizedBox(
-                height: 116,
-                child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: blooms.length.clamp(0, 12),
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(width: AppSpace.xs),
-                    itemBuilder: (context, i) {
-                      final m = blooms[i];
-                      return Semantics(
-                          label: m.flower?.name ?? 'Bouquet',
-                          button: true,
-                          child: InkWell(
-                              onTap: () => openMemory(
-                                  context,
-                                  RelationshipMemory(
-                                      id: m.id,
-                                      kind: MemoryKind.flowers,
-                                      date: m.sentAt,
-                                      title:
-                                          m.flower?.name ?? 'A bouquet for you',
-                                      body: m.note ?? '',
-                                      route: Routes.chat,
-                                      message: m)),
-                              child: m.flower == null
-                                  ? const AppIcon(CupertinoIcons.gift,
-                                      size: 80, color: AppColors.brand)
-                                  : FlowerImage(flower: m.flower!, size: 96)));
-                    })),
           ],
         ]);
   }

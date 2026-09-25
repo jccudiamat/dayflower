@@ -147,10 +147,11 @@ void main() {
       final boundary = GlobalKey();
       await _pump(tester,
           at: Routes.chats, messages: thread, boundary: boundary);
-      expect(find.text('Chats'), findsOneWidget);
+      // The page's title and the tab under it, which says the same now.
+      expect(find.text('Chats'), findsNWidgets(2));
       expect(find.text('Wifey'), findsOneWidget);
       expect(find.text('Call me when you land 💕'), findsOneWidget);
-      // Two unread, on the row; the Chat tab carries the same count.
+      // Two unread, on the row; the Chats tab carries the same count.
       expect(
           find.descendant(
               of: find.byType(ConversationRow), matching: find.text('2')),
