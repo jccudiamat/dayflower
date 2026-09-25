@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../domain/call.dart';
 import 'livekit_call_transport.dart';
+import 'peer_call_transport.dart';
 
 /// Something happening to the media session, in the app's own vocabulary.
 ///
@@ -148,28 +149,51 @@ class UnconfiguredCallTransport implements CallTransport {
 
 /// The URL of the media server, or null when this build has none.
 ///
-/// Read from `.env` the same way the Supabase keys are, so a phone build and
-/// the web preview pick it up identically and no key is ever committed.
-/// Adding `LIVEKIT_URL` to `.env` is what switches calling on.
+/// Only read when `CALL_TRANSPORT=livekit`. Read from `.env` the same way
+/// the Supabase keys are, so a phone build and the web preview pick it up
+/// identically and no key is ever committed.
 String? get callServerUrl {
-  final url = dotenv.env['LIVEKIT_URL']?.trim();
+  final url = _env('LIVEKIT_URL');
   return (url == null || url.isEmpty) ? null : url;
 }
 
-/// The transport this build will use.
+/// 🔴 Guarded, because reading `dotenv.env` before `load()` throws rather
+/// than returning empty. Widget tests never load it, and a production build
+/// whose .env failed to parse would otherwise take calling down with it.
+String? _env(String key) {
+  try {
+    if (!dotenv.isInitialized) return null;
+    return dotenv.env[key]?.trim();
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Whether this build routes calls through the media server instead of
+/// sending them phone to phone.
 ///
-/// `LIVEKIT_URL` in `.env` is the switch. Absent, the app says calling is
-/// not switched on rather than dialling into nothing — which is also what a
-/// build with the URL but no Vault secrets gets, from the server side (see
-/// migration 0026).
+/// 🔴 **Peer is the default, and the server is the fallback**, which is the
+/// reverse of how this shipped. Every room here holds exactly two people, so
+/// an SFU is doing a job the app never needs — and it was about 90% of the
+/// modelled running cost. `CALL_TRANSPORT=livekit` in `.env` puts it back,
+/// which is the one-line way out if peer calling misbehaves in the wild.
+bool get useMediaServer =>
+    (_env('CALL_TRANSPORT')?.toLowerCase() ?? 'peer') == 'livekit';
+
+/// The transport this build will use.
 final callTransportProvider = Provider<CallTransport>((ref) {
-  final url = callServerUrl;
-  final transport = url == null
-      ? UnconfiguredCallTransport()
-      : LiveKitCallTransport(
-          url: url,
-          client: ref.watch(supabaseClientProvider),
-        );
+  final client = ref.watch(supabaseClientProvider);
+  final CallTransport transport;
+  if (useMediaServer) {
+    final url = callServerUrl;
+    // Asked for the server and given no URL: say calling is not switched on
+    // rather than dialling into nothing.
+    transport = url == null
+        ? UnconfiguredCallTransport()
+        : LiveKitCallTransport(url: url, client: client);
+  } else {
+    transport = PeerCallTransport(client: client);
+  }
   ref.onDispose(transport.dispose);
   return transport;
 });

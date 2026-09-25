@@ -23,6 +23,18 @@ class CallRepository {
   /// their own `call_room`, which is why it is stored as well as derived.
   static String roomFor(String pairId) => 'dayflower-v1-$pairId';
 
+  /// The pair a room names, or null when the string is not one of ours.
+  ///
+  /// The inverse of [roomFor], for the peer transport: it meets the other
+  /// phone on a channel named after the pair, and all it is handed is the
+  /// room. ⚠️ Parsed rather than trusted — the same check migration 0050
+  /// makes server-side, because the phone's copy decides nothing.
+  static String? pairOf(String room) {
+    final match =
+        RegExp(r'^dayflower-v1-([0-9a-fA-F-]{36})$').firstMatch(room.trim());
+    return match?.group(1);
+  }
+
   /// Places a call: writes the row that *is* the call.
   ///
   /// The row goes in before any media is negotiated, deliberately. It is the
