@@ -13,6 +13,37 @@
 
 ## Recent app work
 
+### A note gets a heading, a background, and a sheet to write it in (2026-09-26, build 119)
+
+✅ **Migration `0053_note_heading_and_background.sql` applied 2026-09-26, before publishing.** (It was `0053_note_background.sql` until the heading joined it. It had never been applied, so it was renamed rather than followed by a 0054.)
+
+- **A heading over a body**, like the user's reference card ("Good Morning!" over "Coffee, goals, and a better you! ♡"). The heading is **Caveat Brush**, thick marker at the greeting's size; the body is **Patrick Hand**, neat upright handwriting at two thirds of that. Both are OFL fonts from github.com/google/fonts, trimmed with fontTools to Latin-1 plus punctuation: 111 KB and 28 KB (`assets/fonts/handwriting/README.md`). The first pair, Kaushan Script and Caveat, "didn't look good at all". The user then picked this pair from a sheet of six headings and five bodies rendered at Home's size and width. Their own first suggestions (Playlist Script, Brusher, Selima) are paid or personal-use only. Every download was OK'd by the user first.
+- **A line breaks only where it runs out of room.** Newlines are refused as typed, and stripped by the repository. Enter in the heading moves to the body.
+- **50 characters, heading and body together** (`UserProfile.noteLimit`, `_Budget`): each field may take what the other leaves. The heading is `users.home_note_heading`; the body stays in `home_note`, so a note from 118 reads as a body with no heading. `freshNote` is now a `(heading, body)` record.
+- **No "from Wifey"** under their note. Your reaction sits at the end of its last line instead. Tap to read it whole; the dialog is titled "Wifey's note".
+- **Your scrap follows their background.** With their note's background behind it, your own "Type your message here..." scrap changes to one chosen for that background (`NoteBackground.scrap`). With no background it is the original torn one (`defaultNoteScrap`). The mapping:
+  - morning_light: golden
+  - clear_sky: white_rounded
+  - paper_sky: cream_torn
+  - pink_pets: pink
+  - scrapbook_star and cozy_night: kraft
+  - paper_window: cream_rough
+  - starry_bears: lavender_sky
+  - night_pets: cream_wavy
+
+  The eight scraps are in `assets/images/note_scraps/` (600px WebP, 202 KB); originals are in `twolip/design/notes/scraps/`. Each is drawn at its own shape (`NoteScrap.aspect`), so torn edges are not stretched. The tilted ones keep the words further in (`inset`).
+
+- **The sheet** (from the user's mockup, `twolip/design/notes/note_sheet_reference.jpg`). The scrap on Home is no longer typed into; a tap opens "Your note" (`_NoteSheet`). It holds the words, with a counter at n/35 (the limit is still 35; the mockup's 100 was the designer's), a row of emoji put in at the cursor, and the backgrounds. Two lines say what posting does: visible to them on their Home, gone after 24 hours. Then Post note, and Clear note when one is up.
+- **A background for the note, none by default.** Nine, from the user's images (`assets/images/note_backgrounds/`, 900px WebP q72, 355 KB for all nine; originals in `twolip/design/note_backgrounds/`). The sheet's text box shows the chosen one behind the words as you type. On their Home it runs **edge to edge** across the top of the page for as long as the note is up. It sits behind the status bar, the bar, the note and their My Day, and fades into the page just above the map card (`_Backdrop`, `home-note-background`). It scrolls away with the header: it follows the section's own PrimaryScrollController, so a second tap on the Home tab still scrolls to the top. At the top of the page the bar is clear and written in the picture's ink, with status bar icons to match; scrolled down, it floats back solid. (The first cut was a rounded card round the header. The user asked to see it edge to edge, and this is that. The card version is in the scratchpad as `home_screen.card_version.dart` if wanted back.)
+- **Words on a background take its ink, not the theme's.** Each background's `dark` flag is measured: the lightness of the left half's middle band, where the note sits. Starry bears (0.32), Night pets (0.22) and Cozy night (0.13) take white; the rest take the page's dark ink. Either way the text gets a soft halo so it reads over the busy parts.
+- Stored as an id (`users.home_note_bg`, 0053) that goes up and comes down with the note. An id a build does not know shows as none. ⚠️ Never rename a background's id.
+- "A little something for Wifey" ends in 💗, not ♡: TikTok Sans has no ♡ and drew an empty box.
+- APK: +355 KB of backgrounds, +139 KB of fonts, +202 KB of scraps. A release build is 52,052,493 bytes: **376 KB left** under the ceiling. 🔴 The next asset-heavy change needs room made first. Candidates: `assets/images/logo.png` (239 KB), which only the old welcome screen used and no app code references now; `reunion.png` (222 KB) as WebP; or frame artwork downloaded on demand.
+- **No line under the background.** A hairline of the picture showed right across the screen above the map card. The fade was the page colour painted over the picture, reaching full strength only at the last row, and on a phone that row lands between pixels. The picture's own alpha now fades to zero before its edge (a `ShaderMask`, `dstIn`), so nothing is left at the edge. Checked in the render: the margin rows above the card are exactly the page colour.
+- Test fix: "Choosing a mood" looked for 😌 anywhere on Home. The greeting's flower is picked at random and 😌 is one it can be, so the test failed now and then. It now looks only in the mood row.
+
+Tests: 627 passing.
+
 ### Notes in place of the greeting, a stamp on the polaroid, a shorter heartbeat card (2026-09-26, build 118)
 
 ✅ **Migration `0052_home_notes.sql` applied 2026-09-26, before publishing** (`dart run tool/run_sql.dart supabase/migrations/0052_home_notes.sql`). Without it, leaving a note or a reaction fails. Reading still works, as nothing.

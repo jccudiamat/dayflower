@@ -35,17 +35,31 @@ class UserRepository {
     }).eq('id', userId);
   }
 
-  /// Leaves [note] on the other one's Home, in place of its greeting, or
-  /// takes it down (null or blank). Its time goes with it: the note lasts
-  /// a day from then, and a reaction belongs to the note of that moment.
+  /// Leaves a note on the other one's Home, in place of its greeting: a
+  /// [heading] over a [body], either of which may be empty. Both empty (or
+  /// null) takes it down. Its time goes with it: the note lasts a day from
+  /// then, and a reaction belongs to the note of that moment.
   ///
   /// ⚠️ Replaces, never adds. Only the latest note exists anywhere.
-  Future<void> setHomeNote(String userId, String? note) async {
-    final text = note?.trim();
-    final up = text != null && text.isNotEmpty;
+  ///
+  /// [background] is the id of one of the app's note backgrounds, or null
+  /// for none. It goes up and comes down with the note.
+  Future<void> setHomeNote(String userId,
+      {String? heading, String? body, String? background}) async {
+    // One line each: a line breaks where it runs out of room, never where
+    // it was typed.
+    String? clean(String? s) {
+      final t = s?.replaceAll(RegExp(r'\s*\n\s*'), ' ').trim();
+      return t == null || t.isEmpty ? null : t;
+    }
+
+    final h = clean(heading), b = clean(body);
+    final up = h != null || b != null;
     await _client.from('users').update({
-      'home_note': up ? text : null,
+      'home_note': b,
+      'home_note_heading': h,
       'home_note_at': up ? DateTime.now().toUtc().toIso8601String() : null,
+      'home_note_bg': up ? background : null,
     }).eq('id', userId);
   }
 

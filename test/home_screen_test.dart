@@ -58,6 +58,7 @@ import 'support/trust_fakes.dart';
 import 'package:dayflower/features/heartbeat/data/heartbeat_repository.dart';
 import 'package:dayflower/features/home/presentation/screens/home_screen.dart';
 import 'package:dayflower/features/home/data/mood_prefs.dart';
+import 'package:dayflower/features/home/domain/note_backgrounds.dart';
 import 'package:dayflower/features/onboarding/data/user_repository.dart';
 import 'package:dayflower/features/pairing/data/pair_repository.dart';
 import 'package:dayflower/features/tulip/data/flower_repository.dart';
@@ -272,12 +273,13 @@ const _me =
 /// Keeps the notes and reactions it is given instead of writing them.
 class _Notes extends UserRepository {
   _Notes() : super(offlineClient());
-  final notes = <String?>[];
+  final notes = <(String?, String?, String?)>[];
   final reactions = <(String?, DateTime?)>[];
 
   @override
-  Future<void> setHomeNote(String userId, String? note) async =>
-      notes.add(note);
+  Future<void> setHomeNote(String userId,
+          {String? heading, String? body, String? background}) async =>
+      notes.add((heading, body, background));
 
   @override
   Future<void> setNoteReaction(
@@ -427,6 +429,8 @@ void main() {
     tz.initializeTimeZones();
     for (final (family, asset) in [
       ('TikTokSans', 'assets/fonts/tiktok/TikTokSans.ttf'),
+      ('CaveatBrush', 'assets/fonts/handwriting/CaveatBrush-Regular.ttf'),
+      ('PatrickHand', 'assets/fonts/handwriting/PatrickHand-Regular.ttf'),
       ('MaterialIcons', 'fonts/MaterialIcons-Regular.otf'),
       (
         'packages/cupertino_icons/CupertinoIcons',
@@ -1031,7 +1035,8 @@ void main() {
         partnerLive: UserProfile(
             id: 'preview-b',
             displayName: 'Wifey',
-            homeNote: 'Miss you already ☀️',
+            homeNoteHeading: 'Good Morning!',
+            homeNote: 'Coffee, goals, and a better you! ♡',
             homeNoteAt: at));
     await tester.pumpAndSettle();
 
@@ -1042,8 +1047,21 @@ void main() {
     await tester.pump();
     await _screenshot(tester, 'home-partner-note');
     expect(find.byKey(const ValueKey('partner-note')), findsOneWidget);
-    expect(find.text('Miss you already ☀️'), findsOneWidget);
-    expect(find.text('from Wifey'), findsOneWidget);
+    // The heading big in thick marker, the body in neat handwriting.
+    final heading = tester.widget<Text>(find.descendant(
+        of: find.byKey(const ValueKey('partner-note')),
+        matching: find.byKey(const ValueKey('note-heading'))));
+    final body = tester.widget<Text>(find.descendant(
+        of: find.byKey(const ValueKey('partner-note')),
+        matching: find.byKey(const ValueKey('note-body'))));
+    expect(heading.textSpan!.toPlainText(), 'Good Morning!');
+    expect(body.textSpan!.toPlainText(), 'Coffee, goals, and a better you! ♡');
+    expect(heading.style!.fontFamily, 'CaveatBrush');
+    expect(body.style!.fontFamily, 'PatrickHand');
+    expect(heading.style!.fontSize!, greaterThan(body.style!.fontSize! * 1.4),
+        reason: 'the heading noticeably larger');
+    // 🔴 No "from Wifey": whose note it is is plain from where it is.
+    expect(find.textContaining('from Wifey'), findsNothing);
     expect(find.byKey(const ValueKey('greeting-title')), findsNothing);
     expect(find.textContaining('miles apart'), findsOneWidget,
         reason: 'once, on the map card, not under the greeting as well');
@@ -1051,7 +1069,7 @@ void main() {
     // Tap to read it whole.
     await tester.tap(find.byKey(const ValueKey('partner-note')));
     await tester.pumpAndSettle();
-    expect(find.text('From Wifey'), findsOneWidget);
+    expect(find.text('Wifey’s note'), findsOneWidget);
     await tester.tap(find.text('Close'));
     await tester.pumpAndSettle();
 
@@ -1076,34 +1094,68 @@ void main() {
     expect(find.byKey(const ValueKey('greeting-title')), findsOneWidget);
   });
 
-  _homeTest('Your note goes on their Home, and their reaction comes back',
+  _homeTest('Your note goes on their Home, on a background if you like',
       (tester) async {
     final users = _Notes();
     await _pump(tester, Routes.home, users: users);
     await tester.pumpAndSettle();
     final field = find.byKey(const ValueKey('home-note-field'));
-    expect(field, findsOneWidget);
     expect(find.text('Type your message here...'), findsOneWidget);
 
-    // Held to its limit, 35 for now.
-    await tester.enterText(find.descendant(of: field, matching: find.byType(TextField)),
-        'Thinking of you on your long day today, love');
-    await tester.pump();
-    final typed = tester
-        .widget<TextField>(
-            find.descendant(of: field, matching: find.byType(TextField)))
-        .controller!
-        .text;
-    expect(typed.length, UserProfile.noteLimit);
-    await tester.testTextInput.receiveAction(TextInputAction.done);
+    // The scrap opens the sheet it is written in.
+    await tester.tap(field);
     await tester.pumpAndSettle();
-    expect(users.notes, [typed]);
+    expect(find.text('Your note'), findsOneWidget);
+    expect(find.text('A little something for Wifey 💗'), findsOneWidget);
+    final heading = find.byKey(const ValueKey('note-sheet-heading'));
+    final body = find.byKey(const ValueKey('note-sheet-body'));
+
+    // A heading and a body. A line breaks only where it runs out of room:
+    // Enter does not put one in.
+    await tester.enterText(heading, 'Good\nMorning!');
+    await tester.pump();
+    expect(tester.widget<TextField>(heading).controller!.text, 'GoodMorning!');
+    await tester.enterText(heading, 'Good Morning!');
+    // The two share the limit, 50 for now, and it says so.
+    await tester.enterText(
+        body, 'Coffee, goals, and a better you, all day long, love');
+    await tester.pump();
+    final typedBody = tester.widget<TextField>(body).controller!.text;
+    expect('Good Morning!'.length + typedBody.length, UserProfile.noteLimit);
+    expect(find.text('50/50'), findsOneWidget);
+
+    // No background unless one is chosen; choosing one shows it behind the
+    // words at once, as it will be seen.
+    expect(find.bySemanticsLabel('No background'), findsOneWidget);
+    await tester.scrollUntilVisible(find.bySemanticsLabel('Starry bears'), 120,
+        scrollable: find.descendant(
+            of: find.byKey(const ValueKey('note-backgrounds')),
+            matching: find.byType(Scrollable)));
+    await tester.tap(find.bySemanticsLabel('Starry bears'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+    await _screenshot(tester, 'home-note-sheet');
+    final decoration = tester
+        .widget<AnimatedContainer>(find.byKey(const ValueKey('note-sheet-box')))
+        .decoration! as BoxDecoration;
+    expect((decoration.image!.image as AssetImage).assetName,
+        noteBackgroundById('starry_bears')!.asset);
+
+    await tester.ensureVisible(find.text('Post note'));
+    await tester.tap(find.text('Post note'));
+    await tester.pumpAndSettle();
+    // Trimmed on the way out: the cut at the limit left a trailing space.
+    expect(users.notes, [('Good Morning!', typedBody.trim(), 'starry_bears')]);
+    expect(find.text('On Wifey’s Home for 24 hours.'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox());
 
-    // Up, and reacted to: their reaction sits at the right of the paper.
+    // Up, and reacted to: their reaction sits at the right of the scrap.
     final at = DateTime.now().subtract(const Duration(minutes: 20));
     await _pump(tester, Routes.home,
+        users: users,
         me: UserProfile(
             id: 'preview-a',
             displayName: 'Hubby',
@@ -1125,8 +1177,18 @@ void main() {
         (tester.widget(find.byKey(const ValueKey('note-reaction'))) as Text)
             .data,
         '😘');
-    // A reaction to an older note is not a reaction to this one.
+
+    // And taken down from the same sheet.
+    await tester.tap(find.byKey(const ValueKey('home-note-field')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Clear note'));
+    await tester.tap(find.text('Clear note'));
+    await tester.pumpAndSettle();
+    expect(users.notes.last, ('', '', null));
+    await tester.pump(const Duration(seconds: 5));
     await tester.pumpWidget(const SizedBox());
+
+    // A reaction to an older note is not a reaction to this one.
     await _pump(tester, Routes.home,
         me: UserProfile(
             id: 'preview-a',
@@ -1140,6 +1202,86 @@ void main() {
             noteReactionTo: at.subtract(const Duration(hours: 2))));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('note-reaction')), findsNothing);
+  });
+
+  _homeTest('Their note\'s background is behind the note and their days',
+      (tester) async {
+    await _pump(tester, Routes.home,
+        filled: true,
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            homeNoteHeading: 'Sleep well',
+            homeNote: 'Dream of us ✨',
+            homeNoteAt: DateTime.now().subtract(const Duration(hours: 2)),
+            homeNoteBg: 'night_pets'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.pump();
+    await _screenshot(tester, 'home-note-background');
+
+    final backdrop = find.byKey(const ValueKey('home-note-background'));
+    expect(backdrop, findsOneWidget);
+    final image = tester.widget<Image>(
+        find.descendant(of: backdrop, matching: find.byType(Image)));
+    expect((image.image as AssetImage).assetName,
+        noteBackgroundById('night_pets')!.asset);
+    // Edge to edge, from the very top of the screen, down past their days,
+    // with the note on it.
+    final area = tester.getRect(backdrop);
+    expect(area.left, 0);
+    expect(area.right, 390);
+    expect(area.top, lessThanOrEqualTo(0));
+    expect(area.bottom,
+        greaterThan(tester.getRect(find.byKey(const ValueKey('home-photo-deck'))).bottom));
+    expect(area.contains(tester.getCenter(find.byKey(const ValueKey('partner-note')))),
+        isTrue);
+    // A night sky takes light words.
+    final note = tester.widget<Text>(find.descendant(
+        of: find.byKey(const ValueKey('partner-note')),
+        matching: find.byKey(const ValueKey('note-heading'))));
+    expect(note.style!.color, Colors.white);
+    // And your scrap changes to go with it.
+    AssetImage scrapOf() => (tester
+            .widget<AnimatedContainer>(
+                find.byKey(const ValueKey('home-note-field')))
+            .decoration! as BoxDecoration)
+        .image!
+        .image as AssetImage;
+    expect(scrapOf().assetName, noteBackgroundById('night_pets')!.scrap.asset);
+    await tester.pumpWidget(const SizedBox());
+
+    // A light one, for the review screenshots.
+    await _pump(tester, Routes.home,
+        filled: true,
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            homeNoteHeading: 'Good Morning!',
+            homeNote: 'Coffee, goals, and a better you! ♡',
+            homeNoteAt: DateTime.now().subtract(const Duration(hours: 2)),
+            homeNoteBg: 'morning_light'));
+    await tester.pumpAndSettle();
+    expect(scrapOf().assetName,
+        noteBackgroundById('morning_light')!.scrap.asset);
+    await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 400)));
+    await tester.pump();
+    await _screenshot(tester, 'home-note-background-light');
+    await tester.pumpWidget(const SizedBox());
+
+    // None is the default.
+    await _pump(tester, Routes.home,
+        filled: true,
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            homeNote: 'Sleep well ✨',
+            homeNoteAt: DateTime.now().subtract(const Duration(hours: 2))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('home-note-background')), findsNothing);
+    expect(scrapOf().assetName, defaultNoteScrap.asset);
   });
 
   _homeTest('Snackbars are lifted clear of the tab bar', (tester) async {
@@ -1226,7 +1368,11 @@ void main() {
     expect(find.text('Calm'), findsNothing);
     expect(find.text('Tap one'), findsNothing);
 
-    final face = find.text('😌');
+    // In the mood row: the greeting's flower is picked at random, and 😌 is
+    // one it can pick, which made this find two faces now and then.
+    final face = find.descendant(
+        of: find.byKey(const ValueKey('home-heartbeat')),
+        matching: find.text('😌'));
     expect(face, findsOneWidget);
     await tester.tap(face);
     await tester.pumpAndSettle();

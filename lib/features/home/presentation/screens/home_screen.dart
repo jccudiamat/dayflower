@@ -34,6 +34,7 @@ import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/storage_image.dart';
 import '../../../../core/widgets/app_bottom_sheet.dart';
 import '../../../../core/models/user_profile.dart';
+import '../../domain/note_backgrounds.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -44,6 +45,23 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen>
     with WidgetsBindingObserver {
+  /// The page's scroll when nothing above it gives one. ⚠️ Normally the
+  /// section's own (SectionScrollScope's PrimaryScrollController), which is
+  /// what a second tap on the Home tab scrolls back to the top: taking a
+  /// controller of our own here broke that.
+  final _ownScroll = ScrollController();
+
+  /// The top of the page: the greeting (or their note) and their days.
+  final _headerKey = GlobalKey();
+
+  /// Where that ends, from the top of the screen, with the page at rest.
+  double? _headerBottom;
+
+  /// Whether the page is at its top, where the bar is clear over the
+  /// background; scrolled down, the bar floats back over the page and has
+  /// to be solid again.
+  bool _atTop = true;
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +71,24 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _ownScroll.dispose();
     super.dispose();
+  }
+
+  /// The controller the page actually scrolls with.
+  ScrollController get _scroll =>
+      PrimaryScrollController.maybeOf(context) ?? _ownScroll;
+
+  /// Measures where the header ends, after each layout, so the background
+  /// reaches exactly past it whatever it holds today.
+  void _measureHeader() {
+    final box = _headerKey.currentContext?.findRenderObject();
+    if (box is! RenderBox || !box.attached || !box.hasSize) return;
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    final bottom = box.localToGlobal(Offset(0, box.size.height)).dy + offset;
+    if (_headerBottom == null || (bottom - _headerBottom!).abs() > .5) {
+      setState(() => _headerBottom = bottom);
+    }
   }
 
   @override
@@ -70,28 +105,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ref.invalidate(myDayPhotoProvider);
       ref.invalidate(partnerDayPhotoProvider);
     });
-    return Scaffold(
+    final backdrop = ref.watch(_backdropProvider);
+    if (backdrop != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _measureHeader();
+      });
+    }
+    // On their background, and only while the page is at its top, the
+    // status bar and the bar under it are written on the picture.
+    final onPicture = backdrop != null && _atTop ? backdrop : null;
+    final page = Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const AppBottomNav(),
-      body: SafeArea(
+      body: Stack(children: [
+        if (backdrop != null)
+          _Backdrop(
+            backdrop: backdrop,
+            scroll: _scroll,
+            // Past the header, into the gap before the next card, where it
+            // fades into the page.
+            height: (_headerBottom ?? 360) + AppSpace.md,
+          ),
+        SafeArea(
         // CustomScrollView rather than ListView so the top bar can be a
         // sliver: `floating` lets it slide away as you read down the page
         // and `snap` brings the whole thing back on the first upward
         // flick, instead of dragging it in a pixel at a time.
-        child: CustomScrollView(
+        child: NotificationListener<ScrollUpdateNotification>(
+          onNotification: (n) {
+            final top = n.depth == 0 ? n.metrics.pixels <= .5 : _atTop;
+            if (top != _atTop) setState(() => _atTop = top);
+            return false;
+          },
+          child: CustomScrollView(
+          controller: PrimaryScrollController.maybeOf(context) == null
+              ? _ownScroll
+              : null,
           slivers: [
             SliverAppBar(
               floating: true,
               snap: true,
-              backgroundColor: AppColors.background,
+              // Clear over their background at the top of the page; solid
+              // once it floats back in over the page further down.
+              backgroundColor:
+                  onPicture != null ? Colors.transparent : AppColors.background,
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               titleSpacing: 0,
               toolbarHeight: 56,
               automaticallyImplyLeading: false,
-              title: const Padding(
+              title: Padding(
                 padding: AppSpace.screen,
-                child: _HomeBar(),
+                child: _HomeBar(onPicture: onPicture),
               ),
             ),
             SliverPadding(
@@ -101,25 +166,93 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   Center(
                       child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1040),
-                    child: const Column(
+                    child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          _HomeHeader(),
-                          SizedBox(height: AppSpace.md),
-                          HomeMapCard(),
-                          SizedBox(height: AppSpace.md),
-                          _HeartbeatCard(),
-                          SizedBox(height: AppSpace.md),
-                          HomeUpcomingEvents(),
-                          SizedBox(height: AppSpace.md),
-                          HomeThrowback(),
-                          HomeWidgetGallery(),
+                          _HomeHeader(key: _headerKey),
+                          const SizedBox(height: AppSpace.md),
+                          const HomeMapCard(),
+                          const SizedBox(height: AppSpace.md),
+                          const _HeartbeatCard(),
+                          const SizedBox(height: AppSpace.md),
+                          const HomeUpcomingEvents(),
+                          const SizedBox(height: AppSpace.md),
+                          const HomeThrowback(),
+                          const HomeWidgetGallery(),
                         ]),
                   )),
                 ]),
               ),
             ),
           ],
+        ),
+        ),
+      ),
+      ]),
+    );
+    if (onPicture == null) return page;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: onPicture.dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+      child: page,
+    );
+  }
+}
+
+/// Their note's background, if their note is up and has one.
+final _backdropProvider = Provider.autoDispose<NoteBackground?>((ref) {
+  final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+      ref.watch(partnerProfileProvider).valueOrNull;
+  return noteBackgroundById(partner?.freshNoteBackground);
+});
+
+/// Their note's background, edge to edge across the top of Home: behind
+/// the status bar, the bar, the note and their days, fading into the page
+/// below them. It moves with the page, so it scrolls away with the header.
+class _Backdrop extends StatelessWidget {
+  const _Backdrop({
+    required this.backdrop,
+    required this.scroll,
+    required this.height,
+  });
+
+  final NoteBackground backdrop;
+  final ScrollController scroll;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: scroll,
+      builder: (context, child) => Positioned(
+        top: -(scroll.hasClients ? scroll.offset : 0.0),
+        left: 0,
+        right: 0,
+        height: height,
+        child: child!,
+      ),
+      child: IgnorePointer(
+        // 🔴 **Faded out, not painted over.** The fade used to be the page's
+        // colour drawn on top of the picture, reaching full strength only at
+        // the very last row. On a phone that row lands between pixels, the
+        // picture under it and the colour over it are each only partly
+        // there, and a hairline of the picture showed right across the
+        // screen above the map card. Taking the picture's own alpha to zero
+        // before its edge leaves nothing at the edge to show.
+        child: ShaderMask(
+          key: const ValueKey('home-note-background'),
+          blendMode: BlendMode.dstIn,
+          shaderCallback: (bounds) => const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: [0, .72, .96],
+            colors: [Colors.white, Colors.white, Colors.transparent],
+          ).createShader(bounds),
+          child: Image.asset(backdrop.asset,
+              fit: BoxFit.cover,
+              alignment: Alignment.topCenter,
+              excludeFromSemantics: true),
         ),
       ),
     );
@@ -589,7 +722,7 @@ void _shareDay(BuildContext context, WidgetRef ref) {
 }
 
 class _HomeHeader extends ConsumerWidget {
-  const _HomeHeader();
+  const _HomeHeader({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(homeClockProvider).valueOrNull ?? DateTime.now();
@@ -602,6 +735,8 @@ class _HomeHeader extends ConsumerWidget {
         partner?.petName ?? partner?.displayName ?? 'Your partner';
     final linked = ref.watch(currentPairProvider).valueOrNull?.isLinked ?? false;
     final note = partner?.freshNote;
+    // Theirs, chosen with the note, behind the note and the days beside it.
+    final backdrop = noteBackgroundById(partner?.freshNoteBackground);
     final period = now.hour < 12
         ? 'morning'
         : now.hour < 18
@@ -614,8 +749,12 @@ class _HomeHeader extends ConsumerWidget {
               ? 6.0
               : 16.0;
       final deckWidth = math.min(360.0, (box.maxWidth - gap) * .52);
-      final heading =
-          AppText.display().copyWith(fontSize: box.maxWidth < 320 ? 26 : 30);
+      final heading = AppText.display().copyWith(
+          fontSize: box.maxWidth < 320 ? 26 : 30,
+          // Written on their background, light or dark as it needs, with
+          // a soft edge so it reads over the busy parts of a picture too.
+          color: backdrop == null ? null : _inkOn(backdrop),
+          shadows: backdrop == null ? null : _haloOn(backdrop));
       // 🔴 **Their note, where the greeting was.** The line under the
       // greeting (their city, their time, the miles) said again what the
       // map card below says in full, so it is gone. In its place is a note
@@ -628,11 +767,14 @@ class _HomeHeader extends ConsumerWidget {
         children: [
           if (note != null)
             _PartnerNote(
-              note: note,
+              heading: note.heading,
+              body: note.body,
               from: partnerName,
               writtenAt: partner!.homeNoteAt!,
               reaction: profile?.reactionTo(partner.homeNoteAt),
-              style: heading,
+              size: heading.fontSize ?? 30,
+              ink: backdrop == null ? AppColors.ink : _inkOn(backdrop),
+              halo: heading.shadows,
             )
           else ...[
             Text('Good $period,',
@@ -655,17 +797,20 @@ class _HomeHeader extends ConsumerWidget {
           ],
         ],
       );
+      final row = Row(
+          key: const ValueKey('my-day-side-by-side'),
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: greeting),
+            SizedBox(width: gap),
+            SizedBox(width: deckWidth, child: const _DayArch()),
+          ]);
+      // Their background is drawn behind the whole top of the page by
+      // HomeScreen (_Backdrop), edge to edge; this only writes on it.
       return Padding(
         key: const ValueKey('home-my-day'),
         padding: const EdgeInsets.only(top: 16),
-        child: Row(
-            key: const ValueKey('my-day-side-by-side'),
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(child: greeting),
-              SizedBox(width: gap),
-              SizedBox(width: deckWidth, child: const _DayArch()),
-            ]),
+        child: row,
       );
     });
   }
@@ -1009,33 +1154,118 @@ const _pen = Color(0xFF3A3146);
 /// What a note can be answered with.
 const _noteReactions = ['❤️', '🥰', '😂', '🥺', '😘', '🌷'];
 
-/// Their note to you, where the greeting goes.
+/// A note's heading: thick marker handwriting, like a card's "Good
+/// Morning!". Chosen by the user from a sheet of candidates on their Home
+/// (assets/fonts/handwriting/README.md).
+TextStyle _noteHeading(double size, Color color, [List<Shadow>? halo]) =>
+    TextStyle(
+        fontFamily: 'CaveatBrush',
+        fontSize: size,
+        height: 1.1,
+        color: color,
+        shadows: halo);
+
+/// A note's body: neat, upright handwriting, under the heading.
+TextStyle _noteBody(double size, Color color, [List<Shadow>? halo]) =>
+    TextStyle(
+        fontFamily: 'PatrickHand',
+        fontSize: size,
+        height: 1.1,
+        color: color,
+        shadows: halo);
+
+/// A note set as it is read: the heading big, the body under it, each
+/// breaking a line only where it runs out of room. [trailing] goes at the
+/// end of the last line: your reaction to it, on Home.
+Widget _noteText({
+  required String heading,
+  required String body,
+  required double size,
+  required Color ink,
+  List<Shadow>? halo,
+  int? headingLines,
+  int? bodyLines,
+  Widget? trailing,
+  Key? key,
+}) {
+  InlineSpan? end() => trailing == null
+      ? null
+      : WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Padding(
+              padding: const EdgeInsets.only(left: 6), child: trailing));
+  return Column(
+    key: key,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      if (heading.isNotEmpty)
+        Text.rich(
+          TextSpan(text: heading, children: [
+            if (body.isEmpty && trailing != null) end()!,
+          ]),
+          key: const ValueKey('note-heading'),
+          maxLines: headingLines,
+          overflow: headingLines == null ? null : TextOverflow.ellipsis,
+          style: _noteHeading(size, ink, halo),
+        ),
+      if (body.isNotEmpty)
+        Padding(
+          padding: EdgeInsets.only(top: heading.isEmpty ? 0 : size * .12),
+          child: Text.rich(
+            TextSpan(text: body, children: [
+              if (trailing != null) end()!,
+            ]),
+            key: const ValueKey('note-body'),
+            maxLines: bodyLines,
+            overflow: bodyLines == null ? null : TextOverflow.ellipsis,
+            style: _noteBody(size * .66, ink.withValues(alpha: .92), halo),
+          ),
+        ),
+    ],
+  );
+}
+
+/// Their note to you, where the greeting goes: a heading in thick marker
+/// over a body in neat handwriting, the way their card would be written.
 ///
 /// Tap to read it whole (it is cut short if it will not fit), hold to react.
-/// Your reaction shows beside who it is from, and on their Home beside the
-/// note they wrote.
+/// Your reaction sits at the end of it, and on their Home beside the note
+/// they wrote.
 class _PartnerNote extends ConsumerWidget {
   const _PartnerNote({
-    required this.note,
+    required this.heading,
+    required this.body,
     required this.from,
     required this.writtenAt,
-    required this.style,
+    required this.size,
+    required this.ink,
+    this.halo,
     this.reaction,
   });
 
-  final String note;
+  final String heading;
+  final String body;
   final String from;
   final DateTime writtenAt;
-  final TextStyle style;
+
+  /// The heading's size: the greeting's, which it takes the place of.
+  final double size;
+
+  /// Its colour: the page's, or its background's.
+  final Color ink;
+  final List<Shadow>? halo;
 
   /// Yours to it, if you have reacted.
   final String? reaction;
+
+  String get _said => [heading, body].where((s) => s.isNotEmpty).join('. ');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Semantics(
       button: true,
-      label: 'Note from $from: $note',
+      label: 'Note from $from: $_said',
       hint: 'Tap to read it, hold to react',
       excludeSemantics: true,
       child: GestureDetector(
@@ -1045,31 +1275,22 @@ class _PartnerNote extends ConsumerWidget {
           HapticFeedback.mediumImpact();
           _react(context, ref);
         },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(note,
-                key: const ValueKey('partner-note'),
-                maxLines: 4,
-                overflow: TextOverflow.ellipsis,
-                style: style.copyWith(
-                    fontSize: (style.fontSize ?? 30) * .86, height: 1.15)),
-            const SizedBox(height: AppSpace.xxs),
-            Row(children: [
-              Flexible(
-                child: Text('from $from',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.caption()),
-              ),
-              if (reaction != null) ...[
-                const SizedBox(width: 6),
-                Text(reaction!,
-                    key: const ValueKey('my-note-reaction'),
-                    style: const TextStyle(fontSize: 16)),
-              ],
-            ]),
-          ],
+        // 🔴 Not "from Wifey" under it: whose note it is is plain from
+        // where it is, and the line cost the greeting a line of its room.
+        child: _noteText(
+          key: const ValueKey('partner-note'),
+          heading: heading,
+          body: body,
+          size: size,
+          ink: ink,
+          halo: halo,
+          headingLines: 3,
+          bodyLines: 3,
+          trailing: reaction == null
+              ? null
+              : Text(reaction!,
+                  key: const ValueKey('my-note-reaction'),
+                  style: const TextStyle(fontSize: 16)),
         ),
       ),
     );
@@ -1079,8 +1300,9 @@ class _PartnerNote extends ConsumerWidget {
     final react = await showDialog<bool>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: Text('From $from'),
-        content: Text(note, style: AppText.title()),
+        title: Text('$from’s note'),
+        content: _noteText(
+            heading: heading, body: body, size: 32, ink: AppColors.ink),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialog, true),
@@ -1162,166 +1384,542 @@ class _PartnerNote extends ConsumerWidget {
   }
 }
 
-/// Your note to them, on a torn scrap of paper under the greeting: on their
-/// Home in place of theirs, for a day. Type, press done, and it is there.
+/// Words on [backdrop]: light on a dark one, the page's ink on a light one,
+/// whatever the app's own theme is, since the picture is the same in both.
+Color _inkOn(NoteBackground backdrop) =>
+    backdrop.dark ? Colors.white : const Color(0xFF1E1530);
+
+/// A soft edge round words on a picture, the colour of the picture's mood,
+/// so they still read where it is busy.
+List<Shadow> _haloOn(NoteBackground backdrop) => [
+      Shadow(
+          color: backdrop.dark
+              ? const Color(0x99000000)
+              : const Color(0xCCFFFFFF),
+          blurRadius: 8),
+    ];
+
+/// Your note to them, on a scrap of paper under the greeting: what is up
+/// on their Home, or "Type your message here..." when nothing is.
 ///
-/// Their reaction to it shows at its right. While you are writing, how much
-/// room is left does, and a way to send it. Emptied and sent, it comes down.
-class _NoteField extends ConsumerStatefulWidget {
+/// The scrap is chosen by **their** note's background, the one behind it
+/// on your Home: golden paper in their morning light, lavender under their
+/// stars, the plain torn one when they have none. It is drawn at its own
+/// shape, so a tilted or torn one is not stretched out of it.
+///
+/// A tap opens [_NoteSheet], where it is written, given a background, and
+/// posted or taken down. Their reaction to it shows at the scrap's right.
+class _NoteField extends ConsumerWidget {
   const _NoteField({required this.partnerName});
 
   final String partnerName;
 
   @override
-  ConsumerState<_NoteField> createState() => _NoteFieldState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mine = ref.watch(userProfileProvider).valueOrNull;
+    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+        ref.watch(partnerProfileProvider).valueOrNull;
+    final note = mine?.freshNote;
+    final reaction =
+        note == null ? null : partner?.reactionTo(mine?.homeNoteAt);
+    final scrap = ref.watch(_backdropProvider)?.scrap ?? defaultNoteScrap;
+
+    return Semantics(
+      button: true,
+      label: note == null
+          ? 'Leave a note for $partnerName'
+          : 'Your note to $partnerName: '
+              '${[note.heading, note.body].where((s) => s.isNotEmpty).join('. ')}',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _openNoteSheet(context, ref, partnerName: partnerName),
+        child: LayoutBuilder(builder: (context, box) {
+          final height = box.maxWidth / scrap.aspect;
+          return AnimatedContainer(
+            key: const ValueKey('home-note-field'),
+            duration: AppMotion.standard,
+            constraints: BoxConstraints(minHeight: height),
+            decoration: BoxDecoration(
+              image: DecorationImage(
+                image: AssetImage(scrap.asset),
+                fit: BoxFit.fill,
+              ),
+            ),
+            padding: EdgeInsets.fromLTRB(box.maxWidth * .09,
+                height * scrap.inset, box.maxWidth * .06, height * scrap.inset),
+            alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                Expanded(
+                  child: note == null
+                      // Scaled to fit rather than cut short: on a narrow
+                      // phone the scrap is a few pixels too short for it.
+                      ? FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text('Type your message here...',
+                              maxLines: 1,
+                              style: _noteBody(
+                                  19, _pen.withValues(alpha: .55))),
+                        )
+                      : _noteText(
+                          heading: note.heading,
+                          body: note.body,
+                          size: 19,
+                          ink: _pen,
+                          headingLines: 1,
+                          bodyLines: 2),
+                ),
+                if (reaction != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Semantics(
+                      label: '$partnerName reacted $reaction',
+                      excludeSemantics: true,
+                      child: Text(reaction,
+                          key: const ValueKey('note-reaction'),
+                          style: const TextStyle(fontSize: 20)),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }),
+      ),
+    );
+  }
 }
 
-class _NoteFieldState extends ConsumerState<_NoteField> {
-  final _text = TextEditingController();
-  final _focus = FocusNode();
+Future<void> _openNoteSheet(BuildContext context, WidgetRef ref,
+    {required String partnerName}) async {
+  final said = await showModalBottomSheet<String>(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (_) => _NoteSheet(partnerName: partnerName),
+  );
+  if (said != null && context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(said)));
+  }
+}
+
+/// A few words for the other one's Home, dressed in a background if you
+/// like, and posted: the note, the emoji to hand, the background, what it
+/// does, and Post or Clear.
+///
+/// The box the words are typed in shows the chosen background behind
+/// them, in the ink the background needs, so what is posted is seen first.
+class _NoteSheet extends ConsumerStatefulWidget {
+  const _NoteSheet({required this.partnerName});
+
+  final String partnerName;
+
+  @override
+  ConsumerState<_NoteSheet> createState() => _NoteSheetState();
+}
+
+class _NoteSheetState extends ConsumerState<_NoteSheet> {
+  late final TextEditingController _heading;
+  late final TextEditingController _body;
+  final _headingFocus = FocusNode();
+  final _bodyFocus = FocusNode();
+
+  /// Where the emoji go: whichever was typed in last.
+  late TextEditingController _last;
+  String? _background;
   bool _saving = false;
 
-  /// The note the field last showed, so one written on another phone, or
-  /// one that has just expired, replaces what is in it.
-  String? _shown;
+  /// Put in where the cursor is, as long as it fits.
+  static const _emoji = ['❤️', '🥰', '😊', '😌', '🙏', '🌷', '✨', '🌙', '☀️', '💕'];
+
+  int get _count =>
+      _heading.text.characters.length + _body.text.characters.length;
 
   @override
   void initState() {
     super.initState();
-    _focus.addListener(() => setState(() {}));
-    _text.addListener(() => setState(() {}));
+    final mine = ref.read(userProfileProvider).valueOrNull;
+    final note = mine?.freshNote;
+    _heading = TextEditingController(text: note?.heading ?? '')
+      ..addListener(() => setState(() {}));
+    _body = TextEditingController(text: note?.body ?? '')
+      ..addListener(() => setState(() {}));
+    _last = _body;
+    _headingFocus.addListener(() {
+      if (_headingFocus.hasFocus) _last = _heading;
+    });
+    _bodyFocus.addListener(() {
+      if (_bodyFocus.hasFocus) _last = _body;
+    });
+    _background = mine?.freshNoteBackground;
   }
 
   @override
   void dispose() {
-    _text.dispose();
-    _focus.dispose();
+    _heading.dispose();
+    _body.dispose();
+    _headingFocus.dispose();
+    _bodyFocus.dispose();
     super.dispose();
   }
 
-  Future<void> _send() async {
+  void _insert(String emoji) {
+    final field = _last;
+    final text = field.text;
+    if (_count + emoji.characters.length > UserProfile.noteLimit) return;
+    final sel = field.selection;
+    final from = sel.isValid ? sel.start : text.length;
+    final to = sel.isValid ? sel.end : text.length;
+    field.value = TextEditingValue(
+      text: text.replaceRange(from, to, emoji),
+      selection: TextSelection.collapsed(offset: from + emoji.length),
+    );
+  }
+
+  Future<void> _save({required bool clear}) async {
     final me = ref.read(currentUserIdProvider);
     if (me == null || _saving) return;
-    final current = ref.read(userProfileProvider).valueOrNull?.freshNote ?? '';
-    final text = _text.text.trim();
-    if (text == current) {
-      _focus.unfocus();
-      return;
-    }
     setState(() => _saving = true);
+    final heading = clear ? '' : _heading.text.trim();
+    final body = clear ? '' : _body.text.trim();
     try {
-      await ref
-          .read(userRepositoryProvider)
-          .setHomeNote(me, text.isEmpty ? null : text);
+      await ref.read(userRepositoryProvider).setHomeNote(me,
+          heading: heading,
+          body: body,
+          background: clear ? null : _background);
       ref.invalidate(userProfileProvider);
-      _focus.unfocus();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(text.isEmpty
-                ? 'Your note is down.'
-                : 'On ${widget.partnerName}’s Home for 24 hours.')));
+        Navigator.of(context).pop(heading.isEmpty && body.isEmpty
+            ? 'Your note is down.'
+            : 'On ${widget.partnerName}’s Home for 24 hours.');
       }
     } catch (_) {
       if (mounted) {
+        setState(() => _saving = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("Couldn't leave that note. Try again?")));
+            content: Text("Couldn't post that note. Try again?")));
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final mine = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
-        ref.watch(partnerProfileProvider).valueOrNull;
-    final note = mine?.freshNote;
-    // What is up, unless it is being rewritten.
-    if (!_focus.hasFocus && note != _shown) {
-      _shown = note;
-      _text.text = note ?? '';
-    }
-    final reaction =
-        note == null ? null : partner?.reactionTo(mine?.homeNoteAt);
-    final editing = _focus.hasFocus;
-    final left = UserProfile.noteLimit - _text.text.characters.length;
-    // Small enough that "Type your message here..." fits on the scrap in
-    // one line, as a line written on a scrap would.
-    final ink = AppText.note(_pen).copyWith(fontSize: 12.5, height: 1.2);
+    final up = ref.watch(userProfileProvider).valueOrNull?.freshNote != null;
+    final backdrop = noteBackgroundById(_background);
+    final canPost = (_heading.text.trim().isNotEmpty ||
+            _body.text.trim().isNotEmpty) &&
+        !_saving;
+    final ink = backdrop == null ? AppColors.ink : _inkOn(backdrop);
+    final halo = backdrop == null ? null : _haloOn(backdrop);
+    // Heading and body share the limit: each may take what the other has
+    // left. One line each, broken only where it runs out of room.
+    List<TextInputFormatter> within(TextEditingController other) => [
+          FilteringTextInputFormatter.deny(RegExp(r'[\r\n]')),
+          _Budget(() => UserProfile.noteLimit - other.text.characters.length),
+        ];
+    InputDecoration bare(String hint, TextStyle style) => InputDecoration(
+          isCollapsed: true,
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          disabledBorder: InputBorder.none,
+          contentPadding: EdgeInsets.zero,
+          hintText: hint,
+          hintStyle: style.copyWith(color: ink.withValues(alpha: .5)),
+        );
+    final headingStyle = _noteHeading(30, ink, halo);
+    final bodyStyle = _noteBody(21, ink, halo);
 
-    return Container(
-      key: const ValueKey('home-note-field'),
-      constraints: const BoxConstraints(minHeight: 54),
-      decoration: const BoxDecoration(
-        image: DecorationImage(
-          image: AssetImage('assets/images/note_paper.webp'),
-          fit: BoxFit.fill,
-        ),
-      ),
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
-      child: Row(
+    return AppBottomSheet(
+      title: 'Your note',
+      subtitle: 'A little something for ${widget.partnerName} 💗',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            child: TextField(
-              controller: _text,
-              focusNode: _focus,
-              enabled: !_saving,
-              minLines: 1,
-              maxLines: 2,
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(UserProfile.noteLimit),
+          // The words, on the background they will be seen on.
+          AnimatedContainer(
+            key: const ValueKey('note-sheet-box'),
+            duration: AppMotion.standard,
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSubtle,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              border: Border.all(color: AppColors.border),
+              image: backdrop == null
+                  ? null
+                  : DecorationImage(
+                      image: AssetImage(backdrop.asset), fit: BoxFit.cover),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  key: const ValueKey('note-sheet-heading'),
+                  controller: _heading,
+                  focusNode: _headingFocus,
+                  autofocus: !up,
+                  // Wraps, but never breaks where Enter is pressed: that
+                  // moves on to the body.
+                  minLines: 1,
+                  maxLines: null,
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _bodyFocus.requestFocus(),
+                  inputFormatters: within(_body),
+                  style: headingStyle,
+                  cursorColor: ink,
+                  decoration: bare('Good Morning!', headingStyle),
+                ),
+                const SizedBox(height: 4),
+                TextField(
+                  key: const ValueKey('note-sheet-body'),
+                  controller: _body,
+                  focusNode: _bodyFocus,
+                  minLines: 2,
+                  maxLines: null,
+                  keyboardType: TextInputType.text,
+                  textInputAction: TextInputAction.done,
+                  inputFormatters: within(_heading),
+                  style: bodyStyle,
+                  cursorColor: ink,
+                  decoration: bare('Type your message here...', bodyStyle),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text('$_count/${UserProfile.noteLimit}',
+                      key: const ValueKey('note-sheet-count'),
+                      style: AppText.caption(ink.withValues(alpha: .75))),
+                ),
               ],
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _send(),
-              style: ink,
-              cursorColor: _pen,
-              // ⚠️ Every border named, not just `border`: the theme's
-              // enabled and focused outlines otherwise still draw, a box
-              // inside the paper.
-              decoration: InputDecoration(
-                isCollapsed: true,
-                filled: false,
-                border: InputBorder.none,
-                enabledBorder: InputBorder.none,
-                focusedBorder: InputBorder.none,
-                disabledBorder: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-                // Scaled to fit rather than cut short: on a narrow phone
-                // the scrap is a few pixels too short for it.
-                hint: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Text('Type your message here...',
-                      maxLines: 1,
-                      style: ink.copyWith(color: _pen.withValues(alpha: .5))),
+            ),
+          ),
+          const SizedBox(height: AppSpace.sm),
+          SizedBox(
+            height: 44,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (final e in _emoji)
+                  Padding(
+                    padding: const EdgeInsets.only(right: AppSpace.xs),
+                    child: Semantics(
+                      button: true,
+                      label: 'Add $e',
+                      excludeSemantics: true,
+                      child: InkWell(
+                        customBorder: const CircleBorder(),
+                        onTap: () => _insert(e),
+                        child: Container(
+                          width: 44,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: AppColors.blush.withValues(alpha: .6),
+                          ),
+                          child: Text(e, style: const TextStyle(fontSize: 20)),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          Text('BACKGROUND', style: AppText.label()),
+          const SizedBox(height: AppSpace.xs),
+          SizedBox(
+            height: 64,
+            child: ListView(
+              key: const ValueKey('note-backgrounds'),
+              scrollDirection: Axis.horizontal,
+              children: [
+                _BackgroundTile(
+                  label: 'No background',
+                  selected: _background == null,
+                  onTap: () => setState(() => _background = null),
+                ),
+                for (final b in noteBackgrounds)
+                  _BackgroundTile(
+                    label: b.name,
+                    asset: b.asset,
+                    selected: _background == b.id,
+                    onTap: () => setState(() => _background = b.id),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpace.md),
+          _NoteFact(
+            icon: CupertinoIcons.eye,
+            title: 'Visible to ${widget.partnerName}',
+            detail: backdrop == null
+                ? 'They’ll see this on their Home.'
+                : 'They’ll see this on their Home, on ${backdrop.name}.',
+          ),
+          const SizedBox(height: AppSpace.xs),
+          const _NoteFact(
+            icon: CupertinoIcons.clock,
+            title: 'Auto expires',
+            detail: 'Your note will disappear after 24 hours.',
+          ),
+          const SizedBox(height: AppSpace.md),
+          Opacity(
+            opacity: canPost ? 1 : .5,
+            child: Material(
+              color: Colors.transparent,
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: AppGradients.cta,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                ),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  onTap: canPost ? () => _save(clear: false) : null,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    child: Center(
+                      child: Text('Post note',
+                          style: AppText.subtitle(Colors.white)),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
-          if (editing) ...[
-            Text('$left',
-                style: AppText.caption(_pen.withValues(alpha: .6))),
-            IconButton(
-              tooltip: 'Leave this note',
-              visualDensity: VisualDensity.compact,
-              onPressed: _saving ? null : _send,
-              icon: const AppIcon(CupertinoIcons.paperplane_fill,
-                  size: 18, color: _pen),
-            ),
-          ] else if (reaction != null)
-            Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: Semantics(
-                label: '${widget.partnerName} reacted $reaction',
-                excludeSemantics: true,
-                child: Text(reaction,
-                    key: const ValueKey('note-reaction'),
-                    style: const TextStyle(fontSize: 20)),
+          if (up) ...[
+            const SizedBox(height: AppSpace.xs),
+            TextButton(
+              onPressed: _saving ? null : () => _save(clear: true),
+              style: TextButton.styleFrom(
+                backgroundColor: AppColors.surfaceSubtle,
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(vertical: 14),
               ),
+              child: Text('Clear note', style: AppText.subtitle()),
             ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// Holds a field to what the note's shared limit leaves it: typing past
+/// it does nothing, and a paste is cut to fit.
+class _Budget extends TextInputFormatter {
+  _Budget(this.room);
+
+  final int Function() room;
+
+  @override
+  TextEditingValue formatEditUpdate(
+      TextEditingValue oldValue, TextEditingValue newValue) {
+    final max = math.max(0, room());
+    if (newValue.text.characters.length <= max) return newValue;
+    // Full, and typing: nothing goes in (the way LengthLimiting does it).
+    if (oldValue.text.characters.length == max &&
+        oldValue.selection.isCollapsed) {
+      return oldValue;
+    }
+    final cut = newValue.text.characters.take(max).toString();
+    return TextEditingValue(
+        text: cut, selection: TextSelection.collapsed(offset: cut.length));
+  }
+}
+
+/// One background to choose, or none, in the sheet's row.
+class _BackgroundTile extends StatelessWidget {
+  const _BackgroundTile({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.asset,
+  });
+
+  final String label;
+  final String? asset;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: AppSpace.xs),
+      child: Semantics(
+        button: true,
+        selected: selected,
+        label: label,
+        excludeSemantics: true,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: AppMotion.micro,
+            width: 64,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSubtle,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: Border.all(
+                color: selected ? AppColors.brand : AppColors.border,
+                width: selected ? 2 : 1,
+              ),
+              image: asset == null
+                  ? null
+                  : DecorationImage(
+                      image: ResizeImage(AssetImage(asset!), width: 160),
+                      fit: BoxFit.cover),
+            ),
+            alignment: Alignment.center,
+            child: asset == null
+                ? Text('None', style: AppText.caption(AppColors.ink))
+                : selected
+                    ? const AppIcon(CupertinoIcons.check_mark_circled_solid,
+                        color: Colors.white, size: 22)
+                    : null,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A line in the sheet saying what posting does.
+class _NoteFact extends StatelessWidget {
+  const _NoteFact(
+      {required this.icon, required this.title, required this.detail});
+
+  final IconData icon;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.border),
+          ),
+          child: AppIcon(icon, size: 18, color: AppColors.muted),
+        ),
+        const SizedBox(width: AppSpace.compact),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title,
+                  style: AppText.caption(AppColors.ink)
+                      .copyWith(fontWeight: FontWeight.w600)),
+              Text(detail, style: AppText.caption()),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -1483,21 +2081,33 @@ class _TapedDay extends StatelessWidget {
 }
 
 class _HomeBar extends ConsumerWidget {
-  const _HomeBar();
+  const _HomeBar({this.onPicture});
+
+  /// Their note's background, when the bar sits on it: written in its ink.
+  final NoteBackground? onPicture;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) => Row(children: [
         Expanded(
             child: Text(AppConstants.appName,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppText.title().copyWith(fontWeight: FontWeight.w700))),
+                style: AppText.title(
+                        onPicture == null ? null : _inkOn(onPicture!))
+                    .copyWith(
+                        fontWeight: FontWeight.w700,
+                        shadows:
+                            onPicture == null ? null : _haloOn(onPicture!)))),
         IconButton(
             tooltip: 'Notifications',
             onPressed: () => context.push(Routes.notifications),
             icon: Badge(
                 isLabelVisible: ref.watch(unseenActivityCountProvider) > 0,
                 backgroundColor: AppColors.brand,
-                child: AppIcon(CupertinoIcons.bell, color: AppColors.ink))),
+                child: AppIcon(CupertinoIcons.bell,
+                    color: onPicture == null
+                        ? AppColors.ink
+                        : _inkOn(onPicture!)))),
         Semantics(
             label: 'Us, your couple page',
             button: true,

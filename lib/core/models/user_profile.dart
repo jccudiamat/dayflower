@@ -17,7 +17,9 @@ class UserProfile {
     this.cityLon,
     this.birthday,
     this.homeNote,
+    this.homeNoteHeading,
     this.homeNoteAt,
+    this.homeNoteBg,
     this.noteReaction,
     this.noteReactionTo,
   });
@@ -25,8 +27,9 @@ class UserProfile {
   /// How long a note stays on the other one's Home.
   static const noteLife = Duration(hours: 24);
 
-  /// How long a note may be, for now: what fits where the greeting goes.
-  static const noteLimit = 35;
+  /// How long a note may be, heading and body together, for now: what
+  /// fits where the greeting goes.
+  static const noteLimit = 50;
 
   final String id;
   final String displayName;
@@ -102,18 +105,32 @@ class UserProfile {
     return isSameDayIn(timezone, at) ? name : null;
   }
 
-  /// A few words left for the other one's Home, in place of its greeting.
-  /// Only the latest: writing another replaces it, and nothing keeps the
-  /// old ones (see migration 0052).
+  /// A few words left for the other one's Home, in place of its greeting:
+  /// the note's body, in thin handwriting. Only the latest: writing another
+  /// replaces it, and nothing keeps the old ones (see migration 0052).
   final String? homeNote;
+
+  /// The note's heading, written big in thick marker (migration 0053).
+  final String? homeNoteHeading;
   final DateTime? homeNoteAt;
 
+  /// The id of the background chosen for the note, or null for none
+  /// (migration 0053). Goes with the note: see [freshNoteBackground].
+  final String? homeNoteBg;
+
+  /// The note's background, while the note is up.
+  String? get freshNoteBackground => freshNote == null ? null : homeNoteBg;
+
   /// The note, while it is still up: [noteLife] from when it was written.
-  String? get freshNote {
-    final note = homeNote?.trim();
+  /// Either part may be empty, never both.
+  ({String heading, String body})? get freshNote {
+    final heading = homeNoteHeading?.trim() ?? '';
+    final body = homeNote?.trim() ?? '';
     final at = homeNoteAt;
-    if (note == null || note.isEmpty || at == null) return null;
-    return DateTime.now().difference(at) < noteLife ? note : null;
+    if ((heading.isEmpty && body.isEmpty) || at == null) return null;
+    return DateTime.now().difference(at) < noteLife
+        ? (heading: heading, body: body)
+        : null;
   }
 
   /// How this person reacted to the other one's note, and to which: the
@@ -170,7 +187,11 @@ class UserProfile {
             : DateTime.tryParse(map['birthday'] as String),
         // All four absent on rows read before migration 0052.
         homeNote: map['home_note'] as String?,
+        // Absent on rows read before migration 0053.
+        homeNoteHeading: map['home_note_heading'] as String?,
         homeNoteAt: _instant(map['home_note_at']),
+        // Absent on rows read before migration 0053.
+        homeNoteBg: map['home_note_bg'] as String?,
         noteReaction: map['note_reaction'] as String?,
         noteReactionTo: _instant(map['note_reaction_to']),
       );

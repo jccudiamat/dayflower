@@ -117,6 +117,13 @@ flutter:
     - family: TikTokSans
       fonts:
         - asset: assets/fonts/tiktok/TikTokSans.ttf
+    # A note's heading and body. See assets/fonts/handwriting/README.md.
+    - family: CaveatBrush
+      fonts:
+        - asset: assets/fonts/handwriting/CaveatBrush-Regular.ttf
+    - family: PatrickHand
+      fonts:
+        - asset: assets/fonts/handwriting/PatrickHand-Regular.ttf
   assets:
     - assets/images/
     - assets/images/flowers/
@@ -124,6 +131,8 @@ flutter:
     - assets/images/together/
     - assets/images/memories/
     - assets/images/frames/
+    - assets/images/note_backgrounds/
+    - assets/images/note_scraps/
     - assets/fonts/tiktok/OFL.txt
     - .env
 
