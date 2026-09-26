@@ -13,6 +13,17 @@
 
 ## Recent app work
 
+### The bar on their background, ripples again, a tighter top (2026-09-26, build 120)
+
+Four things from the user's phone on build 119.
+
+- 🔴 **The bar went solid at the smallest scroll.** It was clear only while the page was exactly at its top. A touch on the map or mood card scrolled it a few pixels, the bar turned solid, and the picture still showed above it (behind the status bar) and below it: picture, strip of page, picture. It now stays clear for as long as the picture is behind it: until the scroll passes `_pictureUnderBarUntil`, where the picture's solid part (`_backdropSolid`, 55% of its height) passes the bar's bottom. The listener only rebuilds when that answer changes. Once the bar is solid, the status bar gets a solid strip of page too, and its icons follow: the picture's ink over the picture, the page's once solid. Tested by scrolling 30pt (still clear), far down and back (solid), and home (clear).
+- 🔴 **The heartbeat stopped rippling in 119.** Last round's shorter heart stage (64pt, for a shorter card) broke it: a Stack holds its children to its own size, so every ring was squashed to 80×64 behind the heart and never seen. Each ring now sits in an `OverflowBox` and grows out past the stage as before. The test measures a ring 250ms after a tap (round and bigger than the heart). It was run once without the fix to see it fail.
+- **Less space under the bar.** The page's top padding went 16 to 4, the day row's 16 to 8, and a photo on paper rises 8 above the deck instead of 18 (`_paperRise`). The row now starts about 4pt under the bar.
+- **The background reaches further down, over a longer, eased fade.** It now goes past the header and about 64pt behind the top of the map card (`_backdropReach`). It is solid for the top 55%, then eased to nothing by its edge (seven stops), so it shows only faintly in the margins beside the map card and its end is under the card.
+
+Tests: 627 passing.
+
 ### A note gets a heading, a background, and a sheet to write it in (2026-09-26, build 119)
 
 ✅ **Migration `0053_note_heading_and_background.sql` applied 2026-09-26, before publishing.** (It was `0053_note_background.sql` until the heading joined it. It had never been applied, so it was renamed rather than followed by a 0054.)

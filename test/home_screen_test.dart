@@ -882,7 +882,7 @@ void main() {
     final deck = tester.getRect(find.byKey(const ValueKey('home-photo-deck')));
     final drawn = tester.getRect(find.byKey(const ValueKey('taped-day-paper')));
     final room = Rect.fromLTRB(
-        deck.left, deck.top - 18, deck.right + 12, deck.bottom + 10);
+        deck.left, deck.top - 8, deck.right + 12, deck.bottom + 10);
     expect(drawn.left, greaterThanOrEqualTo(room.left - .5));
     expect(drawn.right, lessThanOrEqualTo(room.right + .5));
     expect(drawn.top, greaterThanOrEqualTo(room.top - .5));
@@ -1233,10 +1233,35 @@ void main() {
     expect(area.left, 0);
     expect(area.right, 390);
     expect(area.top, lessThanOrEqualTo(0));
+    // Down behind the top of the map card, so where it ends is under it.
     expect(area.bottom,
-        greaterThan(tester.getRect(find.byKey(const ValueKey('home-photo-deck'))).bottom));
+        greaterThan(tester.getRect(find.byKey(const ValueKey('home-map'))).top));
+    // Close under the bar, with little gap between. (The bar is a sliver,
+    // not a box to measure: on a test screen it ends 56 from the top.)
+    final top = tester.getRect(find.byKey(const ValueKey('home-my-day')));
+    expect(top.top - 56, lessThanOrEqualTo(6));
     expect(area.contains(tester.getCenter(find.byKey(const ValueKey('partner-note')))),
         isTrue);
+    // 🔴 The bar stays clear while the picture is behind it: the first cut
+    // turned it solid at the smallest scroll, with the picture still above
+    // and below it. Solid once the picture has scrolled out from under it.
+    Color? barColour() =>
+        tester.widget<SliverAppBar>(find.byType(SliverAppBar)).backgroundColor;
+    expect(barColour(), Colors.transparent);
+    final page = find.byType(Scrollable).first;
+    await tester.drag(page, const Offset(0, -30));
+    await tester.pumpAndSettle();
+    expect(barColour(), Colors.transparent, reason: 'a small scroll');
+    await tester.drag(page, const Offset(0, -400));
+    await tester.pumpAndSettle();
+    await tester.drag(page, const Offset(0, 60));
+    await tester.pumpAndSettle();
+    expect(barColour(), AppColors.background,
+        reason: 'floating back in over the page, far from the picture');
+    await tester.drag(page, const Offset(0, 1000));
+    await tester.pumpAndSettle();
+    expect(barColour(), Colors.transparent, reason: 'back at the top');
+
     // A night sky takes light words.
     final note = tester.widget<Text>(find.descendant(
         of: find.byKey(const ValueKey('partner-note')),
@@ -1443,6 +1468,18 @@ void main() {
         (w) => w is Semantics && w.properties.label == 'Send a heartbeat');
     await _reveal(tester, heart);
     await tester.tap(heart);
+    // 🔴 It ripples: a round ring that grows past the heart. Its stage is
+    // only the heart's height, and a Stack held every ring to that, so they
+    // were squashed flat behind the heart and never seen.
+    // Halfway through its half second (the first frame starts it).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    final ring = find.byWidgetPredicate(
+        (w) => w.runtimeType.toString() == '_RippleRing');
+    expect(ring, findsWidgets);
+    final size = tester.getSize(ring.first);
+    expect(size.height, closeTo(size.width, .5), reason: 'round, not squashed');
+    expect(size.height, greaterThan(64), reason: 'out past the heart');
     await tester.pumpAndSettle();
     expect(_beats.sends, 1);
     _beats.fail = true;

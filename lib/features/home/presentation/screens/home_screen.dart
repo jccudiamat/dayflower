@@ -57,10 +57,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   /// Where that ends, from the top of the screen, with the page at rest.
   double? _headerBottom;
 
-  /// Whether the page is at its top, where the bar is clear over the
-  /// background; scrolled down, the bar floats back over the page and has
-  /// to be solid again.
-  bool _atTop = true;
+  /// Whether their background is still behind the bar, so the bar is
+  /// clear and written on it.
+  ///
+  /// 🔴 **Not "whether the page is at its top".** That was the first rule,
+  /// and the smallest scroll turned the bar solid while the picture was
+  /// still there above and below it: the status bar on the picture, a solid
+  /// strip of page, then the picture again. The bar now stays clear until
+  /// the picture has scrolled out from behind it.
+  bool _pictureUnderBar = true;
+
+  /// How far the page can scroll before the picture is out from behind
+  /// the bar. Worked out in build, read by the scroll listener, so a
+  /// scroll only rebuilds the page when the answer changes.
+  double _pictureUnderBarUntil = double.infinity;
 
   @override
   void initState() {
@@ -111,9 +121,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         if (mounted) _measureHeader();
       });
     }
-    // On their background, and only while the page is at its top, the
+    final statusBar = MediaQuery.paddingOf(context).top;
+    final backdropHeight = (_headerBottom ?? 360) + _backdropReach;
+    // The bar's bottom is clear of the page's top by statusBar + 56; the
+    // picture is solid down to _backdropSolid of its height.
+    _pictureUnderBarUntil =
+        backdropHeight * _backdropSolid - statusBar - _barHeight;
+    // On their background, and while the picture is behind them, the
     // status bar and the bar under it are written on the picture.
-    final onPicture = backdrop != null && _atTop ? backdrop : null;
+    final onPicture = backdrop != null && _pictureUnderBar ? backdrop : null;
     final page = Scaffold(
       backgroundColor: AppColors.background,
       bottomNavigationBar: const AppBottomNav(),
@@ -122,9 +138,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
           _Backdrop(
             backdrop: backdrop,
             scroll: _scroll,
-            // Past the header, into the gap before the next card, where it
-            // fades into the page.
-            height: (_headerBottom ?? 360) + AppSpace.md,
+            // Past the header and on behind the top of the map card, fading
+            // all the way, so where it ends is not a place anyone can see.
+            height: backdropHeight,
+          ),
+        // Once the bar is solid, so is the status bar above it: otherwise
+        // the picture shows there, over a bar of plain page.
+        if (backdrop != null && onPicture == null)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: statusBar,
+            child: ColoredBox(color: AppColors.background),
           ),
         SafeArea(
         // CustomScrollView rather than ListView so the top bar can be a
@@ -133,8 +159,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         // flick, instead of dragging it in a pixel at a time.
         child: NotificationListener<ScrollUpdateNotification>(
           onNotification: (n) {
-            final top = n.depth == 0 ? n.metrics.pixels <= .5 : _atTop;
-            if (top != _atTop) setState(() => _atTop = top);
+            if (n.depth != 0) return false;
+            final under = n.metrics.pixels < _pictureUnderBarUntil;
+            if (under != _pictureUnderBar) {
+              setState(() => _pictureUnderBar = under);
+            }
             return false;
           },
           child: CustomScrollView(
@@ -152,7 +181,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               surfaceTintColor: Colors.transparent,
               elevation: 0,
               titleSpacing: 0,
-              toolbarHeight: 56,
+              toolbarHeight: _barHeight,
               automaticallyImplyLeading: false,
               title: Padding(
                 padding: AppSpace.screen,
@@ -160,7 +189,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              // Close under the bar: the greeting and their days are the
+              // first thing on the page, not something below a gap.
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
               sliver: SliverList(
                 delegate: SliverChildListDelegate.fixed([
                   Center(
@@ -190,15 +221,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       ),
       ]),
     );
-    if (onPicture == null) return page;
+    if (backdrop == null) return page;
+    // The status bar's icons: the picture's ink while they are on it, the
+    // page's once the solid strip is behind them.
+    final lightIcons = onPicture != null
+        ? onPicture.dark
+        : Theme.of(context).brightness == Brightness.dark;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: onPicture.dark
-          ? SystemUiOverlayStyle.light
-          : SystemUiOverlayStyle.dark,
+      value: lightIcons ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
       child: page,
     );
   }
 }
+
+/// The bar at the top of Home.
+const _barHeight = 56.0;
+
+/// How far their background reaches past the header: through the gap and
+/// on behind the top of the map card.
+const _backdropReach = AppSpace.md + 64;
+
+/// How much of their background is solid before it starts to fade.
+const _backdropSolid = .55;
 
 /// Their note's background, if their note is up and has one.
 final _backdropProvider = Provider.autoDispose<NoteBackground?>((ref) {
@@ -243,11 +287,17 @@ class _Backdrop extends StatelessWidget {
         child: ShaderMask(
           key: const ValueKey('home-note-background'),
           blendMode: BlendMode.dstIn,
-          shaderCallback: (bounds) => const LinearGradient(
+          // Eased, and long: from _backdropSolid down, most of the way
+          // gone before the map card and nothing left by the edge, which is
+          // behind the card anyway. A straight fade reads as a band.
+          shaderCallback: (bounds) => LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            stops: [0, .72, .96],
-            colors: [Colors.white, Colors.white, Colors.transparent],
+            stops: const [0, _backdropSolid, .66, .76, .85, .93, 1],
+            colors: [
+              for (final a in const [1.0, 1.0, .86, .6, .34, .12, 0.0])
+                Colors.white.withValues(alpha: a),
+            ],
           ).createShader(bounds),
           child: Image.asset(backdrop.asset,
               fit: BoxFit.cover,
@@ -552,8 +602,17 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
               alignment: Alignment.center,
               clipBehavior: Clip.none,
               children: [
+            // 🔴 In an OverflowBox: a ring grows past the 64pt stage, and a
+            // Stack holds its children to its own size, so without this
+            // every ring was squashed flat behind the heart and no ripple
+            // showed at all.
             for (final r in _ripples)
-              _RippleRing(key: ValueKey(r.id), ripple: r, baseSize: _heartSize),
+              OverflowBox(
+                maxWidth: _stageSize + _incomingGrowth,
+                maxHeight: _stageSize + _incomingGrowth,
+                child: _RippleRing(
+                    key: ValueKey(r.id), ripple: r, baseSize: _heartSize),
+              ),
             AnimatedBuilder(
                 animation: Listenable.merge([_scaleCtrl, _beatCtrl]),
                 builder: (context, child) => Transform.scale(
@@ -809,7 +868,7 @@ class _HomeHeader extends ConsumerWidget {
       // HomeScreen (_Backdrop), edge to edge; this only writes on it.
       return Padding(
         key: const ValueKey('home-my-day'),
-        padding: const EdgeInsets.only(top: 16),
+        padding: const EdgeInsets.only(top: 8),
         child: row,
       );
     });
@@ -1938,8 +1997,8 @@ class _NoteFact extends StatelessWidget {
 /// Into the page's 20pt right margin, leaving 8.
 const _paperReach = 12.0;
 
-/// Up into the 32pt between the top bar and the deck, leaving 14.
-const _paperRise = 18.0;
+/// Up into the 12pt between the top bar and the deck, leaving 4.
+const _paperRise = 8.0;
 
 /// Down into the 24pt before the map, leaving 14.
 const _paperDrop = 10.0;
