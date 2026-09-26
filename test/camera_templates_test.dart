@@ -11,11 +11,14 @@ import 'package:go_router/go_router.dart';
 
 /// The Templates page is where the photo-booth strips went when the camera's
 /// row became the frames, so it has to hold both and hand either back.
-Future<TemplateChoice?> _pump(WidgetTester tester) async {
+/// What the page handed back, once it closes.
+TemplateChoice? picked;
+
+Future<void> _pump(WidgetTester tester) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
-  TemplateChoice? picked;
+  picked = null;
   final router = GoRouter(initialLocation: '/here', routes: [
     GoRoute(
       path: '/here',
@@ -44,7 +47,6 @@ Future<TemplateChoice?> _pump(WidgetTester tester) async {
   await tester.pumpAndSettle();
   await tester.tap(find.text('open'));
   await tester.pumpAndSettle();
-  return picked;
 }
 
 void main() {
@@ -85,9 +87,25 @@ void main() {
       (tester) async {
     await _pump(tester);
     final frame = photoFrames.firstWhere((f) => f.slots == 1);
-    await tester.tap(find.bySemanticsLabel(frame.name).first);
+    await tester.tap(find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == frame.name));
     await tester.pumpAndSettle();
     expect(find.byType(TemplatesScreen), findsNothing, reason: 'it closes');
+    // And hands back that frame, not merely something.
+    expect(picked, isA<FrameChoice>());
+    expect((picked! as FrameChoice).frame.id, frame.id);
+  });
+
+  testWidgets('it offers only what a photo can go into', (tester) async {
+    // 🔴 In build 114 the torn note was here, and shooting onto it sent a
+    // blank sheet: it has no window, so the photo had nowhere to go.
+    await _pump(tester);
+    for (var i = 0; i < 12; i++) {
+      expect(find.text('Torn note'), findsNothing);
+      await tester.drag(find.byType(ListView), const Offset(0, -300));
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('PAPER'), findsNothing);
   });
 
   testWidgets('search narrows it, and says so when nothing matches',

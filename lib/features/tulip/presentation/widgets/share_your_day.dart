@@ -110,6 +110,34 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// photo, because one press of the shutter is one photo.
   static final _quickFrames = framesForPhotos(1).toList();
 
+  /// Which mode the row under the shutter shows as chosen: 0 Camera,
+  /// 1 Templates. Templates is only chosen while its page is opening or
+  /// open; see _openTemplates.
+  int _mode = 0;
+
+  /// Photos taken for the chosen frame so far, one per window, in order.
+  ///
+  /// 🔴 A two-photo frame is filled **one shot at a time**. Build 114 put a
+  /// single shot in the first window and sent the second as an empty hole,
+  /// and put a shot on the torn note, which has no window, so the photo
+  /// vanished and a blank sheet was sent. Each press of the shutter (or pick
+  /// from the gallery) now fills the next window, and nothing is held for
+  /// sending until every window has a photo in it.
+  final _shots = <Uint8List>[];
+
+  /// The held shot is already on paper, so it is shown whole rather than
+  /// cropped to the screen: cropping it would cut the frame off.
+  bool _pendingOnPaper = false;
+
+  /// Whether the next shot goes onto paper at all. A strip, or a half of
+  /// theirs waiting to be joined, takes precedence: those are their own
+  /// frames already.
+  bool get _onPaper =>
+      _frame != null &&
+      _frame!.slots > 0 &&
+      _template == null &&
+      ref.read(stripAwaitingMeProvider) == null;
+
   /// Strip ids already handed to [_recoverStranded], so a failing retry
   /// cannot spin: the provider re-emits on every stream tick.
   final Set<String> _recoveryTried = {};
@@ -301,17 +329,69 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       }
 
       if (!mounted) return;
-      setState(() {
-        _pending = bytes;
-        _pendingExt = 'jpg';
-      });
+      await _addShot(bytes, 'jpg');
     } catch (_) {
       if (mounted) _toast("Couldn't take that photo.");
     }
   }
 
+  /// A photo from the shutter or the gallery.
+  ///
+  /// Bare, it is held as it is. On paper it fills the next window, and once
+  /// every window has one the frame is composed **now**, before anything is
+  /// sent, so what is held on screen is exactly what will arrive: the frame
+  /// used to be added on the way out, and was never seen until it had gone.
+  Future<void> _addShot(Uint8List raw, String ext) async {
+    final frame = _frame;
+    if (frame == null || !_onPaper) {
+      setState(() {
+        _pending = raw;
+        _pendingExt = ext;
+        _pendingOnPaper = false;
+      });
+      return;
+    }
+    setState(() => _shots.add(raw));
+    if (_shots.length < frame.slots) return;
+
+    setState(() => _busy = true);
+    try {
+      final png = await FrameCompositor.compose(
+        frame: frame,
+        photos: List.of(_shots),
+      );
+      final out = await FrameCompositor.forSending(png);
+      if (!mounted) return;
+      setState(() {
+        _pending = out.bytes;
+        _pendingExt = out.extension;
+        _pendingOnPaper = true;
+      });
+    } catch (e) {
+      debugPrint('frame compositing failed: $e');
+      if (!mounted) return;
+      // The photo is the point and the paper is decoration: if the paper
+      // cannot go round it, hold the photo on its own rather than lose it.
+      setState(() {
+        _pending = _shots.first;
+        _pendingExt = ext;
+        _pendingOnPaper = false;
+        _shots.clear();
+      });
+      _toast("Couldn't put that on paper, so here it is on its own.");
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// Throws the held shot away and goes back to the live viewfinder.
-  void _discardPending() => setState(() => _pending = null);
+  /// Throws the held shot away, and any photos already taken for the frame,
+  /// and goes back to the live viewfinder.
+  void _discardPending() => setState(() {
+        _pending = null;
+        _pendingOnPaper = false;
+        _shots.clear();
+      });
 
   /// Writes the held shot to the app's own external folder.
   ///
@@ -357,7 +437,13 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (_target.toWidget && !await _makeRoomForDay()) return;
 
     await _handleShot(bytes, target: _target);
-    if (mounted) setState(() => _pending = null);
+    if (mounted) {
+      setState(() {
+        _pending = null;
+        _pendingOnPaper = false;
+        _shots.clear();
+      });
+    }
   }
 
   /// Clears a slot if all seven are taken. False means the user backed out.
@@ -428,24 +514,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       return t.isDuo ? _startDuo(t, bytes) : _postSolo(t, bytes);
     }
 
-    // On paper, if paper was chosen. Baked into the picture rather than
-    // kept as a layer: it is sent as an ordinary day photo, so the widget,
-    // the thread and a copy saved to the gallery all have to be the same
-    // image. See FrameCompositor.
-    final frame = _frame;
-    if (frame != null) {
-      try {
-        final framed = await FrameCompositor.compose(
-          frame: frame,
-          photos: [bytes],
-        );
-        return _shareBytes(framed, 'png', target: target);
-      } catch (e) {
-        // The photo is the point and the paper is the decoration, so a
-        // compositor that fails sends the picture rather than nothing.
-        debugPrint('frame compositing failed: $e');
-      }
-    }
+    // A photo on paper was composed when it was taken (_addShot), so what
+    // arrives here is already the finished picture, in its own format.
     return _shareBytes(bytes, _pendingExt, target: target);
   }
 
@@ -523,11 +593,10 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       // least as easy as mis-tapping the shutter.
       final bytes = await file.readAsBytes();
       if (!mounted) return;
-      setState(() {
-        _pending = bytes;
-        _pendingExt =
-            (file.path.split('.').last.toLowerCase() == 'png') ? 'png' : 'jpg';
-      });
+      await _addShot(
+        bytes,
+        file.path.split('.').last.toLowerCase() == 'png' ? 'png' : 'jpg',
+      );
     } catch (_) {
       if (mounted) _toast("Couldn't open that.");
     }
@@ -583,7 +652,9 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
           fit: StackFit.expand,
           children: [
             if (_pending != null)
-              Image.memory(_pending!, fit: BoxFit.cover)
+              _heldShot()
+            else if (_onPaperNow)
+              _framedViewfinder()
             else
               _preview(),
 
@@ -759,6 +830,100 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     }
   }
 
+  /// Whether the viewfinder should show the paper. Read in build, so it
+  /// watches the strip provider rather than reading it.
+  bool get _onPaperNow =>
+      _frame != null &&
+      _frame!.slots > 0 &&
+      _template == null &&
+      ref.watch(stripAwaitingMeProvider) == null;
+
+  /// The shot being reviewed.
+  Widget _heldShot() {
+    final bytes = _pending!;
+    if (!_pendingOnPaper) return Image.memory(bytes, fit: BoxFit.cover);
+    // Whole, not cropped to the screen: cropping would cut the frame off,
+    // and this is the picture that will arrive.
+    return ColoredBox(
+      color: const Color(0xFF120C1F),
+      child: _paperBox(
+        aspect: _frame!.aspect,
+        child: Image.memory(bytes, fit: BoxFit.contain),
+      ),
+    );
+  }
+
+  /// The camera, seen through the chosen paper: the live feed in the window
+  /// being filled, photos already taken in theirs, and the paper on top.
+  ///
+  /// ⚠️ Windows are painted in order, so a later one covers an earlier one
+  /// where their rectangles overlap — the same rule FrameCompositor applies
+  /// when it bakes the result, so the preview and the picture agree.
+  Widget _framedViewfinder() {
+    final frame = _frame!;
+    return ColoredBox(
+      color: const Color(0xFF120C1F),
+      child: _paperBox(
+        aspect: frame.aspect,
+        child: LayoutBuilder(builder: (context, box) {
+          final w = box.maxWidth, h = box.maxHeight;
+          return Stack(
+            children: [
+              for (final (i, window) in frame.windows.indexed)
+                Positioned(
+                  left: window.left * w,
+                  top: window.top * h,
+                  width: window.width * w,
+                  height: window.height * h,
+                  child: ClipRect(
+                    child: i < _shots.length
+                        ? Image.memory(_shots[i], fit: BoxFit.cover)
+                        : i == _shots.length
+                            ? _preview()
+                            : const SizedBox.shrink(),
+                  ),
+                ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: Image.asset(frame.asset,
+                      fit: BoxFit.fill, excludeFromSemantics: true),
+                ),
+              ),
+            ],
+          );
+        }),
+      ),
+    );
+  }
+
+  /// A box of [aspect], as large as fits between the top row and the
+  /// controls, centred in what is left.
+  Widget _paperBox({required double aspect, required Widget child}) {
+    return LayoutBuilder(builder: (context, box) {
+      final top = MediaQuery.paddingOf(context).top + 72;
+      // The controls, the mode row and the gesture bar under them.
+      const bottom = 236.0;
+      final room = (box.maxHeight - top - bottom).clamp(120.0, box.maxHeight);
+      var w = box.maxWidth * .9;
+      var h = w / aspect;
+      if (h > room) {
+        h = room;
+        w = h * aspect;
+      }
+      return Stack(
+        children: [
+          Positioned(
+            left: (box.maxWidth - w) / 2,
+            top: top + (room - h) / 2,
+            width: w,
+            height: h,
+            child: child,
+          ),
+        ],
+      );
+    });
+  }
+
   /// What the shot is being taken on, when it is not a bare photo.
   ///
   /// Says it once, above the controls, rather than relying on a lit ring in
@@ -766,18 +931,32 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Widget _chosenBanner() {
     final awaiting = ref.watch(stripAwaitingMeProvider);
     // While a half waits on you the template is theirs, not yours to pick.
+    final frame = _frame;
     final text = awaiting != null
         ? 'Joining ${awaiting.style.emoji} ${awaiting.style.name}'
         : _template != null
             ? '${_template!.emoji} ${_template!.name}'
-            : null;
+            // A frame that takes more than one says which photo is next,
+            // so the first shot not being sent reads as intended.
+            : frame != null && frame.slots > 1 && _pending == null
+                ? 'Photo ${_shots.length + 1} of ${frame.slots}'
+                : null;
     if (text == null) return const SizedBox.shrink();
 
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpace.xs),
       child: GestureDetector(
-        onTap:
-            awaiting != null ? null : () => setState(() => _template = null),
+        onTap: awaiting != null
+            ? null
+            : () => setState(() {
+                  // Tapping the pill drops the choice, and anything shot for
+                  // a frame goes with it: half a pair is not a photo.
+                  _template = null;
+                  if (frame != null && frame.slots > 1) {
+                    _frame = null;
+                    _shots.clear();
+                  }
+                }),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
@@ -808,11 +987,21 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// and the row can grow without pushing anything else off the screen. The
   /// old design gave the whole width to a row of strip styles above the
   /// controls, which cost a strip of the viewfinder.
+  ///
+  /// 🔴 **The shutter stays in the middle.** The first cut of this let the
+  /// frames push it left, and the one button every camera puts under the
+  /// thumb in the same place moved. Two equal sides hold it centred: upload
+  /// on the left, the frames scrolling on the right, clipped at the
+  /// shutter's edge so they never slide under it.
+  ///
+  /// ⚠️ No horizontal padding on the row itself. Padding there would make
+  /// the two sides unequal the moment it differed left to right, and the
+  /// frames should run off the right edge of the screen, the way a row that
+  /// scrolls does. Upload keeps its own inset instead.
   Widget _controls() {
     final picking = _busy || _pending != null;
     return Container(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpace.compact, AppSpace.sm, AppSpace.compact, AppSpace.sm),
+      padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -822,10 +1011,22 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       ),
       child: Row(
         children: [
-          _GlassButton(
-            icon: CupertinoIcons.photo_on_rectangle,
-            tooltip: 'Upload a photo',
-            onTap: picking ? null : () => _pickFrom(ImageSource.gallery),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              // 24pt in, exactly where it sat before the frames came: the
+              // first rebuild tucked it 12pt from the edge.
+              child: Padding(
+                padding: const EdgeInsets.only(left: AppSpace.md),
+                child: _GlassButton(
+                  icon: CupertinoIcons.photo_on_rectangle,
+                  tooltip: 'Upload a photo',
+                  big: true,
+                  onTap:
+                      picking ? null : () => _pickFrom(ImageSource.gallery),
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: AppSpace.xs),
           // The same button in the same place, because it is the same
@@ -835,7 +1036,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             onTap: _busy ? null : (_pending != null ? _sendPending : _shoot),
           ),
           const SizedBox(width: AppSpace.xs),
-          Expanded(child: _frameRow()),
+          Expanded(child: ClipRect(child: _frameRow())),
         ],
       ),
     );
@@ -848,6 +1049,14 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     if (_template != null || ref.watch(stripAwaitingMeProvider) != null) {
       return const SizedBox.shrink();
     }
+    // Chosen before shooting, like a camera's filter. Changing the paper
+    // under photos already taken would mean re-taking them.
+    if (_shots.isNotEmpty || _pending != null) return const SizedBox.shrink();
+    final chosen = _frame;
+    final elsewhere = chosen != null &&
+            !_quickFrames.any((f) => f.id == chosen.id)
+        ? chosen
+        : null;
     return SizedBox(
       height: 58,
       child: ListView(
@@ -858,6 +1067,15 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             selected: _frame == null,
             onTap: () => setState(() => _frame = null),
           ),
+          // A two-photo frame picked on the Templates page, lit here so the
+          // choice is visible where you shoot.
+          if (elsewhere != null)
+            _FrameDot(
+              label: elsewhere.name,
+              frame: elsewhere,
+              selected: true,
+              onTap: () {},
+            ),
           for (final frame in _quickFrames)
             _FrameDot(
               label: frame.name,
@@ -872,35 +1090,74 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
   /// Camera or Templates, the way a camera app names its modes.
   ///
-  /// Scrollable rather than a fixed pair, so a third mode could be added
-  /// without redesigning the row. Tapping Templates opens the page and comes
-  /// back with whatever was picked.
+  /// 🔴 **The chosen mode sits directly under the shutter**, and the others
+  /// hang off to its sides, as they do in every camera app. The first cut
+  /// centred the pair as a group, which put CAMERA off to the left of the
+  /// button it names. Choosing Templates slides it under the shutter before
+  /// the page opens, and it slides back when the page closes.
+  ///
+  /// Swipe to change mode as well as tap, since the row reads as something
+  /// that scrolls.
   Widget _modeRow() {
-    return ColoredBox(
-      color: Colors.black,
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          // The space at the bottom: the row used to sit against the gesture
-          // bar, where a swipe up was as likely to leave the app as to press
-          // anything.
-          padding: const EdgeInsets.symmetric(vertical: AppSpace.compact),
-          child: SizedBox(
-            height: 24,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              shrinkWrap: true,
-              physics: const ClampingScrollPhysics(),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppSpace.screenInset),
-              children: [
-                const _ModeLabel(label: 'CAMERA', selected: true),
-                const SizedBox(width: 26),
-                _ModeLabel(
-                    label: 'TEMPLATES',
-                    selected: false,
-                    onTap: _openTemplates),
-              ],
+    final canTemplates = _shots.isEmpty && _pending == null;
+    // ⚠️ Full width. The column above centres its children, so without this
+    // the black band was only as wide as the labels, and the viewfinder
+    // showed on either side of it.
+    return SizedBox(
+      width: double.infinity,
+      child: ColoredBox(
+        color: Colors.black,
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            // The space at the bottom: the row used to sit against the
+            // gesture bar, where a swipe up was as likely to leave the app as
+            // to press anything.
+            padding: const EdgeInsets.symmetric(vertical: AppSpace.compact),
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onHorizontalDragEnd: (d) {
+                final v = d.primaryVelocity ?? 0;
+                // Left to reach the mode on the right, as a carousel goes.
+                if (v < -200 && _mode == 0 && canTemplates) _openTemplates();
+              },
+              child: SizedBox(
+                height: 24,
+                child: LayoutBuilder(builder: (context, box) {
+                  const slot = _ModeLabel.slot;
+                  // Where the row sits so the chosen mode's middle is the
+                  // screen's middle, which is the shutter's.
+                  final left = box.maxWidth / 2 - (_mode * slot + slot / 2);
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      AnimatedPositioned(
+                        duration: AppMotion.standard,
+                        curve: AppMotion.easeOut,
+                        left: left,
+                        top: 0,
+                        bottom: 0,
+                        child: Row(
+                          children: [
+                            _ModeLabel(
+                              label: 'CAMERA',
+                              selected: _mode == 0,
+                              onTap: () {},
+                            ),
+                            _ModeLabel(
+                              label: 'TEMPLATES',
+                              selected: _mode == 1,
+                              // Not while photos are being taken for a
+                              // frame: picking another would strand them.
+                              onTap: canTemplates ? _openTemplates : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
             ),
           ),
         ),
@@ -910,10 +1167,21 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
   /// The Templates page, and whatever it hands back.
   Future<void> _openTemplates() async {
+    if (_mode == 1) return;
+    // Slide Templates under the shutter first, so the page opens from the
+    // mode you chose rather than from beside it.
+    setState(() => _mode = 1);
+    await Future<void>.delayed(AppMotion.standard);
+    if (!mounted) return;
     final choice = await context.push<TemplateChoice>(Routes.templates);
-    if (!mounted || choice == null) return;
+    if (!mounted) return;
+    // Back to Camera, whatever happened there: the page is a place you visit
+    // from the camera, not a mode the camera stays in.
+    setState(() => _mode = 0);
+    if (choice == null) return;
     setState(() {
       // Either, never both: see _frame.
+      _shots.clear();
       if (choice is FrameChoice) {
         _frame = choice.frame;
         _template = null;
@@ -971,7 +1239,11 @@ class _FrameDot extends StatelessWidget {
                 : Padding(
                     padding: const EdgeInsets.all(5),
                     child: Image.asset(art.asset,
-                        fit: BoxFit.contain, excludeFromSemantics: true),
+                        fit: BoxFit.contain,
+                        // Eleven 760px frames decoded for 48px dots is
+                        // megabytes of memory for thumbnails.
+                        cacheWidth: 144,
+                        excludeFromSemantics: true),
                   ),
           ),
         ),
@@ -982,12 +1254,19 @@ class _FrameDot extends StatelessWidget {
 
 /// CAMERA, TEMPLATES. The one you are on is white and the rest are faded,
 /// the way every camera app labels its modes.
+///
+/// ⚠️ Every label gets the same width, [slot], so the row can put the chosen
+/// one's middle exactly under the shutter by arithmetic, and animate there.
+/// Measured text would move the target every time the font or text size
+/// changed; a fixed slot with the words scaled down to fit does not.
 class _ModeLabel extends StatelessWidget {
   const _ModeLabel({
     required this.label,
     required this.selected,
     this.onTap,
   });
+
+  static const slot = 108.0;
 
   final String label;
   final bool selected;
@@ -1003,13 +1282,20 @@ class _ModeLabel extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
-        child: Center(
-          child: Text(
-            label,
-            style: AppText.label(selected
-                    ? Colors.white
-                    : Colors.white.withValues(alpha: .45))
-                .copyWith(fontSize: 13, letterSpacing: 1.4),
+        child: SizedBox(
+          width: slot,
+          child: Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: AnimatedDefaultTextStyle(
+                duration: AppMotion.standard,
+                style: AppText.label(selected
+                        ? Colors.white
+                        : Colors.white.withValues(alpha: .45))
+                    .copyWith(fontSize: 13, letterSpacing: 1.4),
+                child: Text(label, maxLines: 1),
+              ),
+            ),
           ),
         ),
       ),
@@ -1713,83 +1999,6 @@ class _StripBanner extends ConsumerWidget {
               ),
             ],
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// One template in the horizontal picker.
-///
-/// A circle rather than a card: the row sits over a live viewfinder, and
-/// circles read as controls while rectangles read as content you might have
-/// already shot.
-class _TemplateDot extends StatelessWidget {
-  const _TemplateDot({
-    required this.label,
-    required this.emoji,
-    required this.selected,
-    required this.onTap,
-    this.paper,
-    this.accent,
-  });
-
-  final String label;
-  final String emoji;
-  final bool selected;
-  final VoidCallback onTap;
-
-  /// The template's own paper and accent, so the dot previews the look
-  /// instead of being a generic swatch. Null for the plain-photo option.
-  final Color? paper;
-  final Color? accent;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      selected: selected,
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: AppMotion.micro,
-                curve: AppMotion.easeOut,
-                width: 46,
-                height: 46,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: paper ?? Colors.black.withValues(alpha: .38),
-                  border: Border.all(
-                    color: selected
-                        ? Colors.white
-                        : (accent ?? Colors.white).withValues(alpha: .35),
-                    width: selected ? 2.5 : 1.2,
-                  ),
-                ),
-                child: Text(emoji, style: const TextStyle(fontSize: 18)),
-              ),
-              const SizedBox(height: 4),
-              SizedBox(
-                width: 58,
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: AppText.label(
-                    selected ? Colors.white : Colors.white70,
-                  ).copyWith(fontSize: 8.5, letterSpacing: 0),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
     );

@@ -476,7 +476,13 @@ class FlowerRepository {
           path,
           bytes,
           fileOptions: FileOptions(
-            contentType: ext == 'png' ? 'image/png' : 'image/jpeg',
+            contentType: switch (ext) {
+              'png' => 'image/png',
+              // A photo on paper (FrameCompositor): lossy, with the torn
+              // edges still transparent.
+              'webp' => 'image/webp',
+              _ => 'image/jpeg',
+            },
             upsert: false,
           ),
         );

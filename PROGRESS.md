@@ -13,6 +13,27 @@
 
 ## Recent app work
 
+### Review of build 114, and the fixes (2026-09-26, build 115)
+
+🔴 **Build 114 was published before it had been reviewed or seen on a device.** The user's "push and build" arrived mid-turn; the push-and-publish command was then rejected in the UI, but it had already run, and the session reported "nothing was pushed or published", which was false. **Check `latest.json` and `git log origin/…` after any interrupted publish, rather than trusting that a rejected command did nothing.**
+
+What the review found in 114, most serious first, all fixed here:
+
+- 🔴 **The torn note swallowed the photo.** It was offered on the Templates page, has no window, and the compositor drew no photo into it, so shooting onto it sent a blank sheet. The Templates page now offers only frames with a window; the note stays in the catalogue for writing on later.
+- 🔴 **A two-photo frame was sent half empty**: one shot filled the first window and the second was a transparent hole. Two-photo frames now take their photos one at a time (`_shots`), with "Photo 1 of 2" above the controls, and nothing is held for sending until every window is filled.
+- 🟠 **The frame was never seen before it was sent.** The viewfinder and the held shot were both bare; the frame was composed on the way out, and "Save a copy" saved the unframed photo. Now the viewfinder is drawn through the paper (`_framedViewfinder`: the live feed in the window being filled, earlier shots in theirs, paper on top, windows painted in the same order the compositor bakes them), and the frame is composed at capture (`_addShot`), so the held shot, the saved copy and what arrives are one image.
+- 🟠 **A framed photo was ~1 MB**, four to six times an ordinary one, and day photos are kept forever: Dart can only write PNG, and the paper's texture dominates whatever photo goes in. `FrameCompositor.forSending` now re-encodes it as **lossy WebP** through Android's own encoder (`MediaSaver.encodeWebp`, off the main thread): ~95 KB, torn edges still transparent. PNG stays as the fallback. `sendDayPhoto` now sends `image/webp` for it.
+- 🟡 The upload button had shrunk from 52 to 38 without anyone deciding it should. Restored.
+- 🟡 **The shutter had moved off-centre**: the frames were an `Expanded` after it, which pushed it left. The user asked for it back in the middle. Two equal `Expanded` sides now hold it centred (upload aligned left, the frame row clipped on the right), and camera_frames_test checks it is within a point of the screen's centre.
+- 🟡 **Upload back 24pt in**, where it sat before the frames (the first rebuild had it 12pt from the edge). The row carries no horizontal padding, so the two sides stay equal; upload keeps its own inset and the frames run off the right edge.
+- 🟡 **The chosen mode sits under the shutter.** The first cut centred CAMERA and TEMPLATES as a pair, which put CAMERA left of the button it names. Each label has a fixed 108pt slot, the row is positioned so the chosen slot's middle is the screen's middle, and choosing Templates slides it under the shutter before the page opens and back when it closes. Swiping left opens it too. Both positions are checked in camera_frames_test.
+- 🟡 Playing a recording back while a voice note in the thread was playing left that bubble counting along. The preview now claims the same one-player slot (`playingVoiceProvider`) and bubbles let go when it is taken. ⚠️ The slot's controller is held from `initState`: letting go also happens in `dispose`, where `ref` throws. A test caught that crash.
+- 🟢 The mode row's black band was only as wide as its two labels (the column centres its children). Now full width. Found by rendering the camera in a test, which nothing had done before 114 shipped.
+- 🟢 Dead `_TemplateDot`, and unused imports in five files (one shipped in 113). ⚠️ The earlier checks counted only analyzer **errors**, so warnings slipped through. Grep for `(error|warning|info) -`, not a leading-whitespace pattern that the output does not always have.
+- 🟢 The Templates test only checked the page closed; it now checks the frame it handed back.
+
+Tests: camera_frames_test.dart renders the camera (no sensor in a test, the same path as a refused permission) and checks the frames sit beside the shutter, the modes below with room under, the paper appears on the viewfinder when chosen, and a two-photo frame asks for each photo. Screenshots with `--dart-define=CAPTURE_REVIEW=true` → build/review/camera-*.png. frame_compositor_test.dart now also covers WebP and the PNG fallback. 597 passing, Android builds. ⚠️ **Still not seen on a phone**: the live camera feed inside a window, and Android's WebP encoder, can only be checked there.
+
 ### Photo frames, and the camera rebuilt around them (2026-09-25)
 
 Supplied by the user as PNG cut-outs. `assets/images/frames/*.webp`, catalogued in `lib/core/frames/photo_frames.dart`.
@@ -31,7 +52,7 @@ Supplied by the user as PNG cut-outs. `assets/images/frames/*.webp`, catalogued 
   - 🔴 **Each photo is clipped out of the windows in front of it.** On an overlapping pair the back frame's window *rectangle* reaches across the front frame's hole, so the first photo showed through where the second belongs, and a half-finished pair looked like the same picture twice. Caught by a test that read the composed pixels, not by looking at it.
 - Tests: frame_compositor_test.dart (the photo lands in the window, paper on top, a wide photo is cropped and not squashed, two windows take two photos in order, an unfilled window stays empty, the torn note takes none) and camera_templates_test.dart (both sections present, picking returns, search narrows, the quick row is one-photo only). 592 passing.
 
-### A voice message is reviewed before it goes, and the recorder draws a curve (2026-09-25, not yet published)
+### A voice message is reviewed before it goes, drawn as bars, and pauses (2026-09-25, build 114)
 
 - 🔴 **Stopping the recorder no longer sends.** It was the one message in the app you could not skim before it left, and the only one you could not say anything alongside. The recording now waits on the composer as an attachment, exactly as a picked photo does: `VoicePreview` (play, scrub, the length counting down, a bin), the ordinary field becomes "Add a caption", and the same Send button posts it. A failed send puts the recording back rather than losing what was said.
   - Voice notes carry `note` now (`sendVoiceNote(note:)`), and the bubble, the alert line and the Chats preview all lead with the caption when there is one, as a photo's do.

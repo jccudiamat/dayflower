@@ -2,7 +2,12 @@ package com.dayflower.app
 
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import java.io.ByteArrayOutputStream
 import android.os.Environment
 import android.provider.MediaStore
 import io.flutter.plugin.common.MethodCall
@@ -36,12 +41,59 @@ object MediaSaver {
     fun handle(context: Context, call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "supported" -> result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            "encodeWebp" -> encodeWebp(call, result)
             "saveImage" -> {
                 lastSavedAt = android.os.SystemClock.elapsedRealtime()
                 saveImage(context, call, result)
             }
             else -> result.notImplemented()
         }
+    }
+
+    /**
+     * Re-encodes a picture as lossy WebP, keeping its transparency.
+     *
+     * WARNING: this exists for cost. A photo on paper is composed in Dart,
+     * and Dart can only write PNG: a framed day photo came out at about a
+     * megabyte, four to six times an ordinary one, and day photos are kept
+     * forever. JPEG would be smaller still but has no transparency, and a
+     * torn edge is not a rectangle. WebP has both, and Android has encoded
+     * it natively since long before this app's minSdk.
+     *
+     * Off the main thread: a 1280px encode is tens of milliseconds, which is
+     * a dropped frame on the shutter animation if it runs inline.
+     */
+    private fun encodeWebp(call: MethodCall, result: MethodChannel.Result) {
+        val bytes = call.argument<ByteArray>("bytes")
+        val quality = call.argument<Int>("quality") ?: 85
+        if (bytes == null || bytes.isEmpty()) {
+            result.success(null)
+            return
+        }
+        val main = Handler(Looper.getMainLooper())
+        Thread {
+            val encoded = try {
+                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                if (bitmap == null) {
+                    null
+                } else {
+                    val out = ByteArrayOutputStream()
+                    val format = if (Build.VERSION.SDK_INT >= 30) {
+                        Bitmap.CompressFormat.WEBP_LOSSY
+                    } else {
+                        @Suppress("DEPRECATION")
+                        Bitmap.CompressFormat.WEBP
+                    }
+                    bitmap.compress(format, quality, out)
+                    bitmap.recycle()
+                    out.toByteArray()
+                }
+            } catch (e: Exception) {
+                // Null tells Dart to keep the PNG: bigger, but still right.
+                null
+            }
+            main.post { result.success(encoded) }
+        }.start()
     }
 
     private fun saveImage(

@@ -1,8 +1,8 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:dayflower/core/frames/frame_compositor.dart';
 import 'package:dayflower/core/frames/photo_frames.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// A solid picture of [colour], [w] by [h].
@@ -126,5 +126,38 @@ void main() {
     // Nowhere for it to go, so the paper comes back as paper rather than
     // the photo leaking out around it.
     expect(await _pixel(image, .5, .5), isNot(0xFFFF0000));
+  });
+
+  test('it is stored as WebP where the phone can write one, PNG otherwise',
+      () async {
+    final png = await FrameCompositor.compose(
+      frame: frameById('polaroid_kraft')!,
+      photos: [await _photo(const ui.Color(0xFF00FF00))],
+    );
+
+    // No channel, as on a build without the Android side: the PNG, whole.
+    final plain = await FrameCompositor.forSending(png);
+    expect(plain.extension, 'png');
+    expect(plain.bytes, png);
+
+    // 🔴 The reason this exists: as PNG a framed photo was about a
+    // megabyte, four to six times an ordinary one, and kept forever.
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    const channel = MethodChannel('dayflower/media');
+    final small = Uint8List.fromList(List.filled(1000, 1));
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      expect(call.method, 'encodeWebp');
+      expect((call.arguments as Map)['quality'], FrameCompositor.webpQuality);
+      return small;
+    });
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final webp = await FrameCompositor.forSending(png);
+    expect(webp.extension, 'webp');
+    expect(webp.bytes, small);
+
+    // An encoder that gives nothing back is not a reason to send nothing.
+    messenger.setMockMethodCallHandler(channel, (call) async => null);
+    expect((await FrameCompositor.forSending(png)).extension, 'png');
   });
 }

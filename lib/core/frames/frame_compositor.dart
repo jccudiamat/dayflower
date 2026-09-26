@@ -2,7 +2,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/painting.dart';
-import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/services.dart' show MethodChannel, rootBundle;
 
 import 'photo_frames.dart';
 
@@ -21,9 +21,18 @@ class FrameCompositor {
   FrameCompositor._();
 
   /// Longest side of the result. Big enough to look right on a phone and to
-  /// survive a crop, small enough that a framed photo is not heavier than
-  /// the unframed one it replaced.
+  /// survive a crop.
+  ///
+  /// ⚠️ Size is decided by [forSending], not by this. As PNG a framed photo
+  /// came out at about a megabyte whatever went into it — the paper's
+  /// texture dominates — which is four to six times an ordinary photo.
   static const maxSide = 1280.0;
+
+  /// Android's own encoder, behind the channel MediaSaver answers on.
+  static const _media = MethodChannel('dayflower/media');
+
+  /// WebP quality. 82 is where the paper's grain stops changing to the eye.
+  static const webpQuality = 82;
 
   /// Frame artwork, decoded once each. There are eleven of them and they are
   /// small; decoding on every shutter press would stall the capture.
@@ -114,6 +123,31 @@ class FrameCompositor {
         image.dispose();
       }
     }
+  }
+
+  /// [png] as it should be stored: WebP where this phone can write it, the
+  /// PNG itself where it cannot.
+  ///
+  /// 🔴 **Not JPEG, and not left as PNG.** JPEG has no transparency, and a
+  /// torn note is not a rectangle; PNG kept the edges and cost a megabyte a
+  /// photo, for photos that are kept forever. WebP keeps the edges at about
+  /// a tenth of that. A phone that cannot encode it — or a build with no
+  /// channel, like a test — still sends the PNG: heavier, never wrong.
+  static Future<({Uint8List bytes, String extension})> forSending(
+    Uint8List png,
+  ) async {
+    try {
+      final webp = await _media.invokeMethod<Uint8List>(
+        'encodeWebp',
+        {'bytes': png, 'quality': webpQuality},
+      );
+      if (webp != null && webp.isNotEmpty) {
+        return (bytes: webp, extension: 'webp');
+      }
+    } catch (_) {
+      // No channel, or the encode failed. The PNG is below.
+    }
+    return (bytes: png, extension: 'png');
   }
 
   /// The part of [photo] that fills [box] without squashing it: the largest

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' as math;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -122,6 +121,15 @@ class _VoiceBubbleState extends ConsumerState<VoiceBubble> {
 
   @override
   Widget build(BuildContext context) {
+    // Someone else took the player — another note, or the preview of a
+    // recording. Stop counting, or this bubble keeps moving its bar along
+    // with a voice that is no longer its own.
+    ref.listen<String?>(playingVoiceProvider, (previous, next) {
+      if (previous == _id && next != _id) {
+        _stopTicking();
+        if (mounted) setState(() => _at = Duration.zero);
+      }
+    });
     final playing = ref.watch(playingVoiceProvider) == _id;
     final total = _length.inMilliseconds;
     final progress =

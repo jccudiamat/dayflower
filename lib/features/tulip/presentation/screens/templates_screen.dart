@@ -80,18 +80,15 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
       for (final f in photoFrames)
         if (f.slots == 2 && _matches(f.name)) f,
     ];
-    final plain = [
-      for (final f in photoFrames)
-        if (f.slots == 0 && _matches(f.name)) f,
-    ];
+    // 🔴 No "Paper" section. The torn note has no window, and in build 114
+    // picking it here and shooting sent a blank sheet: the photo had
+    // nowhere to go and was dropped. This page is reached from the camera,
+    // so it offers only what a photo can go into.
     final strips = [
       for (final t in StripTemplate.all)
         if (_matches('${t.name} ${t.tagline}')) t,
     ];
-    final nothing = singles.isEmpty &&
-        pairs.isEmpty &&
-        plain.isEmpty &&
-        strips.isEmpty;
+    final nothing = singles.isEmpty && pairs.isEmpty && strips.isEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -156,12 +153,13 @@ class _TemplatesScreenState extends ConsumerState<TemplatesScreen> {
                         if (pairs.isNotEmpty) ...[
                           const SizedBox(height: AppSpace.md),
                           _Heading('Two photos', '${pairs.length}'),
+                          Padding(
+                            padding:
+                                const EdgeInsets.only(bottom: AppSpace.xs),
+                            child: Text('Take one, then the other.',
+                                style: AppText.caption()),
+                          ),
                           _FrameGrid(frames: pairs, onPick: _choose),
-                        ],
-                        if (plain.isNotEmpty) ...[
-                          const SizedBox(height: AppSpace.md),
-                          _Heading('Paper', '${plain.length}'),
-                          _FrameGrid(frames: plain, onPick: _choose),
                         ],
                         if (strips.isNotEmpty) ...[
                           const SizedBox(height: AppSpace.md),
@@ -255,6 +253,7 @@ class _FrameGrid extends StatelessWidget {
                       child: Image.asset(
                         frame.asset,
                         fit: BoxFit.contain,
+                        cacheWidth: 480,
                         excludeFromSemantics: true,
                       ),
                     ),
