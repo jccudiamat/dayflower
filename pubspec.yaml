@@ -102,6 +102,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # To hand the camera a photo "from the gallery" in tests.
+  image_picker_platform_interface: ^2.11.1
   flutter_lints: ^3.0.2
   flutter_launcher_icons: ^0.14.1
   build_runner: ^2.4.13

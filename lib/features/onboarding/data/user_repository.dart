@@ -35,6 +35,35 @@ class UserRepository {
     }).eq('id', userId);
   }
 
+  /// Leaves [note] on the other one's Home, in place of its greeting, or
+  /// takes it down (null or blank). Its time goes with it: the note lasts
+  /// a day from then, and a reaction belongs to the note of that moment.
+  ///
+  /// ⚠️ Replaces, never adds. Only the latest note exists anywhere.
+  Future<void> setHomeNote(String userId, String? note) async {
+    final text = note?.trim();
+    final up = text != null && text.isNotEmpty;
+    await _client.from('users').update({
+      'home_note': up ? text : null,
+      'home_note_at': up ? DateTime.now().toUtc().toIso8601String() : null,
+    }).eq('id', userId);
+  }
+
+  /// Reacts to the other one's note, the one written at [noteAt], or
+  /// takes the reaction back ([emoji] null).
+  ///
+  /// ⚠️ On **your own** row, like everything you write: a row is only ever
+  /// changed by the person it belongs to. Their phone matches it to their
+  /// note by [noteAt].
+  Future<void> setNoteReaction(
+      String userId, String? emoji, DateTime? noteAt) async {
+    await _client.from('users').update({
+      'note_reaction': emoji,
+      'note_reaction_to':
+          emoji == null ? null : noteAt?.toUtc().toIso8601String(),
+    }).eq('id', userId);
+  }
+
   Future<void> updateTimezone(String userId, String timezone) async {
     await _client
         .from('users')

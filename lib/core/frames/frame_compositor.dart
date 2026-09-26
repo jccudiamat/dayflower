@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show MethodChannel, rootBundle;
 
+import 'photo_adjust.dart';
 import 'photo_frames.dart';
 
 /// Puts a photo behind a frame and bakes the two into one picture.
@@ -46,7 +47,9 @@ class FrameCompositor {
     return _frames[frame.id] = image;
   }
 
-  /// [photos] fill the frame's windows in order, largest window first.
+  /// [photos] fill the frame's windows in order, largest window first, each
+  /// moved as its [adjusts] says (zoomed and tilted before sending; none
+  /// when there are fewer adjusts than photos).
   ///
   /// ⚠️ Fewer photos than windows is allowed and leaves the rest empty,
   /// which is what a half-finished two-photo frame looks like. More are
@@ -54,6 +57,7 @@ class FrameCompositor {
   static Future<Uint8List> compose({
     required PhotoFrame frame,
     required List<Uint8List> photos,
+    List<PhotoAdjust> adjusts = const [],
   }) async {
     final art = await _frameImage(frame);
     final scale = maxSide / (art.width > art.height ? art.width : art.height);
@@ -79,8 +83,8 @@ class FrameCompositor {
         // shape, with paper between them, so the back photo cannot reach
         // into the front frame's window.
         canvas.clipPath(window.pathIn(size));
-        canvas.drawImageRect(photo, _coverSource(photo, box), box,
-            ui.Paint()..filterQuality = ui.FilterQuality.high);
+        final adjust = i < adjusts.length ? adjusts[i] : PhotoAdjust.none;
+        _drawAdjusted(canvas, photo, box, adjust);
         canvas.restore();
       }
 
@@ -136,18 +140,59 @@ class FrameCompositor {
     return (bytes: png, extension: 'png');
   }
 
-  /// The part of [photo] that fills [box] without squashing it: the largest
-  /// centred rectangle of the photo with the box's proportions.
-  static ui.Rect _coverSource(ui.Image photo, ui.Rect box) {
-    final photoAspect = photo.width / photo.height;
-    final boxAspect = box.width / box.height;
-    if (photoAspect > boxAspect) {
-      // Wider than the window: take a full-height slice from the middle.
-      final w = photo.height * boxAspect;
-      return ui.Rect.fromLTWH((photo.width - w) / 2, 0, w, photo.height.toDouble());
+  /// [photo] drawn to cover [box], then zoomed, tilted and slid by
+  /// [adjust], exactly as the preview on the phone does it (see
+  /// PhotoAdjust.matrixIn): the whole photo is drawn, so a slide can bring
+  /// in what covering the box first cropped off.
+  static void _drawAdjusted(
+      ui.Canvas canvas, ui.Image photo, ui.Rect box, PhotoAdjust adjust) {
+    final size = ui.Size(photo.width.toDouble(), photo.height.toDouble());
+    final cover = PhotoAdjust.coverRect(size, box);
+    final shift = adjust.shiftIn(box);
+    canvas
+      ..save()
+      ..translate(box.center.dx + shift.dx, box.center.dy + shift.dy)
+      ..rotate(adjust.rotation)
+      ..scale(adjust.scale)
+      ..translate(-box.center.dx, -box.center.dy)
+      ..drawImageRect(photo, ui.Offset.zero & size, cover,
+          ui.Paint()..filterQuality = ui.FilterQuality.high)
+      ..restore();
+  }
+
+  /// A bare photo, zoomed and tilted as [adjust] says, at the size it
+  /// already is: the shape stays the photo's own, and what shows in it is
+  /// what showed in the preview.
+  ///
+  /// ⚠️ Only when it was moved. An unmoved photo is sent as the bytes the
+  /// camera gave, not re-encoded for nothing.
+  static Future<({Uint8List bytes, String extension})> adjusted(
+    Uint8List photo,
+    PhotoAdjust adjust,
+  ) async {
+    final image = await decodeImageFromList(photo);
+    try {
+      // Kept under 2048 on its longest side, like everything else sent.
+      final fit = 2048 / (image.width > image.height ? image.width : image.height);
+      final scale = fit < 1 ? fit : 1.0;
+      final width = (image.width * scale).roundToDouble();
+      final height = (image.height * scale).roundToDouble();
+      final box = ui.Rect.fromLTWH(0, 0, width, height);
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder, box)..clipRect(box);
+      _drawAdjusted(canvas, image, box, adjust);
+      final picture = recorder.endRecording();
+      final out = await picture.toImage(width.round(), height.round());
+      picture.dispose();
+      try {
+        final png = await out.toByteData(format: ui.ImageByteFormat.png);
+        return forSending(png!.buffer.asUint8List());
+      } finally {
+        out.dispose();
+      }
+    } finally {
+      image.dispose();
     }
-    final h = photo.width / boxAspect;
-    return ui.Rect.fromLTWH(0, (photo.height - h) / 2, photo.width.toDouble(), h);
   }
 
   /// Frees the decoded artwork. For tests; the app keeps eleven small images

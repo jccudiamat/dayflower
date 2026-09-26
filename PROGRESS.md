@@ -13,6 +13,38 @@
 
 ## Recent app work
 
+### Notes in place of the greeting, a stamp on the polaroid, a shorter heartbeat card (2026-09-26, build 118)
+
+✅ **Migration `0052_home_notes.sql` applied 2026-09-26, before publishing** (`dart run tool/run_sql.dart supabase/migrations/0052_home_notes.sql`). Without it, leaving a note or a reaction fails. Reading still works, as nothing.
+
+- **The line under the greeting is gone.** It showed their name, city, time and the miles, which the map card below shows in full.
+- **Their note takes the greeting's place.** Your partner leaves a note (35 characters for now: `UserProfile.noteLimit`), and on your Home it replaces "Good afternoon, Hubby", with "from Wifey" under it. Tap to read it whole in a dialog; hold to react (❤️ 🥰 😂 🥺 😘 🌷, or take it back). With no note, or one more than 24 hours old (`UserProfile.freshNote`), the greeting is back.
+- **Your note, on a torn scrap of paper, where the line was.** `assets/images/note_paper.webp` was cut out of the user's image by brightness (it came on black, with no alpha); the original and the style reference are in `twolip/design/notes/`. It reads "Type your message here..." until you write one. Press done, or the paper plane, and it is on their Home for a day. Emptied and sent, it comes down. Their reaction to it shows at the scrap's right. While typing, the characters left show instead. Only shown once paired.
+- **Storage** (0052): four columns on `users`: `home_note`, `home_note_at`, `note_reaction` and `note_reaction_to`. Each person writes only their own row: your reaction to their note sits on your row with the time of the note it answers, so a new note starts with no reaction. `users` has been streamed since 0024 (`partnerProfileStreamProvider`), so notes and reactions arrive live. Only the latest note exists anywhere; it is not kept.
+- **On a polaroid the time is stamped on the photo**, at its bottom-left, turned with the print (`FrameWindow.bottomLeftIn`), not written on the white strip. Other frames still show no time.
+- **The heartbeat card is shorter.** "Tap to send" is gone, and the heart's stage is exactly the heart (64pt, with ripples spilling past it). The card's height is now set by its words, and the heart stays centred where it was.
+- Test fix: the Home events test jumped from paused straight to resumed. The note's text field listens to the app's lifecycle and asserts on that jump, so the test now walks paused, hidden, inactive, resumed, as a phone does.
+
+Tests: 626 passing.
+
+### Every day on Home, their days in the viewer, zoom and tilt before sending (2026-09-26, build 118)
+
+Three requests from the user on build 117.
+
+**1. No label on framed days.** Paper with a blank polaroid strip still has "You · 3:00 PM" written on it. Any other frame (illustrated, torn, cloud-patterned) now has nothing: the label stuck over its bottom edge covered the drawing, and the viewer is a tap away.
+
+**2. Every day, on Home and in the viewer.**
+- 🔴 **Home's deck held two cards, the newest of each of you, and a swipe only swapped them.** It now holds every live day: theirs first (Home is a window into their day), then yours. Anyone with none is still in it as their empty arch. Swipe left for the next, right for the one before, and it goes round. Tap the card behind to bring it forward. Tap the one in front to open the viewer on it. Home is swipe only. Cards are keyed `deck-<id>` so a day slides from behind to the front. The role keys `my-day-photo` and `partner-day-photo` are kept, on a `KeyedSubtree` inside each card, for the tests and the layout checks.
+- 🔴 **Their days opened one at a time.** Yours opened in `MyDaysViewer` and theirs in a single-photo `DayPhotoViewer`. Both now use `DaysViewer(own:)`. Swipe, or tap: the right two thirds of the photo go forward, the left third back. A tap past the last page stays put rather than closing, and a tap while the reply box has the keyboard up only puts the keyboard away. Yours still end on the "share your day" page. Every page has a close button now; the pager used to have none.
+
+**3. Zoom and tilt a photo before it is sent** (`lib/core/frames/photo_adjust.dart`).
+- A held shot is shown whole, in its own shape or its paper's, and moves under two fingers: pinch to zoom, twist to tilt, drag to slide, double-tap to reset. The gesture follows the fingers: the part of the photo under them stays under them. It snaps level within 3°, and the hint "Pinch to zoom, twist to tilt" shows until it is moved.
+- 🔴 **It always covers its space.** `PhotoAdjust.clampedTo` zooms in as far as a tilt needs and pulls a slide back until no corner shows. In a frame's window a gap would be a hole through the paper. The compositor leak test now runs every frame twice, unmoved and moved hard. Both find no gap and nothing past the paper.
+- **Framed shots are put on the paper when sent or saved, not when taken**, so each photo can still be moved in its own window (on a two-photo frame, the one the fingers are on). The preview draws them the same way `FrameCompositor.compose(adjusts:)` does, so what is held is what arrives. A bare photo is only re-encoded if it was moved (`FrameCompositor.adjusted`, WebP), and an unmoved one goes as the camera gave it. Strip templates get the moved photo too.
+- `test/camera_adjust_test.dart` does the whole thing end to end: a picked photo (image_picker's platform interface, now a dev dependency), twisted with two fingers, reset by double tap, twisted again and sent. The photo that arrives is turned. ⚠️ Not yet tried on a phone, with a live camera photo.
+
+Tests: 623 passing.
+
 ### 32 more frames, and room for them in the APK (2026-09-26, build 117)
 
 The user sent 32 frames in two batches of 16 (and says more are coming): 22 one-photo and 10 two-photo. The app now has 43 frames: 28 one-photo, 14 two-photo, and the torn note.

@@ -61,6 +61,7 @@ import 'package:dayflower/features/home/data/mood_prefs.dart';
 import 'package:dayflower/features/onboarding/data/user_repository.dart';
 import 'package:dayflower/features/pairing/data/pair_repository.dart';
 import 'package:dayflower/features/tulip/data/flower_repository.dart';
+import 'package:dayflower/features/tulip/presentation/widgets/share_your_day.dart';
 import 'package:dayflower/features/us/data/couple_stats.dart';
 import 'package:dayflower/features/us/presentation/screens/us_screen.dart';
 import 'package:flutter/material.dart';
@@ -96,6 +97,11 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
     bool productionRoutes = false,
     bool filled = false,
     bool framed = false,
+    List<FlowerMessage>? myDays,
+    List<FlowerMessage>? theirDays,
+    UserProfile? me,
+    UserProfile? partnerLive,
+    UserRepository? users,
     bool boothFilled = false,
     double height = 844,
     double textScale = 1,
@@ -195,7 +201,9 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
           flowerType: 'classic_tulip', note: 'Thinking of you', sentAt: _now)] : [])),
       openStripsProvider.overrideWith((ref) => Stream.value(boothFilled ? _pendingBooth : [])),
       partnerLastActiveProvider.overrideWith((ref) async => null),
-      partnerProfileStreamProvider.overrideWith((ref) => Stream.value(null)),
+      partnerProfileStreamProvider
+          .overrideWith((ref) => Stream.value(partnerLive)),
+      if (users != null) userRepositoryProvider.overrideWithValue(users),
       giftFavoritesRepositoryProvider.overrideWithValue(MemoryFavorites()),
       eventRepositoryProvider.overrideWithValue(MemoryEvents()),
       currentUserIdProvider.overrideWithValue('preview-a'),
@@ -206,8 +214,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
             inviteCode: 'PREVIEW',
             togetherSince: hasStart ? DateTime(2022, 4, 16) : null,
           )),
-      userProfileProvider.overrideWith((ref) async => const UserProfile(
-          id: 'preview-a', displayName: 'Hubby', timezone: 'Asia/Dubai')),
+      userProfileProvider.overrideWith((ref) async => me ?? _me),
       partnerProfileProvider.overrideWith((ref) async => const UserProfile(
           id: 'preview-b', displayName: 'Wifey', timezone: 'Asia/Manila')),
       unreadMessageCountProvider.overrideWithValue(0),
@@ -220,8 +227,10 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       myDayPhotoProvider.overrideWithValue(
           filled ? (framed ? _mineFramed : _mine) : null),
       myDayPhotosProvider.overrideWithValue(
-          filled ? [framed ? _mineFramed : _mine] : []),
+          myDays ?? (filled ? [framed ? _mineFramed : _mine] : [])),
       partnerDayPhotoProvider.overrideWithValue(filled ? _theirs : null),
+      partnerDayPhotosProvider
+          .overrideWithValue(theirDays ?? (filled ? [_theirs] : [])),
       recentActivitiesProvider.overrideWithValue(const AsyncData([])),
       unseenActivityCountProvider.overrideWithValue(0),
       activityLastSeenProvider.overrideWith((ref) async => null),
@@ -257,6 +266,24 @@ Future<void> _screenshot(WidgetTester tester, String name) async {
 }
 
 final _now = DateTime(2026, 9, 15, 15);
+const _me =
+    UserProfile(id: 'preview-a', displayName: 'Hubby', timezone: 'Asia/Dubai');
+
+/// Keeps the notes and reactions it is given instead of writing them.
+class _Notes extends UserRepository {
+  _Notes() : super(offlineClient());
+  final notes = <String?>[];
+  final reactions = <(String?, DateTime?)>[];
+
+  @override
+  Future<void> setHomeNote(String userId, String? note) async =>
+      notes.add(note);
+
+  @override
+  Future<void> setNoteReaction(
+          String userId, String? emoji, DateTime? noteAt) async =>
+      reactions.add((emoji, noteAt));
+}
 final _mine = FlowerMessage(
     id: 'mine',
     pairId: 'preview',
@@ -875,17 +902,21 @@ void main() {
     // And the arch behind it is covered, not peeking round the paper.
     expect(opacityOf(theirs), 0);
 
-    // Whose day and when is written on the polaroid's blank strip, under
-    // the photo, not on a label floating below it.
+    // Whose day and when is stamped on the photo, in its bottom-left
+    // corner, the way a camera stamps a print: not on the white strip.
     final caption = find.byKey(const ValueKey('taped-day-caption'));
     expect(caption, findsOneWidget);
     expect((tester.widget(caption) as Text).data, 'You · 3:00 PM');
-    final strip =
-        frameById('polaroid_kraft')!.captionStrip!.rectIn(sheet.size);
-    expect(tester.getCenter(caption).dx,
-        closeTo(sheet.left + strip.center.dx, 2));
-    expect(tester.getCenter(caption).dy,
-        closeTo(sheet.top + strip.center.dy, 2));
+    final photo = frameById('polaroid_kraft')!
+        .windows
+        .first
+        .boundsIn(sheet.size)
+        .shift(sheet.topLeft);
+    final stamp = tester.getCenter(caption);
+    expect(photo.contains(stamp), isTrue, reason: 'on the photo');
+    expect(stamp.dx, lessThan(photo.center.dx), reason: 'at its left');
+    expect(stamp.dy, greaterThan(photo.top + photo.height * .75),
+        reason: 'at its bottom');
     expect(tester.takeException(), isNull);
     // The cache schedules a cleanup when first read; let it run out.
     await tester.pump(const Duration(seconds: 11));
@@ -910,6 +941,205 @@ void main() {
         .map((e) => (e.widget as SizedBox))
         .firstWhere((b) => b.width == 96);
     expect(stage.height, lessThan(96));
+  });
+
+  _homeTest('Every day is on Home, a swipe apart, theirs first',
+      (tester) async {
+    FlowerMessage day(String id, String sender, int hoursAgo) => FlowerMessage(
+        id: id,
+        pairId: 'preview',
+        senderId: sender,
+        imagePath: sender == 'preview-a' ? 'me.png' : 'partner.png',
+        sentAt: _now.subtract(Duration(hours: hoursAgo)),
+        toWidget: true);
+    await _pump(tester, Routes.home,
+        filled: true,
+        theirDays: [day('t1', 'preview-b', 1), day('t2', 'preview-b', 3)],
+        myDays: [day('m1', 'preview-a', 2)]);
+    await tester.pumpAndSettle();
+
+    Finder card(String id) => find.byKey(ValueKey('deck-$id'));
+    final deck = find.byKey(const ValueKey('home-photo-deck'));
+    void inFront(String front, String behind) {
+      expect(card(front), findsOneWidget, reason: '$front in front');
+      expect(card(behind), findsOneWidget, reason: '$behind behind');
+      expect(tester.getTopLeft(card(front)).dx,
+          lessThan(tester.getTopLeft(card(behind)).dx));
+    }
+
+    Future<void> swipe(double dx) async {
+      await tester.drag(deck, Offset(dx, 0));
+      await tester.pumpAndSettle();
+    }
+
+    // 🔴 The deck held the newest of each and a swipe only swapped them.
+    // Their newest first, their next behind it.
+    inFront('t1', 't2');
+    expect(card('m1'), findsNothing);
+    await swipe(-150);
+    inFront('t2', 'm1');
+    await swipe(-150);
+    // Round again, never a wall.
+    inFront('m1', 't1');
+    await swipe(-150);
+    inFront('t1', 't2');
+    // Right goes back.
+    await swipe(150);
+    inFront('m1', 't1');
+
+    // A tap on theirs opens their days, all of them, on the one tapped.
+    await swipe(150);
+    inFront('t2', 'm1');
+    await tester.tap(card('t2'));
+    await tester.pumpAndSettle();
+    Finder page(String id) => find.byWidgetPredicate(
+        (w) => w is DayPhotoViewer && w.message.id == id,
+        description: 'the page for $id');
+    expect(find.byType(DaysViewer), findsOneWidget);
+    expect(page('t2'), findsOneWidget);
+    // In the viewer a tap turns the page: the left third back...
+    final screen = tester.getSize(find.byType(DaysViewer));
+    await tester.tapAt(Offset(screen.width * .15, screen.height * .45));
+    await tester.pumpAndSettle();
+    expect(page('t1'), findsOneWidget);
+    // ...the rest forward, and a swipe does it too.
+    await tester.tapAt(Offset(screen.width * .8, screen.height * .45));
+    await tester.pumpAndSettle();
+    expect(page('t2'), findsOneWidget);
+    await tester.fling(find.byType(PageView), const Offset(300, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(page('t1'), findsOneWidget);
+    // Past their last there is nothing, and a tap there stays put.
+    await tester.tapAt(Offset(screen.width * .8, screen.height * .45));
+    await tester.pumpAndSettle();
+    await tester.tapAt(Offset(screen.width * .8, screen.height * .45));
+    await tester.pumpAndSettle();
+    expect(page('t2'), findsOneWidget);
+    // And a way out on every page.
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DaysViewer), findsNothing);
+  });
+
+  _homeTest('Their note takes the greeting\'s place, for a day',
+      (tester) async {
+    // Written an hour ago, by the real clock: a note's day is a real one.
+    final at = DateTime.now().subtract(const Duration(hours: 1));
+    final users = _Notes();
+    await _pump(tester, Routes.home,
+        users: users,
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            homeNote: 'Miss you already ☀️',
+            homeNoteAt: at));
+    await tester.pumpAndSettle();
+
+    // 🔴 The greeting's place, and the line under it is gone: their city,
+    // their time and the miles are all on the map card below.
+    await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+    await _screenshot(tester, 'home-partner-note');
+    expect(find.byKey(const ValueKey('partner-note')), findsOneWidget);
+    expect(find.text('Miss you already ☀️'), findsOneWidget);
+    expect(find.text('from Wifey'), findsOneWidget);
+    expect(find.byKey(const ValueKey('greeting-title')), findsNothing);
+    expect(find.textContaining('miles apart'), findsOneWidget,
+        reason: 'once, on the map card, not under the greeting as well');
+
+    // Tap to read it whole.
+    await tester.tap(find.byKey(const ValueKey('partner-note')));
+    await tester.pumpAndSettle();
+    expect(find.text('From Wifey'), findsOneWidget);
+    await tester.tap(find.text('Close'));
+    await tester.pumpAndSettle();
+
+    // Hold to react, and the reaction is to this note, by its time.
+    await tester.longPress(find.byKey(const ValueKey('partner-note')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsLabel('React 🥰'));
+    await tester.pumpAndSettle();
+    expect(users.reactions, [('🥰', at)]);
+  });
+
+  _homeTest('A note a day old is gone, and the greeting is back',
+      (tester) async {
+    await _pump(tester, Routes.home,
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            homeNote: 'Good night',
+            homeNoteAt: DateTime.now().subtract(const Duration(hours: 25))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('partner-note')), findsNothing);
+    expect(find.byKey(const ValueKey('greeting-title')), findsOneWidget);
+  });
+
+  _homeTest('Your note goes on their Home, and their reaction comes back',
+      (tester) async {
+    final users = _Notes();
+    await _pump(tester, Routes.home, users: users);
+    await tester.pumpAndSettle();
+    final field = find.byKey(const ValueKey('home-note-field'));
+    expect(field, findsOneWidget);
+    expect(find.text('Type your message here...'), findsOneWidget);
+
+    // Held to its limit, 35 for now.
+    await tester.enterText(find.descendant(of: field, matching: find.byType(TextField)),
+        'Thinking of you on your long day today, love');
+    await tester.pump();
+    final typed = tester
+        .widget<TextField>(
+            find.descendant(of: field, matching: find.byType(TextField)))
+        .controller!
+        .text;
+    expect(typed.length, UserProfile.noteLimit);
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(users.notes, [typed]);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(const SizedBox());
+
+    // Up, and reacted to: their reaction sits at the right of the paper.
+    final at = DateTime.now().subtract(const Duration(minutes: 20));
+    await _pump(tester, Routes.home,
+        me: UserProfile(
+            id: 'preview-a',
+            displayName: 'Hubby',
+            timezone: 'Asia/Dubai',
+            homeNote: 'Thinking of you',
+            homeNoteAt: at),
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            noteReaction: '😘',
+            noteReactionTo: at));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () async => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pump();
+    await _screenshot(tester, 'home-my-note');
+    expect(find.text('Thinking of you'), findsOneWidget);
+    expect(
+        (tester.widget(find.byKey(const ValueKey('note-reaction'))) as Text)
+            .data,
+        '😘');
+    // A reaction to an older note is not a reaction to this one.
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, Routes.home,
+        me: UserProfile(
+            id: 'preview-a',
+            displayName: 'Hubby',
+            homeNote: 'Thinking of you',
+            homeNoteAt: at),
+        partnerLive: UserProfile(
+            id: 'preview-b',
+            displayName: 'Wifey',
+            noteReaction: '😘',
+            noteReactionTo: at.subtract(const Duration(hours: 2))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('note-reaction')), findsNothing);
   });
 
   _homeTest('Snackbars are lifted clear of the tab bar', (tester) async {
@@ -1133,10 +1363,27 @@ void main() {
     router.pop();
     await tester.pumpAndSettle();
     expect(find.text('Our monthsary'), findsOneWidget);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    // Through the states a phone really passes through. ⚠️ Straight from
+    // resumed to paused and back is a jump no phone makes, and anything on
+    // the page listening for them (a text field does) asserts on it.
+    void lifecycle(List<AppLifecycleState> states) {
+      for (final state in states) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+      }
+    }
+
+    lifecycle(const [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+    ]);
     await tester.pump(const Duration(seconds: 6));
     expect(find.text('Our monthsary'), findsOneWidget);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    lifecycle(const [
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]);
     await tester.pumpWidget(const SizedBox());
     await _pump(tester, Routes.home, hasStart: false);
     await _reveal(tester, find.text('Add a date ›'));

@@ -16,7 +16,17 @@ class UserProfile {
     this.cityLat,
     this.cityLon,
     this.birthday,
+    this.homeNote,
+    this.homeNoteAt,
+    this.noteReaction,
+    this.noteReactionTo,
   });
+
+  /// How long a note stays on the other one's Home.
+  static const noteLife = Duration(hours: 24);
+
+  /// How long a note may be, for now: what fits where the greeting goes.
+  static const noteLimit = 35;
 
   final String id;
   final String displayName;
@@ -92,6 +102,37 @@ class UserProfile {
     return isSameDayIn(timezone, at) ? name : null;
   }
 
+  /// A few words left for the other one's Home, in place of its greeting.
+  /// Only the latest: writing another replaces it, and nothing keeps the
+  /// old ones (see migration 0052).
+  final String? homeNote;
+  final DateTime? homeNoteAt;
+
+  /// The note, while it is still up: [noteLife] from when it was written.
+  String? get freshNote {
+    final note = homeNote?.trim();
+    final at = homeNoteAt;
+    if (note == null || note.isEmpty || at == null) return null;
+    return DateTime.now().difference(at) < noteLife ? note : null;
+  }
+
+  /// How this person reacted to the other one's note, and to which: the
+  /// note's own [homeNoteAt]. A reaction belongs to one note, so a new note
+  /// starts with none.
+  final String? noteReaction;
+  final DateTime? noteReactionTo;
+
+  /// This person's reaction to a note written at [noteAt], if it is to that
+  /// one.
+  String? reactionTo(DateTime? noteAt) {
+    final to = noteReactionTo;
+    final emoji = noteReaction;
+    if (noteAt == null || to == null || emoji == null || emoji.isEmpty) {
+      return null;
+    }
+    return to.isAtSameMomentAs(noteAt) ? emoji : null;
+  }
+
   /// Whether this person has a photo rather than a flower.
   ///
   /// The flower stays underneath either way: it is what renders while the
@@ -127,7 +168,15 @@ class UserProfile {
         birthday: map['birthday'] == null
             ? null
             : DateTime.tryParse(map['birthday'] as String),
+        // All four absent on rows read before migration 0052.
+        homeNote: map['home_note'] as String?,
+        homeNoteAt: _instant(map['home_note_at']),
+        noteReaction: map['note_reaction'] as String?,
+        noteReactionTo: _instant(map['note_reaction_to']),
       );
+
+  static DateTime? _instant(Object? value) =>
+      value is String ? DateTime.tryParse(value)?.toLocal() : null;
 
   Map<String, dynamic> toInsertMap() => {
         'id': id,

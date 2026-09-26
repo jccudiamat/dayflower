@@ -1,9 +1,29 @@
 import 'dart:ui' as ui;
 
+import 'dart:math' as math;
+
 import 'package:dayflower/core/frames/frame_compositor.dart';
+import 'package:dayflower/core/frames/photo_adjust.dart';
 import 'package:dayflower/core/frames/photo_frames.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// [left] on the left half and [right] on the right, [w] by [h].
+Future<Uint8List> _halves(ui.Color left, ui.Color right,
+    {int w = 600, int h = 800}) async {
+  final recorder = ui.PictureRecorder();
+  ui.Canvas(recorder)
+    ..drawRect(ui.Rect.fromLTWH(0, 0, w / 2, h.toDouble()),
+        ui.Paint()..color = left)
+    ..drawRect(ui.Rect.fromLTWH(w / 2, 0, w / 2, h.toDouble()),
+        ui.Paint()..color = right);
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(w, h);
+  picture.dispose();
+  final data = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return data!.buffer.asUint8List();
+}
 
 /// A solid picture of [colour], [w] by [h].
 Future<Uint8List> _photo(ui.Color colour, {int w = 600, int h = 400}) async {
@@ -96,6 +116,71 @@ bool _settled(Uint8List kind, int w, int x, int y) {
   return true;
 }
 
+/// Composes every frame with a magenta photo in each window and checks it
+/// against the artwork: nothing opaque past the paper, nothing clear inside
+/// a hole. [moved] zooms, tilts and slides each photo first.
+Future<void> _insideAndFilling({required bool moved}) async {
+  const shape = ui.Size(600, 400);
+  final magenta = await _photo(const ui.Color(0xFFFF00FF));
+  for (final frame in photoFrames.where((f) => f.slots > 0)) {
+    final out = await FrameCompositor.compose(
+      frame: frame,
+      photos: [for (var i = 0; i < frame.slots; i++) magenta],
+      adjusts: [
+        for (final (i, window) in frame.windows.indexed)
+          moved
+              ? PhotoAdjust(
+                  scale: 1.1,
+                  rotation: i.isEven ? .4 : -.7,
+                  offset: const ui.Offset(.6, -.5),
+                ).clampedTo(
+                  shape, window.boundsIn(const ui.Size(1000, 1000)))
+              : PhotoAdjust.none,
+      ],
+    );
+    final image = await _decode(out);
+    final composed =
+        (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!
+            .buffer
+            .asUint8List();
+
+    final art = await _decode(
+        (await rootBundle.load(frame.asset)).buffer.asUint8List());
+    final kind = _regions(
+        (await art.toByteData(format: ui.ImageByteFormat.rawRgba))!
+            .buffer
+            .asUint8List(),
+        art.width,
+        art.height);
+
+    var outside = 0, inside = 0;
+    for (var y = 3; y < art.height - 3; y += 3) {
+      for (var x = 3; x < art.width - 3; x += 3) {
+        final here = kind[y * art.width + x];
+        if (here == _paper || !_settled(kind, art.width, x, y)) continue;
+        final cx = ((x + .5) * image.width / art.width).floor();
+        final cy = ((y + .5) * image.height / art.height).floor();
+        final alpha = composed[(cy * image.width + cx) * 4 + 3];
+        if (here == _outside) {
+          outside++;
+          expect(alpha, lessThan(250),
+              reason: '${frame.id}: photo past the paper at $x,$y');
+        } else {
+          inside++;
+          expect(alpha, 255,
+              reason: '${frame.id}: gap in the window at $x,$y'
+                  '${moved ? ', moved' : ''}');
+        }
+      }
+    }
+    // Enough of each looked at for the passes above to mean something.
+    expect(outside, greaterThan(1000), reason: frame.id);
+    expect(inside, greaterThan(1000), reason: frame.id);
+    image.dispose();
+    art.dispose();
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tearDown(FrameCompositor.evict);
@@ -185,51 +270,51 @@ void main() {
   // thin line showing through under the picture. This reads the artwork
   // itself, not the traced outlines, so it checks the tracing too.
   test('every photo stays inside its paper and fills its hole', () async {
-    for (final frame in photoFrames.where((f) => f.slots > 0)) {
-      final out = await FrameCompositor.compose(frame: frame, photos: [
-        for (var i = 0; i < frame.slots; i++)
-          await _photo(const ui.Color(0xFFFF00FF)),
-      ]);
-      final image = await _decode(out);
-      final composed = (await image.toByteData(
-              format: ui.ImageByteFormat.rawRgba))!
-          .buffer
-          .asUint8List();
+    await _insideAndFilling(moved: false);
+  });
 
-      final art = await _decode(
-          (await rootBundle.load(frame.asset)).buffer.asUint8List());
-      final kind = _regions(
-          (await art.toByteData(format: ui.ImageByteFormat.rawRgba))!
-              .buffer
-              .asUint8List(),
-          art.width,
-          art.height);
+  // 🔴 A photo can be zoomed, tilted and slid before it is sent. However it
+  // is moved, it must still cover its window: a gap would be a hole
+  // through the paper. Moved hard here, held to what the camera allows,
+  // and checked against the artwork like the unmoved ones.
+  test('a zoomed, tilted, slid photo still fills its hole', () async {
+    await _insideAndFilling(moved: true);
+  });
 
-      var outside = 0, inside = 0;
-      for (var y = 3; y < art.height - 3; y += 3) {
-        for (var x = 3; x < art.width - 3; x += 3) {
-          final here = kind[y * art.width + x];
-          if (here == _paper || !_settled(kind, art.width, x, y)) continue;
-          final cx = ((x + .5) * image.width / art.width).floor();
-          final cy = ((y + .5) * image.height / art.height).floor();
-          final alpha = composed[(cy * image.width + cx) * 4 + 3];
-          if (here == _outside) {
-            outside++;
-            expect(alpha, lessThan(250),
-                reason: '${frame.id}: photo past the paper at $x,$y');
-          } else {
-            inside++;
-            expect(alpha, 255,
-                reason: '${frame.id}: gap in the window at $x,$y');
-          }
-        }
-      }
-      // Enough of each looked at for the passes above to mean something.
-      expect(outside, greaterThan(1000), reason: frame.id);
-      expect(inside, greaterThan(1000), reason: frame.id);
-      image.dispose();
-      art.dispose();
+  test('turned half round, a photo is upside down in its window', () async {
+    final frame = frameById('polaroid_kraft')!;
+    final window = frame.windows.first.bounds;
+    const red = ui.Color(0xFFFF0000), green = ui.Color(0xFF00FF00);
+    Future<(int, int)> sides(PhotoAdjust adjust) async {
+      final image = await _decode(await FrameCompositor.compose(
+          frame: frame,
+          photos: [await _halves(red, green)],
+          adjusts: [adjust]));
+      addTearDown(image.dispose);
+      final y = window.center.dy;
+      return (
+        await _pixel(image, window.left + window.width * .3, y),
+        await _pixel(image, window.left + window.width * .7, y),
+      );
     }
+
+    expect(await sides(PhotoAdjust.none), (0xFFFF0000, 0xFF00FF00));
+    // The same way round the preview turns it: Matrix4.rotateZ and
+    // Canvas.rotate agree.
+    expect(await sides(const PhotoAdjust(rotation: math.pi)),
+        (0xFF00FF00, 0xFFFF0000));
+  });
+
+  test('a bare photo keeps its size, and shows what was moved into it',
+      () async {
+    const red = ui.Color(0xFFFF0000), green = ui.Color(0xFF00FF00);
+    final out = await FrameCompositor.adjusted(
+        await _halves(red, green), const PhotoAdjust(rotation: math.pi));
+    final image = await _decode(out.bytes);
+    addTearDown(image.dispose);
+    expect((image.width, image.height), (600, 800));
+    expect(await _pixel(image, .25, .5), 0xFF00FF00);
+    expect(await _pixel(image, .75, .5), 0xFFFF0000);
   });
 
   test('the torn note takes no photo at all', () async {

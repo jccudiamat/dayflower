@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app_router.dart';
 import '../../../../core/constants/app_constants.dart';
@@ -21,8 +20,6 @@ import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../data/mood_prefs.dart';
 import '../../domain/greeting_flower.dart';
-import '../../../../core/utils/zone_distance.dart';
-import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/domain/photo_shape.dart';
 import '../../../../core/frames/photo_frames.dart';
@@ -35,6 +32,8 @@ import '../widgets/home_widget_gallery.dart';
 import '../../domain/home_moments.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/storage_image.dart';
+import '../../../../core/widgets/app_bottom_sheet.dart';
+import '../../../../core/models/user_profile.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -239,10 +238,10 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
   /// much of the row the heart takes.
   static const double _stageSize = 96;
 
-  /// Only as tall as the heart and a little air: the ripples spill past it
-  /// (the stage does not clip), rather than a 96pt stage setting the
-  /// height of the whole card round a 64pt heart.
-  static const double _stageHeight = 80;
+  /// Only as tall as the heart: the ripples spill past it (the stage does
+  /// not clip), rather than a 96pt stage setting the height of the whole
+  /// card round a 64pt heart.
+  static const double _stageHeight = _heartSize;
 
   static const double _incomingGrowth = 32;
   static const Duration _incomingDuration = Duration(milliseconds: 1200);
@@ -445,8 +444,9 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
                                   color: Colors.white, size: 32),
                             ))))),
           ])),
-      Text(enabled ? 'Tap to send' : 'Pair first',
-          style: AppText.caption(), textAlign: TextAlign.center),
+      // 🔴 No "Tap to send" under it. It said what a heart on a card already
+      // says, and with the heart's stage it made the right half twice the
+      // height of the words beside it, so the card was that tall too.
     ]);
     // 🔴 One card, holding both halves. The heartbeat and the mood
     // check-in were two separate surfaces asking the same question a few
@@ -594,13 +594,14 @@ class _HomeHeader extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final now = ref.watch(homeClockProvider).valueOrNull ?? DateTime.now();
     final profile = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    // Live, so a note they leave arrives while you are looking.
+    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+        ref.watch(partnerProfileProvider).valueOrNull;
     final name = profile?.petName ?? profile?.displayName ?? 'there';
-    final partnerName = partner?.petName ?? partner?.displayName;
-    final zone = partner?.timezone;
-    final local =
-        zone == null ? null : tz.TZDateTime.from(now, safeLocation(zone));
-    final distance = profileDistanceLabel(profile, partner);
+    final partnerName =
+        partner?.petName ?? partner?.displayName ?? 'Your partner';
+    final linked = ref.watch(currentPairProvider).valueOrNull?.isLinked ?? false;
+    final note = partner?.freshNote;
     final period = now.hour < 12
         ? 'morning'
         : now.hour < 18
@@ -615,31 +616,42 @@ class _HomeHeader extends ConsumerWidget {
       final deckWidth = math.min(360.0, (box.maxWidth - gap) * .52);
       final heading =
           AppText.display().copyWith(fontSize: box.maxWidth < 320 ? 26 : 30);
+      // 🔴 **Their note, where the greeting was.** The line under the
+      // greeting (their city, their time, the miles) said again what the
+      // map card below says in full, so it is gone. In its place is a note
+      // for them, and theirs to you takes the greeting's place: the first
+      // thing on Home is something they said today, and the greeting is
+      // what shows on a day they have not.
       final greeting = Column(
         key: const ValueKey('home-greeting'),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Good $period,',
-              key: const ValueKey('greeting-title'), style: heading),
-          const SizedBox(height: 2),
-          Row(children: [
-            Flexible(
-                child: Text(name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: heading.copyWith(color: AppColors.brandDark))),
-            const SizedBox(width: AppSpace.xxs),
-            Text(greetingFlower, style: const TextStyle(fontSize: 22)),
-          ]),
-          if (local != null && partnerName != null) ...[
-            const SizedBox(height: AppSpace.xs),
-            Text(
-                '$partnerName · ${partner?.city?.split(',').first.trim() ?? zoneCity(zone!)} · ${DateFormat('h:mm a').format(local).replaceAll(' ', '\u00a0')}',
-                style: AppText.body()),
-          ],
-          if (distance != null) ...[
+          if (note != null)
+            _PartnerNote(
+              note: note,
+              from: partnerName,
+              writtenAt: partner!.homeNoteAt!,
+              reaction: profile?.reactionTo(partner.homeNoteAt),
+              style: heading,
+            )
+          else ...[
+            Text('Good $period,',
+                key: const ValueKey('greeting-title'), style: heading),
             const SizedBox(height: 2),
-            Text(distance, style: AppText.body()),
+            Row(children: [
+              Flexible(
+                  child: Text(name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: heading.copyWith(color: AppColors.brandDark))),
+              const SizedBox(width: AppSpace.xxs),
+              Text(greetingFlower, style: const TextStyle(fontSize: 22)),
+            ]),
+          ],
+          // Nobody to leave one for until you are paired.
+          if (linked) ...[
+            const SizedBox(height: AppSpace.sm),
+            _NoteField(partnerName: partnerName),
           ],
         ],
       );
@@ -666,18 +678,52 @@ class _DayArch extends ConsumerStatefulWidget {
 }
 
 class _DayArchState extends ConsumerState<_DayArch> {
-  bool _mineInFront = false;
+  /// The day in front, by [_idOf]. Null until one is chosen: then it is
+  /// their newest, or mine if they have none today.
+  String? _frontId;
+
+  /// A day's message id, or who it is for an empty one.
+  static String _idOf(_Day day) =>
+      day.message?.id ?? (day.own ? 'mine-empty' : 'theirs-empty');
+
+  /// The day [by] along from [from], going round: past the last is the
+  /// first again, so a swipe never meets a wall.
+  void _turn(List<_Day> days, int from, int by) => setState(
+      () => _frontId = _idOf(days[(from + by) % days.length]));
+
+  /// How far a drag across the deck has gone, to read a slow one by.
+  double _dragged = 0;
+
   @override
   Widget build(BuildContext context) {
-    final mine = ref.watch(myDayPhotoProvider);
-    final theirs = ref.watch(partnerDayPhotoProvider);
+    // 🔴 **Every day, not the newest of each.** The deck held two cards,
+    // your newest day and theirs, and a swipe only swapped them: whatever
+    // else either of you had posted today was only in the viewer. It now
+    // holds all of them, theirs first (Home is a window into their day)
+    // and then yours, and a swipe goes through them one by one. Someone
+    // with no day yet is still in it, as the empty arch that says so, and
+    // for you, offers the camera.
+    final mine = ref.watch(myDayPhotosProvider);
+    final theirs = ref.watch(partnerDayPhotosProvider);
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
     final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
-    final both = mine != null && theirs != null;
-    final mineFront = theirs == null || (both && _mineInFront);
+    final days = <_Day>[
+      if (theirs.isEmpty)
+        (own: false, message: null)
+      else
+        for (final m in theirs) (own: false, message: m),
+      if (mine.isEmpty)
+        (own: true, message: null)
+      else
+        for (final m in mine) (own: true, message: m),
+    ];
+    var front = days.indexWhere((d) => _idOf(d) == _frontId);
+    if (front < 0) front = theirs.isNotEmpty ? 0 : days.indexWhere((d) => d.own);
+    // There are always two at least, one for each of you.
+    final rear = (front + 1) % days.length;
     // A photo on paper in front covers the arch behind it: the paper is
     // what the deck shows, not a polaroid with an arch peeking round it.
-    final paperInFront = (mineFront ? mine : theirs)?.isOnPaper ?? false;
+    final paperInFront = days[front].message?.isOnPaper ?? false;
     return Column(
         key: const ValueKey('home-photo-deck'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -695,25 +741,28 @@ class _DayArchState extends ConsumerState<_DayArch> {
                     final h = math.max(cardWidth / .72,
                             compact ? 170.0 : 280.0) *
                         math.pow(math.max(1.0, textScale), 1.5);
-                    Widget card({required bool own, required bool front}) {
-                      final msg = own ? mine : theirs;
-                      final label = own ? 'Your day' : "$name’s day";
+                    Widget card({required _Day day, required bool front}) {
+                      final own = day.own;
+                      final msg = day.message;
                       final shape = BorderRadius.vertical(
                           top: Radius.circular(cardWidth / 2),
                           bottom: const Radius.circular(AppRadius.lg));
+                      // Behind: to the front. In front: open it, among
+                      // the rest of that one of you's days.
                       void tapped(FlowerMessage msg) {
-                        if (both && !front) {
-                          setState(() => _mineInFront = own);
+                        if (!front) {
+                          setState(() => _frontId = _idOf(day));
                         } else {
-                          _open(msg, label);
+                          _open(msg, own: own);
                         }
                       }
 
                       String caption(FlowerMessage msg) =>
                           '${own ? 'You' : name} · ${DateFormat('h:mm a').format(msg.sentAt.toLocal())}';
                       return AnimatedPositioned(
-                          key: ValueKey(
-                              own ? 'my-day-photo' : 'partner-day-photo'),
+                          // By day, so a day moving from behind to the
+                          // front slides there rather than jumping.
+                          key: ValueKey('deck-${_idOf(day)}'),
                           duration: AppMotion.standard,
                           curve: AppMotion.easeOut,
                           left: front ? 0 : w - rearWidth - (h - 32) * .055,
@@ -732,7 +781,10 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                   ? h + 8 + _paperRise + _paperDrop
                                   : h)
                               : h - (compact ? 24 : 32),
-                          child: AnimatedOpacity(
+                          child: KeyedSubtree(
+                              key: ValueKey(
+                                  own ? 'my-day-photo' : 'partner-day-photo'),
+                              child: AnimatedOpacity(
                               // Covered by the paper in front.
                               opacity: !front && paperInFront ? 0 : 1,
                               duration: AppMotion.standard,
@@ -828,19 +880,25 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                                                             Colors.white)),
                                                               )),
                                                       ]),
-                                          ))))))));
+                                          )))))))));
                     }
 
                     return GestureDetector(
-                        onHorizontalDragEnd: both
-                            ? (_) =>
-                                setState(() => _mineInFront = !_mineInFront)
-                            : null,
+                        // Swipe only: on Home a tap opens the day.
+                        onHorizontalDragStart: (_) => _dragged = 0,
+                        onHorizontalDragUpdate: (d) => _dragged += d.delta.dx,
+                        onHorizontalDragEnd: (d) {
+                          final v = d.primaryVelocity ?? 0;
+                          final left = v.abs() > 100 ? v < 0 : _dragged < 0;
+                          if (v.abs() <= 100 && _dragged.abs() < 24) return;
+                          // Left for the next, as a carousel goes.
+                          _turn(days, front, left ? 1 : days.length - 1);
+                        },
                         child: SizedBox(
                             height: h + 8,
                             child: Stack(clipBehavior: Clip.none, children: [
-                              card(own: !mineFront, front: false),
-                              card(own: mineFront, front: true),
+                              card(day: days[rear], front: false),
+                              card(day: days[front], front: true),
                             ])));
                   }))),
         ]);
@@ -898,15 +956,21 @@ class _DayArchState extends ConsumerState<_DayArch> {
         ]),
       );
 
-  void _open(FlowerMessage message, String who) {
-    final mine = ref.read(myDayPhotosProvider);
-    final index = mine.indexWhere((m) => m.id == message.id);
+  /// The viewer, on [message], among the rest of that one of you's days:
+  /// theirs page through theirs, yours through yours and on to the camera.
+  void _open(FlowerMessage message, {required bool own}) {
+    final days =
+        ref.read(own ? myDayPhotosProvider : partnerDayPhotosProvider);
+    final index = days.indexWhere((m) => m.id == message.id);
     Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => index >= 0
-            ? MyDaysViewer(initialIndex: index)
-            : DayPhotoViewer(message: message, who: who)));
+        builder: (_) =>
+            DaysViewer(own: own, initialIndex: index < 0 ? 0 : index)));
   }
 }
+
+/// One card in the deck: a day of theirs or of mine, or the empty arch of
+/// whichever of us has none.
+typedef _Day = ({bool own, FlowerMessage? message});
 
 /// Shared by the live photo stack and the noninteractive widget preview.
 class HomeDayPhoto extends ConsumerWidget {
@@ -935,6 +999,330 @@ class HomeDayPhoto extends ConsumerWidget {
             Center(child: Text('Loading photo…', style: AppText.caption())),
         error: (retry) =>
             GestureDetector(onTap: retry, child: unavailable()));
+  }
+}
+
+/// Ink, not a theme colour: it is written on paper, and paper is the same
+/// colour in dark mode.
+const _pen = Color(0xFF3A3146);
+
+/// What a note can be answered with.
+const _noteReactions = ['❤️', '🥰', '😂', '🥺', '😘', '🌷'];
+
+/// Their note to you, where the greeting goes.
+///
+/// Tap to read it whole (it is cut short if it will not fit), hold to react.
+/// Your reaction shows beside who it is from, and on their Home beside the
+/// note they wrote.
+class _PartnerNote extends ConsumerWidget {
+  const _PartnerNote({
+    required this.note,
+    required this.from,
+    required this.writtenAt,
+    required this.style,
+    this.reaction,
+  });
+
+  final String note;
+  final String from;
+  final DateTime writtenAt;
+  final TextStyle style;
+
+  /// Yours to it, if you have reacted.
+  final String? reaction;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Semantics(
+      button: true,
+      label: 'Note from $from: $note',
+      hint: 'Tap to read it, hold to react',
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => _read(context, ref),
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          _react(context, ref);
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(note,
+                key: const ValueKey('partner-note'),
+                maxLines: 4,
+                overflow: TextOverflow.ellipsis,
+                style: style.copyWith(
+                    fontSize: (style.fontSize ?? 30) * .86, height: 1.15)),
+            const SizedBox(height: AppSpace.xxs),
+            Row(children: [
+              Flexible(
+                child: Text('from $from',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.caption()),
+              ),
+              if (reaction != null) ...[
+                const SizedBox(width: 6),
+                Text(reaction!,
+                    key: const ValueKey('my-note-reaction'),
+                    style: const TextStyle(fontSize: 16)),
+              ],
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _read(BuildContext context, WidgetRef ref) async {
+    final react = await showDialog<bool>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: Text('From $from'),
+        content: Text(note, style: AppText.title()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, true),
+            child: const Text('React'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialog, false),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+    if (react == true && context.mounted) await _react(context, ref);
+  }
+
+  Future<void> _react(BuildContext context, WidgetRef ref) async {
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheet) => AppBottomSheet(
+        title: 'React to $from’s note',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                for (final emoji in _noteReactions)
+                  Semantics(
+                    button: true,
+                    selected: emoji == reaction,
+                    label: 'React $emoji',
+                    excludeSemantics: true,
+                    child: InkWell(
+                      customBorder: const CircleBorder(),
+                      onTap: () => Navigator.pop(sheet, emoji),
+                      child: Container(
+                        width: 48,
+                        height: 48,
+                        alignment: Alignment.center,
+                        decoration: emoji == reaction
+                            ? BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.blush,
+                                border: Border.all(color: AppColors.brand))
+                            : null,
+                        child: Text(emoji, style: const TextStyle(fontSize: 26)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            if (reaction != null) ...[
+              const SizedBox(height: AppSpace.sm),
+              TextButton(
+                // Empty means take it back.
+                onPressed: () => Navigator.pop(sheet, ''),
+                child: const Text('Take my reaction back'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (picked == null) return;
+    final me = ref.read(currentUserIdProvider);
+    if (me == null) return;
+    try {
+      await ref.read(userRepositoryProvider)
+          .setNoteReaction(me, picked.isEmpty ? null : picked, writtenAt);
+      ref.invalidate(userProfileProvider);
+    } catch (_) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Couldn't react to that. Try again?")));
+      }
+    }
+  }
+}
+
+/// Your note to them, on a torn scrap of paper under the greeting: on their
+/// Home in place of theirs, for a day. Type, press done, and it is there.
+///
+/// Their reaction to it shows at its right. While you are writing, how much
+/// room is left does, and a way to send it. Emptied and sent, it comes down.
+class _NoteField extends ConsumerStatefulWidget {
+  const _NoteField({required this.partnerName});
+
+  final String partnerName;
+
+  @override
+  ConsumerState<_NoteField> createState() => _NoteFieldState();
+}
+
+class _NoteFieldState extends ConsumerState<_NoteField> {
+  final _text = TextEditingController();
+  final _focus = FocusNode();
+  bool _saving = false;
+
+  /// The note the field last showed, so one written on another phone, or
+  /// one that has just expired, replaces what is in it.
+  String? _shown;
+
+  @override
+  void initState() {
+    super.initState();
+    _focus.addListener(() => setState(() {}));
+    _text.addListener(() => setState(() {}));
+  }
+
+  @override
+  void dispose() {
+    _text.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  Future<void> _send() async {
+    final me = ref.read(currentUserIdProvider);
+    if (me == null || _saving) return;
+    final current = ref.read(userProfileProvider).valueOrNull?.freshNote ?? '';
+    final text = _text.text.trim();
+    if (text == current) {
+      _focus.unfocus();
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref
+          .read(userRepositoryProvider)
+          .setHomeNote(me, text.isEmpty ? null : text);
+      ref.invalidate(userProfileProvider);
+      _focus.unfocus();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(text.isEmpty
+                ? 'Your note is down.'
+                : 'On ${widget.partnerName}’s Home for 24 hours.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("Couldn't leave that note. Try again?")));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mine = ref.watch(userProfileProvider).valueOrNull;
+    final partner = ref.watch(partnerProfileStreamProvider).valueOrNull ??
+        ref.watch(partnerProfileProvider).valueOrNull;
+    final note = mine?.freshNote;
+    // What is up, unless it is being rewritten.
+    if (!_focus.hasFocus && note != _shown) {
+      _shown = note;
+      _text.text = note ?? '';
+    }
+    final reaction =
+        note == null ? null : partner?.reactionTo(mine?.homeNoteAt);
+    final editing = _focus.hasFocus;
+    final left = UserProfile.noteLimit - _text.text.characters.length;
+    // Small enough that "Type your message here..." fits on the scrap in
+    // one line, as a line written on a scrap would.
+    final ink = AppText.note(_pen).copyWith(fontSize: 12.5, height: 1.2);
+
+    return Container(
+      key: const ValueKey('home-note-field'),
+      constraints: const BoxConstraints(minHeight: 54),
+      decoration: const BoxDecoration(
+        image: DecorationImage(
+          image: AssetImage('assets/images/note_paper.webp'),
+          fit: BoxFit.fill,
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _text,
+              focusNode: _focus,
+              enabled: !_saving,
+              minLines: 1,
+              maxLines: 2,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(UserProfile.noteLimit),
+              ],
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _send(),
+              style: ink,
+              cursorColor: _pen,
+              // ⚠️ Every border named, not just `border`: the theme's
+              // enabled and focused outlines otherwise still draw, a box
+              // inside the paper.
+              decoration: InputDecoration(
+                isCollapsed: true,
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                disabledBorder: InputBorder.none,
+                contentPadding: EdgeInsets.zero,
+                // Scaled to fit rather than cut short: on a narrow phone
+                // the scrap is a few pixels too short for it.
+                hint: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text('Type your message here...',
+                      maxLines: 1,
+                      style: ink.copyWith(color: _pen.withValues(alpha: .5))),
+                ),
+              ),
+            ),
+          ),
+          if (editing) ...[
+            Text('$left',
+                style: AppText.caption(_pen.withValues(alpha: .6))),
+            IconButton(
+              tooltip: 'Leave this note',
+              visualDensity: VisualDensity.compact,
+              onPressed: _saving ? null : _send,
+              icon: const AppIcon(CupertinoIcons.paperplane_fill,
+                  size: 18, color: _pen),
+            ),
+          ] else if (reaction != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Semantics(
+                label: '${widget.partnerName} reacted $reaction',
+                excludeSemantics: true,
+                child: Text(reaction,
+                    key: const ValueKey('note-reaction'),
+                    style: const TextStyle(fontSize: 20)),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -968,9 +1356,12 @@ const _paperDrop = 10.0;
 ///
 /// Whose day and when is written **on the paper**, in the blank strip under
 /// the photo where a pen would put it, turned to the paper's own tilt. A
-/// label floating under the picture read as something else's caption. Paper
-/// with nowhere to write (a torn edge) gets a small label stuck over its
-/// bottom edge instead.
+/// label floating under the picture read as something else's caption.
+///
+/// 🔴 **Paper with nowhere to write gets nothing.** A label stuck over the
+/// bottom of an illustrated frame covered the drawing, and whose day it is
+/// and when is on the viewer a tap away. The words go on the paper or not
+/// at all.
 class _TapedDay extends StatelessWidget {
   const _TapedDay({required this.message, required this.onTap, this.caption});
 
@@ -979,10 +1370,6 @@ class _TapedDay extends StatelessWidget {
 
   /// Who and when. Only on the card in front.
   final String? caption;
-
-  /// Ink, not a theme colour: it is written on the paper, and the paper is
-  /// the same colour in dark mode.
-  static const _pen = Color(0xFF3A3146);
 
   @override
   Widget build(BuildContext context) {
@@ -1016,7 +1403,7 @@ class _TapedDay extends StatelessWidget {
                   top: -drawn.top * size.height,
                   width: size.width,
                   height: size.height,
-                  child: _picture(path, size, strip, caption),
+                  child: _picture(path, size, frame, strip, caption),
                 ),
               ],
             );
@@ -1026,9 +1413,42 @@ class _TapedDay extends StatelessWidget {
     );
   }
 
+  /// Whose day and when, on the photo's bottom-left corner, turned with it.
+  Widget _stamp(FrameWindow window, Size size, String caption) {
+    final (:corner, :angle) = window.bottomLeftIn(size);
+    final width = window.boundsIn(size).width;
+    // In from the corner by a little of the photo's width: the outline runs
+    // a few pixels under the paper, and a stamp sits clear of the edge.
+    final inset = width * .07;
+    return Positioned(
+      left: corner.dx,
+      bottom: size.height - corner.dy,
+      child: Transform.rotate(
+        angle: angle,
+        alignment: Alignment.bottomLeft,
+        child: Padding(
+          padding: EdgeInsets.only(left: inset, bottom: inset * .8),
+          child: Text(caption,
+              key: const ValueKey('taped-day-caption'),
+              maxLines: 1,
+              style: AppText.caption(Colors.white).copyWith(
+                  fontSize: (width * .075).clamp(9.0, 14.0),
+                  fontWeight: FontWeight.w600,
+                  height: 1,
+                  shadows: const [
+                    Shadow(
+                        color: Color(0x99000000),
+                        blurRadius: 4,
+                        offset: Offset(0, 1)),
+                  ])),
+        ),
+      ),
+    );
+  }
+
   /// The whole picture at [size], its shadow, and what is written on it.
-  Widget _picture(
-      String path, Size size, FrameCaptionStrip? strip, String? caption) {
+  Widget _picture(String path, Size size, PhotoFrame? frame,
+      FrameCaptionStrip? strip, String? caption) {
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -1051,52 +1471,12 @@ class _TapedDay extends StatelessWidget {
           ),
         ),
         HomeDayPhoto(message: message, fit: BoxFit.contain),
-        if (caption != null && strip != null)
-          Positioned.fromRect(
-            rect: strip.rectIn(size),
-            child: Transform.rotate(
-              angle: strip.angle,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(caption,
-                    key: const ValueKey('taped-day-caption'),
-                    maxLines: 1,
-                    style: AppText.note(_pen).copyWith(
-                        fontSize:
-                            (strip.rectIn(size).height * .7).clamp(9.0, 20.0),
-                        height: 1)),
-              ),
-            ),
-          )
-        else if (caption != null)
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: size.height * .04,
-            child: Center(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  boxShadow: [
-                    BoxShadow(
-                        color: Colors.black.withValues(alpha: .08),
-                        blurRadius: 6,
-                        offset: const Offset(0, 2)),
-                  ],
-                ),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-                  child: Text(caption,
-                      key: const ValueKey('taped-day-caption'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppText.caption(AppColors.ink)),
-                ),
-              ),
-            ),
-          ),
+        // On a polaroid (paper with a blank strip), stamped on the photo's
+        // bottom-left corner the way a camera stamps a print, and turned
+        // with it. Not on the strip: that is the paper, and the time is
+        // about the picture.
+        if (caption != null && strip != null && frame!.windows.isNotEmpty)
+          _stamp(frame.windows.first, size, caption),
       ],
     );
   }

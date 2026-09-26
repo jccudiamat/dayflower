@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show Offset, Path, Rect, Size;
 
 import 'frame_windows.dart';
@@ -294,6 +295,28 @@ class FrameWindow {
   Rect boundsIn(Size size) => Rect.fromLTWH(bounds.left * size.width,
       bounds.top * size.height, bounds.width * size.width,
       bounds.height * size.height);
+
+  /// The photo's bottom-left corner in a frame drawn at [size], and the
+  /// slope of its bottom edge: where a camera stamps the date on a print,
+  /// and how far the print is turned.
+  ///
+  /// From the outline's extremes, which on a turned rectangle are its
+  /// corners: bottom-left is furthest left and down, bottom-right furthest
+  /// right and down.
+  ({Offset corner, double angle}) bottomLeftIn(Size size) {
+    Offset at(int i) =>
+        Offset(outline[i] * size.width, outline[i + 1] * size.height);
+    var left = at(0), right = at(0);
+    for (var i = 0; i + 1 < outline.length; i += 2) {
+      final p = at(i);
+      if (p.dx - p.dy < left.dx - left.dy) left = p;
+      if (p.dx + p.dy > right.dx + right.dy) right = p;
+    }
+    return (
+      corner: left,
+      angle: math.atan2(right.dy - left.dy, right.dx - left.dx),
+    );
+  }
 
   /// [outline] in a frame drawn at [size], shifted by [origin]: pass the
   /// window's own top left to cut a child that is laid out in [bounds].

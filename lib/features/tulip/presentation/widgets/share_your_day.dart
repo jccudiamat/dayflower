@@ -20,6 +20,8 @@ import '../../../booth/data/strip_repository.dart';
 import '../../../booth/domain/strip_templates.dart';
 import '../../../../core/frames/photo_frames.dart';
 import '../../../../core/frames/frame_compositor.dart';
+import '../../../../core/frames/photo_adjust.dart';
+import '../../domain/photo_shape.dart';
 import '../screens/templates_screen.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
@@ -100,6 +102,13 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Uint8List? _pending;
   String _pendingExt = 'jpg';
 
+  /// Its shape, which a pinch keeps it covering.
+  Size _pendingSize = const Size(3, 4);
+
+  /// How it has been zoomed and tilted since it was taken. Applied when it
+  /// is sent, not before: the photo stays as the camera gave it until then.
+  PhotoAdjust _pendingAdjust = PhotoAdjust.none;
+
   /// Null means a plain day photo. Selecting a template routes the next
   /// shot through the booth compositor instead.
   StripTemplate? _template;
@@ -126,9 +135,17 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// sending until every window has a photo in it.
   final _shots = <Uint8List>[];
 
-  /// The held shot is already on paper, so it is shown whole rather than
-  /// cropped to the screen: cropping it would cut the frame off.
+  /// Each shot's shape, and how it has been moved in its window.
+  final _shotSizes = <Size>[];
+  final _shotAdjusts = <PhotoAdjust>[];
+
+  /// Every window of the paper has its photo, and they are held for review
+  /// in their windows. They are put on the paper when sent (or saved), not
+  /// before, so each can still be zoomed and tilted in its window.
   bool _pendingOnPaper = false;
+
+  /// A shot is held for review, bare or on paper.
+  bool get _holding => _pending != null || _pendingOnPaper;
 
   /// Which frame it is on, taken when it was composed: the choice under the
   /// shutter can change before it is sent, and the paper it is on cannot.
@@ -347,61 +364,90 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// A photo from the shutter or the gallery.
   ///
   /// Bare, it is held as it is. On paper it fills the next window, and once
-  /// every window has one the frame is composed **now**, before anything is
-  /// sent, so what is held on screen is exactly what will arrive: the frame
-  /// used to be added on the way out, and was never seen until it had gone.
+  /// every window has one they are held in their windows, drawn exactly as
+  /// FrameCompositor will draw them, so what is held on screen is what will
+  /// arrive. They are put on the paper when sent, so each can still be
+  /// zoomed and tilted until then.
   Future<void> _addShot(Uint8List raw, String ext) async {
+    // Its shape, the way it will be drawn: a phone's JPEG is often stored
+    // sideways with a note to turn it, and this reads it turned.
+    final measured = await measurePhoto(raw);
+    if (!mounted) return;
+    final size = measured == null
+        ? const Size(3, 4)
+        : Size(measured.$1.toDouble(), measured.$2.toDouble());
     final frame = _frame;
     if (frame == null || !_onPaper) {
       setState(() {
         _pending = raw;
         _pendingExt = ext;
+        _pendingSize = size;
+        _pendingAdjust = PhotoAdjust.none;
         _pendingOnPaper = false;
       });
       return;
     }
-    setState(() => _shots.add(raw));
-    if (_shots.length < frame.slots) return;
-
-    setState(() => _busy = true);
-    try {
-      final png = await FrameCompositor.compose(
-        frame: frame,
-        photos: List.of(_shots),
-      );
-      final out = await FrameCompositor.forSending(png);
-      if (!mounted) return;
-      setState(() {
-        _pending = out.bytes;
-        _pendingExt = out.extension;
+    setState(() {
+      _shots.add(raw);
+      _shotSizes.add(size);
+      _shotAdjusts.add(PhotoAdjust.none);
+      if (_shots.length >= frame.slots) {
         _pendingOnPaper = true;
         _pendingFrameId = frame.id;
-      });
-    } catch (e) {
-      debugPrint('frame compositing failed: $e');
-      if (!mounted) return;
-      // The photo is the point and the paper is decoration: if the paper
-      // cannot go round it, hold the photo on its own rather than lose it.
-      setState(() {
-        _pending = _shots.first;
-        _pendingExt = ext;
-        _pendingOnPaper = false;
-        _shots.clear();
-      });
-      _toast("Couldn't put that on paper, so here it is on its own.");
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+      }
+    });
   }
 
-  /// Throws the held shot away and goes back to the live viewfinder.
   /// Throws the held shot away, and any photos already taken for the frame,
   /// and goes back to the live viewfinder.
-  void _discardPending() => setState(() {
-        _pending = null;
-        _pendingOnPaper = false;
-        _shots.clear();
-      });
+  void _discardPending() => setState(_clearHeld);
+
+  void _clearHeld() {
+    _pending = null;
+    _pendingAdjust = PhotoAdjust.none;
+    _pendingOnPaper = false;
+    _shots.clear();
+    _shotSizes.clear();
+    _shotAdjusts.clear();
+  }
+
+  /// The held shot as it will arrive: on its paper if it was taken on one,
+  /// zoomed and tilted as it was left. Null when nothing is held.
+  Future<({Uint8List bytes, String ext, bool onPaper})?> _finalPhoto() async {
+    if (_pendingOnPaper) {
+      final frame = frameById(_pendingFrameId);
+      if (frame != null) {
+        try {
+          final png = await FrameCompositor.compose(
+            frame: frame,
+            photos: List.of(_shots),
+            adjusts: List.of(_shotAdjusts),
+          );
+          final out = await FrameCompositor.forSending(png);
+          return (bytes: out.bytes, ext: out.extension, onPaper: true);
+        } catch (e) {
+          debugPrint('frame compositing failed: $e');
+        }
+      }
+      // The photo is the point and the paper is decoration: if the paper
+      // cannot go round it, send the photo on its own rather than lose it.
+      if (mounted) _toast("Couldn't put that on paper, so here it is on its own.");
+      return (bytes: _shots.first, ext: 'jpg', onPaper: false);
+    }
+    final bytes = _pending;
+    if (bytes == null) return null;
+    // Unmoved, it goes as the camera gave it, not re-encoded for nothing.
+    if (_pendingAdjust.isNone) {
+      return (bytes: bytes, ext: _pendingExt, onPaper: false);
+    }
+    try {
+      final out = await FrameCompositor.adjusted(bytes, _pendingAdjust);
+      return (bytes: out.bytes, ext: out.extension, onPaper: false);
+    } catch (e) {
+      debugPrint('adjusting the photo failed: $e');
+      return (bytes: bytes, ext: _pendingExt, onPaper: false);
+    }
+  }
 
   /// Writes the held shot to the app's own external folder.
   ///
@@ -410,20 +456,25 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// adding one, and the toast says where it went rather than implying it
   /// landed in Photos.
   Future<void> _savePending() async {
-    final bytes = _pending;
-    if (bytes == null) return;
+    if (!_holding || _busy) return;
+    setState(() => _busy = true);
     try {
+      // The picture as it will arrive, paper, zoom and all.
+      final photo = await _finalPhoto();
+      if (photo == null) return;
       final base = await getExternalStorageDirectory() ??
           await getApplicationDocumentsDirectory();
       final dir = Directory('${base.path}/Saved');
       if (!await dir.exists()) await dir.create(recursive: true);
       final file = File(
-        '${dir.path}/day_${DateTime.now().millisecondsSinceEpoch}.$_pendingExt',
+        '${dir.path}/day_${DateTime.now().millisecondsSinceEpoch}.${photo.ext}',
       );
-      await file.writeAsBytes(bytes);
+      await file.writeAsBytes(photo.bytes);
       if (mounted) _toast('Saved a copy to the app folder.');
     } catch (_) {
       if (mounted) _toast("Couldn't save that.");
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -438,22 +489,24 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// a confirmation sheet on every send is a tax on the common case, and
   /// the pill is on screen the whole time you are framing.
   Future<void> _sendPending() async {
-    final bytes = _pending;
-    if (bytes == null || _busy) return;
+    if (!_holding || _busy) return;
 
     // Seven live days is the ceiling. The eighth is allowed — it just costs
     // the oldest one its place on the home screen, and that is worth asking
     // about rather than doing quietly.
     if (_target.toWidget && !await _makeRoomForDay()) return;
+    if (!mounted) return;
 
-    await _handleShot(bytes, target: _target);
-    if (mounted) {
-      setState(() {
-        _pending = null;
-        _pendingOnPaper = false;
-        _shots.clear();
-      });
-    }
+    setState(() => _busy = true);
+    final photo = await _finalPhoto();
+    if (!mounted) return;
+    // Each way of sending shows its own progress from here.
+    setState(() => _busy = false);
+    if (photo == null) return;
+
+    await _handleShot(photo.bytes,
+        target: _target, ext: photo.ext, onPaper: photo.onPaper);
+    if (mounted) setState(_clearHeld);
   }
 
   /// Clears a slot if all seven are taken. False means the user backed out.
@@ -512,6 +565,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   Future<void> _handleShot(
     Uint8List bytes, {
     DayPhotoTarget target = DayPhotoTarget.myDay,
+    String ext = 'jpg',
+    bool onPaper = false,
   }) async {
     final waiting = ref.read(stripAwaitingMeProvider);
 
@@ -524,14 +579,13 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       return t.isDuo ? _startDuo(t, bytes) : _postSolo(t, bytes);
     }
 
-    // A photo on paper was composed when it was taken (_addShot), so what
-    // arrives here is already the finished picture, in its own format.
-    // Marked as framed, so Home shows it on its paper rather than cutting
-    // it into the arch.
-    return _shareBytes(bytes, _pendingExt,
+    // A photo on paper arrives here already on it (_finalPhoto), in its own
+    // format. Marked as framed, so Home shows it on its paper rather than
+    // cutting it into the arch.
+    return _shareBytes(bytes, ext,
         target: target,
-        origin: _pendingOnPaper ? PhotoOrigin.frame : PhotoOrigin.daily,
-        frameId: _pendingOnPaper ? _pendingFrameId : null);
+        origin: onPaper ? PhotoOrigin.frame : PhotoOrigin.daily,
+        frameId: onPaper ? _pendingFrameId : null);
   }
 
   Future<void> _postSolo(StripTemplate t, Uint8List bytes) async {
@@ -666,7 +720,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (_pending != null)
+            if (_holding)
               _heldShot()
             else if (_onPaperNow)
               _framedViewfinder()
@@ -729,7 +783,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (_pending != null) ...[
+                      if (_holding) ...[
                         _GlassButton(
                           icon: CupertinoIcons.xmark_circle,
                           tooltip: 'Discard',
@@ -777,6 +831,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _StripBanner(onCancelMine: _cancelMyStrip),
+                    _adjustHint(),
                     _chosenBanner(),
                     _controls(),
                     _modeRow(),
@@ -856,36 +911,146 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       _template == null &&
       ref.watch(stripAwaitingMeProvider) == null;
 
-  /// The shot being reviewed.
+  /// The shot being reviewed, whole, in a box of its own shape (or its
+  /// paper's), and moved by two fingers: pinched to zoom, twisted to tilt,
+  /// dragged to slide, double-tapped back to how it was taken.
+  ///
+  /// ⚠️ Whole rather than cropped to the screen. The screen is not the
+  /// photo's shape, and cropping it here would hide what the pinch is for:
+  /// seeing exactly what will be sent.
   Widget _heldShot() {
+    if (_pendingOnPaper) return _framedViewfinder(held: true);
     final bytes = _pending!;
-    if (!_pendingOnPaper) return Image.memory(bytes, fit: BoxFit.cover);
-    // Whole, not cropped to the screen: cropping would cut the frame off,
-    // and this is the picture that will arrive.
     return ColoredBox(
       color: const Color(0xFF120C1F),
       child: _paperBox(
-        aspect: _frame!.aspect,
-        child: Image.memory(bytes, fit: BoxFit.contain),
+        aspect: _pendingSize.width / _pendingSize.height,
+        child: LayoutBuilder(builder: (context, box) {
+          return _pinchable(
+            area: box.biggest,
+            child: ClipRect(
+              child: _moved(bytes, _pendingSize, _pendingAdjust, box.biggest),
+            ),
+          );
+        }),
       ),
+    );
+  }
+
+  /// [bytes], drawn to cover [area] and then moved by [adjust]: exactly as
+  /// FrameCompositor draws it, so the preview and the picture agree.
+  Widget _moved(Uint8List bytes, Size photo, PhotoAdjust adjust, Size area) {
+    final box = Offset.zero & area;
+    return Transform(
+      transform: adjust.matrixIn(box),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fromRect(
+            rect: PhotoAdjust.coverRect(photo, box),
+            child: Image.memory(bytes,
+                fit: BoxFit.fill,
+                gaplessPlayback: true,
+                excludeFromSemantics: true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Moving a held photo ─────────────────────────────────────────
+
+  /// Which held photo a pinch is moving, and where it all stood when the
+  /// fingers came down.
+  int _adjusting = 0;
+  Rect _adjustBox = Rect.zero;
+  Offset _adjustFrom = Offset.zero;
+  PhotoAdjust _adjustStart = PhotoAdjust.none;
+
+  PhotoAdjust _adjustOf(int i) =>
+      _pendingOnPaper ? _shotAdjusts[i] : _pendingAdjust;
+  Size _sizeOf(int i) => _pendingOnPaper ? _shotSizes[i] : _pendingSize;
+
+  void _setAdjust(int i, PhotoAdjust adjust) => setState(() {
+        if (_pendingOnPaper) {
+          _shotAdjusts[i] = adjust;
+        } else {
+          _pendingAdjust = adjust;
+        }
+      });
+
+  /// The photo under [point] in a held box of [area], and its window there:
+  /// on a two-photo frame, the one the fingers are on.
+  (int, Rect) _photoAt(Offset point, Size area) {
+    final frame = _pendingOnPaper ? frameById(_pendingFrameId) : null;
+    if (frame == null) return (0, Offset.zero & area);
+    var best = 0;
+    var bestDistance = double.infinity;
+    for (final (i, window) in frame.windows.indexed) {
+      if (i >= _shots.length) break;
+      if (window.pathIn(area).contains(point)) return (i, window.boundsIn(area));
+      // Fingers on the paper between windows move the nearest photo.
+      final d = (window.boundsIn(area).center - point).distance;
+      if (d < bestDistance) {
+        best = i;
+        bestDistance = d;
+      }
+    }
+    return (best, frame.windows[best].boundsIn(area));
+  }
+
+  Widget _pinchable({required Size area, required Widget child}) {
+    var tappedAt = Offset.zero;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onScaleStart: (d) {
+        final (i, box) = _photoAt(d.localFocalPoint, area);
+        _adjusting = i;
+        _adjustBox = box;
+        _adjustFrom = d.localFocalPoint;
+        _adjustStart = _adjustOf(i);
+      },
+      onScaleUpdate: (d) {
+        final moved = _adjustStart.followed(
+          box: _adjustBox,
+          from: _adjustFrom,
+          to: d.localFocalPoint,
+          zoom: d.scale,
+          turn: d.rotation,
+        );
+        _setAdjust(
+            _adjusting, moved.clampedTo(_sizeOf(_adjusting), _adjustBox));
+      },
+      onScaleEnd: (_) => _setAdjust(
+          _adjusting,
+          _adjustOf(_adjusting)
+              .snapped()
+              .clampedTo(_sizeOf(_adjusting), _adjustBox)),
+      onDoubleTapDown: (d) => tappedAt = d.localPosition,
+      // Back to how it was taken.
+      onDoubleTap: () => _setAdjust(_photoAt(tappedAt, area).$1,
+          PhotoAdjust.none),
+      child: child,
     );
   }
 
   /// The camera, seen through the chosen paper: the live feed in the window
   /// being filled, photos already taken in theirs, and the paper on top.
+  /// [held] once every window has its photo: then the paper is the chosen
+  /// one it was taken on, and the photos move under two fingers.
   ///
   /// ⚠️ Windows are painted in order, so a later one covers an earlier one
   /// where their rectangles overlap — the same rule FrameCompositor applies
   /// when it bakes the result, so the preview and the picture agree.
-  Widget _framedViewfinder() {
-    final frame = _frame!;
+  Widget _framedViewfinder({bool held = false}) {
+    final frame = (held ? frameById(_pendingFrameId) : null) ?? _frame!;
     return ColoredBox(
       color: const Color(0xFF120C1F),
       child: _paperBox(
         aspect: frame.aspect,
         child: LayoutBuilder(builder: (context, box) {
           final size = box.biggest;
-          return Stack(
+          final paper = Stack(
             children: [
               for (final (i, window) in frame.windows.indexed)
                 Positioned.fromRect(
@@ -896,7 +1061,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
                   child: ClipPath(
                     clipper: _WindowClip(window, size),
                     child: i < _shots.length
-                        ? Image.memory(_shots[i], fit: BoxFit.cover)
+                        ? _moved(_shots[i], _shotSizes[i], _shotAdjusts[i],
+                            window.boundsIn(size).size)
                         : i == _shots.length
                             ? _preview()
                             : const SizedBox.shrink(),
@@ -910,6 +1076,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
               ),
             ],
           );
+          return held ? _pinchable(area: size, child: paper) : paper;
         }),
       ),
     );
@@ -943,6 +1110,20 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     });
   }
 
+  /// How to move a held shot, until it has been moved. A pinch on a still
+  /// photo is not something anyone expects to be able to do.
+  Widget _adjustHint() {
+    final untouched = _pendingOnPaper
+        ? _shotAdjusts.every((a) => a.isNone)
+        : _pendingAdjust.isNone;
+    if (!_holding || !untouched) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpace.xs),
+      child: Text('Pinch to zoom, twist to tilt',
+          style: AppText.caption(Colors.white.withValues(alpha: .8))),
+    );
+  }
+
   /// What the shot is being taken on, when it is not a bare photo.
   ///
   /// Says it once, above the controls, rather than relying on a lit ring in
@@ -957,7 +1138,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             ? '${_template!.emoji} ${_template!.name}'
             // A frame that takes more than one says which photo is next,
             // so the first shot not being sent reads as intended.
-            : frame != null && frame.slots > 1 && _pending == null
+            : frame != null && frame.slots > 1 && !_holding
                 ? 'Photo ${_shots.length + 1} of ${frame.slots}'
                 : null;
     if (text == null) return const SizedBox.shrink();
@@ -1018,7 +1199,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// frames should run off the right edge of the screen, the way a row that
   /// scrolls does. Upload keeps its own inset instead.
   Widget _controls() {
-    final picking = _busy || _pending != null;
+    final picking = _busy || _holding;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: AppSpace.sm),
       decoration: BoxDecoration(
@@ -1051,8 +1232,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
           // The same button in the same place, because it is the same
           // gesture continued: take the picture, then send the picture.
           _ShutterButton(
-            sending: _pending != null,
-            onTap: _busy ? null : (_pending != null ? _sendPending : _shoot),
+            sending: _holding,
+            onTap: _busy ? null : (_holding ? _sendPending : _shoot),
           ),
           const SizedBox(width: AppSpace.xs),
           Expanded(child: ClipRect(child: _frameRow())),
@@ -1070,7 +1251,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     }
     // Chosen before shooting, like a camera's filter. Changing the paper
     // under photos already taken would mean re-taking them.
-    if (_shots.isNotEmpty || _pending != null) return const SizedBox.shrink();
+    if (_shots.isNotEmpty || _holding) return const SizedBox.shrink();
     final chosen = _frame;
     final elsewhere = chosen != null &&
             !_quickFrames.any((f) => f.id == chosen.id)
@@ -1118,7 +1299,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// Swipe to change mode as well as tap, since the row reads as something
   /// that scrolls.
   Widget _modeRow() {
-    final canTemplates = _shots.isEmpty && _pending == null;
+    final canTemplates = _shots.isEmpty && !_holding;
     // ⚠️ Full width. The column above centres its children, so without this
     // the black band was only as wide as the labels, and the viewfinder
     // showed on either side of it.
@@ -1428,26 +1609,34 @@ class _GlassButton extends StatelessWidget {
   }
 }
 
-/// Full-bleed viewer, opened from a day chip.
-/// All of my live days, swipeable, ending on the camera.
+/// Full-bleed viewer for one of you's live days: yours, or theirs.
 ///
-/// ⚠️ The last page is **"share your day"**, not another photo. Reaching the
-/// end of your own days and finding the way to add one there is how every
-/// story rail works, and it means the add button does not have to live
-/// somewhere else as well.
+/// Swipe between them, or tap: the right of the photo for the next, its
+/// left third for the one before, the way every story viewer goes.
+///
+/// 🔴 **Their days used to open one at a time.** Yours opened in a pager and
+/// theirs in a viewer of a single photo, so of everything they had posted
+/// today you could only ever see the newest. Both are this pager now.
+///
+/// ⚠️ Yours end on **"share your day"**, not another photo. Reaching the end
+/// of your own days and finding the way to add one there is how every story
+/// rail works, and it means the add button does not have to live somewhere
+/// else as well. Theirs simply end.
 ///
 /// Each page keeps its own countdown because each day is its own message
 /// with its own `sentAt` — see [myDayPhotosProvider].
-class MyDaysViewer extends ConsumerStatefulWidget {
-  const MyDaysViewer({super.key, this.initialIndex = 0});
+class DaysViewer extends ConsumerStatefulWidget {
+  const DaysViewer({super.key, required this.own, this.initialIndex = 0});
 
+  /// Mine, or theirs.
+  final bool own;
   final int initialIndex;
 
   @override
-  ConsumerState<MyDaysViewer> createState() => _MyDaysViewerState();
+  ConsumerState<DaysViewer> createState() => _DaysViewerState();
 }
 
-class _MyDaysViewerState extends ConsumerState<MyDaysViewer> {
+class _DaysViewerState extends ConsumerState<DaysViewer> {
   late final PageController _pages =
       PageController(initialPage: widget.initialIndex);
   int _index = 0;
@@ -1464,13 +1653,52 @@ class _MyDaysViewerState extends ConsumerState<MyDaysViewer> {
     super.dispose();
   }
 
+  /// A page along, if there is one. Tapping past the last does nothing
+  /// rather than closing: a viewer that vanishes under a tap reads as a
+  /// crash.
+  void _go(int by, int count) {
+    final to = _index + by;
+    if (to < 0 || to >= count || !_pages.hasClients) return;
+    _pages.animateToPage(to,
+        duration: AppMotion.standard, curve: AppMotion.easeOut);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final days = ref.watch(myDayPhotosProvider);
+    final days = ref.watch(
+        widget.own ? myDayPhotosProvider : partnerDayPhotosProvider);
+    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
+    final who = widget.own ? 'Your day' : '$name’s day';
 
-    // Every day gone while this was open — expired, or retired by an eighth
-    // post. Nothing left to page through, so the camera is the whole screen.
-    final count = days.length + 1;
+    // Every one of theirs gone while this was open, expired or deleted.
+    // Mine always have the camera page.
+    final count = days.length + (widget.own ? 1 : 0);
+    if (count == 0) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Stack(
+            children: [
+              Center(
+                child: Text('Nothing from $name today',
+                    style: AppText.body(AppColors.onDarkMuted)),
+              ),
+              Positioned(
+                top: AppSpace.xs,
+                right: AppSpace.xs,
+                child: IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const AppIcon(CupertinoIcons.xmark,
+                      color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -1484,8 +1712,10 @@ class _MyDaysViewerState extends ConsumerState<MyDaysViewer> {
                 ? const _AddDayPage()
                 : DayPhotoViewer(
                     message: days[i],
-                    who: 'Your day',
+                    who: who,
                     embedded: true,
+                    onNext: () => _go(1, count),
+                    onPrevious: () => _go(-1, count),
                   ),
           ),
           Positioned(
@@ -1573,16 +1803,21 @@ class DayPhotoViewer extends ConsumerStatefulWidget {
     required this.message,
     required this.who,
     this.embedded = false,
+    this.onNext,
+    this.onPrevious,
   });
 
   final FlowerMessage message;
   final String who;
 
-  /// True when this is one page of [MyDaysViewer] rather than a route of its
-  /// own. ⚠️ Drops its own Scaffold and close button — nesting a Scaffold per
-  /// page paints a second background over the pager, and a close button on
-  /// every page would sit in a different place from the one that actually
-  /// closes it.
+  /// A tap on the photo: its right for the next day, its left third for
+  /// the one before. Null outside a pager.
+  final VoidCallback? onNext;
+  final VoidCallback? onPrevious;
+
+  /// True when this is one page of [DaysViewer] rather than a route of its
+  /// own. ⚠️ Drops its own Scaffold: nesting a Scaffold per page paints a
+  /// second background over the pager.
   final bool embedded;
 
   @override
@@ -1663,14 +1898,15 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                     icon: const AppIcon(CupertinoIcons.delete,
                         color: Colors.white, size: 19),
                   ),
-                // One close button, owned by the pager. A per-page one would
-                // sit in the same place and mean something different.
-                if (!widget.embedded)
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const AppIcon(CupertinoIcons.xmark,
-                        color: Colors.white, size: 20),
-                  ),
+                // On every page, and on each it means the same thing:
+                // close the viewer. The pager used to have none, so the
+                // only way out of your own days was the back gesture.
+                IconButton(
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const AppIcon(CupertinoIcons.xmark,
+                      color: Colors.white, size: 20),
+                ),
               ],
             ),
           ),
@@ -1678,7 +1914,7 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
             // ⚠️ A photo that no longer exists still ends in "unavailable",
             // never a spinner that runs forever - StorageImage's error path
             // is a finished state, as the old hasError check made this one.
-            child: InteractiveViewer(
+            child: _tapToTurn(InteractiveViewer(
               child: Center(
                 child: StorageImage.dayPhoto(
                   message.imagePath!,
@@ -1693,7 +1929,7 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
                   ),
                 ),
               ),
-            ),
+            )),
           ),
           if (message.note != null && message.note!.isNotEmpty)
             Padding(
@@ -1723,6 +1959,30 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
           // Room for the pager's dots.
           if (widget.embedded) const SizedBox(height: 28),
         ],
+      ),
+    );
+  }
+
+  /// Taps on the photo turn the page, when this is one page of a pager.
+  ///
+  /// ⚠️ A tap while the reply box has the keyboard up only puts the
+  /// keyboard away: tapping the photo is how you get out of typing, and a
+  /// page turn there would throw away what you were writing.
+  Widget _tapToTurn(Widget photo) {
+    if (widget.onNext == null && widget.onPrevious == null) return photo;
+    return LayoutBuilder(
+      builder: (context, box) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapUp: (d) {
+          if (_focus.hasFocus) {
+            _focus.unfocus();
+          } else if (d.localPosition.dx < box.maxWidth / 3) {
+            widget.onPrevious?.call();
+          } else {
+            widget.onNext?.call();
+          }
+        },
+        child: photo,
       ),
     );
   }
