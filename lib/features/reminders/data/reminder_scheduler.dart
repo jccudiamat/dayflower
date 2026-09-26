@@ -33,7 +33,7 @@ const kSnoozeDuration = Duration(minutes: 9);
 ///     is audible with the ringer silenced and at alarm volume. This is the
 ///     single most important one: a notification-stream sound on a phone in
 ///     do-not-disturb makes no noise at all.
-///  2. **A 30-second sound** (`res/raw/alarm.wav`, see
+///  2. **A 30-second sound** (`res/raw/alarm.ogg`, see
 ///     `tools/generate_alarm_wav.py`). Notification sounds play once and do
 ///     not loop, so the *file* has to be long enough to wake someone.
 ///  3. **`fullScreenIntent`** plus `showWhenLocked`/`turnScreenOn` on
@@ -537,7 +537,7 @@ class ReminderScheduler {
         presentAlert: true,
         presentSound: true,
         subtitle: copy.subText,
-        // WARNING: iOS gets the DEFAULT sound, not alarm.wav. The file lives
+        // WARNING: iOS gets the DEFAULT sound, not alarm.ogg. The file lives
         // in Android's res/raw and would have to be added to the Runner
         // target in Xcode to exist on iOS at all — exactly the same gap as
         // heartbeat.wav. Naming it here without doing that would fall back

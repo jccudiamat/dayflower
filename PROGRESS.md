@@ -13,6 +13,29 @@
 
 ## Recent app work
 
+### 32 more frames, and room for them in the APK (2026-09-26, build 117)
+
+The user sent 32 frames in two batches of 16 (and says more are coming): 22 one-photo and 10 two-photo. The app now has 43 frames: 28 one-photo, 14 two-photo, and the torn note.
+
+- **Adding a frame is now two scripts.** `python tool/add_frames.py <art.png>=<id> ...` does four things: it clears cut-out haze (alpha under 32, the grey veil that would smudge a photo), trims the canvas to the artwork, resamples to 760px premultiplied (no dark rim) and saves WebP q86. It prints each frame's aspect and the total size. Next, give each frame an entry in `photo_frames.dart` (id, name, aspect). Then run `python tool/trace_frame_windows.py`, which finds its windows, caption strip and drawn box. Originals are in `twolip/design/frames/<id>.png`.
+- **Caption strips must be plain paper** (`PLAIN`, 90% of the band within an RGB distance of 40 of its median colour). Without that rule, "You · 3:00 PM" would have been written across the bathing capybara, the sleeping cat and the wreath. 22 frames have a strip. The illustrated frames, the torn ones and the cloud-patterned polaroid do not, and get the small label instead.
+- 🔴 **The APK ceiling.** Build 116 was 49,928,163 bytes against Supabase's 52,428,800 upload limit. The 32 frames are 2.5 MB. To make room, `res/raw/alarm.wav` (1.3 MB, the largest file after the native libraries) is now `alarm.ogg` at 30 KB. `tools/generate_alarm_wav.py` now encodes it with ffmpeg/libvorbis. Its decode correlates 0.9986 with the WAV. It is still `raw/alarm` in the APK (checked with aapt2), so `ReminderScheduler` and the notification channels already on phones find it unchanged. ⚠️ Never put an `alarm.wav` back beside it: two files for one resource name is a build error.
+- **With the frames in, the release APK is 51,359,230 bytes: 1.07 MB left.** That is roughly one more batch of 13 frames, and nothing else. 🔴 **Before the next batch, move frame artwork out of the APK:** download each frame on demand from Storage and cache it, and keep only the geometry (`frame_windows.dart`, a few KB a frame) in the app.
+- Test changes: the Templates page is several screens long now, so its test scrolls to each section rather than expecting them all on the first screen.
+
+Tests: 612 passing.
+
+### A framed day fills the space round it; the mood card loses a line (2026-09-26, build 117)
+
+On build 116 the user's framed My Day (the sunny polaroid) still came out small. They marked the space it could fill: the deck and the room round it, keeping clear of its neighbours.
+
+- 🔴 **Why it was small:** a frame's canvas has clear margins round the tilted sheet. The sunny and aged polaroids draw only 76% of their canvas's width. Home fitted the canvas, so the paper was about a quarter smaller than its box. The tool now measures what each frame actually draws (`frameContent`, alpha of at least 32). `_TapedDay` fits that to the space and draws the whole picture round it, with its clear margins spilling past.
+- **The space:** the deck, plus 12pt into the right margin (`_paperReach`), 18pt up under the top bar (`_paperRise`) and 10pt down toward the map (`_paperDrop`). It never grows left, where the greeting is. The Home test checks it stays inside that room, fills it one way, is bigger than the arch both ways, keeps 12pt before the map and does not reach the greeting's words. Rendered with both the kraft and the sunny polaroid.
+- ⚠️ Taps above the deck (in the 18pt rise) do not reach the photo, because a Stack only hit-tests inside itself. Taps on the rest of it do.
+- **Mood card:** "Send a little love back" is gone, and so is "A little hello, just because" (the no-mood version). Unpaired still says "Connect with your partner on Us". That alone would not have made the card shorter, though: the heart's 96pt ripple stage set its height. The stage is now 80pt tall and does not clip, so the ripples spill past it.
+
+Tests: 612 passing.
+
 ### Frames cut to their holes, framed days taped to Home, snackbars off the tab bar (2026-09-26, build 116)
 
 Three bugs from the user's screenshots of build 115.

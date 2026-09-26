@@ -160,7 +160,7 @@ void main() {
       (tester) async {
     final boundary = GlobalKey();
     await _pump(tester, boundary: boundary);
-    // The cloud is last in the row beside the shutter.
+    // The cloud is a way along the row beside the shutter.
     for (var i = 0;
         i < 10 && _labelled('Cloud & moon').hitTestable().evaluate().isEmpty;
         i++) {

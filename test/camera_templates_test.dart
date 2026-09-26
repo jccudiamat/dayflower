@@ -68,16 +68,23 @@ void main() {
     await _pump(tester);
     expect(find.byType(TemplatesScreen), findsOneWidget);
     expect(find.text('ONE PHOTO'), findsOneWidget);
-    expect(find.text('TWO PHOTOS'), findsOneWidget);
 
-    // 🔴 The strips used to be the camera's own row. This page is where
-    // they live now, so if this section goes, they are unreachable.
+    // Each section in turn, further down: with a few dozen frames the page
+    // is several screens long, and only what is near the screen is built.
     // ⚠️ Dragged rather than scrollUntilVisible, which ends in
     // ensureVisible and scrolls the page out from under the finder.
-    for (var i = 0; i < 12 && find.text('PHOTO BOOTH').evaluate().isEmpty; i++) {
-      await tester.drag(find.byType(ListView), const Offset(0, -400));
-      await tester.pumpAndSettle();
+    Future<void> scrollTo(String heading) async {
+      for (var i = 0; i < 30 && find.text(heading).evaluate().isEmpty; i++) {
+        await tester.drag(find.byType(ListView), const Offset(0, -400));
+        await tester.pumpAndSettle();
+      }
     }
+
+    await scrollTo('TWO PHOTOS');
+    expect(find.text('TWO PHOTOS'), findsOneWidget);
+    // 🔴 The strips used to be the camera's own row. This page is where
+    // they live now, so if this section goes, they are unreachable.
+    await scrollTo('PHOTO BOOTH');
     expect(find.text('PHOTO BOOTH'), findsOneWidget);
     expect(find.text(StripTemplate.all.first.name), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -100,7 +107,8 @@ void main() {
     // 🔴 In build 114 the torn note was here, and shooting onto it sent a
     // blank sheet: it has no window, so the photo had nowhere to go.
     await _pump(tester);
-    for (var i = 0; i < 12; i++) {
+    // The whole page, which is several screens long.
+    for (var i = 0; i < 40; i++) {
       expect(find.text('Torn note'), findsNothing);
       await tester.drag(find.byType(ListView), const Offset(0, -300));
       await tester.pumpAndSettle();

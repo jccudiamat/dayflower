@@ -843,18 +843,35 @@ void main() {
     await tester.pumpAndSettle();
     await _screenshot(tester, 'home-framed-day');
 
-    // 🔴 At the arch's width the squarer paper came out smaller than the
-    // window it replaced. In front it takes the deck's whole width, and
-    // reaches into the page's margin on the right to stand as tall as the
-    // arch: never left, where the greeting is.
+    // 🔴 It came out smaller than the arch it replaced, twice: squarer than
+    // the arch, then shrunk again by the clear margins round the tilted
+    // sheet. What the frame draws now fills the deck and the room round it:
+    // right into the page's margin, up under the top bar, down toward the
+    // map. Never left, where the greeting is, and never touching anything.
     final deck = tester.getRect(find.byKey(const ValueKey('home-photo-deck')));
+    final drawn = tester.getRect(find.byKey(const ValueKey('taped-day-paper')));
+    final room = Rect.fromLTRB(
+        deck.left, deck.top - 18, deck.right + 12, deck.bottom + 10);
+    expect(drawn.left, greaterThanOrEqualTo(room.left - .5));
+    expect(drawn.right, lessThanOrEqualTo(room.right + .5));
+    expect(drawn.top, greaterThanOrEqualTo(room.top - .5));
+    expect(drawn.bottom, lessThanOrEqualTo(room.bottom + .5));
+    // It fills the room one way or the other, whichever its shape allows.
+    expect(
+        (drawn.width - room.width).abs() < 1 ||
+            (drawn.height - room.height).abs() < 1,
+        isTrue,
+        reason: '$drawn in $room');
+    expect(drawn.width, greaterThan(arch.width));
+    expect(drawn.height, greaterThan(arch.height));
+    expect(drawn.right, lessThanOrEqualTo(390 - 8), reason: 'off the edge');
+    final greeting =
+        tester.getRect(find.byKey(const ValueKey('home-greeting')));
+    expect(drawn.left, greaterThan(greeting.right), reason: 'off the words');
+    final map = tester.getRect(find.byKey(const ValueKey('home-map')));
+    expect(map.top - drawn.bottom, greaterThanOrEqualTo(12),
+        reason: 'room before the map');
     final sheet = tester.getRect(paper);
-    expect(sheet.width, greaterThan(arch.width));
-    expect(sheet.left, closeTo(deck.left, 1));
-    expect(sheet.width, closeTo(deck.width + 12, 1));
-    expect(sheet.right, lessThanOrEqualTo(390 - 8), reason: 'off the edge');
-    expect(sheet.height, greaterThan(arch.height * .95));
-    expect(sheet.bottom, lessThanOrEqualTo(deck.bottom));
     // And the arch behind it is covered, not peeking round the paper.
     expect(opacityOf(theirs), 0);
 
@@ -872,6 +889,27 @@ void main() {
     expect(tester.takeException(), isNull);
     // The cache schedules a cleanup when first read; let it run out.
     await tester.pump(const Duration(seconds: 11));
+  });
+
+  _homeTest('The heartbeat says its mood in one line, and no more',
+      (tester) async {
+    await _pump(tester, Routes.home, filled: true);
+    await _reveal(tester, find.byKey(const ValueKey('home-heartbeat')));
+    expect(find.textContaining('Wifey is feeling'), findsOneWidget);
+    // It repeated what the heart beside it already says, and cost the card
+    // a line of height.
+    expect(find.text('Send a little love back'), findsNothing);
+    expect(find.text('A little hello, just because'), findsNothing);
+    // The heart is 64 on a stage no taller than it needs; the ripples spill
+    // past, so a 96pt stage no longer sets the card's height.
+    final heart = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Send a heartbeat');
+    final stage = find
+        .ancestor(of: heart, matching: find.byType(SizedBox))
+        .evaluate()
+        .map((e) => (e.widget as SizedBox))
+        .firstWhere((b) => b.width == 96);
+    expect(stage.height, lessThan(96));
   });
 
   _homeTest('Snackbars are lifted clear of the tab bar', (tester) async {

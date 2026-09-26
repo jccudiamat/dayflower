@@ -235,9 +235,14 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
   /// The heart itself. Ripples are sized relative to it.
   static const double _heartSize = 64;
 
-  /// Big enough to hold a fully expanded incoming ripple without clipping —
-  /// [Stack] clips by default, so this and [_incomingGrowth] move together.
+  /// Wide enough to hold a fully expanded incoming ripple, which is how
+  /// much of the row the heart takes.
   static const double _stageSize = 96;
+
+  /// Only as tall as the heart and a little air: the ripples spill past it
+  /// (the stage does not clip), rather than a 96pt stage setting the
+  /// height of the whole card round a 64pt heart.
+  static const double _stageHeight = 80;
 
   static const double _incomingGrowth = 32;
   static const Duration _incomingDuration = Duration(milliseconds: 1200);
@@ -388,17 +393,16 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
         : mood == null
             ? 'Send $partnerName a heartbeat'
             : '$partnerName is feeling ${mood.label.toLowerCase()} ${mood.emoji}';
+    // One line under the title only when it tells you something to do. The
+    // "send a little love back" line said again what the heart beside it
+    // says, and cost the card a line of height.
     final text =
         Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text(title, style: AppText.subtitle()),
-      const SizedBox(height: AppSpace.xs),
-      Text(
-          !enabled
-              ? 'Connect with your partner on Us'
-              : mood == null
-                  ? 'A little hello, just because'
-                  : 'Send a little love back',
-          style: AppText.body()),
+      if (!enabled) ...[
+        const SizedBox(height: AppSpace.xs),
+        Text('Connect with your partner on Us', style: AppText.body()),
+      ],
       const SizedBox(height: AppSpace.sm),
       if (counts.mine == 0 && counts.partner == 0)
         Text('No heartbeats yet today', style: AppText.caption())
@@ -411,8 +415,11 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     final action = Column(mainAxisSize: MainAxisSize.min, children: [
       SizedBox(
           width: _stageSize,
-          height: _stageSize,
-          child: Stack(alignment: Alignment.center, children: [
+          height: _stageHeight,
+          child: Stack(
+              alignment: Alignment.center,
+              clipBehavior: Clip.none,
+              children: [
             for (final r in _ripples)
               _RippleRing(key: ValueKey(r.id), ripple: r, baseSize: _heartSize),
             AnimatedBuilder(
@@ -710,19 +717,21 @@ class _DayArchState extends ConsumerState<_DayArch> {
                           duration: AppMotion.standard,
                           curve: AppMotion.easeOut,
                           left: front ? 0 : w - rearWidth - (h - 32) * .055,
-                          top: front ? 0 : (compact ? 16 : 24),
-                          // A photo on paper in front takes the deck's whole
-                          // width and then some, to the right, where the
-                          // page's margin has room: its paper is squarer
-                          // than the arch, and at the arch's width it came
-                          // out smaller than the window it replaced. Not to
-                          // the left, where the greeting is.
+                          top: front
+                              ? (msg != null && msg.isOnPaper ? -_paperRise : 0)
+                              : (compact ? 16 : 24),
+                          // A photo on paper in front takes the space round
+                          // the deck as well as the deck: see _paperReach.
                           width: front
                               ? (msg != null && msg.isOnPaper
                                   ? w + _paperReach
                                   : cardWidth)
                               : rearWidth,
-                          height: front ? h : h - (compact ? 24 : 32),
+                          height: front
+                              ? (msg != null && msg.isOnPaper
+                                  ? h + 8 + _paperRise + _paperDrop
+                                  : h)
+                              : h - (compact ? 24 : 32),
                           child: AnimatedOpacity(
                               // Covered by the paper in front.
                               opacity: !front && paperInFront ? 0 : 1,
@@ -929,6 +938,26 @@ class HomeDayPhoto extends ConsumerWidget {
   }
 }
 
+// ── The space a photo on paper in front is given ──────────────────────
+//
+// 🔴 **It came out smaller than the arch it replaced**, twice. A polaroid is
+// squarer than the arch, so at the arch's width it was shorter; and the
+// frame's canvas has clear margins round the tilted sheet (a quarter of the
+// sunny polaroid's width), so fitting the canvas shrank the paper again.
+// It now fits what the frame actually draws (PhotoFrame.content) into the
+// deck plus the room round it: into the page's right margin, up into the
+// space under the top bar, and down toward the map. Never left, where the
+// greeting is, and never so far that it touches the next thing.
+
+/// Into the page's 20pt right margin, leaving 8.
+const _paperReach = 12.0;
+
+/// Up into the 32pt between the top bar and the deck, leaving 14.
+const _paperRise = 18.0;
+
+/// Down into the 24pt before the map, leaving 14.
+const _paperDrop = 10.0;
+
 /// A day photo taken on paper, a frame or a strip, laid on Home as it is.
 ///
 /// 🔴 **The arch is a window into the other one's day.** A photo that came
@@ -942,10 +971,6 @@ class HomeDayPhoto extends ConsumerWidget {
 /// label floating under the picture read as something else's caption. Paper
 /// with nowhere to write (a torn edge) gets a small label stuck over its
 /// bottom edge instead.
-/// How far a photo on paper in front reaches past the deck on the right,
-/// into the page's 20pt margin, to be as tall as the arch it replaces.
-const _paperReach = 12.0;
-
 class _TapedDay extends StatelessWidget {
   const _TapedDay({required this.message, required this.onTap, this.caption});
 
@@ -967,6 +992,10 @@ class _TapedDay extends StatelessWidget {
     // picture's; from the name otherwise; square as a last resort, which
     // the frames nearly are.
     final aspect = frame?.aspect ?? photoAspectOf(path) ?? 1.0;
+    // What is fitted to the space: only what the frame draws, not its clear
+    // margins. The whole picture is drawn round it, margins spilling past,
+    // where they are clear anyway.
+    final drawn = frame?.content ?? const Rect.fromLTWH(0, 0, 1, 1);
     final strip = frame?.captionStrip;
     final caption = this.caption;
     return GestureDetector(
@@ -974,83 +1003,101 @@ class _TapedDay extends StatelessWidget {
       onTap: onTap,
       child: Center(
         child: AspectRatio(
-          aspectRatio: aspect,
+          key: const ValueKey('taped-day-paper'),
+          aspectRatio: aspect * drawn.width / drawn.height,
           child: LayoutBuilder(builder: (context, box) {
-            final size = box.biggest;
+            final size =
+                Size(box.maxWidth / drawn.width, box.maxHeight / drawn.height);
             return Stack(
-              fit: StackFit.expand,
+              clipBehavior: Clip.none,
               children: [
-                // The paper's own shadow, cut to its torn edges rather than
-                // to a box: the photo, blurred, in shadow colour.
-                Transform.translate(
-                  offset: const Offset(0, 4),
-                  child: ImageFiltered(
-                    imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
-                    child: ColorFiltered(
-                      colorFilter: ColorFilter.mode(
-                          Colors.black.withValues(alpha: .22),
-                          BlendMode.srcIn),
-                      child: StorageImage.dayPhoto(path,
-                          width: double.infinity,
-                          height: double.infinity,
-                          fit: BoxFit.contain,
-                          placeholder: const SizedBox.shrink(),
-                          error: (_) => const SizedBox.shrink()),
-                    ),
-                  ),
+                Positioned(
+                  left: -drawn.left * size.width,
+                  top: -drawn.top * size.height,
+                  width: size.width,
+                  height: size.height,
+                  child: _picture(path, size, strip, caption),
                 ),
-                HomeDayPhoto(message: message, fit: BoxFit.contain),
-                if (caption != null && strip != null)
-                  Positioned.fromRect(
-                    rect: strip.rectIn(size),
-                    child: Transform.rotate(
-                      angle: strip.angle,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(caption,
-                            key: const ValueKey('taped-day-caption'),
-                            maxLines: 1,
-                            style: AppText.note(_pen).copyWith(
-                                fontSize: (strip.rectIn(size).height * .7)
-                                    .clamp(9.0, 20.0),
-                                height: 1)),
-                      ),
-                    ),
-                  )
-                else if (caption != null)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: size.height * .04,
-                    child: Center(
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(AppRadius.pill),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withValues(alpha: .08),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2)),
-                          ],
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 3),
-                          child: Text(caption,
-                              key: const ValueKey('taped-day-caption'),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: AppText.caption(AppColors.ink)),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             );
           }),
         ),
       ),
+    );
+  }
+
+  /// The whole picture at [size], its shadow, and what is written on it.
+  Widget _picture(
+      String path, Size size, FrameCaptionStrip? strip, String? caption) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // The paper's own shadow, cut to its torn edges rather than to a
+        // box: the photo, blurred, in shadow colour.
+        Transform.translate(
+          offset: const Offset(0, 4),
+          child: ImageFiltered(
+            imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: ColorFiltered(
+              colorFilter: ColorFilter.mode(
+                  Colors.black.withValues(alpha: .22), BlendMode.srcIn),
+              child: StorageImage.dayPhoto(path,
+                  width: double.infinity,
+                  height: double.infinity,
+                  fit: BoxFit.contain,
+                  placeholder: const SizedBox.shrink(),
+                  error: (_) => const SizedBox.shrink()),
+            ),
+          ),
+        ),
+        HomeDayPhoto(message: message, fit: BoxFit.contain),
+        if (caption != null && strip != null)
+          Positioned.fromRect(
+            rect: strip.rectIn(size),
+            child: Transform.rotate(
+              angle: strip.angle,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(caption,
+                    key: const ValueKey('taped-day-caption'),
+                    maxLines: 1,
+                    style: AppText.note(_pen).copyWith(
+                        fontSize:
+                            (strip.rectIn(size).height * .7).clamp(9.0, 20.0),
+                        height: 1)),
+              ),
+            ),
+          )
+        else if (caption != null)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: size.height * .04,
+            child: Center(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.pill),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: .08),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2)),
+                  ],
+                ),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                  child: Text(caption,
+                      key: const ValueKey('taped-day-caption'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.caption(AppColors.ink)),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

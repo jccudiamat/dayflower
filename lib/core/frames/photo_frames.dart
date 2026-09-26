@@ -30,6 +30,10 @@ class PhotoFrame {
   /// Width over height of the artwork.
   final double aspect;
 
+  /// The box round what the frame actually draws, as fractions of its
+  /// canvas: the canvas has clear margins round a tilted sheet.
+  Rect get content => frameContent[id] ?? const Rect.fromLTWH(0, 0, 1, 1);
+
   /// The blank paper under a window, where Home writes whose day it is.
   /// Null for a frame with nowhere to write: a torn edge, no window.
   FrameCaptionStrip? get captionStrip => frameCaptionStrips[id];
@@ -76,6 +80,116 @@ const photoFrames = <PhotoFrame>[
     aspect: 760 / 757,
   ),
   PhotoFrame(
+    id: 'polaroid_wide',
+    name: 'Wide polaroid',
+    aspect: 760 / 749,
+  ),
+  PhotoFrame(
+    id: 'polaroid_moon',
+    name: 'Moon polaroid',
+    aspect: 760 / 709,
+  ),
+  PhotoFrame(
+    id: 'polaroid_stars',
+    name: 'Starry polaroid',
+    aspect: 757 / 760,
+  ),
+  PhotoFrame(
+    id: 'polaroid_peek_sun',
+    name: 'Peeking sun',
+    aspect: 686 / 760,
+  ),
+  PhotoFrame(
+    id: 'polaroid_sparkle',
+    name: 'Sparkle polaroid',
+    aspect: 760 / 689,
+  ),
+  PhotoFrame(
+    id: 'polaroid_daisy',
+    name: 'Daisy polaroid',
+    aspect: 760 / 690,
+  ),
+  PhotoFrame(
+    id: 'polaroid_clouds',
+    name: 'Cloud polaroid',
+    aspect: 728 / 760,
+  ),
+  PhotoFrame(
+    id: 'polaroid_night',
+    name: 'Night polaroid',
+    aspect: 760 / 752,
+  ),
+  PhotoFrame(
+    id: 'polaroid_film',
+    name: 'Polaroid & film',
+    aspect: 753 / 760,
+  ),
+  PhotoFrame(
+    id: 'film_frame',
+    name: 'Film frame',
+    aspect: 760 / 726,
+  ),
+  PhotoFrame(
+    id: 'torn_square',
+    name: 'Torn square',
+    aspect: 743 / 760,
+  ),
+  PhotoFrame(
+    id: 'torn_pressed',
+    name: 'Pressed flowers',
+    aspect: 760 / 742,
+  ),
+  PhotoFrame(
+    id: 'cloud_taped',
+    name: 'Taped cloud',
+    aspect: 760 / 577,
+  ),
+  PhotoFrame(
+    id: 'cloud_clip',
+    name: 'Clipped cloud',
+    aspect: 760 / 690,
+  ),
+  PhotoFrame(
+    id: 'scallop_tulips',
+    name: 'Tulips & bow',
+    aspect: 760 / 687,
+  ),
+  PhotoFrame(
+    id: 'tulip_kitten',
+    name: 'Tulip kitten',
+    aspect: 760 / 746,
+  ),
+  PhotoFrame(
+    id: 'lilac_kitten',
+    name: 'Lilac kitten',
+    aspect: 760 / 715,
+  ),
+  PhotoFrame(
+    id: 'sleepy_cat',
+    name: 'Sleepy cat',
+    aspect: 722 / 760,
+  ),
+  PhotoFrame(
+    id: 'pink_puppy',
+    name: 'Pink puppy',
+    aspect: 752 / 760,
+  ),
+  PhotoFrame(
+    id: 'puppy_ears',
+    name: 'Puppy ears',
+    aspect: 760 / 738,
+  ),
+  PhotoFrame(
+    id: 'capybara_orange',
+    name: 'Capybara & oranges',
+    aspect: 760 / 728,
+  ),
+  PhotoFrame(
+    id: 'wreath_pets',
+    name: 'Pet wreath',
+    aspect: 760 / 715,
+  ),
+  PhotoFrame(
     id: 'duo_offset',
     name: 'Two, offset',
     aspect: 707 / 760,
@@ -94,6 +208,56 @@ const photoFrames = <PhotoFrame>[
     id: 'duo_pinned',
     name: 'Two, pinned',
     aspect: 744 / 760,
+  ),
+  PhotoFrame(
+    id: 'duo_gold_pins',
+    name: 'Two, gold pins',
+    aspect: 760 / 622,
+  ),
+  PhotoFrame(
+    id: 'duo_notebook',
+    name: 'Two, notebook',
+    aspect: 760 / 662,
+  ),
+  PhotoFrame(
+    id: 'duo_leaf_star',
+    name: 'Two, leaf & star',
+    aspect: 760 / 638,
+  ),
+  PhotoFrame(
+    id: 'duo_coral',
+    name: 'Two, coral tape',
+    aspect: 760 / 753,
+  ),
+  PhotoFrame(
+    id: 'duo_all_pink',
+    name: 'Two, all pink',
+    aspect: 730 / 760,
+  ),
+  PhotoFrame(
+    id: 'duo_lilac_pink',
+    name: 'Two, lilac & pink',
+    aspect: 760 / 619,
+  ),
+  PhotoFrame(
+    id: 'duo_lilac_heart',
+    name: 'Two, lilac heart',
+    aspect: 760 / 683,
+  ),
+  PhotoFrame(
+    id: 'duo_lilac_moon',
+    name: 'Two, lilac moon',
+    aspect: 760 / 682,
+  ),
+  PhotoFrame(
+    id: 'duo_cat',
+    name: 'Two, with a cat',
+    aspect: 760 / 688,
+  ),
+  PhotoFrame(
+    id: 'duo_capybara_bath',
+    name: 'Two, capybara bath',
+    aspect: 760 / 656,
   ),
   PhotoFrame(
     id: 'cloud_moon',
