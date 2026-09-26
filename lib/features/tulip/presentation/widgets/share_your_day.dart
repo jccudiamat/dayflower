@@ -27,6 +27,7 @@ import '../../data/flower_repository.dart';
 import '../../domain/camera_lifecycle.dart';
 import '../../domain/day_reactions.dart';
 import '../../../../core/widgets/storage_image.dart';
+import '../../../../core/widgets/app_snack_bars.dart';
 
 /// Where the next shot goes.
 ///
@@ -128,6 +129,10 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
   /// The held shot is already on paper, so it is shown whole rather than
   /// cropped to the screen: cropping it would cut the frame off.
   bool _pendingOnPaper = false;
+
+  /// Which frame it is on, taken when it was composed: the choice under the
+  /// shutter can change before it is sent, and the paper it is on cannot.
+  String? _pendingFrameId;
 
   /// Whether the next shot goes onto paper at all. A strip, or a half of
   /// theirs waiting to be joined, takes precedence: those are their own
@@ -269,6 +274,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
     Uint8List bytes,
     String ext, {
     DayPhotoTarget target = DayPhotoTarget.myDay,
+    PhotoOrigin origin = PhotoOrigin.daily,
+    String? frameId,
   }) async {
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
@@ -282,6 +289,8 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
             bytes: bytes,
             fileExtension: ext,
             target: target,
+            origin: origin,
+            frameId: frameId,
           );
       if (mounted) {
         _toast(switch (target) {
@@ -366,6 +375,7 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
         _pending = out.bytes;
         _pendingExt = out.extension;
         _pendingOnPaper = true;
+        _pendingFrameId = frame.id;
       });
     } catch (e) {
       debugPrint('frame compositing failed: $e');
@@ -516,7 +526,12 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
 
     // A photo on paper was composed when it was taken (_addShot), so what
     // arrives here is already the finished picture, in its own format.
-    return _shareBytes(bytes, _pendingExt, target: target);
+    // Marked as framed, so Home shows it on its paper rather than cutting
+    // it into the arch.
+    return _shareBytes(bytes, _pendingExt,
+        target: target,
+        origin: _pendingOnPaper ? PhotoOrigin.frame : PhotoOrigin.daily,
+        frameId: _pendingOnPaper ? _pendingFrameId : null);
   }
 
   Future<void> _postSolo(StripTemplate t, Uint8List bytes) async {
@@ -756,14 +771,17 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
               left: 0,
               right: 0,
               bottom: 0,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _StripBanner(onCancelMine: _cancelMyStrip),
-                  _chosenBanner(),
-                  _controls(),
-                  _modeRow(),
-                ],
+              // "No flash on this camera" above the shutter, not on it.
+              child: SnackBarObstacle(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _StripBanner(onCancelMine: _cancelMyStrip),
+                    _chosenBanner(),
+                    _controls(),
+                    _modeRow(),
+                  ],
+                ),
               ),
             ),
 
@@ -866,16 +884,17 @@ class _ShareYourDayBarState extends ConsumerState<ShareYourDayBar>
       child: _paperBox(
         aspect: frame.aspect,
         child: LayoutBuilder(builder: (context, box) {
-          final w = box.maxWidth, h = box.maxHeight;
+          final size = box.biggest;
           return Stack(
             children: [
               for (final (i, window) in frame.windows.indexed)
-                Positioned(
-                  left: window.left * w,
-                  top: window.top * h,
-                  width: window.width * w,
-                  height: window.height * h,
-                  child: ClipRect(
+                Positioned.fromRect(
+                  rect: window.boundsIn(size),
+                  // Cut to the hole's shape, as the compositor cuts the
+                  // photo it sends, so what the viewfinder shows is what
+                  // arrives: nothing in the corners past a cloud's edge.
+                  child: ClipPath(
+                    clipper: _WindowClip(window, size),
                     child: i < _shots.length
                         ? Image.memory(_shots[i], fit: BoxFit.cover)
                         : i == _shots.length
@@ -1250,6 +1269,25 @@ class _FrameDot extends StatelessWidget {
       ),
     );
   }
+}
+
+/// A frame's window, cut to its outline, for a child laid out in the
+/// window's bounds.
+class _WindowClip extends CustomClipper<Path> {
+  const _WindowClip(this.window, this.frame);
+
+  final FrameWindow window;
+
+  /// The size the whole frame is drawn at.
+  final Size frame;
+
+  @override
+  Path getClip(Size size) =>
+      window.pathIn(frame, origin: window.boundsIn(frame).topLeft);
+
+  @override
+  bool shouldReclip(_WindowClip old) =>
+      old.window != window || old.frame != frame;
 }
 
 /// CAMERA, TEMPLATES. The one you are on is white and the rest are faded,
@@ -1671,12 +1709,15 @@ class _DayPhotoViewerState extends ConsumerState<DayPhotoViewer> {
               padding: EdgeInsets.only(
                 bottom: MediaQuery.viewInsetsOf(context).bottom,
               ),
-              child: _ReplyBar(
-                controller: _reply,
-                focus: _focus,
-                busy: _sending,
-                onSend: _sendText,
-                onReact: _sendReaction,
+              // "Sent" above the reply box, not over it.
+              child: SnackBarObstacle(
+                child: _ReplyBar(
+                  controller: _reply,
+                  focus: _focus,
+                  busy: _sending,
+                  onSend: _sendText,
+                  onReact: _sendReaction,
+                ),
               ),
             ),
           // Room for the pager's dots.

@@ -77,7 +77,8 @@ class _Flowers extends FlowerRepository {
       bool toWidget = true,
       bool toChat = true,
       String? replyTo,
-      PhotoOrigin origin = PhotoOrigin.daily}) async {
+      PhotoOrigin origin = PhotoOrigin.daily,
+      String? frameId}) async {
     sends++;
     widgetTarget = toWidget;
     return FlowerMessage(

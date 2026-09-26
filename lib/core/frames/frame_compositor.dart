@@ -68,31 +68,17 @@ class FrameCompositor {
       for (var i = 0; i < frame.windows.length && i < photos.length; i++) {
         final photo = await decodeImageFromList(photos[i]);
         decoded.add(photo);
-        final w = frame.windows[i];
-        final box = ui.Rect.fromLTWH(
-          w.left * width,
-          w.top * height,
-          w.width * width,
-          w.height * height,
-        );
+        final window = frame.windows[i];
+        final size = ui.Size(width, height);
+        final box = window.boundsIn(size);
         canvas.save();
-        // Clipped to the window, so a photo wider than its hole cannot
-        // spill over the paper around it.
-        canvas.clipRect(box);
-        // 🔴 And clipped *out* of every window in front of it. On an
-        // overlapping pair the back frame's window is notched by the front
-        // one, so its rectangle reaches across the front frame's hole —
-        // without this the first photo shows through where the second
-        // belongs, and a pair with only one photo taken looks like the same
-        // picture twice.
-        for (var j = i + 1; j < frame.windows.length; j++) {
-          final other = frame.windows[j];
-          canvas.clipRect(
-            ui.Rect.fromLTWH(other.left * width, other.top * height,
-                other.width * width, other.height * height),
-            clipOp: ui.ClipOp.difference,
-          );
-        }
+        // 🔴 Cut to the hole's own shape, not to its box. The box of a
+        // cloud reaches past the cloud into corners where the paper is
+        // clear, and the photo showed there, outside the frame. The outline
+        // also keeps the two photos of a pair apart: each hole is its own
+        // shape, with paper between them, so the back photo cannot reach
+        // into the front frame's window.
+        canvas.clipPath(window.pathIn(size));
         canvas.drawImageRect(photo, _coverSource(photo, box), box,
             ui.Paint()..filterQuality = ui.FilterQuality.high);
         canvas.restore();

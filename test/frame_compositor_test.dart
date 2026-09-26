@@ -32,6 +32,70 @@ Future<int> _pixel(ui.Image image, double fx, double fy) async {
   return (b[i + 3] << 24) | (b[i] << 16) | (b[i + 1] << 8) | b[i + 2];
 }
 
+const _outside = 1, _hole = 2, _paper = 3;
+
+/// Every pixel of a frame's artwork as outside the frame, inside one of its
+/// holes, or paper. Clear means alpha under 250 (the paper sits at 250 to
+/// 254); clear and reachable from an edge is outside, and a clear region the
+/// paper encloses is a hole if it is big enough to hold a photo.
+Uint8List _regions(Uint8List rgba, int w, int h) {
+  final kind = Uint8List(w * h);
+  bool clear(int i) => rgba[i * 4 + 3] < 250;
+
+  List<int> fill(int start, int as) {
+    final seen = <int>[start];
+    kind[start] = as;
+    for (var n = 0; n < seen.length; n++) {
+      final i = seen[n], x = i % w;
+      for (final j in [
+        if (x > 0) i - 1,
+        if (x < w - 1) i + 1,
+        if (i >= w) i - w,
+        if (i < w * (h - 1)) i + w,
+      ]) {
+        if (kind[j] == 0 && clear(j)) {
+          kind[j] = as;
+          seen.add(j);
+        }
+      }
+    }
+    return seen;
+  }
+
+  for (var i = 0; i < w * h; i++) {
+    final x = i % w, y = i ~/ w;
+    final edge = x == 0 || y == 0 || x == w - 1 || y == h - 1;
+    if (edge && kind[i] == 0 && clear(i)) fill(i, _outside);
+  }
+  for (var i = 0; i < w * h; i++) {
+    if (kind[i] != 0) continue;
+    if (!clear(i)) {
+      kind[i] = _paper;
+      continue;
+    }
+    final region = fill(i, _hole);
+    // A speck inside a sparkle is a gap in the drawing, not a window.
+    if (region.length < w * h * .01) {
+      for (final j in region) {
+        kind[j] = _paper;
+      }
+    }
+  }
+  return kind;
+}
+
+/// Whether every pixel within three of ([x], [y]) is the same region, so
+/// resampling to the composed size cannot move the point across an edge.
+bool _settled(Uint8List kind, int w, int x, int y) {
+  final here = kind[y * w + x];
+  for (var dy = -3; dy <= 3; dy++) {
+    for (var dx = -3; dx <= 3; dx++) {
+      if (kind[(y + dy) * w + x + dx] != here) return false;
+    }
+  }
+  return true;
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   tearDown(FrameCompositor.evict);
@@ -49,7 +113,7 @@ void main() {
     // polaroid must not stretch the paper.
     expect(image.width / image.height, closeTo(frame.aspect, 0.01));
 
-    final window = frame.windows.first;
+    final window = frame.windows.first.bounds;
     final green = await _pixel(image, window.center.dx, window.center.dy);
     expect(green, 0xFF00FF00, reason: 'the photo shows through the window');
 
@@ -69,7 +133,7 @@ void main() {
     );
     final image = await _decode(out);
     addTearDown(image.dispose);
-    final window = frame.windows.first;
+    final window = frame.windows.first.bounds;
     // Filled corner to corner inside the window, which only happens if it
     // was scaled to cover rather than fitted with gaps.
     // ⚠️ Not the very corners: the artwork draws an inner shadow over the
@@ -92,10 +156,10 @@ void main() {
     ]);
     final image = await _decode(out);
     addTearDown(image.dispose);
-    expect(await _pixel(image, frame.windows[0].center.dx,
-        frame.windows[0].center.dy), 0xFFFF0000);
-    expect(await _pixel(image, frame.windows[1].center.dx,
-        frame.windows[1].center.dy), 0xFF00FF00);
+    expect(await _pixel(image, frame.windows[0].bounds.center.dx,
+        frame.windows[0].bounds.center.dy), 0xFFFF0000);
+    expect(await _pixel(image, frame.windows[1].bounds.center.dx,
+        frame.windows[1].bounds.center.dy), 0xFF00FF00);
   });
 
   test('fewer photos than windows leaves the rest empty, and does not throw',
@@ -106,13 +170,66 @@ void main() {
             const ui.Color(0xFFFF0000))]);
     final image = await _decode(out);
     addTearDown(image.dispose);
-    expect(await _pixel(image, frame.windows[0].center.dx,
-        frame.windows[0].center.dy), 0xFFFF0000);
+    expect(await _pixel(image, frame.windows[0].bounds.center.dx,
+        frame.windows[0].bounds.center.dy), 0xFFFF0000);
     // The second window is still a hole, so it is transparent rather than
     // filled with the first photo.
-    final second = await _pixel(
-        image, frame.windows[1].center.dx, frame.windows[1].center.dy);
+    final second = await _pixel(image, frame.windows[1].bounds.center.dx,
+        frame.windows[1].bounds.center.dy);
     expect(second >> 24, 0, reason: 'an unfilled window stays empty');
+  });
+
+  // 🔴 Build 115 cut every photo to the box around its hole. On the cloud
+  // the photo showed in the box's corners, outside the cloud's outline, and
+  // the box stopped three pixels short of the hole's bottom, which left a
+  // thin line showing through under the picture. This reads the artwork
+  // itself, not the traced outlines, so it checks the tracing too.
+  test('every photo stays inside its paper and fills its hole', () async {
+    for (final frame in photoFrames.where((f) => f.slots > 0)) {
+      final out = await FrameCompositor.compose(frame: frame, photos: [
+        for (var i = 0; i < frame.slots; i++)
+          await _photo(const ui.Color(0xFFFF00FF)),
+      ]);
+      final image = await _decode(out);
+      final composed = (await image.toByteData(
+              format: ui.ImageByteFormat.rawRgba))!
+          .buffer
+          .asUint8List();
+
+      final art = await _decode(
+          (await rootBundle.load(frame.asset)).buffer.asUint8List());
+      final kind = _regions(
+          (await art.toByteData(format: ui.ImageByteFormat.rawRgba))!
+              .buffer
+              .asUint8List(),
+          art.width,
+          art.height);
+
+      var outside = 0, inside = 0;
+      for (var y = 3; y < art.height - 3; y += 3) {
+        for (var x = 3; x < art.width - 3; x += 3) {
+          final here = kind[y * art.width + x];
+          if (here == _paper || !_settled(kind, art.width, x, y)) continue;
+          final cx = ((x + .5) * image.width / art.width).floor();
+          final cy = ((y + .5) * image.height / art.height).floor();
+          final alpha = composed[(cy * image.width + cx) * 4 + 3];
+          if (here == _outside) {
+            outside++;
+            expect(alpha, lessThan(250),
+                reason: '${frame.id}: photo past the paper at $x,$y');
+          } else {
+            inside++;
+            expect(alpha, 255,
+                reason: '${frame.id}: gap in the window at $x,$y');
+          }
+        }
+      }
+      // Enough of each looked at for the passes above to mean something.
+      expect(outside, greaterThan(1000), reason: frame.id);
+      expect(inside, greaterThan(1000), reason: frame.id);
+      image.dispose();
+      art.dispose();
+    }
   });
 
   test('the torn note takes no photo at all', () async {

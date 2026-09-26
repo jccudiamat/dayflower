@@ -28,7 +28,12 @@ import '../domain/photo_shape.dart';
 /// Memories reads it back off the storage path. Renaming a member renames
 /// every future file and silently reclassifies nothing that already exists,
 /// so old prefixes have to keep being recognised — see [MemoryKind].
-enum PhotoOrigin { daily, card, booth }
+///
+/// [frame] is a photo taken on paper (FrameCompositor): its edges are the
+/// frame's, shaped and transparent, so Home lays it on the page whole
+/// rather than cutting it into the arch. Memories files it with the other
+/// day photos, which is what it is.
+enum PhotoOrigin { daily, card, booth, frame }
 
 class FlowerMessage {
   const FlowerMessage({
@@ -134,6 +139,23 @@ class FlowerMessage {
       isPhoto &&
       (imagePath!.split('/').last.startsWith('strip-') ||
           imagePath!.split('/').last.startsWith('booth-'));
+
+  /// A photo taken on one of the frames, by the same means.
+  bool get isFramed =>
+      isPhoto && imagePath!.split('/').last.startsWith('frame-');
+
+  /// Which frame, from `frame-<id>-<uuid>`: Home writes on its paper. Null
+  /// for anything else, and for a name that does not say.
+  String? get frameId {
+    if (!isFramed) return null;
+    final rest = imagePath!.split('/').last.substring('frame-'.length);
+    final dash = rest.indexOf('-');
+    return dash <= 0 ? null : rest.substring(0, dash);
+  }
+
+  /// Made from a template, a frame or a strip, so it already has its own
+  /// paper and is shown whole. See Home's day photos.
+  bool get isOnPaper => isFramed || isStrip;
 
   /// A text-only message — no flower, no photo, no call.
   ///
@@ -437,6 +459,8 @@ class FlowerRepository {
     required DayPhotoTarget target,
     String? note,
     String? replyTo,
+    PhotoOrigin origin = PhotoOrigin.daily,
+    String? frameId,
   }) =>
       sendDayPhoto(
         pairId: pairId,
@@ -447,6 +471,8 @@ class FlowerRepository {
         note: note,
         toWidget: target.toWidget,
         toChat: target.toChat,
+        origin: origin,
+        frameId: frameId,
       );
 
   Future<FlowerMessage> sendDayPhoto({
@@ -459,13 +485,20 @@ class FlowerRepository {
     bool toChat = true,
     String? replyTo,
     PhotoOrigin origin = PhotoOrigin.daily,
+    // Which frame a [PhotoOrigin.frame] photo was taken on. It goes in the
+    // name after the prefix, so Home can find the paper's blank strip.
+    String? frameId,
   }) async {
     // <pair_id>/<uuid>.<ext> — the leading segment is what the Storage RLS
     // policy reads to check pair membership, so it must stay first.
     final ext = fileExtension.replaceAll('.', '').toLowerCase();
     // An ordinary day photo stays unprefixed, so every path
     // already in the bucket keeps meaning what it meant.
-    final prefix = origin == PhotoOrigin.daily ? '' : '${origin.name}-';
+    final prefix = switch (origin) {
+      PhotoOrigin.daily => '',
+      PhotoOrigin.frame when frameId != null => 'frame-$frameId-',
+      _ => '${origin.name}-',
+    };
     // The shape rides in the name, so the thread can draw the bubble at its
     // final size before the photo arrives. See photo_shape.dart.
     final shape = await measurePhoto(bytes);

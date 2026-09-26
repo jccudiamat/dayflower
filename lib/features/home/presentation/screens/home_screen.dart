@@ -1,5 +1,6 @@
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +24,8 @@ import '../../domain/greeting_flower.dart';
 import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../tulip/data/flower_repository.dart';
+import '../../../tulip/domain/photo_shape.dart';
+import '../../../../core/frames/photo_frames.dart';
 import '../../../tulip/presentation/widgets/share_your_day.dart';
 import '../../../activity/data/activity_repository.dart';
 import '../widgets/home_upcoming_events.dart';
@@ -665,6 +668,9 @@ class _DayArchState extends ConsumerState<_DayArch> {
     final name = partner?.petName ?? partner?.displayName ?? 'Your partner';
     final both = mine != null && theirs != null;
     final mineFront = theirs == null || (both && _mineInFront);
+    // A photo on paper in front covers the arch behind it: the paper is
+    // what the deck shows, not a polaroid with an arch peeking round it.
+    final paperInFront = (mineFront ? mine : theirs)?.isOnPaper ?? false;
     return Column(
         key: const ValueKey('home-photo-deck'),
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -688,6 +694,16 @@ class _DayArchState extends ConsumerState<_DayArch> {
                       final shape = BorderRadius.vertical(
                           top: Radius.circular(cardWidth / 2),
                           bottom: const Radius.circular(AppRadius.lg));
+                      void tapped(FlowerMessage msg) {
+                        if (both && !front) {
+                          setState(() => _mineInFront = own);
+                        } else {
+                          _open(msg, label);
+                        }
+                      }
+
+                      String caption(FlowerMessage msg) =>
+                          '${own ? 'You' : name} · ${DateFormat('h:mm a').format(msg.sentAt.toLocal())}';
                       return AnimatedPositioned(
                           key: ValueKey(
                               own ? 'my-day-photo' : 'partner-day-photo'),
@@ -695,13 +711,36 @@ class _DayArchState extends ConsumerState<_DayArch> {
                           curve: AppMotion.easeOut,
                           left: front ? 0 : w - rearWidth - (h - 32) * .055,
                           top: front ? 0 : (compact ? 16 : 24),
-                          width: front ? cardWidth : rearWidth,
+                          // A photo on paper in front takes the deck's whole
+                          // width and then some, to the right, where the
+                          // page's margin has room: its paper is squarer
+                          // than the arch, and at the arch's width it came
+                          // out smaller than the window it replaced. Not to
+                          // the left, where the greeting is.
+                          width: front
+                              ? (msg != null && msg.isOnPaper
+                                  ? w + _paperReach
+                                  : cardWidth)
+                              : rearWidth,
                           height: front ? h : h - (compact ? 24 : 32),
-                          child: AnimatedRotation(
+                          child: AnimatedOpacity(
+                              // Covered by the paper in front.
+                              opacity: !front && paperInFront ? 0 : 1,
+                              duration: AppMotion.standard,
+                              child: IgnorePointer(
+                                  ignoring: !front && paperInFront,
+                                  child: AnimatedRotation(
                               turns: front ? 0 : 3 / 360,
                               duration: AppMotion.standard,
                               curve: AppMotion.easeOut,
-                              child: ClipRRect(
+                              // The arch is a window into their day. A photo
+                              // already on paper is laid on the page instead.
+                              child: msg != null && msg.isOnPaper
+                                  ? _TapedDay(
+                                      message: msg,
+                                      caption: front ? caption(msg) : null,
+                                      onTap: () => tapped(msg))
+                                  : ClipRRect(
                                   borderRadius: shape,
                                   child: CustomPaint(
                                       foregroundPainter: msg == null
@@ -725,14 +764,7 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                                     ? () =>
                                                         _shareDay(context, ref)
                                                     : null)
-                                                : () {
-                                                    if (both && !front) {
-                                                      setState(() =>
-                                                          _mineInFront = own);
-                                                    } else {
-                                                      _open(msg, label);
-                                                    }
-                                                  },
+                                                : () => tapped(msg),
                                             child: msg == null
                                                 ? (front
                                                     ? _empty(name, own, compact)
@@ -781,13 +813,13 @@ class _DayArchState extends ConsumerState<_DayArch> {
                                                                           .black54
                                                                     ])),
                                                                 child: Text(
-                                                                    '${own ? 'You' : name} · ${DateFormat('h:mm a').format(msg.sentAt.toLocal())}',
+                                                                    caption(msg),
                                                                     style: AppText
                                                                         .caption(
                                                                             Colors.white)),
                                                               )),
                                                       ]),
-                                          ))))));
+                                          ))))))));
                     }
 
                     return GestureDetector(
@@ -869,8 +901,13 @@ class _DayArchState extends ConsumerState<_DayArch> {
 
 /// Shared by the live photo stack and the noninteractive widget preview.
 class HomeDayPhoto extends ConsumerWidget {
-  const HomeDayPhoto({super.key, required this.message});
+  const HomeDayPhoto(
+      {super.key, required this.message, this.fit = BoxFit.cover});
   final FlowerMessage message;
+
+  /// Cover for a photo in the arch; contain for one on its own paper, whose
+  /// edges are the point of it.
+  final BoxFit fit;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final path = message.imagePath;
@@ -884,11 +921,137 @@ class HomeDayPhoto extends ConsumerWidget {
     return StorageImage.dayPhoto(path,
         width: double.infinity,
         height: double.infinity,
-        fit: BoxFit.cover,
+        fit: fit,
         placeholder:
             Center(child: Text('Loading photo…', style: AppText.caption())),
         error: (retry) =>
             GestureDetector(onTap: retry, child: unavailable()));
+  }
+}
+
+/// A day photo taken on paper, a frame or a strip, laid on Home as it is.
+///
+/// 🔴 **The arch is a window into the other one's day.** A photo that came
+/// with its own paper was cut into it all the same, so a polaroid sat inside
+/// a second frame with its tape and torn edges cropped off, and the paper
+/// the photo was taken on was the one thing that did not show. It is taped
+/// to the page now, whole, with the shadow a sheet of paper casts.
+///
+/// Whose day and when is written **on the paper**, in the blank strip under
+/// the photo where a pen would put it, turned to the paper's own tilt. A
+/// label floating under the picture read as something else's caption. Paper
+/// with nowhere to write (a torn edge) gets a small label stuck over its
+/// bottom edge instead.
+/// How far a photo on paper in front reaches past the deck on the right,
+/// into the page's 20pt margin, to be as tall as the arch it replaces.
+const _paperReach = 12.0;
+
+class _TapedDay extends StatelessWidget {
+  const _TapedDay({required this.message, required this.onTap, this.caption});
+
+  final FlowerMessage message;
+  final VoidCallback onTap;
+
+  /// Who and when. Only on the card in front.
+  final String? caption;
+
+  /// Ink, not a theme colour: it is written on the paper, and the paper is
+  /// the same colour in dark mode.
+  static const _pen = Color(0xFF3A3146);
+
+  @override
+  Widget build(BuildContext context) {
+    final path = message.imagePath!;
+    final frame = frameById(message.frameId);
+    // The frame's own shape where it is known, which is exactly the
+    // picture's; from the name otherwise; square as a last resort, which
+    // the frames nearly are.
+    final aspect = frame?.aspect ?? photoAspectOf(path) ?? 1.0;
+    final strip = frame?.captionStrip;
+    final caption = this.caption;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: aspect,
+          child: LayoutBuilder(builder: (context, box) {
+            final size = box.biggest;
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                // The paper's own shadow, cut to its torn edges rather than
+                // to a box: the photo, blurred, in shadow colour.
+                Transform.translate(
+                  offset: const Offset(0, 4),
+                  child: ImageFiltered(
+                    imageFilter: ui.ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                    child: ColorFiltered(
+                      colorFilter: ColorFilter.mode(
+                          Colors.black.withValues(alpha: .22),
+                          BlendMode.srcIn),
+                      child: StorageImage.dayPhoto(path,
+                          width: double.infinity,
+                          height: double.infinity,
+                          fit: BoxFit.contain,
+                          placeholder: const SizedBox.shrink(),
+                          error: (_) => const SizedBox.shrink()),
+                    ),
+                  ),
+                ),
+                HomeDayPhoto(message: message, fit: BoxFit.contain),
+                if (caption != null && strip != null)
+                  Positioned.fromRect(
+                    rect: strip.rectIn(size),
+                    child: Transform.rotate(
+                      angle: strip.angle,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(caption,
+                            key: const ValueKey('taped-day-caption'),
+                            maxLines: 1,
+                            style: AppText.note(_pen).copyWith(
+                                fontSize: (strip.rectIn(size).height * .7)
+                                    .clamp(9.0, 20.0),
+                                height: 1)),
+                      ),
+                    ),
+                  )
+                else if (caption != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: size.height * .04,
+                    child: Center(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          boxShadow: [
+                            BoxShadow(
+                                color: Colors.black.withValues(alpha: .08),
+                                blurRadius: 6,
+                                offset: const Offset(0, 2)),
+                          ],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 3),
+                          child: Text(caption,
+                              key: const ValueKey('taped-day-caption'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppText.caption(AppColors.ink)),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            );
+          }),
+        ),
+      ),
+    );
   }
 }
 

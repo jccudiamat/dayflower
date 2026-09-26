@@ -34,6 +34,7 @@ import '../widgets/voice_recorder_bar.dart';
 import '../../data/voice_notes.dart';
 import 'chat_settings_screen.dart';
 import '../../../../core/widgets/profile_photo.dart';
+import '../../../../core/widgets/app_snack_bars.dart';
 import '../widgets/media_viewer.dart';
 
 /// The Chat tab: the couple's conversation.
@@ -579,7 +580,9 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
             // you are talking to; this is a thing happening in the thread,
             // and it belongs where you are already looking.
             const TypingFooter(),
-            _buildComposer(),
+            // Snackbars are lifted clear of the composer rather than drawn
+            // over what is being typed.
+            SnackBarObstacle(child: _buildComposer()),
             if (_panelOpen)
               FlowerCatalogPanel(
                 height: _keyboardHeight,

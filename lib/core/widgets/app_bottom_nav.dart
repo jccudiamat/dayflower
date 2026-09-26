@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'app_snack_bars.dart';
 import 'section_scroll_scope.dart';
 
 import 'package:dayflower/app_router.dart';
@@ -44,7 +45,8 @@ class AppBottomNav extends ConsumerWidget {
     final index = _destinations.indexWhere((d) => d.section == section);
     final onDayflower = section == AppSection.dayflower;
 
-    return DecoratedBox(
+    // Snackbars are lifted clear of the tab bar rather than drawn over it.
+    return SnackBarObstacle(child: DecoratedBox(
       decoration: BoxDecoration(
         color: AppColors.background,
         // ⚠️ A hairline and nothing else. The brief allows a divider or a soft
@@ -99,7 +101,7 @@ class AppBottomNav extends ConsumerWidget {
           }),
         ),
       ),
-    );
+    ));
   }
 }
 

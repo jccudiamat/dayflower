@@ -186,6 +186,10 @@ class AppTheme {
         backgroundColor: dark ? AppColors.darkRaised : AppColors.darkSurface,
         contentTextStyle: _text(14, FontWeight.w500, AppColors.onDark),
         behavior: SnackBarBehavior.floating,
+        // Every snackbar can be closed. AppSnackBars adds the X to each one
+        // whatever it asks for; this is the colour it is drawn in.
+        showCloseIcon: true,
+        closeIconColor: AppColors.onDark,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),

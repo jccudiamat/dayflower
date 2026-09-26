@@ -38,7 +38,11 @@ import 'package:dayflower/features/activity/presentation/screens/activity_feed_s
 import 'package:dayflower/features/activity/data/activity_models.dart';
 import 'package:dayflower/features/settings/presentation/screens/settings_screen.dart';
 
+import 'package:dayflower/core/frames/frame_compositor.dart';
+import 'package:dayflower/core/frames/photo_frames.dart';
 import 'package:dayflower/core/models/pair.dart';
+import 'package:dayflower/core/widgets/storage_image.dart';
+import 'package:dayflower/core/widgets/app_snack_bars.dart';
 import 'package:dayflower/core/models/user_profile.dart';
 import 'package:dayflower/core/providers/supabase_provider.dart';
 import 'package:dayflower/core/theme/app_theme.dart';
@@ -62,6 +66,7 @@ import 'package:dayflower/features/us/presentation/screens/us_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -90,6 +95,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
     bool hasStart = true,
     bool productionRoutes = false,
     bool filled = false,
+    bool framed = false,
     bool boothFilled = false,
     double height = 844,
     double textScale = 1,
@@ -184,7 +190,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       reunionProvider.overrideWith((ref) => Stream.value(null)),
       flowerMessagesProvider.overrideWith((ref) => Stream.value(
         throwback ? [_lastYear] :
-        productionRoutes && filled ? [_mine, _theirs, if (boothFilled) ..._boothPhotos, FlowerMessage(
+        productionRoutes && filled ? [framed ? _mineFramed : _mine, _theirs, if (boothFilled) ..._boothPhotos, FlowerMessage(
           id: 'flower-preview', pairId: 'preview', senderId: 'preview-b',
           flowerType: 'classic_tulip', note: 'Thinking of you', sentAt: _now)] : [])),
       openStripsProvider.overrideWith((ref) => Stream.value(boothFilled ? _pendingBooth : [])),
@@ -211,8 +217,10 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
       partnerMoodProvider.overrideWithValue(filled ? Mood.loved : partnerMood),
       todayHeartbeatCountsProvider.overrideWithValue(
           filled ? (mine: 3, partner: 2) : (mine: 0, partner: 0)),
-      myDayPhotoProvider.overrideWithValue(filled ? _mine : null),
-      myDayPhotosProvider.overrideWithValue(filled ? [_mine] : []),
+      myDayPhotoProvider.overrideWithValue(
+          filled ? (framed ? _mineFramed : _mine) : null),
+      myDayPhotosProvider.overrideWithValue(
+          filled ? [framed ? _mineFramed : _mine] : []),
       partnerDayPhotoProvider.overrideWithValue(filled ? _theirs : null),
       recentActivitiesProvider.overrideWithValue(const AsyncData([])),
       unseenActivityCountProvider.overrideWithValue(0),
@@ -256,6 +264,15 @@ final _mine = FlowerMessage(
     imagePath: 'me.png',
     sentAt: _now,
     toWidget: true);
+/// My day taken on the kraft polaroid: composed for real in setUpAll, and
+/// served under this name. The name carries the shape, as a sent one does.
+final _mineFramed = FlowerMessage(
+    id: 'mine',
+    pairId: 'preview',
+    senderId: 'preview-a',
+    imagePath: 'frame-polaroid_kraft-mine_1256x1280.png',
+    sentAt: _now,
+    toWidget: true);
 final _theirs = FlowerMessage(
     id: 'theirs',
     pairId: 'preview',
@@ -290,6 +307,34 @@ class _HeartbeatFake extends HeartbeatRepository {
     if (fail) throw StateError('offline');
     sends++;
   }
+}
+
+/// Serves the same pictures as [_PhotoClient], to the private photo cache.
+class _PhotoFiles extends FileService {
+  @override
+  Future<FileServiceResponse> get(String url,
+      {Map<String, String>? headers}) async {
+    final name = Uri.parse(url).pathSegments.last;
+    return _PhotoFile(_boothImages[name] ??
+        File('test/fixtures/home/$name').readAsBytesSync());
+  }
+}
+
+class _PhotoFile implements FileServiceResponse {
+  _PhotoFile(this.bytes);
+  final List<int> bytes;
+  @override
+  Stream<List<int>> get content => Stream.value(bytes);
+  @override
+  int? get contentLength => bytes.length;
+  @override
+  int get statusCode => 200;
+  @override
+  DateTime get validTill => DateTime.now().add(const Duration(days: 7));
+  @override
+  String? get eTag => null;
+  @override
+  String get fileExtension => '.png';
 }
 
 class _PhotoClient implements HttpClient {
@@ -349,6 +394,8 @@ void main() {
       _boothImages[name] = await BoothRenderer.render(design,
           List.generate(design.layout.shots, (i) => i.isEven ? mine : theirs));
     }
+    _boothImages[_mineFramed.imagePath!] = await FrameCompositor.compose(
+        frame: frameById('polaroid_kraft')!, photos: [mine]);
 
     tz.initializeTimeZones();
     for (final (family, asset) in [
@@ -744,6 +791,96 @@ void main() {
       }
       await tester.pumpWidget(const SizedBox());
     }
+  });
+
+  _homeTest('A day taken on paper is laid on the page, not cut into the arch',
+      (tester) async {
+    // The photos for real, for once: every other test here draws them
+    // offline (flutter_test_config.dart), and whether the paper shows whole
+    // is only visible with the paper in it.
+    final offline = StorageImageCache.manager;
+    addTearDown(() => StorageImageCache.debugManager = offline);
+    await tester.runAsync(() async {
+      StorageImageCache.debugManager = CacheManager(Config('home-framed',
+          repo: NonStoringObjectProvider(),
+          fileSystem: MemoryCacheSystem(),
+          fileService: _PhotoFiles()));
+    });
+    await _pump(tester, Routes.home, filled: true, framed: true);
+    for (var i = 0; i < 10; i++) {
+      await tester.runAsync(
+          () async => Future<void>.delayed(const Duration(milliseconds: 200)));
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+    final mine = find.byKey(const ValueKey('my-day-photo'));
+    final theirs = find.byKey(const ValueKey('partner-day-photo'));
+
+    // 🔴 Build 115 cut a framed photo into the arch like any other, so the
+    // polaroid sat inside a second frame with its edges cropped away.
+    expect(find.descendant(of: mine, matching: find.byType(ClipRRect)),
+        findsNothing, reason: 'no arch around a photo on paper');
+    final paper = find.descendant(
+        of: mine,
+        matching: find.byWidgetPredicate(
+            (w) => w is HomeDayPhoto && w.fit == BoxFit.contain));
+    expect(paper, findsOneWidget, reason: 'shown whole, never cropped');
+    // A plain photo keeps its window.
+    expect(find.descendant(of: theirs, matching: find.byType(ClipRRect)),
+        findsOneWidget);
+    expect(find.descendant(of: theirs, matching: find.byType(HomeDayPhoto)),
+        findsOneWidget);
+
+    await _screenshot(tester, 'home-framed-day-behind');
+    double opacityOf(Finder card) => tester
+        .widget<AnimatedOpacity>(
+            find.descendant(of: card, matching: find.byType(AnimatedOpacity)))
+        .opacity;
+    // Behind a plain photo, the paper peeks out: it is not covered.
+    expect(opacityOf(mine), 1);
+    final arch = tester.getRect(theirs);
+    await tester.dragFrom(tester.getCenter(theirs), const Offset(-100, 0));
+    await tester.pumpAndSettle();
+    await _screenshot(tester, 'home-framed-day');
+
+    // 🔴 At the arch's width the squarer paper came out smaller than the
+    // window it replaced. In front it takes the deck's whole width, and
+    // reaches into the page's margin on the right to stand as tall as the
+    // arch: never left, where the greeting is.
+    final deck = tester.getRect(find.byKey(const ValueKey('home-photo-deck')));
+    final sheet = tester.getRect(paper);
+    expect(sheet.width, greaterThan(arch.width));
+    expect(sheet.left, closeTo(deck.left, 1));
+    expect(sheet.width, closeTo(deck.width + 12, 1));
+    expect(sheet.right, lessThanOrEqualTo(390 - 8), reason: 'off the edge');
+    expect(sheet.height, greaterThan(arch.height * .95));
+    expect(sheet.bottom, lessThanOrEqualTo(deck.bottom));
+    // And the arch behind it is covered, not peeking round the paper.
+    expect(opacityOf(theirs), 0);
+
+    // Whose day and when is written on the polaroid's blank strip, under
+    // the photo, not on a label floating below it.
+    final caption = find.byKey(const ValueKey('taped-day-caption'));
+    expect(caption, findsOneWidget);
+    expect((tester.widget(caption) as Text).data, 'You · 3:00 PM');
+    final strip =
+        frameById('polaroid_kraft')!.captionStrip!.rectIn(sheet.size);
+    expect(tester.getCenter(caption).dx,
+        closeTo(sheet.left + strip.center.dx, 2));
+    expect(tester.getCenter(caption).dy,
+        closeTo(sheet.top + strip.center.dy, 2));
+    expect(tester.takeException(), isNull);
+    // The cache schedules a cleanup when first read; let it run out.
+    await tester.pump(const Duration(seconds: 11));
+  });
+
+  _homeTest('Snackbars are lifted clear of the tab bar', (tester) async {
+    await _pump(tester, Routes.home);
+    expect(
+        find.descendant(
+            of: find.byType(AppBottomNav),
+            matching: find.byType(SnackBarObstacle)),
+        findsOneWidget);
   });
 
   _homeTest('Every section sits the same distance from the next',

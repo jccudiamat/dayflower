@@ -5,6 +5,7 @@ import 'package:dayflower/app_router.dart';
 import 'package:dayflower/core/models/pair.dart';
 import 'package:dayflower/core/providers/supabase_provider.dart';
 import 'package:dayflower/core/theme/app_theme.dart';
+import 'package:dayflower/core/widgets/app_snack_bars.dart';
 import 'package:dayflower/features/booth/data/strip_repository.dart';
 import 'package:dayflower/features/pairing/data/pair_repository.dart';
 import 'package:dayflower/features/tulip/data/flower_repository.dart';
@@ -121,6 +122,11 @@ void main() {
     expect(camera.center.dx, closeTo(shutter.center.dx, 1));
     // 🔴 The space asked for: the mode row is not against the bottom edge.
     expect(844 - camera.bottom, greaterThan(10));
+    // "No flash on this camera" is lifted above the shutter, not put on it.
+    expect(find.ancestor(
+            of: _labelled('Take photo'),
+            matching: find.byType(SnackBarObstacle)),
+        findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -147,6 +153,42 @@ void main() {
             .endsWith('frames/polaroid_kraft.webp') &&
         w.fit == BoxFit.fill);
     expect(paper, findsOneWidget, reason: 'the paper, over the viewfinder');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the viewfinder is cut to the hole, not to its box',
+      (tester) async {
+    final boundary = GlobalKey();
+    await _pump(tester, boundary: boundary);
+    // The cloud is last in the row beside the shutter.
+    for (var i = 0;
+        i < 10 && _labelled('Cloud & moon').hitTestable().evaluate().isEmpty;
+        i++) {
+      await tester.drag(find.byType(ListView), const Offset(-200, 0));
+      await tester.pumpAndSettle();
+    }
+    await tester.tap(_labelled('Cloud & moon'));
+    await tester.pumpAndSettle();
+    await _settleImages(tester);
+    if (_capture) await _shoot(tester, boundary, 'camera-cloud');
+
+    // 🔴 Build 115 clipped the live feed to the box around the cloud's
+    // hole, so the camera showed in the box's corners, outside the cloud.
+    final clip = tester.widget<ClipPath>(find.byWidgetPredicate((w) =>
+        w is ClipPath && '${w.clipper.runtimeType}' == '_WindowClip'));
+    final size = tester.getSize(find.byWidget(clip));
+    final path = clip.clipper!.getClip(size);
+    expect(path.contains(size.center(Offset.zero)), isTrue,
+        reason: 'the middle of the hole shows the camera');
+    for (final corner in [
+      const Offset(2, 2),
+      Offset(size.width - 2, 2),
+      Offset(2, size.height - 2),
+      Offset(size.width - 2, size.height - 2),
+    ]) {
+      expect(path.contains(corner), isFalse,
+          reason: 'the box corner at $corner is outside the cloud');
+    }
     expect(tester.takeException(), isNull);
   });
 

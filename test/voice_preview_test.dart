@@ -5,6 +5,7 @@ import 'package:dayflower/core/models/pair.dart';
 import 'package:dayflower/core/models/user_profile.dart';
 import 'package:dayflower/core/providers/supabase_provider.dart';
 import 'package:dayflower/core/theme/app_theme.dart';
+import 'package:dayflower/core/widgets/app_snack_bars.dart';
 import 'package:dayflower/features/onboarding/data/user_repository.dart';
 import 'package:dayflower/features/pairing/data/pair_repository.dart';
 import 'package:dayflower/features/presence/data/presence_repository.dart';
@@ -175,6 +176,11 @@ void main() {
 
     // The ordinary field is the caption field while one is waiting.
     expect(find.text('Add a caption'), findsOneWidget);
+    // Snackbars are lifted clear of the composer rather than put over it.
+    expect(
+        find.ancestor(
+            of: find.byType(TextField), matching: find.byType(SnackBarObstacle)),
+        findsOneWidget);
     await tester.enterText(find.byType(TextField), 'listen to this');
     await tester.pumpAndSettle();
 

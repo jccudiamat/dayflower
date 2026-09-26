@@ -96,6 +96,8 @@ class StripRepository {
       bytes: composed,
       fileExtension: 'jpg',
       note: template.name,
+      // Marked as a strip, so Home shows it whole rather than in the arch.
+      origin: PhotoOrigin.booth,
     );
   }
 
@@ -178,6 +180,7 @@ class StripRepository {
       fileExtension: 'jpg',
       note: strip.style.name,
       toWidget: !strip.template.startsWith('studio_'),
+      origin: PhotoOrigin.booth,
     );
 
     await _client.from('photo_strips').update({

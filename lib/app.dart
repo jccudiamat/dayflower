@@ -15,6 +15,7 @@ import 'features/heartbeat/data/incoming_heartbeats.dart';
 import 'features/heartbeat/data/pulse_alert_prefs.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/app_snack_bars.dart';
 import 'core/theme/theme_mode_prefs.dart';
 import 'core/providers/supabase_provider.dart';
 import 'features/activity/data/activity_models.dart';
@@ -522,8 +523,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // in one.
       builder: (context, child) => DevicePreview.appBuilder(
         context,
-        CallPipGate(
-            child: UpdateGate(child: ScreenshotReportGate(child: child))),
+        // Every snackbar in the app goes through this: clear of the tab bar
+        // and the text boxes, and always with an X. See AppSnackBars.
+        AppSnackBars(
+          child: CallPipGate(
+              child: UpdateGate(child: ScreenshotReportGate(child: child))),
+        ),
       ),
     );
   }

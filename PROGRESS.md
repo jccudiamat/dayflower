@@ -13,6 +13,29 @@
 
 ## Recent app work
 
+### Frames cut to their holes, framed days taped to Home, snackbars off the tab bar (2026-09-26, build 116)
+
+Three bugs from the user's screenshots of build 115.
+
+**1. A photo showed outside its frame, and a thin line under it.** Every frame's window was stored as the rectangle around its hole, measured on a coarse grid, and the photo filled that rectangle. On the cloud the rectangle reaches past the outline into the corners, where the paper is clear, so the photo showed there: in the viewfinder, the held shot, the saved copy and My Day. The rectangle also stopped 3px short of the hole's bottom, and the gap showed whatever was behind (the "thin white line" on Home).
+- `tool/trace_frame_windows.py` now traces each hole's own outline from the artwork's alpha: clear pixels the paper encloses, grown 3px so the photo runs under the paper's antialiased edge. It writes `lib/core/frames/frame_windows.dart` (generated; do not edit). It refuses a frame whose paper is too thin to hide that 3px, or whose two windows are too close.
+- `PhotoFrame.windows` are now `FrameWindow`s (the `bounds` box for cover-fitting, and the outline). `FrameCompositor` clips each photo with `clipPath`, and the viewfinder with `ClipPath` (`_WindowClip`). The difference-clip for overlapping pairs is gone: the outlines are separate shapes with paper between them.
+- 🔴 **A new frame needs a run of the script.** Its name and aspect still go in `photo_frames.dart` by hand. Its windows and caption strip come from the script.
+- Test: `frame_compositor_test` composes every frame and reads the artwork itself, not the traced data. Nothing opaque may appear outside the paper, and nothing may be left see-through inside a hole. With the old rectangle clip put back, it fails.
+
+**2. A framed day sat inside the arch.** The arch is a window into their day. A photo that already has its own paper is now laid on Home whole (`_TapedDay`), with a shadow cut to the paper's edges. The arch stays for a plain photo and for an empty day.
+- Framed photos are named `frame-<frameId>-<uuid>` (`PhotoOrigin.frame`, `FlowerMessage.isFramed/frameId/isOnPaper`). Strips (solo and joined) are now sent as `booth-`, which Memories already read as strips, so they count as on paper too. Strips sent before this still go in the arch until they expire.
+- The user asked for two changes after seeing it. **Size:** in front, the paper takes the deck's whole width plus 12pt into the page's right margin (`_paperReach`), which makes it as tall as the arch. It never grows left, where the greeting is. **The arch behind it fades out and ignores taps:** the paper covers it rather than letting it peek round, for every frame, including the cloud's see-through corners. The other day is still one swipe away. Behind a plain photo, a framed one still peeks out. Whose day and when is written **on the paper**, in the polaroid's blank strip under the photo, turned to the paper's tilt. The script measures that strip too (`frameCaptionStrips`). The cloud's strip is on the peach cloud. The two torn papers have ragged bottoms and no strip, so they get a small label over their bottom edge.
+
+**3. Snackbars floated over the tab bar and the chat's text box, and some could not be closed.** Root cause: `AppShell` wraps every page in its own `Scaffold`, and a snackbar is drawn by the outermost one, which has neither. That Scaffold is kept: it is what shows a snackbar from a bottom sheet above the sheet, and lets one shown as a page closes outlive it. Instead:
+- `AppSnackBars` (installed in `app.dart`'s builder) is the messenger every `ScaffoldMessenger.of` finds. When a snackbar is shown, it lifts it above any visible `SnackBarObstacle`, and above a focused text field sitting where the snackbar would. It also forces `showCloseIcon: true` on every snackbar, whatever the call site asks.
+- The obstacles are the tab bar (`AppBottomNav`), the chat composer, the camera's controls, and the day-photo reply bar. A tab bar on a page underneath does not count (TickerMode).
+- Tests: `app_snack_bars_test.dart`. It keeps one test that reproduces the old overlap without `AppSnackBars`.
+
+Tests: 611 passing. ⚠️ **Not yet seen on a phone:** the live camera cut to a cloud, a framed My Day arriving on the partner's Home, and a snackbar with the keyboard up.
+
+⚠️ Home tests that wait on real time (`runAsync`) fail when run **alone**, on the map card's tile cache (`path_provider` has no answer in a test). They pass as a file. This was already so before this change.
+
 ### Review of build 114, and the fixes (2026-09-26, build 115)
 
 🔴 **Build 114 was published before it had been reviewed or seen on a device.** The user's "push and build" arrived mid-turn; the push-and-publish command was then rejected in the UI, but it had already run, and the session reported "nothing was pushed or published", which was false. **Check `latest.json` and `git log origin/…` after any interrupted publish, rather than trusting that a rejected command did nothing.**
