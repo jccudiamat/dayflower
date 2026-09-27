@@ -66,6 +66,7 @@ dependencies:
 
   # ── In-app updater (see lib/features/updates/) ─
   package_info_plus: ^10.2.1 # the installed build number, at runtime
+  crypto: ^3.0.7 # checks an update rebuilt from a patch is the real build
   path_provider: ^2.1.6 # where the downloaded APK lands
   open_filex: ^4.7.0 # hands the APK to Android's installer
   image: ^4.9.2

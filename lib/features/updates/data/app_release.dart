@@ -16,6 +16,8 @@ class AppRelease {
     required this.notes,
     required this.minBuildNumber,
     this.publishedAt,
+    this.sha256,
+    this.patches = const {},
   });
 
   /// Android's versionCode — the `+N` half of pubspec's `version:` line, and
@@ -42,8 +44,26 @@ class AppRelease {
 
   final DateTime? publishedAt;
 
+  /// The APK's SHA-256, which an APK rebuilt from a patch must match.
+  /// Null in manifests from before patches, which then offer none.
+  final String? sha256;
+
+  /// Patches to this build, by the build they apply to: a phone on one of
+  /// those downloads the patch (a few MB) rather than the whole APK.
+  /// See ApkPatch.
+  final Map<int, AppPatch> patches;
+
+  /// The patch for a phone on [installedBuild], if there is one it can use.
+  AppPatch? patchFrom(int installedBuild) =>
+      sha256 == null ? null : patches[installedBuild];
+
+  /// What a phone on [installedBuild] downloads: the patch, or the APK.
+  int downloadBytesFor(int installedBuild) =>
+      patchFrom(installedBuild)?.sizeBytes ?? sizeBytes;
+
   factory AppRelease.fromMap(Map<String, dynamic> map) {
     final rawNotes = map['notes'];
+    final rawPatches = map['patches'];
     return AppRelease(
       buildNumber: _asInt(map['buildNumber']),
       versionName: map['versionName'] as String? ?? '?',
@@ -58,6 +78,17 @@ class AppRelease {
       minBuildNumber: _asInt(map['minBuildNumber']),
       publishedAt:
           DateTime.tryParse(map['publishedAt'] as String? ?? '')?.toLocal(),
+      sha256: map['sha256'] as String?,
+      patches: {
+        if (rawPatches is Map)
+          for (final MapEntry(:key, :value) in rawPatches.entries)
+            if (int.tryParse('$key') case final from?
+                when value is Map && value['object'] is String)
+              from: AppPatch(
+                fileName: value['object'] as String,
+                sizeBytes: _asInt(value['sizeBytes']),
+              ),
+      },
     );
   }
 
@@ -69,9 +100,25 @@ class AppRelease {
   /// update that can't be downloaded.
   bool get isUsable => buildNumber > 0 && fileName.isNotEmpty;
 
-  /// Sizes here are always tens of megabytes, so MB with one decimal is the
-  /// only unit worth printing.
-  String get readableSize => sizeBytes <= 0
+  /// Sizes here are megabytes, so MB with one decimal is the only unit
+  /// worth printing.
+  String get readableSize => readableBytes(sizeBytes);
+
+  /// What a phone on [installedBuild] will download, readably.
+  String readableSizeFor(int installedBuild) =>
+      readableBytes(downloadBytesFor(installedBuild));
+
+  static String readableBytes(int bytes) => bytes <= 0
       ? ''
-      : '${(sizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+      : '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+}
+
+/// One patch in the manifest: from an older build to this one.
+@immutable
+class AppPatch {
+  const AppPatch({required this.fileName, required this.sizeBytes});
+
+  /// Object name inside the bucket.
+  final String fileName;
+  final int sizeBytes;
 }

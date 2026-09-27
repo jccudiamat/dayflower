@@ -77,6 +77,25 @@ class MainActivity : FlutterActivity() {
                 MediaSaver.handle(applicationContext, call, result)
             }
 
+        // Where this app's own APK is, for an update patch to be applied to.
+        // Only a single APK, which is how the sideloaded app installs: split
+        // APKs (a Play install) could not be rebuilt from one base file, so
+        // they answer null and the updater takes the full APK.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, APP_CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "installedApk" -> {
+                        val info = applicationContext.applicationInfo
+                        val splits = info.splitSourceDirs
+                        result.success(
+                            if (splits == null || splits.isEmpty()) info.sourceDir
+                            else null,
+                        )
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
         // Sticking one reminder on the home screen. Its own channel for the
         // same reason as the others: requestPinAppWidget is a method on
         // AppWidgetManager, so it cannot be reached from Dart, and
@@ -368,6 +387,7 @@ class MainActivity : FlutterActivity() {
         private const val CHANNEL = "dayflower/pip"
         private const val PRESENCE_CHANNEL = "dayflower/presence"
         private const val STICKY_NOTE_CHANNEL = "dayflower/sticky_note"
+        private const val APP_CHANNEL = "dayflower/app"
 
         /**
          * How VoiceNotes tells Dart that playback reached the end.

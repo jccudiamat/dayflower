@@ -13,6 +13,22 @@
 
 ## Recent app work
 
+### Updates download only what changed (2026-09-28, build 122)
+
+Every update used to download the whole APK (49.7 MB). Now a phone on one of the last few builds downloads a **patch** of about 2 MB and rebuilds the new APK from the one it has installed.
+
+**Measured first**, on the published builds 120 and 121: 5 of 1,184 files inside the APK changed, almost all of it `lib/arm64-v8a/libapp.so` (the compiled Dart, 13.4 MB, new on every build). The engine, WebRTC, fonts and other assets (36 MB) were byte-identical. zstd's `--patch-from` made a 2.01 MB patch, but its decoder is native code worth several hundred KB and the APK has about 330 KB left, so the patch format is our own and needs only the Deflate built into Dart.
+
+- **The format** (`lib/features/updates/data/apk_patch.dart`, `ApkPatch`): bsdiff-style. A 108-byte header (magic `DFP1`, both sizes and both SHA-256s), then three zlib streams: control (seek, diff length, extra length), diff bytes (new minus old, mostly zeros where code shifted) and extra bytes (wholly new). 120 to 121 comes out at 2.19 MB, 4.4% of the APK; made in about 4s, applied on a PC in about 3s.
+- **Safety:** a patch fits one exact build. It is refused unless the installed APK hashes to the patch's old hash, and the result must hash to the patch's new hash and to the manifest's `sha256`. Anything that goes wrong (no patch for this build, the patch will not download, the phone cannot say where its APK is, any check fails) falls back silently to the full APK. The worst a patch can do is cost the time spent trying.
+- **The installed APK** comes from `MainActivity` on the `dayflower/app` channel (`installedApk`, `applicationInfo.sourceDir`). A split-APK install answers null and gets the full APK.
+- **Publishing** (`tool/publish_update.dart`): the manifest gains `sha256` and `patches` (`{"<from build>": {"object", "sizeBytes"}}`). A patch is made from each of the last 4 builds in the bucket and uploaded before `latest.json`. The published APKs are kept in `build/published/` (gitignored) so the next publish does not download them again; anything missing there is fetched from the bucket. Patches to anything but the newest build are deleted when pruning, and pruning counts only `.apk` names as builds. `--dry-run` lists the patches. At build 122 they were 2.2 MB (from 120 and 119) and 2.9 MB (from 118).
+- `dart run tool/make_patch.dart <old.apk> <new.apk> <out.patch>` makes a patch by hand and checks it rebuilds the new APK exactly.
+- The update sheet shows what this phone will download (the patch size when there is one).
+- ⚠️ **Build 122 itself still downloads in full** on every phone: phones on 121 and older have the old updater, which knows nothing about patches. Patches start working from 122 to 123.
+- Tests: `test/apk_patch_test.dart` (round trips over edits, inserts, removals, swaps and nothing in common; the wrong old file and a damaged patch are refused and leave no file) and `test/update_patch_test.dart` (against a local HTTP server: only the patch downloads; a damaged or missing patch, another build, or an unknown APK path all end with the full APK).
+- Other options discussed with the user: Shorebird (code push, Dart only, third-party service), and Google Play internal testing (automatic delta updates, and it lifts the 50 MB ceiling).
+
 ### A drawn boy or girl for anyone without a photo, and their gender (2026-09-27, build 121)
 
 The user supplied two illustrations (a boy, a girl) to be the default avatar for anyone who hasn't added a profile picture.

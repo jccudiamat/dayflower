@@ -43,8 +43,13 @@
 
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:crypto/crypto.dart';
+import 'package:dayflower/features/updates/data/apk_patch.dart';
 
 const _bucket = 'app-builds';
+
 /// Supabase's free plan caps a single object at 50 MB and refuses to let a
 /// bucket raise its own limit past the plan's, so the 62 MB universal APK
 /// simply cannot be published. `--split-per-abi` produces one APK per
@@ -72,6 +77,17 @@ const _targetPlatforms = <String, String>{
 };
 
 const _apkPath = 'build/app/outputs/flutter-apk/app-release.apk';
+
+/// Every published APK is also kept here, so the next publish can make a
+/// patch from it without downloading it back. Under build/, so git ignores
+/// it and `flutter clean` may empty it: anything missing is fetched from
+/// the bucket instead.
+const _publishedDir = 'build/published';
+
+/// How many older builds get a patch to the new one. A phone further
+/// behind than this downloads the whole APK, which is also what it would
+/// do with no patches at all.
+const _patchDepth = 4;
 
 Future<void> main(List<String> args) async {
   try {
@@ -197,6 +213,7 @@ Future<void> _publish(List<String> args) async {
     }
     final bytes = apk.lengthSync();
     final objectName = 'dayflower-$newBuild-${options.abi}.apk';
+    final apkBytes = apk.readAsBytesSync();
 
     final manifest = <String, Object?>{
       'buildNumber': newBuild,
@@ -207,6 +224,8 @@ Future<void> _publish(List<String> args) async {
       'notes': options.notes,
       'minBuildNumber': options.minBuild,
       'publishedAt': DateTime.now().toUtc().toIso8601String(),
+      // What an APK rebuilt from a patch must hash to. See ApkPatch.
+      'sha256': sha256.convert(apkBytes).toString(),
     };
 
     // Fail here rather than after pushing 50 MB up the wire. Supabase's free
@@ -221,9 +240,29 @@ Future<void> _publish(List<String> args) async {
       );
     }
 
+    // ── Patches. A phone on one of the last few builds downloads what
+    // changed (a few MB) instead of the whole APK. ─────────────────
+    final patches = <_Patch>[];
+    if (serviceKey != null && _serviceKeyProblem(serviceKey) == null) {
+      patches.addAll(await _makePatches(
+        supabaseUrl: supabaseUrl,
+        serviceKey: serviceKey,
+        abi: options.abi,
+        newBuild: newBuild,
+        apk: apkBytes,
+      ));
+    }
+    manifest['patches'] = {
+      for (final p in patches)
+        '${p.from}': {'object': p.object, 'sizeBytes': p.bytes.length},
+    };
+
     if (options.dryRun) {
       stdout.writeln('\n--dry-run — would upload:');
       stdout.writeln('  $objectName  (${_mb(bytes)})');
+      for (final p in patches) {
+        stdout.writeln('  ${p.object}  (${_mb(p.bytes.length)})');
+      }
       stdout.writeln('  latest.json  ${jsonEncode(manifest)}');
       return;
     }
@@ -242,6 +281,20 @@ Future<void> _publish(List<String> args) async {
       // CDN hold them for a day.
       cacheControl: '86400',
     );
+
+    // Before the manifest that names them, like the APK.
+    for (final p in patches) {
+      stdout.writeln('→ uploading ${p.object} (${_mb(p.bytes.length)})');
+      await _upload(
+        supabaseUrl: supabaseUrl,
+        serviceKey: serviceKey,
+        object: p.object,
+        body: Stream.value(p.bytes),
+        length: p.bytes.length,
+        contentType: 'application/octet-stream',
+        cacheControl: '86400',
+      );
+    }
 
     stdout.writeln('→ uploading latest.json');
     final manifestBytes = utf8.encode(jsonEncode(manifest));
@@ -263,6 +316,7 @@ Future<void> _publish(List<String> args) async {
       '  or resume, or immediately via Settings → Check for updates.',
     );
     pubspecStamped = false; // keep the bump, it's now the published truth
+    _remember(newBuild, options.abi, apk);
 
     // ── 4. Retention. Nothing downloads an old build, but every one of
     // them keeps counting against the storage quota forever. ────────
@@ -310,9 +364,33 @@ Future<void> _prune({
   // above all — is left alone, and an unparseable name is left alone too
   // rather than guessed at.
   final builds = <int, _Build>{};
+  final patches = <_Build, int>{};
   for (final o in objects) {
-    final match = RegExp(r'^dayflower-(\d+)-').firstMatch(o.name);
+    // ⚠️ Patches are named dayflower-<from>-to-<to>-…, which the APK
+    // pattern would also match: told apart by what they end in.
+    final patch =
+        RegExp(r'^dayflower-\d+-to-(\d+)-.*\.patch$').firstMatch(o.name);
+    if (patch != null) {
+      patches[o] = int.parse(patch.group(1)!);
+      continue;
+    }
+    final match = RegExp(r'^dayflower-(\d+)-.*\.apk$').firstMatch(o.name);
     if (match != null) builds[int.parse(match.group(1)!)] = o;
+  }
+
+  // A patch is only ever read from the newest manifest, so any patch to an
+  // older build is dead weight.
+  if (builds.isNotEmpty) {
+    final newest = builds.keys.reduce((a, b) => a > b ? a : b);
+    final stale = [
+      for (final MapEntry(:key, :value) in patches.entries)
+        if (value != newest) key.name,
+    ];
+    if (stale.isNotEmpty) {
+      stdout.writeln('\n→ removing ${stale.length} patch(es) to older builds');
+      await _delete(
+          supabaseUrl: supabaseUrl, serviceKey: serviceKey, names: stale);
+    }
   }
   if (builds.length <= keep) {
     stdout.writeln('\n→ ${builds.length} build(s) in the bucket, keeping $keep'
@@ -354,6 +432,111 @@ class _Build {
   _Build(this.name, this.size);
   final String name;
   final int size;
+}
+
+/* ── Patches ─────────────────────────────────────────────────── */
+
+class _Patch {
+  _Patch(this.from, this.object, this.bytes);
+  final int from;
+  final String object;
+  final Uint8List bytes;
+}
+
+/// A patch to [newBuild] from each of the last few builds in the bucket.
+///
+/// ⚠️ Best effort: a build whose APK cannot be had, or whose patch comes out
+/// no smaller than a download worth skipping, is left out, and phones on it
+/// simply take the whole APK.
+Future<List<_Patch>> _makePatches({
+  required String supabaseUrl,
+  required String serviceKey,
+  required String abi,
+  required int newBuild,
+  required Uint8List apk,
+}) async {
+  final older = <int, String>{};
+  for (final o
+      in await _listBuilds(supabaseUrl: supabaseUrl, serviceKey: serviceKey)) {
+    final match = RegExp('^dayflower-(\\d+)-${RegExp.escape(abi)}\\.apk\$')
+        .firstMatch(o.name);
+    final build = match == null ? null : int.parse(match.group(1)!);
+    if (build != null && build < newBuild) older[build] = o.name;
+  }
+  final from =
+      (older.keys.toList()..sort((a, b) => b - a)).take(_patchDepth).toList();
+  if (from.isEmpty) return const [];
+
+  stdout.writeln('\n→ patches from ${from.join(", ")}');
+  final out = <_Patch>[];
+  for (final build in from) {
+    final old = await _publishedApk(supabaseUrl, build, older[build]!);
+    if (old == null) {
+      stdout.writeln('  $build: APK unavailable, skipped');
+      continue;
+    }
+    final watch = Stopwatch()..start();
+    final patch = ApkPatch.create(old, apk);
+    // Worth it only if it saves most of the download.
+    if (patch.length > apk.length * .6) {
+      stdout.writeln('  $build: ${_mb(patch.length)}, not worth it, skipped');
+      continue;
+    }
+    stdout.writeln('  $build → $newBuild: ${_mb(patch.length)} '
+        '(${watch.elapsed.inSeconds}s)');
+    out.add(_Patch(build, 'dayflower-$build-to-$newBuild-$abi.patch', patch));
+  }
+  return out;
+}
+
+/// A published APK, from the local copy or else from the bucket (and kept
+/// locally for next time).
+Future<Uint8List?> _publishedApk(
+    String supabaseUrl, int build, String object) async {
+  final local = File('$_publishedDir/$object');
+  if (local.existsSync()) return local.readAsBytesSync();
+  final client = HttpClient();
+  try {
+    final uri = Uri.parse('${supabaseUrl.replaceAll(RegExp(r'/+$'), '')}'
+        '/storage/v1/object/public/$_bucket/$object');
+    final response = await (await client.getUrl(uri)).close();
+    if (response.statusCode != 200) return null;
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in response) {
+      bytes.add(chunk);
+    }
+    final data = bytes.takeBytes();
+    local.parent.createSync(recursive: true);
+    local.writeAsBytesSync(data);
+    return data;
+  } catch (e) {
+    stdout.writeln('  could not fetch $object: $e');
+    return null;
+  } finally {
+    client.close(force: true);
+  }
+}
+
+/// Keeps the APK just published, and the few before it, for the next
+/// publish's patches.
+void _remember(int build, String abi, File apk) {
+  try {
+    final dir = Directory(_publishedDir)..createSync(recursive: true);
+    apk.copySync('${dir.path}/dayflower-$build-$abi.apk');
+    // By build number, not file time: a copy keeps the build's own time,
+    // which is older than an APK fetched back from the bucket.
+    int number(File f) =>
+        int.tryParse(
+            RegExp(r'dayflower-(\d+)-').firstMatch(f.path)?.group(1) ?? '') ??
+        0;
+    final kept = dir.listSync().whereType<File>().toList()
+      ..sort((a, b) => number(b) - number(a));
+    for (final old in kept.skip(_patchDepth + 1)) {
+      old.deleteSync();
+    }
+  } catch (e) {
+    stdout.writeln('  (could not keep a local copy of the APK: $e)');
+  }
 }
 
 Future<List<_Build>> _listBuilds({

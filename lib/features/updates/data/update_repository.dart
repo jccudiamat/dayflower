@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:open_filex/open_filex.dart';
@@ -10,6 +11,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/constants/app_constants.dart';
+import 'apk_patch.dart';
 import 'app_release.dart';
 
 /// Fetching the manifest, pulling the APK down, and handing it to Android.
@@ -20,7 +22,20 @@ import 'app_release.dart';
 /// download buffers the whole object in memory with no progress callback —
 /// useless for 50 MB behind a progress bar.
 class UpdateRepository {
-  const UpdateRepository();
+  /// The three seams are for tests; the app passes none.
+  const UpdateRepository({
+    Uri? bucketBase,
+    Future<Directory> Function()? downloadDir,
+    Future<String?> Function()? installedApk,
+  })  : _bucketBase = bucketBase,
+        _downloadDirOverride = downloadDir,
+        _installedApkOverride = installedApk;
+
+  final Uri? _bucketBase;
+  final Future<Directory> Function()? _downloadDirOverride;
+  final Future<String?> Function()? _installedApkOverride;
+
+  static const _app = MethodChannel('dayflower/app');
 
   /// Android-only. iOS has no legal route to self-installing an IPA, and the
   /// desktop/web builds are run from source, so everywhere else the whole
@@ -73,10 +88,19 @@ class UpdateRepository {
     }
   }
 
-  /// Streams the APK to app-private external storage, reporting bytes as they
-  /// land. Returns the finished file.
+  /// Gets the new build's APK into app-private external storage, reporting
+  /// bytes as they land. Returns the finished file.
+  ///
+  /// 🔴 **A patch first, when there is one for [installedBuild].** A patch
+  /// is a few MB where the APK is ~50: it is applied to this phone's own
+  /// installed APK to rebuild the new one exactly (see ApkPatch). Anything
+  /// that goes wrong on the way, a phone that cannot say where its APK is,
+  /// a failed download, a rebuilt file that is not byte for byte the
+  /// published build, falls back to the full APK, silently. The worst a
+  /// patch can do is cost the time it took to try.
   Future<File> download(
     AppRelease release, {
+    int installedBuild = 0,
     required void Function(int received, int total) onProgress,
   }) async {
     final dir = await _downloadDir();
@@ -92,20 +116,85 @@ class UpdateRepository {
       return file;
     }
 
+    final patch = release.patchFrom(installedBuild);
+    if (patch != null) {
+      try {
+        await _rebuildFromPatch(release, patch, dir, file, onProgress);
+        await _purgeOtherBuilds(dir, keep: file.path);
+        return file;
+      } catch (e) {
+        debugPrint('update patch failed, taking the full APK: $e');
+      }
+    }
+
+    await _fetch(release.fileName, file, release.sizeBytes, onProgress);
+    await _purgeOtherBuilds(dir, keep: file.path);
+    return file;
+  }
+
+  /// The patch, applied to the installed APK, into [file].
+  Future<void> _rebuildFromPatch(
+    AppRelease release,
+    AppPatch patch,
+    Directory dir,
+    File file,
+    void Function(int received, int total) onProgress,
+  ) async {
+    final installed = await _installedApkPath();
+    if (installed == null || !await File(installed).exists()) {
+      throw const ApkPatchException('cannot find the installed APK');
+    }
+    final patchFile = File('${dir.path}/${patch.fileName}');
+    final rebuilt = File('${file.path}.part');
+    try {
+      await _fetch(patch.fileName, patchFile, patch.sizeBytes, onProgress);
+      final hash = await ApkPatch.apply(
+          old: File(installed), patch: patchFile, out: rebuilt);
+      // The patch checked itself against its own record of the new build;
+      // this checks that record is the build the manifest is offering.
+      if (hash != release.sha256) {
+        throw const ApkPatchException('the patch is for a different build');
+      }
+      if (await file.exists()) await file.delete();
+      await rebuilt.rename(file.path);
+    } finally {
+      if (await patchFile.exists()) await patchFile.delete();
+      if (await rebuilt.exists()) await rebuilt.delete();
+    }
+  }
+
+  Future<String?> _installedApkPath() async {
+    final override = _installedApkOverride;
+    if (override != null) return override();
+    try {
+      return await _app.invokeMethod<String>('installedApk');
+    } catch (e) {
+      debugPrint('installed apk path unavailable: $e');
+      return null;
+    }
+  }
+
+  /// Streams one object from the bucket into [file], via a `.part` file so
+  /// that only a finished download ever has the real name.
+  Future<void> _fetch(
+    String object,
+    File file,
+    int expected,
+    void Function(int received, int total) onProgress,
+  ) async {
     final partial = File('${file.path}.part');
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 20);
     try {
-      final request = await client.getUrl(_objectUrl(release.fileName));
+      final request = await client.getUrl(_objectUrl(object));
       final response = await request.close();
       if (response.statusCode != 200) {
-        throw HttpException('apk returned ${response.statusCode}');
+        throw HttpException('$object returned ${response.statusCode}');
       }
 
       // contentLength is -1 on a chunked response; the manifest's own figure
       // is the fallback so the bar still fills rather than spinning forever.
-      final total = response.contentLength > 0
-          ? response.contentLength
-          : release.sizeBytes;
+      final total =
+          response.contentLength > 0 ? response.contentLength : expected;
 
       var received = 0;
       final sink = partial.openWrite();
@@ -132,9 +221,6 @@ class UpdateRepository {
     } finally {
       client.close(force: true);
     }
-
-    await _purgeOtherBuilds(dir, keep: file.path);
-    return file;
   }
 
   /// Hands the APK to Android's package installer. The user still confirms
@@ -152,6 +238,8 @@ class UpdateRepository {
   }
 
   Uri _objectUrl(String object) {
+    final override = _bucketBase;
+    if (override != null) return override.resolve(object);
     final base =
         (dotenv.env['SUPABASE_URL'] ?? '').replaceAll(RegExp(r'/+$'), '');
     return Uri.parse(
@@ -160,6 +248,8 @@ class UpdateRepository {
   }
 
   Future<Directory> _downloadDir() async {
+    final override = _downloadDirOverride;
+    if (override != null) return override();
     // App-private external storage: writable with no runtime permission, and
     // one of the roots open_filex's FileProvider is allowed to share out (see
     // `external-files-path` in its filepaths.xml). From a path it cannot
@@ -172,11 +262,18 @@ class UpdateRepository {
   }
 
   /// Each APK is tens of megabytes and no old one is ever useful again, so
-  /// keep exactly the one just downloaded.
+  /// keep exactly the one just downloaded. (A patch is deleted once used.)
+  ///
+  /// ⚠️ By name, not by path: the same file's path can be spelled two ways
+  /// (a listed path and a built one disagree about separators on Windows),
+  /// and a mismatch here deletes the APK that was just downloaded.
   Future<void> _purgeOtherBuilds(Directory dir, {required String keep}) async {
+    final name = File(keep).uri.pathSegments.last;
     try {
       await for (final entity in dir.list()) {
-        if (entity is File && entity.path != keep) await entity.delete();
+        if (entity is File && entity.uri.pathSegments.last != name) {
+          await entity.delete();
+        }
       }
     } catch (e) {
       debugPrint('update cache purge failed: $e');
@@ -319,7 +416,7 @@ class UpdateController extends StateNotifier<UpdateState> {
         release: release,
         installedBuild: installed,
         received: 0,
-        total: release.sizeBytes,
+        total: release.downloadBytesFor(installed),
       );
     } catch (e) {
       debugPrint('update check failed: $e');
@@ -338,12 +435,13 @@ class UpdateController extends StateNotifier<UpdateState> {
     state = state.copyWith(
       stage: UpdateStage.downloading,
       received: 0,
-      total: release.sizeBytes,
+      total: release.downloadBytesFor(state.installedBuild),
       clearError: true,
     );
     try {
       final file = await _repo.download(
         release,
+        installedBuild: state.installedBuild,
         onProgress: (received, total) {
           // The notifier outlives the sheet, and a write after dispose throws.
           if (!mounted) return;

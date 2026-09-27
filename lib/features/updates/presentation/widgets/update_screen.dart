@@ -176,7 +176,7 @@ class UpdateScreen extends ConsumerWidget {
                 const SizedBox(height: AppSpace.sm),
 
                 Text(
-                  _bodyText(release, mandatory),
+                  _bodyText(release, mandatory, state.installedBuild),
                   style: AppText.body(AppColors.onDarkMuted),
                 ),
 
@@ -237,9 +237,11 @@ class UpdateScreen extends ConsumerWidget {
     );
   }
 
-  static String _bodyText(AppRelease release, bool mandatory) {
-    final size =
-        release.readableSize.isEmpty ? '' : ' · ${release.readableSize}';
+  static String _bodyText(
+      AppRelease release, bool mandatory, int installedBuild) {
+    // What this phone downloads: a patch when there is one for its build.
+    final readable = release.readableSizeFor(installedBuild);
+    final size = readable.isEmpty ? '' : ' · $readable';
     final head = mandatory
         ? 'This build is required to keep using Dayflower.'
         : 'A newer version is ready to install.';
