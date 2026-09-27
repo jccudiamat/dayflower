@@ -28,8 +28,8 @@ export const metadata: Metadata = {
 
 const timeGaps = [
   { hours: "1–3 hours apart", plan: "Share an evening. One of you eats dinner while the other has a late snack; neither has to move a meal.", strain: "Easy to keep up most nights." },
-  { hours: "4–8 hours apart", plan: "Trade a morning for an evening. Fix one slot a week that neither of you has to renegotiate, and let the rest be voice notes.", strain: "Nightly calls will cost someone their sleep. Do not plan on them." },
-  { hours: "9+ hours apart", plan: "Stop trying to be awake together. Leave things for each other instead: a photo, a note, a bouquet waiting when they wake up.", strain: "Live calls become a weekend event, not a daily habit." },
+  { hours: "4–8 hours apart", plan: "Look for a morning and afternoon or evening overlap. Try one agreed call slot, with voice notes between calls.", strain: "Check work hours and bedtimes before committing to a daily call." },
+  { hours: "9+ hours apart", plan: "Try a morning-to-evening call if your schedules allow it. Otherwise leave a photo, a note, or a bouquet for them to open later.", strain: "A weekend call may be easier than a weekday routine." },
 ];
 
 const ideas = [
@@ -41,10 +41,10 @@ const ideas = [
 
 const questions = [
   ["What can long-distance couples actually do together online?", "The plans that last are the small ones: cooking the same snack on a call, trading three songs with the story behind each, or keeping a call open while you both do your own thing. Making something you can both keep, like a photo strip or a bouquet, gives an evening a result, which helps on the nights when neither of you has much to say."],
-  ["How do you handle a big time difference?", "Past roughly eight hours, trying to be awake at the same time every day costs one person their sleep, and that debt tends to show up as irritability neither of you can trace back to it. It usually works better to fix one live slot a week that nobody has to renegotiate, and to leave things for each other the rest of the time: a voice note, a photo, something waiting when they wake up."],
-  ["How can I send flowers to a partner in another country?", "You can send a digital bouquet as a link: free, no address needed, and it arrives instantly wherever they are. For a physical delivery, ordering from a shop in their own country is usually cheaper and faster than going through an international florist."],
+  ["How do you handle a big time difference?", "Write down each person’s available hours in both local times, including work and sleep. Choose an overlap that suits both of you, and check it again when daylight saving time changes. If there is no comfortable overlap, exchange voice notes or photos and plan a call for another day."],
+  ["How can I send flowers to a partner in another country?", "Create a free digital bouquet and share its link in your usual chat. They can open it in a browser without an account or a delivery address. If you want physical flowers instead, compare florists that deliver to their address and check the delivery date and total price."],
   ["Is there an app just for two people?", "Dayflower is one. It is a private space for a couple rather than a social network. Flowers, messages, calls, shared photos and everyday moments, with nobody else in it. It is in private testing, and the waitlist below is how you hear when it opens."],
-  ["Do long-distance relationships work?", "Plenty do, and research generally finds them no less stable than close-distance ones. What tends to matter is a shared sense of when the distance ends, and a routine neither person is quietly resenting, which is a smaller and more boring thing than grand gestures, and easier to build."],
+  ["What if we cannot fit in a date this week?", "Make the plan smaller, or choose another day together. One photo with a short voice note is a way to share a moment without coordinating a live call. Agree on a comfortable reply window so it feels like an invitation rather than another deadline."],
 ] as const;
 
 export default async function LongDistancePage() {
@@ -52,12 +52,12 @@ export default async function LongDistancePage() {
     <SiteHeader />
     <main className="mx-auto max-w-4xl px-5 py-10 sm:py-16">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-dark">Dayflower · for couples apart</p>
-      <h1 className="mt-4 max-w-3xl text-3xl font-bold leading-tight sm:text-5xl">Long-distance, and looking for something to do about it.</h1>
+      <h1 className="mt-4 max-w-3xl text-3xl font-bold leading-tight sm:text-5xl">Long-distance relationship ideas for everyday connection.</h1>
       <p className="mt-6 max-w-2xl text-lg leading-relaxed text-body">Most advice for long-distance couples is either a list of grand gestures nobody has the energy for, or a reminder to communicate. This page is the smaller stuff: what to do on an ordinary Tuesday, how to plan around a time difference that is not going to change, and a few free tools for sending something across it.</p>
 
       <section className="mt-14" aria-labelledby="clock">
         <h2 id="clock" className="text-2xl font-bold sm:text-3xl">Start with the clock, not the ideas</h2>
-        <p className="mt-4 max-w-2xl leading-relaxed text-body">Nearly every long-distance routine that falls apart falls apart on scheduling rather than on feeling. It is worth being honest about how far apart your days really are before picking a habit to fail at.</p>
+        <p className="mt-4 max-w-2xl leading-relaxed text-body">Start with the hours you both have available. The same time difference can be easy or awkward depending on work, sleep, and family commitments. Use these starting points to choose a plan you both have room for.</p>
         <div className="mt-7 overflow-x-auto">
           <table className="w-full min-w-[34rem] border-collapse text-left text-sm">
             <thead><tr className="border-b border-border-soft">

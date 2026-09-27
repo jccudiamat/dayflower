@@ -6,15 +6,13 @@ import { JsonLd, breadcrumbs, openGraph, ORGANISATION, url as siteUrl } from "..
 const title = "7 long-distance date ideas for a quiet night in";
 const description = "Low-pressure long-distance date ideas with simple plans, conversation prompts, and options for busy schedules or different time zones.";
 const url = siteUrl("/journal/long-distance-date-ideas");
-// ⚠️ Full ISO datetimes, not bare dates. A bare "2026-09-08" is ambiguous
-// about timezone, and Google reads an ambiguous date as no date at all,
-// which costs the article its freshness signal in Top Stories and Discover.
+// Keep visible dates and article metadata aligned with substantive edits.
 const published = "2026-09-08T09:00:00+08:00";
-const modified = "2026-09-08T09:00:00+08:00";
+const modified = "2026-09-27T00:00:00+04:00";
 export const metadata: Metadata = {
   title: `${title} | Dayflower Journal`, description,
   alternates: { canonical: url },
-  openGraph: openGraph({ title, description, path: "/journal/long-distance-date-ideas", type: "article", publishedTime: published, modifiedTime: modified, authors: ["Dayflower"] }),
+  openGraph: openGraph({ title, description, path: "/journal/long-distance-date-ideas", type: "article", publishedTime: published, modifiedTime: modified, authors: ["Dayflower"], image: siteUrl("/journal/long-distance-date-ideas/opengraph-image") }),
 };
 
 const ideas = [
@@ -57,8 +55,9 @@ export default async function Article() {
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-dark">Together, from wherever</p>
           <h1 className="mt-5 text-4xl font-bold leading-tight sm:text-5xl">{title}</h1>
           <p className="mt-6 text-lg leading-relaxed text-body">Some nights, you want time together without another elaborate plan. These dates leave room for tired evenings, small budgets, and the fact that your clocks might not agree.</p>
-          <p className="mt-6 text-sm text-muted">By Dayflower · <time dateTime="2026-09-08">September 8, 2026</time> · 6 min read</p>
+          <p className="mt-6 text-sm text-body">By <Link href="/" className="underline">Dayflower</Link> · Published <time dateTime={published}>September 8, 2026</time> · Updated <time dateTime={modified}>September 27, 2026</time> · 7 min read</p>
         </header>
+        <section className="pt-9" aria-labelledby="quick-pick"><h2 id="quick-pick" className="text-2xl font-bold">Pick a date that fits tonight</h2><p className="mt-4 leading-8 text-body">For a free long-distance date, try a three-photo tour, quiet company on a call, or a voice-note exchange. You can use the calling and messaging apps you already have. Cooking and music ideas can also cost nothing extra if you use ingredients and music you already have access to.</p><div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><caption className="sr-only">Long-distance date ideas by time and schedule</caption><thead><tr className="border-b border-border-soft"><th scope="col" className="py-3 pr-4">If you have…</th><th scope="col" className="py-3">Try this</th></tr></thead><tbody>{[["5–10 minutes, different schedules", "voice-note", "A photo and voice-note exchange"], ["10–15 minutes, low energy", "tiny-tour", "A tiny tour of your day"], ["15–25 minutes, feeling creative", "photo-strip", "A photo strip from both places"], ["20–30 minutes, time for a call", "same-snack", "Make the same snack"], ["30 minutes, little to say", "parallel-evening", "Quiet company while doing your own things"]].map(([time, id, idea]) => <tr key={id} className="border-b border-border-soft"><th scope="row" className="py-4 pr-4 font-medium text-body">{time}</th><td className="py-4"><a href={`#${id}`} className="text-brand-dark underline underline-offset-4">{idea}</a></td></tr>)}</tbody></table></div></section>
         <section className="py-9" aria-labelledby="before-title">
           <h2 id="before-title" className="text-2xl font-bold">Before you pick a date</h2>
           <p className="mt-4 leading-8 text-body">Ask how much energy you each have and agree on an end time. A lovely twenty-minute call can be enough. Choose one idea, use a calling app you already know, and leave yourselves permission to change the plan.</p>
@@ -76,12 +75,12 @@ export default async function Article() {
           <p className="mt-5 rounded-2xl bg-surface p-5 leading-relaxed text-body"><strong>A question to try:</strong> “{idea.prompt}”</p>
         </section>)}
         <section className="py-9"><h2 className="text-2xl font-bold">An easy plan for tonight</h2><p className="mt-4 leading-8 text-body">Spend five minutes catching up, fifteen minutes on one activity, and five minutes saying goodbye without rushing. Before you hang up, decide whether you want to do it again or choose something different next time. Keeping the plan small makes it easier to fit into an actual evening.</p></section>
-        <aside className="rounded-3xl bg-dark-canvas p-7 text-on-dark sm:p-9"><h2 className="text-2xl font-bold">Keep a little piece of tonight.</h2><p className="my-5 leading-relaxed text-on-dark-muted">Make a photo strip you can both save. Dayflower’s photo booth is free to use now; our private app for two is still in testing.</p><Link href="/photobooth" className="gradient-button">Make a photo strip</Link><p className="mt-5 text-sm"><Link href="/#waitlist" className="underline underline-offset-4">Join the app waitlist</Link></p></aside>
+        <aside className="rounded-3xl bg-dark-canvas p-7 text-on-dark sm:p-9"><h2 className="text-2xl font-bold">Keep a little piece of tonight.</h2><p className="my-5 leading-relaxed text-on-dark-muted">Make a photo strip you can both save. Dayflower’s photo booth is free to use now; our private app for two is still in testing.</p><Link href="/photobooth" className="gradient-button">Make a photo strip</Link><p className="mt-5 text-sm"><Link href="/journal/how-to-make-photo-strips" className="underline underline-offset-4">Read the photo strip tutorial</Link></p><p className="mt-5 text-sm"><Link href="/journal/digital-bouquet-messages#long-distance" className="underline underline-offset-4">Find a little note for someone you miss</Link></p></aside>
       </article>
     </main>
     <footer className="mx-auto flex max-w-3xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/journal">Journal</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>
     <JsonLd nodes={[
-      { "@type": "BlogPosting", "@id": `${url}#article`, headline: title, description, datePublished: published, dateModified: modified, mainEntityOfPage: url, url, inLanguage: "en", author: { "@id": ORGANISATION["@id"] }, publisher: { "@id": ORGANISATION["@id"] }, about: ["Long-distance relationships", "Date ideas"] },
+      { "@type": "BlogPosting", "@id": `${url}#article`, headline: title, description, datePublished: published, dateModified: modified, mainEntityOfPage: url, url, image: siteUrl("/journal/long-distance-date-ideas/opengraph-image"), inLanguage: "en", author: { "@id": ORGANISATION["@id"] }, publisher: { "@id": ORGANISATION["@id"] }, about: ["Long-distance relationships", "Date ideas"] },
       breadcrumbs([["Journal", "/journal"], [title, "/journal/long-distance-date-ideas"]]),
     ]} />
   </>;

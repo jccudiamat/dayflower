@@ -18,9 +18,9 @@ const lora = Lora({
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: "Dayflower | One flower a day, across any distance",
+  title: "Dayflower | Free Digital Bouquets & Photo Keepsakes",
   description:
-    "A private app for exactly two people. Somewhere to land on each other every day when you can't be in the same room. Join the waitlist.",
+    "Create a free digital bouquet or photo keepsake for someone you love. Explore Dayflower’s website tools and upcoming private app for couples.",
   applicationName: SITE_NAME,
   // ⚠️ Inherited defaults only. `alternates.canonical` is deliberately NOT
   // set here: metadata inherits down the tree, so a canonical on the layout
@@ -30,8 +30,7 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
-    // Without these, Google truncates the snippet and refuses to show a
-    // large image preview for a domain it does not yet recognise.
+    // Allow full snippets and large image previews where Google supports them.
     googleBot: { index: true, follow: true, "max-snippet": -1, "max-image-preview": "large", "max-video-preview": -1 },
   },
 };

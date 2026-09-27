@@ -512,7 +512,8 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     {art && !hasContents(bouquet) && <div className="bouquet-empty"><p>A little space for something lovely.</p><span>Choose a flower to begin.</span></div>}
   </div>;
 
-  if (!ready) return <div className="bouquet-loading" role="status">Opening the flower shop…</div>;
+  const creatorHeading = <header className="bouquet-heading"><div><p className="bouquet-eyebrow">THE DAYFLOWER FLOWER SHOP</p><h1>Free digital<br className="bouquet-mobile-break" /> <span>bouquet creator.</span></h1><p>Choose flowers, add photos and a note, then send a link. No account needed.</p></div><span className="bouquet-free">Free to make &amp; send <span aria-hidden="true">♡</span></span></header>;
+  if (!ready) return <>{creatorHeading}<div className="bouquet-loading" role="status">Opening the flower shop…</div><noscript><p>The interactive bouquet creator needs JavaScript. Enable it to arrange flowers, add a note, and create a gift link. Read how it works and see an example below.</p></noscript></>;
   if (badLink) return <section className="bouquet-invalid"><p className="bouquet-eyebrow">DAYFLOWER BOUQUETS</p><h1>This bouquet link is incomplete.</h1><p>Ask the sender to copy and send the whole gift link, including everything after the #.</p><button className="bouquet-button primary" onClick={startFresh}>Make your own bouquet</button></section>;
   if (viewing) return <section className="bouquet-gift">
     {preview && <p className="bouquet-preview-label">A peek at what they’ll see <button onClick={() => { setPreview(false); setOpened(false); }}>Back to editing</button></p>}
@@ -526,7 +527,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   </section>;
 
   return <>
-    <header className="bouquet-heading"><div><p className="bouquet-eyebrow">THE DAYFLOWER FLOWER SHOP</p><h1>A little bouquet.<br className="bouquet-mobile-break" /> <span>A lot of love.</span></h1><p>Pick a few blooms, tuck in a note, and make someone’s day.</p></div><span className="bouquet-free">Free to make & send <span aria-hidden="true">♡</span></span></header>
+    {creatorHeading}
     <div className="bouquet-studio">
       <section className="bouquet-preview" aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Tap a bloom to pick it up. Drag the flower to move it, or its little dial to tilt it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
       <section className="bouquet-controls" aria-label="Bouquet creator">

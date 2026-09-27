@@ -3,349 +3,102 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import HomeNav from "./components/HomeNav";
 import WaitlistForm from "./components/WaitlistForm";
-import AppPhones from "./components/AppPhones";
-import Parallax from "./components/scene/Parallax";
-import Scenery from "./components/scene/Scenery";
-import HeroPigeon from "./components/scene/HeroPigeon";
-import { SignPost, Mailbox } from "./components/scene/Props";
-import { Petals, Fireflies } from "./components/scene/Drift";
-import "./components/scene/scene.css";
-import "./components/phones.css";
+import { JsonLd, faqPage, openGraph, ORGANISATION, WEBSITE, url } from "./lib/seo";
 import "./home.css";
-import { JsonLd, ORGANISATION, WEBSITE, url } from "./lib/seo";
+
+const title = "Dayflower | Free Digital Bouquets & Photo Keepsakes";
+const description = "Create and send a free digital bouquet or make a photo strip, collage, or postcard. No account needed. Discover Dayflower’s upcoming private app for couples.";
 
 export const metadata: Metadata = {
-  // ⚠️ Deliberately the umbrella, not a keyword. Each tool page owns its own
-  // head term: /bouquet owns "digital bouquet", /photobooth owns "photo
-  // booth". Repeating those here would put the homepage in a fight with the
-  // page that actually answers the query, and split the signal between them.
-  title: "Dayflower | Little ways to make their day",
-  description:
-    "Make a digital bouquet, create a photo keepsake, find a thoughtful gift, or read the journal. Explore Dayflower’s free website tools and join the waitlist for our private app for two.",
+  title, description,
   alternates: { canonical: url() },
+  openGraph: openGraph({ title, description, path: "" }),
 };
 
-/**
- * The four things you can actually do on the website today, in the order the
- * reference lays them out. Each one goes to the real tool; none of them is a
- * mockup of a tool that does not exist.
- */
-const tools = [
-  {
-    name: "Bouquet",
-    description: "Send flowers that feel like yours.",
-    href: "/bouquet",
-    tone: "is-bouquet",
-    art: { src: "/models/bouquet-sample.webp", alt: "A wrapped bouquet of roses, daisies and tulips with a photo tucked in among the stems", width: 720, height: 625 },
-  },
-  {
-    name: "Photo Booth",
-    description: "Turn moments into keepsakes.",
-    href: "/photobooth",
-    tone: "is-booth",
-    art: null,
-  },
-  {
-    name: "Gifts",
-    description: "Thoughtful ideas for the person you know best.",
-    href: "/gifts",
-    tone: "is-gifts",
-    art: { src: "/bouquet/reveal-box.webp", alt: "A pink gift box tied with a wide ribbon and a few flowers", width: 512, height: 512 },
-  },
-  {
-    name: "Journal",
-    description: "Ideas, prompts and a more connected you.",
-    href: "/journal",
-    tone: "is-journal",
-    art: { src: "/bouquet/reveal-letter.webp", alt: "A bundle of handwritten letters tied with a ribbon", width: 512, height: 512 },
-  },
+const questions = [
+  ["What can I use right now?", "The digital bouquet creator and photo booth are ready to use in your browser. You can also browse gift ideas and read the journal. The Dayflower app is in private testing."],
+  ["Are the website tools free?", "Yes. Creating and sharing a digital bouquet, and making and downloading a photo keepsake, are free. You do not need an account or a place on the app waitlist. Physical gifts linked from our gift guide are sold separately by sellers on Shopee."],
+  ["Can I send something to someone far away?", "Yes. Send a digital bouquet as a link they can open in their browser, or download a photo keepsake to share in your usual chat. For a couple photo strip, collect both people’s photos on one device; the booth is not a live video room."],
+  ["Who is Dayflower for?", "The website tools are for anyone making a thoughtful gesture for a partner, friend, or family member. The upcoming app is a private space for couples to share everyday life, near or far."],
+  ["What happens when I join the app waitlist?", "We’ll send a signup confirmation, then a launch email when the app is ready. Joining does not create an app account or sign your partner up. There is no newsletter."],
 ] as const;
 
-const features = [
-  { title: "Daily moments", note: "Photos, moods, heartbeats", icon: <path d="M12 20.6s-8-5-8-10.4A4.7 4.7 0 0 1 12 7a4.7 4.7 0 0 1 8 3.2c0 5.4-8 10.4-8 10.4Z" /> },
-  { title: "Stay in sync", note: "Local time and distance", icon: <><circle cx="12" cy="12" r="8.4" /><path d="M12 7.4v5l3.2 2" /></> },
-  { title: "Look forward", note: "Countdowns, plans, dates", icon: <><rect x="3.6" y="5.2" width="16.8" height="15.2" rx="3" /><path d="M3.6 10h16.8M8.4 3.4v3.4M15.6 3.4v3.4" /></> },
-  { title: "Keep what matters", note: "Memories, journals, milestones", icon: <><rect x="3.6" y="4.6" width="16.8" height="15.6" rx="3.4" /><path d="M12 16.4s-3.6-2.3-3.6-4.8a2.1 2.1 0 0 1 3.6-1.4 2.1 2.1 0 0 1 3.6 1.4c0 2.5-3.6 4.8-3.6 4.8Z" /></> },
-];
+const screens = [
+  { name: "Home", x: 16, note: "A little window into their day.", alt: "Dayflower Home preview with a daily photo, moods, local times, and an upcoming anniversary" },
+  { name: "Chat", x: 270, note: "Your everyday conversation.", alt: "Dayflower Chat preview with messages and shared daily photos" },
+  { name: "Dayflower", x: 520, note: "Small gestures, just because.", alt: "Dayflower preview with flowers, bouquets, cards, a photo booth, and a shared garden" },
+  { name: "Memories", x: 770, note: "The little things, kept together.", alt: "Dayflower Memories preview with a timeline of flowers, photo strips, and journal entries" },
+  { name: "Together", x: 1022, note: "More to look forward to.", alt: "Dayflower Together preview with shared plans, reminders, trips, and activities" },
+] as const;
 
-const values = [
-  {
-    title: "Just yours",
-    body: ["No followers. No public feed.", "No likes to chase."],
-    icon: <><rect x="5" y="10.4" width="14" height="9.6" rx="2.6" /><path d="M8.2 10.4V8a3.8 3.8 0 0 1 7.6 0v2.4" /><path d="M12 14v2.4" /></>,
-  },
-  {
-    title: "For all kinds of couples",
-    body: ["Long distance, same city,", "anywhere in between."],
-    icon: <path d="M12 20.4s-7.6-4.7-7.6-9.8A4.5 4.5 0 0 1 12 7.2a4.5 4.5 0 0 1 7.6 3.4c0 5.1-7.6 9.8-7.6 9.8Z" />,
-  },
-  {
-    title: "Built with care",
-    body: ["A more intentional way", "to stay connected."],
-    icon: <><circle cx="9" cy="8.4" r="3.2" /><circle cx="16.4" cy="9.6" r="2.4" /><path d="M3.8 19.4a5.2 5.2 0 0 1 10.4 0" /><path d="M15.4 14.6a4.4 4.4 0 0 1 4.8 4.8" /></>,
-  },
-];
-
-export default async function Home() {
-  return (
-    <>
-      <HomeNav />
-      <main id="top" className="dayflower-home">
-        {/* ── Morning ─────────────────────────────────────────────────────
-            The scenery is a sibling of the copy, never its container: the
-            headline, both buttons and the scroll cue are ordinary HTML that
-            would stand on a plain gradient if every layer below failed. */}
-        <section className="home-hero" aria-labelledby="hero-title">
-          <Parallax className="home-hero-scene">
-            <Scenery time="dawn" />
-            <SignPost />
-            <p className="scene-note scene-note-dawn">
-              Good things
-              <br />
-              bloom,
-              <br />
-              always. ♡
-            </p>
-            <Petals />
-          </Parallax>
-          <HeroPigeon />
-
-          <div className="home-hero-copy">
-            <h1 id="hero-title">
-              Be part of
-              <br />
-              their day.
-            </h1>
-            <p className="home-hero-lede">
-              Little ways to stay close through
-              <br />
-              the moments in between.
-            </p>
-            <div className="home-hero-actions">
-              <Link className="home-cta" href="/#explore">
-                Explore Dayflower <span aria-hidden="true">→</span>
-              </Link>
-              <Link className="home-cta-plain" href="/#waitlist">
-                Join the waitlist
-              </Link>
-            </div>
-          </div>
-
-          <a className="home-scroll" href="#explore">
-            Scroll <span aria-hidden="true">↓</span>
-          </a>
-        </section>
-
-        {/* ── Create ──────────────────────────────────────────────────────── */}
-        <section id="explore" className="home-create" aria-labelledby="create-title">
-          <div className="home-shell home-create-grid">
-            <div className="home-intro">
-              <p className="home-eyebrow">CREATE</p>
-              <h2 id="create-title">
-                What will you make
-                <br />
-                of today?
-              </h2>
-              <p className="home-lede">Turn feelings into something meaningful.</p>
-            </div>
-
-            <div className="home-cards">
-              {tools.map((tool) => (
-                <Link key={tool.name} href={tool.href} className={`home-card ${tool.tone}`}>
-                  <span className="home-card-art">
-                    {tool.art ? (
-                      <Image
-                        src={tool.art.src}
-                        alt={tool.art.alt}
-                        width={tool.art.width}
-                        height={tool.art.height}
-                        sizes="(max-width: 520px) 90vw, (max-width: 1100px) 44vw, 360px"
-                      />
-                    ) : (
-                      <BoothArt />
-                    )}
-                  </span>
-                  <span className="home-card-name">{tool.name}</span>
-                  <span className="home-card-desc">{tool.description}</span>
-                  <span className="home-card-go" aria-hidden="true">
-                    →
-                  </span>
-                </Link>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── The app ─────────────────────────────────────────────────────── */}
-        <section id="app" className="home-app" aria-labelledby="app-title">
-          <div className="home-shell home-app-grid">
-            <div className="home-intro">
-              <p className="home-eyebrow">APP</p>
-              <h2 id="app-title">
-                A private space
-                <br />
-                for your everyday
-                <br />
-                moments.
-              </h2>
-              <p className="home-lede">The Dayflower app. Made for the two of you.</p>
-              {/* ⚠️ The reference says "Learn more" here. There is no app page
-                  to learn more on yet, and sending somebody to a signup form
-                  under that label is a small lie, so the button says what it
-                  actually does. */}
-              <Link className="home-pill" href="/#waitlist">
-                Join the waitlist <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-
-            <figure className="home-app-stage">
-              <AppPhones />
-              <figcaption>App preview · illustrative sample content</figcaption>
-            </figure>
-
-            <ul className="home-features">
-              {features.map((f) => (
-                <li key={f.title}>
-                  <svg viewBox="0 0 24 24" aria-hidden className="home-feature-icon">
-                    {f.icon}
-                  </svg>
-                  <div>
-                    <p className="home-feature-title">{f.title}</p>
-                    <p className="home-feature-note">{f.note}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        {/* ── Who it is for ───────────────────────────────────────────────── */}
-        <section id="about" className="home-values" aria-labelledby="values-title">
-          <div className="home-shell home-values-grid">
-            <div className="home-intro">
-              <p className="home-eyebrow">FOR REAL RELATIONSHIPS</p>
-              <h2 id="values-title">
-                Made for all
-                <br />
-                kinds of couples.
-              </h2>
-              <p className="home-lede">
-                Whether you&rsquo;re near or far, Dayflower helps you stay present in the little
-                things that make a big difference.
-              </p>
-              <Link className="home-pill" href="/long-distance">
-                Learn more <span aria-hidden="true">→</span>
-              </Link>
-            </div>
-
-            <ul className="home-value-list">
-              {values.map((v) => (
-                <li key={v.title}>
-                  <svg viewBox="0 0 24 24" aria-hidden className="home-value-icon">
-                    {v.icon}
-                  </svg>
-                  <p className="home-value-title">{v.title}</p>
-                  <p className="home-value-body">
-                    {v.body[0]}
-                    <br />
-                    {v.body[1]}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        {/* ── Night ───────────────────────────────────────────────────────
-            The same valley, later. Nothing says so in words, and it does not
-            need to. */}
-        <section id="waitlist" className="home-night" aria-labelledby="night-title">
-          <Parallax className="home-night-scene">
-            <Scenery time="night" />
-            <Mailbox />
-            <p className="scene-note scene-note-night">
-              Same moon.
-              <br />
-              Same us. ♡
-            </p>
-            <Fireflies />
-          </Parallax>
-
-          <div className="home-night-copy">
-            <h2 id="night-title">
-              A little closer.
-              <br />
-              Even from here.
-            </h2>
-            <p>Be among the first couples to try Dayflower together.</p>
-            <WaitlistForm />
-            <p className="home-night-invite">
-              Invite your favorite person. <span aria-hidden="true">♡</span>
-            </p>
-            <small>A signup confirmation, then a launch email. No newsletter.</small>
-          </div>
-        </section>
-      </main>
-
-      <footer className="home-footer">
-        <div className="home-shell home-footer-grid">
-          <Link href="/" className="home-footer-brand">
-            <Image src="/mark.png" width={26} height={26} alt="" />
-            Dayflower
-          </Link>
-          <nav aria-label="Footer navigation">
-            <Link href="/#explore">Explore</Link>
-            <Link href="/bouquet">Bouquet</Link>
-            <Link href="/photobooth">Photo booth</Link>
-            <Link href="/gifts">Gifts</Link>
-            <Link href="/journal">Journal</Link>
-            <Link href="/long-distance">Long distance</Link>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-          </nav>
-          <p className="home-footer-line">A calmer, kinder internet for two.</p>
-        </div>
-        <p className="home-footer-copy">© {new Date().getFullYear()} Dayflower</p>
-      </footer>
-
-      <JsonLd
-        nodes={[
-          { "@type": "WebPage", "@id": url("/#webpage"), url: url(), name: "Dayflower", isPartOf: { "@id": WEBSITE["@id"] }, about: { "@id": ORGANISATION["@id"] }, inLanguage: "en" },
-          // The four tools, as the site's own table of contents. Named here so
-          // a crawler that only reads the graph still learns the site has four
-          // things in it and where each one lives.
-          {
-            "@type": "ItemList",
-            name: "Dayflower website tools",
-            itemListElement: tools.map((tool, i) => ({
-              "@type": "ListItem",
-              position: i + 1,
-              name: tool.name,
-              description: tool.description,
-              url: url(tool.href),
-            })),
-          },
-        ]}
-      />
-    </>
-  );
+function PhotoStrip() {
+  return <div className="home-photo-strip">
+    <Image src="/models/sunset.webp" alt="A woman at the beach at sunset" width={720} height={960} sizes="180px" />
+    <Image src="/models/cove.webp" alt="A man on a boat in a turquoise cove" width={720} height={960} sizes="180px" />
+    <span className="note">a little us, to keep.</span>
+  </div>;
 }
 
-/**
- * The booth, which has no single object to photograph the way a bouquet or a
- * gift box does. A strip of prints is what it makes, so a strip of prints is
- * what the card shows.
- */
-function BoothArt() {
-  return (
-    <span className="home-strip">
-      <span className="home-strip-print">
-        <Image src="/models/cove.webp" alt="" width={720} height={960} sizes="100px" />
-        <Image src="/models/sunset.webp" alt="" width={720} height={960} sizes="100px" />
-        <Image src="/models/cove.webp" alt="" width={720} height={960} sizes="100px" />
-        <em className="note">you &amp; me</em>
-      </span>
-      <span className="sr-only">A photo strip of three pictures</span>
-    </span>
-  );
+export default function Home() {
+  return <div className="home-page">
+    <HomeNav />
+    <main id="main-content" className="dayflower-home">
+      <section className="home-hero home-shell" aria-labelledby="hero-title">
+        <div className="home-hero-copy">
+          <p className="home-eyebrow">SMALL GESTURES. REAL CONNECTION.</p>
+          <h1 id="hero-title">A little something.<br /><em>Just for them.</em></h1>
+          <p className="home-lede">Send a digital bouquet or turn your favorite photos into a keepsake. Free little ways to make someone’s day, wherever they are.</p>
+          <div className="home-actions">
+            <Link className="home-button" href="/bouquet">Make a bouquet <span aria-hidden="true">↗</span></Link>
+            <Link className="home-button home-button-secondary" href="/photobooth">Try the photo booth <span aria-hidden="true">↗</span></Link>
+          </div>
+          <p className="home-reassurance">Free to create and share. No account needed.</p>
+          <a className="home-app-hint" href="#app">Looking for the couples app? See what’s coming <span aria-hidden="true">↓</span></a>
+        </div>
+        <div className="home-keepsakes" aria-label="Examples of a digital bouquet and a photo keepsake">
+          <figure className="home-bouquet-preview">
+            <p className="home-sample-label">A LITTLE SOMETHING FOR YOU</p>
+            <Image src="/models/bouquet-sample.webp" alt="Roses, daisies, and tulips wrapped in cream paper with a photo tucked between the flowers" width={720} height={625} sizes="(max-width: 600px) 64vw, 340px" preload />
+            <figcaption className="note">Just because you’re you.</figcaption>
+          </figure>
+          <div className="home-strip-preview"><PhotoStrip /></div>
+        </div>
+      </section>
+
+      <section id="explore" className="home-tools-section home-shell" aria-labelledby="tools-title">
+        <div className="home-section-heading"><div><p className="home-eyebrow">READY WHEN YOU ARE</p><h2 id="tools-title">Make their day, today.</h2></div><p>Open a tool. Make it yours.<br />Send a little love.</p></div>
+        <div className="home-tools">
+          <article className="home-tool"><span className="home-tool-number">01 / FLOWERS, FROM ANYWHERE</span><h3>Send a digital bouquet.</h3><p>Choose your flowers and wrapping, tuck in photos and a personal note, then share a link or download your bouquet.</p><Link href="/bouquet">Create a free bouquet <span aria-hidden="true">↗</span></Link></article>
+          <article className="home-tool"><span className="home-tool-number">02 / MORE THAN A CAMERA ROLL</span><h3>Make a photo keepsake.</h3><p>Turn your photos into a strip, collage, or postcard. Choose a layout, add a caption, and download an image to keep or share.</p><Link href="/photobooth">Open the free photo booth <span aria-hidden="true">↗</span></Link></article>
+        </div>
+        <div className="home-more"><Link href="/gifts"><span>Something you can send to their door</span><strong>Gift ideas from Shopee Philippines <span aria-hidden="true">↗</span></strong></Link><Link href="/journal"><span>A little inspiration for your time together</span><strong>Read the Dayflower journal <span aria-hidden="true">↗</span></strong></Link></div>
+      </section>
+
+      <section id="app" className="home-app" aria-labelledby="app-title">
+        <div className="home-shell">
+          <div className="home-app-heading"><p className="home-eyebrow">THE DAYFLOWER APP · COMING SOON</p><h2 id="app-title">Your everyday.<br /><em>A little closer.</em></h2><p className="home-lede">A private space for the two of you. Share your day, leave a little love, and keep the moments that make your story.</p><a className="home-button" href="#waitlist">Join the app waitlist <span aria-hidden="true">↗</span></a><p className="home-app-status">In private testing. Not available to download yet.</p></div>
+          <p className="home-swipe-hint">Scroll through the five app previews →</p>
+          <div className="home-screens" role="region" aria-label="Five Dayflower app previews, scroll horizontally to see more" tabIndex={0}>
+            {screens.map(screen => <figure key={screen.name}>
+              {/* CSS windows preserve the supplied contact sheet and its UI. */}
+              <div className="home-screen-window"><Image src="/models/app-preview.jpg" alt={screen.alt} width={1280} height={853} sizes="1280px" style={{ left: `${-screen.x / 244 * 100}%` }} /></div>
+              <figcaption><h3>{screen.name}</h3><p>{screen.note}</p></figcaption>
+            </figure>)}
+          </div>
+          <p className="home-preview-note">App design previews. Features and appearance may change before launch.</p>
+          <Link className="home-distance-link" href="/long-distance">Across time zones? Explore our ideas for long-distance couples <span aria-hidden="true">↗</span></Link>
+        </div>
+      </section>
+
+      <section className="home-questions home-shell" aria-labelledby="questions-title"><div><p className="home-eyebrow">GOOD TO KNOW</p><h2 id="questions-title">The website now.<br />The app to come.</h2><p>Two ways to stay close.<br />Here’s what’s ready today.</p></div><div className="home-question-list">{questions.map(([q, a]) => <details key={q}><summary>{q}<span aria-hidden="true">+</span></summary><p>{a}</p></details>)}</div></section>
+
+      <section id="waitlist" className="home-waitlist home-shell" aria-labelledby="waitlist-title"><div className="home-waitlist-inner"><div><p className="home-eyebrow">SOMETHING TO LOOK FORWARD TO</p><h2 id="waitlist-title">Be the first to know.</h2><p>Leave your email. We’ll let you know when the Dayflower app is ready for you and your partner.</p></div><div className="home-signup"><WaitlistForm /><p>A signup confirmation, then a launch email. No newsletter.</p><Link href="/privacy">How we use your email</Link></div></div></section>
+    </main>
+    <footer className="home-footer home-shell"><div><Link href="/" className="home-brand"><Image src="/mark.png" width={26} height={26} alt="" />Dayflower</Link><p>Little ways to be there.</p></div><nav aria-label="Footer navigation"><Link href="/bouquet">Digital bouquet</Link><Link href="/photobooth">Photo booth</Link><Link href="/gifts">Gift ideas</Link><Link href="/journal">Journal</Link><Link href="/long-distance">Long distance</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></nav><small>© {new Date().getFullYear()} Dayflower</small></footer>
+    <JsonLd nodes={[
+      { "@type": "WebPage", "@id": url("/#webpage"), url: url(), name: title, description, isPartOf: { "@id": WEBSITE["@id"] }, about: { "@id": ORGANISATION["@id"] }, inLanguage: "en" },
+      { "@type": "ItemList", name: "Free Dayflower tools", itemListElement: [["Digital bouquet creator", "/bouquet"], ["Photo booth and keepsake maker", "/photobooth"]].map(([name, path], i) => ({ "@type": "ListItem", position: i + 1, name, url: url(path) })) },
+      faqPage(questions),
+    ]} />
+  </div>;
 }
