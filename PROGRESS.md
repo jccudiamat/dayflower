@@ -13,6 +13,20 @@
 
 ## Recent app work
 
+### A drawn boy or girl for anyone without a photo, and their gender (2026-09-27, build 121)
+
+The user supplied two illustrations (a boy, a girl) to be the default avatar for anyone who hasn't added a profile picture.
+
+- 🔴 **The app did not know who is which.** Onboarding asks name, nickname and birthday: no photo, no gender. `users.gender` exists but nothing in the app sets it. Both live accounts have it null (and both have photos). The user chose to **ask**: a last onboarding step, "Which one is you?", shows the two. Continue is disabled until one is picked, and the pick goes to `createProfile(character:)`. The birthday step no longer submits; it moves on to this one.
+- **Gender on the same page** (asked for after the step was built): Man, Woman, Non-binary, or Prefer not to say. It is optional and stored in `users.gender` as `male`, `female` or `nonbinary`; no answer and "prefer not to say" both store null. It is the first thing to fill that column. Man or Woman pre-selects the boy or girl, until they tap a picture themselves; after that their gender never overrides it. It is not yet editable in Settings.
+- **Stored in `users.avatar`**, the column a chosen flower already uses, as `boy` or `girl` (`AvatarCharacter`). So a character and a flower replace each other, with no migration needed. An older build reads these ids as no flower chosen and shows its default flower: never blank, never a crash. A test pins that no character id is a flower id.
+- **Drawn wherever a photo would be**: `UserAvatar` and the full-size profile viewer draw `defaultAvatarFor(profile)`, which is the character if one is chosen, the flower otherwise. The home-screen widget's header emoji is 👦/👧 for a character.
+- **Settings' avatar sheet** gets "OR PICK A CHARACTER" (both, ringed when chosen) above the flowers. A chosen character means no flower is ringed.
+- Art: `assets/images/avatars/{boy,girl}.webp`, square crops round head and shoulders at 512px (24 KB and 26 KB), checked in circles at 22, 44 and 96pt. They are decoded at the drawn size. Originals are in `twolip/design/avatars/`.
+
+Tests: `avatar_character_test.dart` covers the sign-up flow end to end (including gender picking the picture, and never overriding one that was tapped), character vs flower vs default, and ids that never collide. 630 passing.
+- Test fix: the booth test "remote solo half is saved as an invitation" waited a fixed 2s of real time for its print to render and send. It failed twice running under the full suite (the spinner was still up when pumpAndSettle ran out) and passed alone. It now waits until the send has happened, up to 10s, as the join test beside it already did.
+
 ### The bar on their background, ripples again, a tighter top (2026-09-26, build 120)
 
 Four things from the user's phone on build 119.

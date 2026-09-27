@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/models/avatar_character.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../data/user_repository.dart';
 
@@ -25,6 +26,8 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
     required String name,
     required String petName,
     DateTime? birthday,
+    AvatarCharacter? character,
+    String? gender,
   }) async {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
@@ -47,6 +50,8 @@ class OnboardingNotifier extends StateNotifier<OnboardingState> {
             // Null when skipped, which is a real answer and not a failure -
             // Settings can add it later, and Events simply shows nothing.
             birthday: birthday,
+            character: character,
+            gender: gender,
           );
       _ref.invalidate(userProfileProvider);
       state = state.copyWith(isLoading: false);

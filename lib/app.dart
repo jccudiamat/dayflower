@@ -608,10 +608,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     );
   }
 
-  /// Their avatar flower's emoji, for the widget's story header.
+  /// Their avatar's emoji, for the widget's story header: their character's,
+  /// or their flower's.
   String get _partnerFlower {
     final partner = ref.read(partnerProfileProvider).valueOrNull;
-    return (partner?.flower ?? AvatarFlower.fallback).emoji;
+    return partner?.character?.emoji ??
+        (partner?.flower ?? AvatarFlower.fallback).emoji;
   }
 
   /// Answer and Decline on the call notification's own buttons.

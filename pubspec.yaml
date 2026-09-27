@@ -131,6 +131,7 @@ flutter:
     - assets/images/together/
     - assets/images/memories/
     - assets/images/frames/
+    - assets/images/avatars/
     - assets/images/note_backgrounds/
     - assets/images/note_scraps/
     - assets/fonts/tiktok/OFL.txt

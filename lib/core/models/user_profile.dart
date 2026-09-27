@@ -1,4 +1,5 @@
 import '../time/zones.dart';
+import 'avatar_character.dart';
 import 'avatar_flower.dart';
 
 class UserProfile {
@@ -156,6 +157,10 @@ class UserProfile {
   /// signed URL is in flight, and what renders if the image fails. See the
   /// header of migration 0020.
   bool get hasPhoto => avatarPath != null && avatarPath!.isNotEmpty;
+
+  /// The drawn boy or girl they chose at sign-up, if they did, and have
+  /// not picked a flower since. Stands in for a photo they have not added.
+  AvatarCharacter? get character => AvatarCharacter.byId(avatar);
 
   /// The flower to draw for this person, everywhere.
   AvatarFlower get flower =>

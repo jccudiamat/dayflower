@@ -297,7 +297,13 @@ void main() {
     await tester.ensureVisible(find.text('Send my photos to Wifey'));
     await tester.runAsync(() async {
       await tester.tap(find.text('Send my photos to Wifey'));
-      await Future<void>.delayed(const Duration(seconds: 2));
+      // Until the half is actually sent, as the join test waits: the print
+      // is rendered in real time, and a fixed two seconds ran out under a
+      // loaded full-suite run, leaving the spinner up and pumpAndSettle
+      // timing out.
+      for (var i = 0; i < 100 && repository.starts == 0; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
     });
     await tester.pumpAndSettle();
     expect(repository.starts, 1);

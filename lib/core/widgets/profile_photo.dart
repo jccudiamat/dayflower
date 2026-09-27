@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/user_profile.dart';
 import '../theme/design_tokens.dart';
 import 'app_icon.dart';
-import 'flower_avatar.dart';
+import 'character_avatar.dart';
 import 'storage_image.dart';
 import 'user_avatar.dart';
 
@@ -67,9 +67,9 @@ class _ProfilePhotoScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final path = profile?.avatarPath;
-    // No photo: their flower, big. The flower is who they chose to be here,
-    // and a blank square would read as a picture that failed to load.
-    final flower = Center(child: FlowerAvatar.of(profile, size: width * .6));
+    // No photo: their character or flower, big. It is who they chose to be
+    // here, and a blank square would read as a picture that failed to load.
+    final flower = Center(child: defaultAvatarFor(profile, size: width * .6));
     return Scaffold(
       // Black in either mode, like the media viewer: a photo is judged
       // against black, not against the app's plum.

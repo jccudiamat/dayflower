@@ -33,10 +33,12 @@ import '../../../calls/data/native_calls.dart';
 import '../../../../core/theme/app_colors.dart';
 import 'settings_sections.dart';
 import '../../../../core/models/user_profile.dart';
+import '../../../../core/models/avatar_character.dart';
 import '../../../../core/models/avatar_flower.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/theme/theme_mode_prefs.dart';
 import '../../../../core/services/avatar_image.dart';
+import '../../../../core/widgets/character_avatar.dart';
 import '../../../../core/widgets/flower_avatar.dart';
 import '../../../../core/widgets/user_avatar.dart';
 import '../../../../core/widgets/confirm_dialog.dart';
@@ -778,7 +780,11 @@ Future<void> _pickAvatar(
               );
             });
 
-        final current = profile?.flower ?? AvatarFlower.fallback;
+        // A chosen character means no flower is theirs, so none is ringed.
+        final character = profile?.character;
+        final current = character == null
+            ? (profile?.flower ?? AvatarFlower.fallback)
+            : null;
 
         return Container(
           decoration: BoxDecoration(
@@ -894,6 +900,45 @@ Future<void> _pickAvatar(
                     ),
                   ),
                 ],
+
+                const SizedBox(height: AppSpace.md),
+                Text('OR PICK A CHARACTER', style: AppText.label()),
+                const SizedBox(height: AppSpace.sm),
+                Row(
+                  children: [
+                    for (final c in AvatarCharacter.values) ...[
+                      Semantics(
+                        button: true,
+                        selected: c == character,
+                        label: c.label,
+                        excludeSemantics: true,
+                        child: GestureDetector(
+                          onTap: busy
+                              ? null
+                              : () => finish(() => repository.updateProfile(
+                                    userId,
+                                    character: c,
+                                  )),
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              // design.md: selection is a tinted outline.
+                              border: Border.all(
+                                color: c == character
+                                    ? AppColors.brand
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
+                            ),
+                            child: CharacterAvatar(character: c, size: 64),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpace.sm),
+                    ],
+                  ],
+                ),
 
                 const SizedBox(height: AppSpace.md),
                 Text('OR PICK A FLOWER', style: AppText.label()),

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../../core/models/avatar_character.dart';
 import '../../../core/models/avatar_flower.dart';
 import '../../../core/models/user_profile.dart';
 import '../../../core/providers/supabase_provider.dart';
@@ -91,6 +92,7 @@ class UserRepository {
     String? displayName,
     String? petName,
     AvatarFlower? avatar,
+    AvatarCharacter? character,
     String? gender,
   }) async {
     final patch = <String, dynamic>{
@@ -100,6 +102,8 @@ class UserRepository {
       // Writing the id, not the enum: the column is text and an unknown id
       // from a newer build must degrade to the default, not crash a decode.
       if (avatar != null) 'avatar': avatar.id,
+      // The same column: a character and a flower replace each other.
+      if (character != null) 'avatar': character.id,
       if (gender != null) 'gender': gender.trim().isEmpty ? null : gender.trim(),
     };
     if (patch.isEmpty) return;
@@ -233,6 +237,7 @@ class UserRepository {
     String timezone = 'UTC',
     String? gender,
     DateTime? birthday,
+    AvatarCharacter? character,
   }) async {
     final profile = UserProfile(
       id: userId,
@@ -240,12 +245,15 @@ class UserRepository {
       petName: petName,
       timezone: timezone,
       gender: gender,
+      // "Which one is you?", the last step of sign-up: the drawn boy or girl
+      // that stands in until they add a photo.
+      avatar: character?.id,
       // Optional at sign-up and optional forever — null here just means it
       // wasn't given, and Settings can fill it in later.
       birthday: birthday,
-      // Left null on purpose. A null avatar means "never chosen", which is
-      // what lets the gender default apply — and lets it change later if the
-      // gender does. Writing the default here would freeze it forever.
+      // ⚠️ Never a flower written here: a null avatar means "never chosen",
+      // which is what lets the default flower apply to an account with no
+      // character (one from before characters, or a retry without one).
     );
     // Upsert so a retry after a half-failed submit doesn't hit a
     // duplicate-key error on the existing row.

@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/user_profile.dart';
-import 'flower_avatar.dart';
+import 'character_avatar.dart';
 import 'storage_image.dart';
 
 /// This person, however they have chosen to appear: their photo if they
-/// uploaded one, their flower otherwise.
+/// uploaded one, otherwise the drawn boy or girl they chose at sign-up, or
+/// their flower.
 ///
 /// **The flower is not a placeholder that goes away — it is the floor.** It
 /// renders while the signed URL is being minted, when the network is gone,
@@ -26,7 +27,7 @@ class UserAvatar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final flower = FlowerAvatar.of(profile, size: size);
+    final flower = defaultAvatarFor(profile, size: size);
     final path = profile?.avatarPath;
     if (path == null || path.isEmpty) return flower;
 
