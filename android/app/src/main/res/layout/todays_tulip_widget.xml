@@ -237,6 +237,12 @@
          Now each line is a row with its heart in it, centred, so the heart
          is level with its words whatever the font or its size.
 
+         The reply sits after the heart, at the very right: it opens the
+         chat with a reply to this day or flower already started. The two
+         always come and go together. With no words on the line they stay
+         at the right: the words are made invisible, not GONE, so they
+         still take the width (GONE put the heart at the left).
+
          A heart for each line, because it belongs on the last one: the
          title on a day, the note under a flower's name. The render shows
          the one on the last line and hides the other. The 44dp box is the
@@ -289,6 +295,17 @@
                 android:src="@drawable/ic_widget_heart_off"
                 android:contentDescription="Love"
                 android:visibility="invisible" />
+
+            <ImageView
+                android:id="@+id/widget_reply"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginLeft="-6dp"
+                android:padding="9dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_reply"
+                android:contentDescription="Reply"
+                android:visibility="invisible" />
         </LinearLayout>
 
         <LinearLayout
@@ -324,6 +341,17 @@
                 android:scaleType="fitCenter"
                 android:src="@drawable/ic_widget_heart_off"
                 android:contentDescription="Love"
+                android:visibility="invisible" />
+
+            <ImageView
+                android:id="@+id/widget_body_reply"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginLeft="-6dp"
+                android:padding="9dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_reply"
+                android:contentDescription="Reply"
                 android:visibility="invisible" />
         </LinearLayout>
     </LinearLayout>

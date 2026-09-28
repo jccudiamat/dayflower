@@ -27,6 +27,8 @@ import 'features/pairing/data/pair_repository.dart';
 import 'features/home/data/mood_prefs.dart';
 import 'features/home/presentation/screens/home_screen.dart'
     show openTheirDaysOn, openTheirDaysRequest;
+import 'features/tulip/presentation/screens/flowers_screen.dart'
+    show replyFromWidgetRequest;
 import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
@@ -257,6 +259,14 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         openTheirDaysOn = uri?.queryParameters['id'];
         openTheirDaysRequest.value = DateTime.now();
         goWhenReady(ref, Routes.home);
+      case 'reply':
+        // The reply bubble beside a heart: the chat, with a reply to that
+        // day or flower started on the composer. See FlowersScreen.
+        final id = uri?.queryParameters['id'];
+        if (id != null && id.isNotEmpty) {
+          replyFromWidgetRequest.value = (id: id, at: DateTime.now());
+        }
+        goWhenReady(ref, Routes.chat);
       default:
         // A flower: the conversation it was sent in.
         goWhenReady(ref, Routes.chat);

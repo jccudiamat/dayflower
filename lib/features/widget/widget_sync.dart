@@ -3,12 +3,11 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
-import 'package:flutter/widgets.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/services/background_supabase.dart';
 
 import '../tulip/data/flower_repository.dart';
 import '../heartbeat/data/heartbeat_nudge.dart';
@@ -401,6 +400,20 @@ class DayflowerWidgets {
     }
   }
 
+  /// Empties every widget of the account that just signed out: their day,
+  /// its cached photos, the hearts, today's heartbeats and the countdown.
+  ///
+  /// ⚠️ Nothing did before, so after a sign-out the home screen went on
+  /// showing the last account's partner, photos and counts, and whoever
+  /// signed in next started with someone else's widgets until their own
+  /// data arrived. Stickies are left: each is a note somebody pinned there
+  /// on purpose.
+  static Future<void> clearAccount() async {
+    await syncFlower(received: null, sentToday: false, partnerName: '');
+    await syncHeartbeat(mine: 0, partner: 0, partnerName: 'Your partner');
+    await syncReunion(title: null, place: null, happensAt: null);
+  }
+
   /// Pushes the couple's reunion onto the home screen.
   ///
   /// Everything here is one row from `reunions` — the same row the card on
@@ -744,127 +757,126 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
   if (host != 'heartbeat' && host != 'react' && host != 'like') return;
 
   try {
-    WidgetsFlutterBinding.ensureInitialized();
-    await dotenv.load(fileName: '.env');
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-    );
-
-    final client = Supabase.instance.client;
-    final userId = client.auth.currentUser?.id;
-    if (userId == null) return; // signed out — nothing to send as
-
-    final pairs = await client
-        .from('pairs')
-        .select('id')
-        .or('user_a.eq.$userId,user_b.eq.$userId')
-        .limit(1);
-    if (pairs.isEmpty) return;
-
-    final pairId = pairs.first['id'] as String;
-
-    // ❤️, or taking it back. DayLikeReceiver has already lit or cleared the
-    // heart on the card; this makes it true. A heart is a "❤️" reply to
-    // the message, the same one the day viewer sends, so it arrives in
-    // the thread saying what it loves, and taking it back deletes it.
-    if (host == 'like') {
-      final id = uri?.queryParameters['id'] ?? '';
-      if (id.isEmpty) return;
-      final on = uri?.queryParameters['on'] == '1';
-      final mine = await client
-          .from('flower_messages')
-          .select('id')
-          .eq('pair_id', pairId)
-          .eq('sender_id', userId)
-          .eq('reply_to', id)
-          .eq('note', heartNote);
-      if (on) {
-        // Once: a second tap arriving before the first landed must not
-        // love it twice.
-        if (mine.isNotEmpty) return;
-        await client.from('flower_messages').insert({
-          'pair_id': pairId,
-          'sender_id': userId,
-          'note': heartNote,
-          'to_widget': false,
-          'reply_to': id,
-        });
-      } else {
-        for (final row in mine) {
-          await client.rpc<void>('delete_message',
-              params: {'p_message_id': row['id']});
-        }
-      }
-      return;
-    }
-
-    // A reaction is a reply to the day photo the widget is showing — a
-    // text message carrying the emoji and `reply_to`, which is what makes
-    // it still say what it was answering when it is read hours later.
-    // ⚠️ The five-emoji row is gone (the heart replaced it); kept for a
-    // widget still drawn by an older build until it next redraws.
-    if (host == 'react') {
-      final reaction = DayReaction.byId(
-        uri?.queryParameters[DayflowerWidgets.reactParam],
-      );
-      if (reaction == null) return;
-
-      // ⚠️ **No photo, no reaction.** The id is written alongside the photo
-      // at sync time, so an empty one means the widget is on its fallback
-      // glyph. Sending anyway would drop a bare emoji into the conversation
-      // answering nothing — and the reaction row is hidden in that state,
-      // so getting here at all means the widget is out of date.
-      final replyTo =
-          await HomeWidget.getWidgetData<String>(DayflowerWidgets.keyDayPhotoId);
-      if (replyTo == null || replyTo.isEmpty) return;
-
-      await client.from('flower_messages').insert({
-        'pair_id': pairId,
-        'sender_id': userId,
-        // `note` with no flower and no image is what makes this a text
-        // message — see FlowerMessage.isText.
-        'note': reaction.emoji,
-        // It answers what is already on their home screen rather than
-        // replacing it.
-        'to_widget': false,
-        'reply_to': replyTo,
-      });
-      return;
-    }
-
-    await client.from('heartbeats').insert({
-      'pair_id': pairId,
-      'sender_id': userId,
-    });
-
-    // A successful widget tap also cancels this device's pending reminder.
-    await HeartbeatNudge.sync(sentToday: true);
-
-    // Bump the count straight away so the widget acknowledges the tap
-    // without waiting for the app to next run a sync.
-    final shown =
-        int.tryParse(await HomeWidget.getWidgetData<String>(
-              DayflowerWidgets.keyBeatMine,
-            ) ??
-            '0') ??
-        0;
-    await HomeWidget.saveWidgetData<String>(
-      DayflowerWidgets.keyBeatMine,
-      '${shown + 1}',
-    );
-    // Ripple the widget the tap came from. This isolate is alive precisely
-    // because of that tap, so it's the one case that always animates.
-    await DayflowerWidgets._markPulse(sent: true);
-    await HomeWidget.updateWidget(
-      qualifiedAndroidName: DayflowerWidgets.heartbeatProvider,
-    );
-    await HomeWidget.updateWidget(
-      qualifiedAndroidName: DayflowerWidgets.adaptiveProvider,
-    );
+    // 🔴 As whoever is signed in now: this isolate outlives an account
+    // switch, and used to go on sending as the one before. See
+    // withBackgroundSupabase. Nobody signed in, nothing is sent.
+    await withBackgroundSupabase<void>(
+        (client, userId) => _widgetAction(client, userId, host!, uri));
   } catch (e) {
     debugPrint('widget background action failed: $e');
   }
+}
+
+/// A widget tap, sent as [userId].
+Future<void> _widgetAction(
+    SupabaseClient client, String userId, String host, Uri? uri) async {
+  final pairs = await client
+      .from('pairs')
+      .select('id')
+      .or('user_a.eq.$userId,user_b.eq.$userId')
+      .limit(1);
+  if (pairs.isEmpty) return;
+
+  final pairId = pairs.first['id'] as String;
+
+  // ❤️, or taking it back. DayLikeReceiver has already lit or cleared the
+  // heart on the card; this makes it true. A heart is a "❤️" reply to
+  // the message, the same one the day viewer sends, so it arrives in
+  // the thread saying what it loves, and taking it back deletes it.
+  if (host == 'like') {
+    final id = uri?.queryParameters['id'] ?? '';
+    if (id.isEmpty) return;
+    final on = uri?.queryParameters['on'] == '1';
+    final mine = await client
+        .from('flower_messages')
+        .select('id')
+        .eq('pair_id', pairId)
+        .eq('sender_id', userId)
+        .eq('reply_to', id)
+        .eq('note', heartNote);
+    if (on) {
+      // Once: a second tap arriving before the first landed must not
+      // love it twice.
+      if (mine.isNotEmpty) return;
+      await client.from('flower_messages').insert({
+        'pair_id': pairId,
+        'sender_id': userId,
+        'note': heartNote,
+        'to_widget': false,
+        'reply_to': id,
+      });
+    } else {
+      for (final row in mine) {
+        await client.rpc<void>('delete_message',
+            params: {'p_message_id': row['id']});
+      }
+    }
+    return;
+  }
+
+  // A reaction is a reply to the day photo the widget is showing — a
+  // text message carrying the emoji and `reply_to`, which is what makes
+  // it still say what it was answering when it is read hours later.
+  // ⚠️ The five-emoji row is gone (the heart replaced it); kept for a
+  // widget still drawn by an older build until it next redraws.
+  if (host == 'react') {
+    final reaction = DayReaction.byId(
+      uri?.queryParameters[DayflowerWidgets.reactParam],
+    );
+    if (reaction == null) return;
+
+    // ⚠️ **No photo, no reaction.** The id is written alongside the photo
+    // at sync time, so an empty one means the widget is on its fallback
+    // glyph. Sending anyway would drop a bare emoji into the conversation
+    // answering nothing — and the reaction row is hidden in that state,
+    // so getting here at all means the widget is out of date.
+    final replyTo =
+        await HomeWidget.getWidgetData<String>(DayflowerWidgets.keyDayPhotoId);
+    if (replyTo == null || replyTo.isEmpty) return;
+
+    await client.from('flower_messages').insert({
+      'pair_id': pairId,
+      'sender_id': userId,
+      // `note` with no flower and no image is what makes this a text
+      // message — see FlowerMessage.isText.
+      'note': reaction.emoji,
+      // It answers what is already on their home screen rather than
+      // replacing it.
+      'to_widget': false,
+      'reply_to': replyTo,
+    });
+    return;
+  }
+
+  await client.from('heartbeats').insert({
+    'pair_id': pairId,
+    'sender_id': userId,
+  });
+
+  // A successful widget tap also cancels this device's pending reminder.
+  await HeartbeatNudge.sync(sentToday: true);
+
+  // Bump the count straight away so the widget acknowledges the tap
+  // without waiting for the app to next run a sync.
+  final shown =
+      int.tryParse(await HomeWidget.getWidgetData<String>(
+            DayflowerWidgets.keyBeatMine,
+          ) ??
+          '0') ??
+      0;
+  await HomeWidget.saveWidgetData<String>(
+    DayflowerWidgets.keyBeatMine,
+    '${shown + 1}',
+  );
+  // Ripple the widget the tap came from. This isolate is alive precisely
+  // because of that tap, so it's the one case that always animates.
+  await DayflowerWidgets._markPulse(sent: true);
+  await HomeWidget.updateWidget(
+    qualifiedAndroidName: DayflowerWidgets.heartbeatProvider,
+  );
+  await HomeWidget.updateWidget(
+    qualifiedAndroidName: DayflowerWidgets.adaptiveProvider,
+  );
 }
 
 /// Crops [bytes] to a circle and downscales it, for the widget's avatar.

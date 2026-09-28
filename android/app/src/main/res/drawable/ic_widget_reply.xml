@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget's reply: a round speech bubble with its tail at the lower
+     left, drawn as an outline the weight of the heart beside it
+     (ic_widget_heart_off), white on the caption's shade. Opens the chat
+     with a reply to the day or flower already started. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineJoin="round"
+        android:pathData="M7.75,18.86 A8.5,8.5 0 1 0 4.64,15.75 L3.5,20.5 Z" />
+</vector>

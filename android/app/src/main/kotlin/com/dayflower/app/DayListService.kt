@@ -22,8 +22,8 @@ import es.antonborri.home_widget.HomeWidgetPlugin
  * 🔴 **Taps are filled in, not attached.** The launcher ignores a
  * PendingIntent set on anything inside a list row, so the list carries one
  * template (DayLikeReceiver.listTemplate) and each row only says what was
- * tapped: `dayflower://like?id=` for its heart, `dayflower://open?day=` for
- * the rest of it.
+ * tapped: `dayflower://like?id=` for its heart, `dayflower://open?reply=`
+ * for its reply, `dayflower://open?day=` for the rest of it.
  */
 class DayListService : RemoteViewsService() {
     override fun onGetViewFactory(intent: Intent): RemoteViewsFactory =
@@ -86,7 +86,7 @@ private class DayListFactory(
         } catch (e: Throwable) {
             android.util.Log.e("DayflowerWidget", "list row photo failed", e)
         }
-        TodaysTulipWidget.setTextOrHide(row, R.id.widget_day_note, day.note)
+        TodaysTulipWidget.setTextOrBlank(row, R.id.widget_day_note, day.note)
         row.setOnClickFillInIntent(
             R.id.widget_day_photo,
             Intent().setData(Uri.parse("dayflower://open?day=" + Uri.encode(day.id ?: ""))),
@@ -95,6 +95,7 @@ private class DayListFactory(
         val id = day.id
         if (id.isNullOrBlank()) {
             row.setViewVisibility(R.id.widget_day_heart, View.INVISIBLE)
+            row.setViewVisibility(R.id.widget_day_reply, View.INVISIBLE)
         } else {
             val on = hearted.contains(id)
             row.setImageViewResource(
@@ -108,6 +109,10 @@ private class DayListFactory(
             row.setOnClickFillInIntent(
                 R.id.widget_day_heart,
                 Intent().setData(Uri.parse("dayflower://like?id=" + Uri.encode(id))),
+            )
+            row.setOnClickFillInIntent(
+                R.id.widget_day_reply,
+                Intent().setData(Uri.parse("dayflower://open?reply=" + Uri.encode(id))),
             )
         }
         return row

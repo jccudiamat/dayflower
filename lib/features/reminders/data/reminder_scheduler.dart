@@ -1,12 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../../../core/services/app_notifications.dart';
+import '../../../core/services/background_supabase.dart';
 import '../../calls/data/call_alerts.dart';
 import '../domain/reminder_countdown.dart';
 import 'reminder_repository.dart';
@@ -720,9 +719,9 @@ String? tapRouteOf(String? payload) {
 /// Handles Snooze / Done **when the app is not running**.
 ///
 /// Runs in its own isolate: nothing from the app exists here, so Supabase
-/// has to be re-initialised from scratch, exactly like the home-screen
-/// widget's background send. Supabase restores the persisted session
-/// itself, which is what lets this write as whoever is signed in.
+/// has to be set up again, exactly like the home-screen widget's
+/// background send, and as whoever is signed in *now*: the isolate outlives
+/// an account switch (see withBackgroundSupabase).
 ///
 /// Must stay a top-level function with the `vm:entry-point` pragma — the
 /// tree shaker cannot see that Android calls it, and an anonymous closure
@@ -732,19 +731,12 @@ Future<void> reminderActionBackground(NotificationResponse response) async {
   final callId = CallAlerts.callIdOf(response.payload);
   if (callId != null && response.actionId == CallAlerts.actionDecline) {
     try {
-      WidgetsFlutterBinding.ensureInitialized();
-      await dotenv.load(fileName: '.env');
-      await Supabase.initialize(
-        url: dotenv.env['SUPABASE_URL']!,
-        anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-      );
-      final client = Supabase.instance.client;
-      final user = client.auth.currentUser;
-      if (user == null) return;
-      final call = await client.from('flower_messages').select('sender_id,call_mode')
-          .eq('id', callId).maybeSingle();
-      if (call == null || call['call_mode'] == null || call['sender_id'] == user.id) return;
-      await client.rpc('end_call', params: {'p_message_id': callId});
+      await withBackgroundSupabase<void>((client, userId) async {
+        final call = await client.from('flower_messages').select('sender_id,call_mode')
+            .eq('id', callId).maybeSingle();
+        if (call == null || call['call_mode'] == null || call['sender_id'] == userId) return;
+        await client.rpc('end_call', params: {'p_message_id': callId});
+      });
     } catch (e) {
       debugPrint('call decline failed: $e');
     }
@@ -761,54 +753,47 @@ Future<void> reminderActionBackground(NotificationResponse response) async {
   }
 
   try {
-    WidgetsFlutterBinding.ensureInitialized();
-    await dotenv.load(fileName: '.env');
-    await Supabase.initialize(
-      url: dotenv.env['SUPABASE_URL']!,
-      anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-    );
+    // Nobody signed in, nothing is changed.
+    await withBackgroundSupabase<void>((client, _) async {
+      final rows = await client
+          .from('reminders')
+          .select()
+          .eq('id', reminderId)
+          .limit(1);
+      if (rows.isEmpty) return;
+      final reminder = Reminder.fromMap(rows.first);
+      final repository = ReminderRepository(client);
 
-    final client = Supabase.instance.client;
-    if (client.auth.currentUser == null) return; // signed out
-
-    final rows = await client
-        .from('reminders')
-        .select()
-        .eq('id', reminderId)
-        .limit(1);
-    if (rows.isEmpty) return;
-    final reminder = Reminder.fromMap(rows.first);
-    final repository = ReminderRepository(client);
-
-    if (action == ReminderScheduler.actionSnooze) {
-      final next = DateTime.now().add(kSnoozeDuration);
-      await repository.snooze(reminder, kSnoozeDuration);
-      // Nothing else will reschedule this until the app next runs a sync,
-      // so this isolate has to put the alarm back on the phone itself —
-      // otherwise Snooze would quietly mean Dismiss.
-      //
-      // scheduleOne, never sync: sync cancels every pending reminder alarm
-      // first, and this isolate has only loaded one of them.
-      await ReminderScheduler.scheduleOne(
-        Reminder(
-          id: reminder.id,
-          pairId: reminder.pairId,
-          createdBy: reminder.createdBy,
-          forUser: reminder.forUser,
-          title: reminder.title,
-          note: reminder.note,
-          emoji: reminder.emoji,
-          remindAt: next,
-          // A snoozed alarm fires once at the snoozed time. Keeping the
-          // repeat rule here would hand matchDateTimeComponents a new
-          // time-of-day and quietly move the whole daily series.
-          repeat: ReminderRepeat.none,
-          alarm: reminder.alarm,
-        ),
-      );
-    } else {
-      await repository.markDone(reminder);
-    }
+      if (action == ReminderScheduler.actionSnooze) {
+        final next = DateTime.now().add(kSnoozeDuration);
+        await repository.snooze(reminder, kSnoozeDuration);
+        // Nothing else will reschedule this until the app next runs a sync,
+        // so this isolate has to put the alarm back on the phone itself —
+        // otherwise Snooze would quietly mean Dismiss.
+        //
+        // scheduleOne, never sync: sync cancels every pending reminder alarm
+        // first, and this isolate has only loaded one of them.
+        await ReminderScheduler.scheduleOne(
+          Reminder(
+            id: reminder.id,
+            pairId: reminder.pairId,
+            createdBy: reminder.createdBy,
+            forUser: reminder.forUser,
+            title: reminder.title,
+            note: reminder.note,
+            emoji: reminder.emoji,
+            remindAt: next,
+            // A snoozed alarm fires once at the snoozed time. Keeping the
+            // repeat rule here would hand matchDateTimeComponents a new
+            // time-of-day and quietly move the whole daily series.
+            repeat: ReminderRepeat.none,
+            alarm: reminder.alarm,
+          ),
+        );
+      } else {
+        await repository.markDone(reminder);
+      }
+    });
   } catch (e) {
     debugPrint('reminder background action failed: $e');
   }

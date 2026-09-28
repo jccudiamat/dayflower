@@ -37,6 +37,16 @@ import '../../../../core/widgets/profile_photo.dart';
 import '../../../../core/widgets/app_snack_bars.dart';
 import '../widgets/media_viewer.dart';
 
+/// A reply to start, asked for by the reply bubble on the home-screen
+/// widget (see _openWidgetTarget in app.dart): the chat opens with a reply
+/// to message [id] on the composer, as a draft, and the keyboard up.
+///
+/// ⚠️ A time as well as the id, like openTheirDaysRequest: on a cold start
+/// the thread takes a moment to arrive, so the request waits for the
+/// message, but only briefly. One that outlived that would start a reply
+/// out of nowhere the next time the chat opened.
+final replyFromWidgetRequest = ValueNotifier<({String id, DateTime at})?>(null);
+
 /// The Chat tab: the couple's conversation.
 ///
 /// It reads as a messaging thread because that is what it now is: flowers
@@ -164,6 +174,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
     super.initState();
     _panelOpen = widget.openFlowers;
     _thread.addListener(_onThreadScroll);
+    replyFromWidgetRequest.addListener(_replyFromWidgetSoon);
+    _replyFromWidgetSoon();
     _focus.addListener(() {
       // Tapping the field means "I want the keyboard", so the drawer yields.
       if (_focus.hasFocus && _panelOpen) setState(() => _panelOpen = false);
@@ -189,6 +201,7 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
   @override
   void dispose() {
+    replyFromWidgetRequest.removeListener(_replyFromWidgetSoon);
     _composer.dispose();
     _focus.dispose();
     _thread.dispose();
@@ -357,6 +370,35 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   void _startReply(FlowerMessage message) {
     setState(() => _replyingTo = message);
     _focus.requestFocus();
+  }
+
+  /// How long a widget's reply waits for the thread to arrive.
+  static const _widgetReplyWait = Duration(seconds: 15);
+
+  /// Answers [replyFromWidgetRequest], after the frame: the same tap sent
+  /// the router here, and the composer has to be on screen to take focus.
+  void _replyFromWidgetSoon() {
+    if (replyFromWidgetRequest.value == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _replyFromWidget());
+  }
+
+  void _replyFromWidget() {
+    final asked = replyFromWidgetRequest.value;
+    if (asked == null || !mounted) return;
+    if (DateTime.now().difference(asked.at) > _widgetReplyWait) {
+      replyFromWidgetRequest.value = null;
+      return;
+    }
+    // Not here yet on a cold start: the thread's listener in build tries
+    // again when it is. Gone for good (deleted, expired), the request runs
+    // out and the chat simply opens.
+    final message = (ref.read(flowerMessagesProvider).valueOrNull ??
+            const <FlowerMessage>[])
+        .where((m) => m.id == asked.id)
+        .firstOrNull;
+    if (message == null) return;
+    replyFromWidgetRequest.value = null;
+    _startReply(message);
   }
 
   Future<void> _deleteMessage(FlowerMessage message) async {
@@ -565,6 +607,8 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
       if (_pending.any((m) => known.contains(m.id))) {
         setState(() => _pending.removeWhere((m) => known.contains(m.id)));
       }
+      // A reply the widget asked for, waiting on this message.
+      _replyFromWidgetSoon();
     });
 
     return Scaffold(

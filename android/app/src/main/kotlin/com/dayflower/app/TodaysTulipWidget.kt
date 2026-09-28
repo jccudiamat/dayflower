@@ -124,6 +124,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // Invisible, not gone: its box is what holds the line off the
             // card's bottom edge (see widget_caption in the layout).
             views.setViewVisibility(R.id.widget_heart, View.INVISIBLE)
+            views.setViewVisibility(R.id.widget_reply, View.INVISIBLE)
             views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             views.setTextViewText(
                 R.id.widget_emoji,
@@ -234,13 +235,19 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 R.id.widget_emoji,
                 widgetData.getString("tulip_emoji", "🌷"),
             )
-            // Empty means hidden, not a blank line. The caption is now only
-            // a flower's name or something they actually wrote, so on a day
-            // photo with no note there is genuinely nothing to say here and
-            // an empty TextView would still hold a line of space open.
-            setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
             // The note's whole row, not only its words: see widget_caption.
             val body = widgetData.getString("tulip_body", "") ?: ""
+            // Empty is no words, never a blank line. The caption is only a
+            // flower's name or something they actually wrote, so a day
+            // photo with no note has nothing to say here. But the heart and
+            // the reply are on this line then, and an empty title keeps its
+            // width (invisible, not GONE) to hold them at the right.
+            val title = widgetData.getString("tulip_title", "") ?: ""
+            if (body.isEmpty()) {
+                setTextOrBlank(views, R.id.widget_title, title)
+            } else {
+                setTextOrHide(views, R.id.widget_title, title)
+            }
             views.setTextViewText(R.id.widget_body, body)
             views.setViewVisibility(
                 R.id.widget_body_row,
@@ -263,10 +270,18 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // On the last line, level with it: the note's, when there is
             // one, and the title's otherwise.
             if (body.isEmpty()) {
-                renderHeart(context, views, R.id.widget_heart, heartFor, hearted)
+                renderActions(context, views, R.id.widget_heart, R.id.widget_reply, heartFor, hearted)
             } else {
                 views.setViewVisibility(R.id.widget_heart, View.GONE)
-                renderHeart(context, views, R.id.widget_body_heart, heartFor, hearted)
+                views.setViewVisibility(R.id.widget_reply, View.GONE)
+                renderActions(
+                    context,
+                    views,
+                    R.id.widget_body_heart,
+                    R.id.widget_body_reply,
+                    heartFor,
+                    hearted,
+                )
             }
 
             // 🔴 **What it shows is what a tap opens.** Every tap opened the
@@ -328,6 +343,38 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                     if (id.isNullOrBlank()) "dayflower://days" else "dayflower://days?id=" + Uri.encode(id),
                 ),
             )
+
+        /**
+         * The chat, with a reply to message [id] already started: the
+         * reply bubble beside a heart. See _openWidgetTarget in app.dart.
+         */
+        fun openReply(context: Context, id: String): PendingIntent =
+            HomeWidgetLaunchIntent.getActivity(
+                context,
+                MainActivity::class.java,
+                Uri.parse("dayflower://reply?id=" + Uri.encode(id)),
+            )
+
+        /**
+         * The heart and the reply for message [id], which always come and go
+         * together: nothing to love is nothing to answer either.
+         */
+        fun renderActions(
+            context: Context,
+            views: RemoteViews,
+            heartView: Int,
+            replyView: Int,
+            id: String?,
+            hearted: Set<String>,
+        ) {
+            renderHeart(context, views, heartView, id, hearted)
+            if (id.isNullOrBlank()) {
+                views.setViewVisibility(replyView, View.INVISIBLE)
+                return
+            }
+            views.setViewVisibility(replyView, View.VISIBLE)
+            views.setOnClickPendingIntent(replyView, openReply(context, id))
+        }
 
         /**
          * A heart for message [id]: an outline, or red once hearted, and a
@@ -561,8 +608,15 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 val item = RemoteViews(context.packageName, R.layout.widget_photo_item)
                 item.setImageViewBitmap(R.id.widget_photo, day.photo)
                 // Its own words and its own heart: see widget_photo_item.
-                setTextOrHide(item, R.id.widget_item_note, day.note)
-                renderHeart(context, item, R.id.widget_item_heart, day.id, hearted)
+                setTextOrBlank(item, R.id.widget_item_note, day.note)
+                renderActions(
+                    context,
+                    item,
+                    R.id.widget_item_heart,
+                    R.id.widget_item_reply,
+                    day.id,
+                    hearted,
+                )
                 // A tap opens the viewer on the day that was showing, not
                 // on their newest.
                 item.setOnClickPendingIntent(R.id.widget_photo, openDays(context, day.id))
@@ -655,6 +709,20 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 views.setViewVisibility(viewId, View.VISIBLE)
                 views.setTextViewText(viewId, text)
             }
+        }
+
+        /**
+         * [setTextOrHide] for words that share a line with the heart and the
+         * reply: with nothing to say they are invisible, not GONE, so they
+         * still take the line's width and the two stay at the right. GONE
+         * put them at the left, where the words would have started.
+         */
+        fun setTextOrBlank(views: RemoteViews, viewId: Int, text: String?) {
+            views.setTextViewText(viewId, text ?: "")
+            views.setViewVisibility(
+                viewId,
+                if (text.isNullOrEmpty()) View.INVISIBLE else View.VISIBLE,
+            )
         }
 
         /**

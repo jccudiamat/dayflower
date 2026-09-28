@@ -31,7 +31,16 @@ class DayLikeReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.data?.host == "open") {
-            openDay(context, intent.data?.getQueryParameter("day"))
+            val reply = intent.data?.getQueryParameter("reply")
+            open(
+                context,
+                if (!reply.isNullOrBlank()) {
+                    "dayflower://reply?id=" + Uri.encode(reply)
+                } else {
+                    val day = intent.data?.getQueryParameter("day")
+                    if (day.isNullOrBlank()) "dayflower://days" else "dayflower://days?id=" + Uri.encode(day)
+                },
+            )
             return
         }
         val id = intent.data?.getQueryParameter("id")?.takeIf { it.isNotBlank() } ?: return
@@ -73,9 +82,10 @@ class DayLikeReceiver : BroadcastReceiver() {
     }
 
     /**
-     * A day in the scrolling list, tapped: the app, on the My Day viewer, on
-     * that day. The same intent the card's own tap sends
-     * (TodaysTulipWidget.openDays), so the app cannot tell them apart.
+     * A day in the scrolling list, tapped: the app, on the My Day viewer on
+     * that day, or (its reply) on the chat with a reply to it started. The
+     * same intents the card's own taps send (TodaysTulipWidget.openDays,
+     * openReply), so the app cannot tell them apart.
      *
      * ⚠️ Started from here, a receiver, because a list's taps all go to one
      * place and the heart's must not open anything. A launcher lets a
@@ -83,24 +93,16 @@ class DayLikeReceiver : BroadcastReceiver() {
      * explicitly), but one that did not would leave this tap doing nothing;
      * the header above the list opens the viewer directly either way.
      */
-    private fun openDay(context: Context, day: String?) {
+    private fun open(context: Context, target: String) {
         try {
             context.startActivity(
                 Intent(context, MainActivity::class.java)
                     .setAction(HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION)
-                    .setData(
-                        Uri.parse(
-                            if (day.isNullOrBlank()) {
-                                "dayflower://days"
-                            } else {
-                                "dayflower://days?id=" + Uri.encode(day)
-                            },
-                        ),
-                    )
+                    .setData(Uri.parse(target))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             )
         } catch (e: Throwable) {
-            android.util.Log.w("DayLikeReceiver", "could not open the day: $e")
+            android.util.Log.w("DayLikeReceiver", "could not open $target: $e")
         }
     }
 
