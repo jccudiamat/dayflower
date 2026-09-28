@@ -6,7 +6,9 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import es.antonborri.home_widget.HomeWidgetBackgroundIntent
+import es.antonborri.home_widget.HomeWidgetLaunchIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 
 /**
@@ -21,10 +23,17 @@ import es.antonborri.home_widget.HomeWidgetPlugin
  * "❤️" reply that makes it true.
  *
  * Tapping a lit heart takes it back, the way every like does.
+ *
+ * It also takes every tap on the scrolling list (see [listTemplate]), where
+ * the rest of a day, not its heart, opens that day in the app.
  */
 class DayLikeReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.data?.host == "open") {
+            openDay(context, intent.data?.getQueryParameter("day"))
+            return
+        }
         val id = intent.data?.getQueryParameter("id")?.takeIf { it.isNotBlank() } ?: return
         val data = HomeWidgetPlugin.getData(context)
         val hearted = (data.getString(KEY_HEARTED, "") ?: "")
@@ -63,6 +72,38 @@ class DayLikeReceiver : BroadcastReceiver() {
         }
     }
 
+    /**
+     * A day in the scrolling list, tapped: the app, on the My Day viewer, on
+     * that day. The same intent the card's own tap sends
+     * (TodaysTulipWidget.openDays), so the app cannot tell them apart.
+     *
+     * ⚠️ Started from here, a receiver, because a list's taps all go to one
+     * place and the heart's must not open anything. A launcher lets a
+     * widget's broadcast start the app it belongs to (AOSP's does,
+     * explicitly), but one that did not would leave this tap doing nothing;
+     * the header above the list opens the viewer directly either way.
+     */
+    private fun openDay(context: Context, day: String?) {
+        try {
+            context.startActivity(
+                Intent(context, MainActivity::class.java)
+                    .setAction(HomeWidgetLaunchIntent.HOME_WIDGET_LAUNCH_ACTION)
+                    .setData(
+                        Uri.parse(
+                            if (day.isNullOrBlank()) {
+                                "dayflower://days"
+                            } else {
+                                "dayflower://days?id=" + Uri.encode(day)
+                            },
+                        ),
+                    )
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        } catch (e: Throwable) {
+            android.util.Log.w("DayLikeReceiver", "could not open the day: $e")
+        }
+    }
+
     private fun redraw(context: Context, provider: Class<*>) {
         val manager = AppWidgetManager.getInstance(context)
         val ids = manager.getAppWidgetIds(ComponentName(context, provider))
@@ -85,6 +126,31 @@ class DayLikeReceiver : BroadcastReceiver() {
         /** How long a heart keeps the card on its day. A redraw after that
          *  (a sync, the next day) starts from the newest again. */
         const val FOCUS_MS = 15_000L
+
+        /**
+         * Every tap on the scrolling list, before its row says which day
+         * and what part of it (DayListService).
+         *
+         * 🔴 Mutable, which nothing else here is: the row's part of the
+         * intent is filled in when it is tapped, and Android 12 and later
+         * ignore the fill-in on an immutable PendingIntent, so every tap
+         * would arrive saying nothing. Explicit (this class), so a filled-in
+         * intent can only ever come here.
+         */
+        fun listTemplate(context: Context): android.app.PendingIntent =
+            android.app.PendingIntent.getBroadcast(
+                context,
+                LIST_REQUEST,
+                Intent(context, DayLikeReceiver::class.java),
+                android.app.PendingIntent.FLAG_UPDATE_CURRENT or
+                    (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        android.app.PendingIntent.FLAG_MUTABLE
+                    } else {
+                        0
+                    }),
+            )
+
+        private const val LIST_REQUEST = 0x4C495354
 
         /** The heart's tap, for the card showing message [id]. */
         fun pendingIntent(context: Context, id: String): android.app.PendingIntent =

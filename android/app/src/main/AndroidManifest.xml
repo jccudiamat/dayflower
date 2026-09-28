@@ -77,9 +77,11 @@
          See lib/features/updates/data/update_repository.dart. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
 
+    <!-- DayflowerApplication: keeps every widget from blinking at every
+         widget tap. See the class. -->
     <application
         android:label="Dayflower"
-        android:name="${applicationName}"
+        android:name=".DayflowerApplication"
         android:icon="@mipmap/ic_launcher">
         <!-- showWhenLocked/turnScreenOn: a reminder alarm's full-screen
              intent launches this activity. Without these two the intent
@@ -201,6 +203,15 @@
              only, so not exported. -->
         <receiver
             android:name=".DayLikeReceiver"
+            android:exported="false"/>
+
+        <!-- Their days as a list to scroll, when Settings asks for that
+             rather than the rotation. The launcher binds it to fill the
+             list, and only the launcher: BIND_REMOTEVIEWS is a system
+             permission. See DayListService. -->
+        <service
+            android:name=".DayListService"
+            android:permission="android.permission.BIND_REMOTEVIEWS"
             android:exported="false"/>
 
         <!-- flutter_local_notifications ships a manifest containing ONLY

@@ -114,4 +114,10 @@ dependencies {
     // nothing to it. The version is the plugin's own (its build.gradle);
     // move them together.
     compileOnly("io.github.webrtc-sdk:android:144.7559.09")
+    // DayflowerApplication queues one job that never runs, so WorkManager
+    // (which home_widget sends every widget tap through) never switches its
+    // receiver off and on and resets every widget. home_widget keeps
+    // WorkManager as an `implementation` dependency (2.+), invisible to this
+    // module; the version it resolves to today.
+    implementation("androidx.work:work-runtime:2.12.0")
 }

@@ -46,6 +46,12 @@ import '../../domain/note_backgrounds.dart';
 /// came in.
 final openTheirDaysRequest = ValueNotifier<DateTime?>(null);
 
+/// Which of their days that request is for, by message id, when the widget
+/// said: the day a rotating card was on, or the one scrolled to. Null opens
+/// their newest, the one a still card shows. Set with the request, read and
+/// cleared with it.
+String? openTheirDaysOn;
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -114,6 +120,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     if (asked == null || !mounted) return;
     if (DateTime.now().difference(asked) > _theirDaysWait) {
       openTheirDaysRequest.value = null;
+      openTheirDaysOn = null;
       return;
     }
     final days = ref.read(partnerDayPhotosProvider);
@@ -121,9 +128,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     // they are.
     if (days.isEmpty) return;
     openTheirDaysRequest.value = null;
-    // From their newest, which is the one the card shows first.
+    // On the day the widget was showing, both lists being newest first;
+    // their newest when it did not say, or that day has since gone.
+    final on = openTheirDaysOn;
+    openTheirDaysOn = null;
+    final at = on == null ? 0 : days.indexWhere((d) => d.id == on);
     Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => const DaysViewer(own: false)));
+        builder: (_) => DaysViewer(own: false, initialIndex: at < 0 ? 0 : at)));
   }
 
   /// The controller the page actually scrolls with.

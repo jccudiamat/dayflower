@@ -103,36 +103,43 @@ class WidgetSettingsScreen extends ConsumerWidget {
                   SettingsCard(children: [ReunionBackgroundRow()]),
                   const SizedBox(height: AppSpace.md),
 
-                  Text('PHOTO ROTATION', style: AppText.label()),
+                  Text('THEIR DAYS ON MY DAY', style: AppText.label()),
                   const SizedBox(height: AppSpace.xs),
                   Text(
-                    'How often the widget moves to their next day. Only '
-                    'applies when more than one is live.',
+                    'How the widget shows them when more than one is live: '
+                    'moving through them on its own, or a list you scroll.',
                     style: AppText.caption(),
                   ),
                   const SizedBox(height: AppSpace.xs),
                   SettingsCard(
                     children: [
-                      // ⚠️ "Don't" is first and is the default. A card that
-                      // moves on its own is the kind of thing that reads as
-                      // delightful for a week and restless after that, so it
-                      // is opt-in.
-                      WidgetRotationRow(
-                        title: "Don't rotate",
-                        subtitle: 'Only the newest day',
+                      // ⚠️ Holding still is first and is the default. A card
+                      // that moves on its own is the kind of thing that
+                      // reads as delightful for a week and restless after
+                      // that, so it is opt-in.
+                      WidgetDaysRow(
+                        title: 'Newest only',
+                        subtitle: 'Their latest day, holding still',
                         seconds: 0,
                       ),
                       SettingsLine(),
-                      WidgetRotationRow(
-                        title: 'Every 3 seconds',
-                        subtitle: 'Through their live days',
+                      WidgetDaysRow(
+                        title: 'Rotate every 3 seconds',
+                        subtitle: 'Through their days on its own',
                         seconds: 3,
                       ),
                       SettingsLine(),
-                      WidgetRotationRow(
-                        title: 'Every 5 seconds',
-                        subtitle: 'A calmer pace',
+                      WidgetDaysRow(
+                        title: 'Rotate every 5 seconds',
+                        subtitle: 'The same, at a calmer pace',
                         seconds: 5,
+                      ),
+                      SettingsLine(),
+                      WidgetDaysRow(
+                        title: 'Scroll',
+                        subtitle:
+                            'Scroll up and down through their days, a heart on each',
+                        scroll: true,
                       ),
                     ],
                   ),

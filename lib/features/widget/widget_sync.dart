@@ -120,6 +120,17 @@ class DayflowerWidgets {
   /// across a room, which some people want and others do not.
   static const keyRotateSeconds = 'widget_rotate_seconds';
 
+  /// How My Day shows more than one live day: [daysScroll] for a list to
+  /// scroll up and down, each day with its own heart; anything else for the
+  /// rotation [keyRotateSeconds] sets (0 holding still on the newest).
+  /// TodaysTulipWidget.KEY_DAYS_STYLE in Kotlin; change them together.
+  ///
+  /// A string rather than a bool: what Dart writes as a bool and what
+  /// Kotlin reads back have disagreed on type before (see WidgetPrefs.kt),
+  /// and a string cannot.
+  static const keyDaysStyle = 'widget_days_style';
+  static const daysScroll = 'scroll';
+
   // ── Reunion countdown ─────────────────────────────────────
   static const keyReunionTitle = 'reunion_title';
   static const keyReunionPlace = 'reunion_place';
@@ -659,14 +670,33 @@ class DayflowerWidgets {
     );
   }
 
-  /// How often the day photos advance. 0, 3 or 5 seconds.
-  static Future<void> setRotateSeconds(int seconds) async {
+  /// How My Day moves through their days: a list to [scroll], or rotating
+  /// every [seconds] (0, 3 or 5; 0 holds still on the newest). Both are
+  /// written, then one redraw: the rotation is kept while the list is on,
+  /// so it is still there if they go back to it.
+  static Future<void> setDaysMotion({
+    required bool scroll,
+    required int seconds,
+  }) async {
     if (!isSupported) return;
     try {
       await HomeWidget.saveWidgetData<int>(keyRotateSeconds, seconds);
+      await HomeWidget.saveWidgetData<String>(
+          keyDaysStyle, scroll ? daysScroll : '');
       await _refresh();
     } catch (e) {
-      debugPrint('widget rotation set failed: $e');
+      debugPrint('widget days motion set failed: $e');
+    }
+  }
+
+  static Future<bool> currentDaysScroll() async {
+    if (!isSupported) return false;
+    try {
+      return await HomeWidget.getWidgetData<String>(keyDaysStyle) ==
+          daysScroll;
+    } catch (e) {
+      debugPrint('widget days style read failed: $e');
+      return false;
     }
   }
 

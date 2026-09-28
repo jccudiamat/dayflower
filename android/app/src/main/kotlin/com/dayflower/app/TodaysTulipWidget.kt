@@ -1,7 +1,9 @@
 package com.dayflower.app
 
 import android.appwidget.AppWidgetManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -70,13 +72,19 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         ) {
             try {
                 val views = RemoteViews(context.packageName, R.layout.todays_tulip_widget)
-                renderFlower(
+                val listed = renderFlower(
                     context,
                     views,
                     widgetData,
                     appWidgetManager.getAppWidgetOptions(widgetId),
+                    widgetId,
                 )
                 appWidgetManager.updateAppWidget(widgetId, views)
+                // The list keeps the rows it has until it is told they
+                // changed: a new day, or a heart. Its scroll stays put.
+                if (listed) {
+                    appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.widget_list)
+                }
             } catch (e: Throwable) {
                 // Named in the log so a logcat says what actually failed
                 // rather than leaving the next person guessing at it.
@@ -109,17 +117,20 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // the flipper itself cycling empty slots.
             views.setViewVisibility(R.id.widget_photo_still, View.GONE)
             views.setViewVisibility(R.id.widget_flipper, View.GONE)
+            views.setViewVisibility(R.id.widget_list, View.GONE)
             views.setViewVisibility(R.id.widget_flower_art, View.GONE)
             views.setViewVisibility(R.id.widget_header, View.GONE)
             views.setViewVisibility(R.id.widget_caption, View.VISIBLE)
-            views.setViewVisibility(R.id.widget_heart, View.GONE)
+            // Invisible, not gone: its box is what holds the line off the
+            // card's bottom edge (see widget_caption in the layout).
+            views.setViewVisibility(R.id.widget_heart, View.INVISIBLE)
             views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             views.setTextViewText(
                 R.id.widget_emoji,
                 widgetData.getString("tulip_emoji", "🌷"),
             )
             setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
-            views.setViewVisibility(R.id.widget_body, View.GONE)
+            views.setViewVisibility(R.id.widget_body_row, View.GONE)
             views.setOnClickPendingIntent(
                 R.id.widget_root,
                 HomeWidgetLaunchIntent.getActivity(
@@ -132,32 +143,71 @@ class TodaysTulipWidget : HomeWidgetProvider() {
 
         private const val TAG = "DayflowerWidget"
 
-        /** Shared with DayflowerWidget so the adaptive variant renders identically. */
+        /**
+         * Settings' choice for more than one live day: [DAYS_SCROLL] for a
+         * list to scroll, anything else for the rotation (or none) that
+         * `widget_rotate_seconds` sets. DayflowerWidgets.keyDaysStyle in
+         * Dart; change them together.
+         */
+        const val KEY_DAYS_STYLE = "widget_days_style"
+        const val DAYS_SCROLL = "scroll"
+
+        /**
+         * Shared with DayflowerWidget so the adaptive variant renders
+         * identically. Returns whether their days are the scrolling list,
+         * which the caller then tells to reload once the views are on the
+         * card (renderSafely).
+         */
         fun renderFlower(
             context: Context,
             views: RemoteViews,
             widgetData: SharedPreferences,
             options: Bundle? = null,
-        ) {
+            widgetId: Int = AppWidgetManager.INVALID_APPWIDGET_ID,
+        ): Boolean {
             // A day photo takes the slot when there is a live one; otherwise
             // the flower glyph does. Never both.
-            val days = loadDays(widgetData)
-                .map { it.copy(photo = roundCorners(context, it.photo, options)) }
+            val refs = dayRefs(widgetData)
+            // More than one, and Settings says scroll. The list fetches
+            // each day's photo itself (DayListService), so none is decoded
+            // here for it.
+            val listed = refs.size > 1 &&
+                widgetId != AppWidgetManager.INVALID_APPWIDGET_ID &&
+                widgetData.getString(KEY_DAYS_STYLE, "") == DAYS_SCROLL
+            val days = if (listed) {
+                emptyList()
+            } else {
+                refs.mapNotNull { ref ->
+                    decodePhoto(ref.path)?.let {
+                        Day(roundCorners(context, it, options), ref.id, ref.note)
+                    }
+                }
+            }
             val photos = days.map { it.photo }
             val hearted = linesOf(widgetData, DayLikeReceiver.KEY_HEARTED).toSet()
             // The flower's own painting, for when there is no day photo.
             // WARNING: fitted rather than full-bleed, and in a view of its
             // own - the catalogue art is a 512px square and this card is
             // tall, so centreCrop would keep a narrow vertical strip of it.
-            val art = if (photos.isEmpty()) loadFlowerArt(widgetData) else null
+            val art = if (!listed && photos.isEmpty()) loadFlowerArt(widgetData) else null
             var rotating = false
-            if (photos.isNotEmpty()) {
+            if (listed) {
+                renderList(context, views, widgetId)
+                views.setViewVisibility(R.id.widget_photo_still, View.GONE)
+                // Emptied as well as hidden: last rotation's bitmaps.
+                views.removeAllViews(R.id.widget_flipper)
+                views.setViewVisibility(R.id.widget_flipper, View.GONE)
+                views.setViewVisibility(R.id.widget_flower_art, View.GONE)
+                views.setViewVisibility(R.id.widget_emoji, View.GONE)
+            } else if (photos.isNotEmpty()) {
+                views.setViewVisibility(R.id.widget_list, View.GONE)
                 // Which of the two photo views is shown is renderPhotos'
                 // decision — it depends on whether anything is rotating.
                 rotating = renderPhotos(context, views, widgetData, days, hearted)
                 views.setViewVisibility(R.id.widget_flower_art, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
             } else if (art != null) {
+                views.setViewVisibility(R.id.widget_list, View.GONE)
                 views.setViewVisibility(R.id.widget_photo_still, View.GONE)
                 views.setViewVisibility(R.id.widget_flipper, View.GONE)
                 views.setImageViewBitmap(R.id.widget_flower_art, art)
@@ -166,6 +216,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             } else {
                 // A retired flower with no artwork, or nothing from them at
                 // all. The glyph is the honest fallback, not a failure.
+                views.setViewVisibility(R.id.widget_list, View.GONE)
                 views.setViewVisibility(R.id.widget_photo_still, View.GONE)
                 views.setViewVisibility(R.id.widget_flipper, View.GONE)
                 views.setViewVisibility(R.id.widget_flower_art, View.GONE)
@@ -188,47 +239,101 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             // photo with no note there is genuinely nothing to say here and
             // an empty TextView would still hold a line of space open.
             setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
-            setTextOrHide(views, R.id.widget_body, widgetData.getString("tulip_body", ""))
+            // The note's whole row, not only its words: see widget_caption.
+            val body = widgetData.getString("tulip_body", "") ?: ""
+            views.setTextViewText(R.id.widget_body, body)
+            views.setViewVisibility(
+                R.id.widget_body_row,
+                if (body.isEmpty()) View.GONE else View.VISIBLE,
+            )
 
             // The card's own caption and heart, for one day or a flower.
-            // While days rotate, each carries its own (renderPhotos).
+            // While days rotate or scroll, each carries its own
+            // (renderPhotos, DayListService).
+            val ownCaption = !rotating && !listed
             views.setViewVisibility(
                 R.id.widget_caption,
-                if (rotating) View.GONE else View.VISIBLE,
+                if (ownCaption) View.VISIBLE else View.GONE,
             )
-            renderHeart(
-                context,
-                views,
-                R.id.widget_heart,
-                when {
-                    rotating -> null
-                    days.isNotEmpty() -> days.first().id
-                    else -> widgetData.getString("flower_id", "")
-                },
-                hearted,
-            )
+            val heartFor = when {
+                !ownCaption -> null
+                days.isNotEmpty() -> days.first().id
+                else -> widgetData.getString("flower_id", "")
+            }
+            // On the last line, level with it: the note's, when there is
+            // one, and the title's otherwise.
+            if (body.isEmpty()) {
+                renderHeart(context, views, R.id.widget_heart, heartFor, hearted)
+            } else {
+                views.setViewVisibility(R.id.widget_heart, View.GONE)
+                renderHeart(context, views, R.id.widget_body_heart, heartFor, hearted)
+            }
 
             // 🔴 **What it shows is what a tap opens.** Every tap opened the
             // conversation, so a day on the card opened the app on the
             // chat, or on Home when the app was cold, and never on the day.
             // Their days now open in the My Day viewer; a flower still goes
             // to the conversation it was sent in. See _openWidgetTarget.
-            views.setOnClickPendingIntent(
-                R.id.widget_root,
+            val open = if (listed || photos.isNotEmpty()) {
+                openDays(context, null)
+            } else {
                 HomeWidgetLaunchIntent.getActivity(
                     context,
                     MainActivity::class.java,
-                    Uri.parse(if (photos.isNotEmpty()) "dayflower://days" else "dayflower://flowers"),
-                ),
-            )
+                    Uri.parse("dayflower://flowers"),
+                )
+            }
+            views.setOnClickPendingIntent(R.id.widget_root, open)
+            // The header too, and always: over the scrolling list a tap on
+            // it would otherwise land on the row beneath, and once a view
+            // has a tap it keeps it through every later render, so it is
+            // set every time rather than only while the list is up.
+            views.setOnClickPendingIntent(R.id.widget_header, open)
 
             roundTheWholeCard(views)
+            return listed
         }
 
         /**
+         * Their days as a list to scroll (Settings: Scroll).
+         *
+         * The rows are DayListService's: the launcher asks it for each one
+         * as it comes into view. A row cannot carry PendingIntents of its
+         * own (the launcher ignores them inside a list), so the list has
+         * one, to DayLikeReceiver, and each row fills in which day it is
+         * and whether the tap was its heart.
+         *
+         * ⚠️ The widget id is in the adapter intent's data, not only in an
+         * extra. Intents that differ only in extras are the same intent to
+         * the system, so two widgets would share one list; and the same
+         * intent again on the next render is what keeps the list where it
+         * was scrolled to rather than starting it over.
+         */
+        @Suppress("DEPRECATION")
+        private fun renderList(context: Context, views: RemoteViews, widgetId: Int) {
+            val adapter = Intent(context, DayListService::class.java)
+                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            adapter.data = Uri.parse(adapter.toUri(Intent.URI_INTENT_SCHEME))
+            views.setRemoteAdapter(R.id.widget_list, adapter)
+            views.setPendingIntentTemplate(R.id.widget_list, DayLikeReceiver.listTemplate(context))
+            views.setViewVisibility(R.id.widget_list, View.VISIBLE)
+        }
+
+        /** The My Day viewer, on day [id] when there is one. */
+        fun openDays(context: Context, id: String?): PendingIntent =
+            HomeWidgetLaunchIntent.getActivity(
+                context,
+                MainActivity::class.java,
+                Uri.parse(
+                    if (id.isNullOrBlank()) "dayflower://days" else "dayflower://days?id=" + Uri.encode(id),
+                ),
+            )
+
+        /**
          * A heart for message [id]: an outline, or red once hearted, and a
-         * tap that flips it (DayLikeReceiver). Gone when there is nothing
-         * to love.
+         * tap that flips it (DayLikeReceiver). Invisible when there is
+         * nothing to love, not gone: its box is what holds the caption's
+         * last line off the bottom of the card (see widget_caption).
          */
         fun renderHeart(
             context: Context,
@@ -238,7 +343,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             hearted: Set<String>,
         ) {
             if (id.isNullOrBlank()) {
-                views.setViewVisibility(viewId, View.GONE)
+                views.setViewVisibility(viewId, View.INVISIBLE)
                 return
             }
             val on = hearted.contains(id)
@@ -458,6 +563,9 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 // Its own words and its own heart: see widget_photo_item.
                 setTextOrHide(item, R.id.widget_item_note, day.note)
                 renderHeart(context, item, R.id.widget_item_heart, day.id, hearted)
+                // A tap opens the viewer on the day that was showing, not
+                // on their newest.
+                item.setOnClickPendingIntent(R.id.widget_photo, openDays(context, day.id))
                 views.addView(R.id.widget_flipper, item)
             }
             views.setInt(R.id.widget_flipper, "setFlipInterval", seconds * 1000)
@@ -478,16 +586,24 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         /** One live day on the card: its photo, message id and words. */
         data class Day(val photo: Bitmap, val id: String?, val note: String?)
 
+        /** One live day before its photo is decoded: where the photo is. */
+        data class DayRef(val path: String, val id: String?, val note: String?)
+
         /**
          * The live days, newest first, each with the id its heart loves and
          * the words written on it.
          *
          * ⚠️ Kept in step by index with what Dart wrote (day_photo_paths,
-         * day_photo_ids, day_photo_notes): a photo that will not decode is
+         * day_photo_ids, day_photo_notes): a photo that is not there is
          * dropped with its id and note, never shifting the others onto the
-         * wrong day.
+         * wrong day. One that is there but will not decode is dropped the
+         * same way, by whoever decodes it.
          */
-        fun loadDays(widgetData: SharedPreferences): List<Day> {
+        fun dayRefs(widgetData: SharedPreferences): List<DayRef> {
+            // Self-expiry. The widget refreshes every 30 min, so the photos
+            // leave the home screen within half an hour of their 24h mark
+            // even if the app is never opened again, which is the only way
+            // the "lasts a day" promise actually holds.
             val expiresAt = widgetData.longOf("day_photo_expires_at")
             if (expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
                 return emptyList()
@@ -502,14 +618,12 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             }
             if (paths.isEmpty()) {
                 // Older data, written before rotation existed.
-                return listOfNotNull(
-                    loadDayPhoto(widgetData)?.let {
-                        Day(it, widgetData.getString("day_photo_id", ""), null)
-                    },
-                )
+                val path = widgetData.getString("day_photo_path", "") ?: ""
+                if (path.isEmpty() || !File(path).exists()) return emptyList()
+                return listOf(DayRef(path, widgetData.getString("day_photo_id", ""), null))
             }
             return paths.take(MAX_ROTATION).mapIndexedNotNull { i, path ->
-                decodePhoto(path)?.let { Day(it, ids.getOrNull(i), notes.getOrNull(i)) }
+                if (File(path).exists()) DayRef(path, ids.getOrNull(i), notes.getOrNull(i)) else null
             }
         }
 
@@ -534,7 +648,7 @@ class TodaysTulipWidget : HomeWidgetProvider() {
          * expired one looks like: Dart writes an empty path once the 24h are
          * up, so expiry needs no logic on this side.
          */
-        private fun setTextOrHide(views: RemoteViews, viewId: Int, text: String?) {
+        fun setTextOrHide(views: RemoteViews, viewId: Int, text: String?) {
             if (text.isNullOrEmpty()) {
                 views.setViewVisibility(viewId, View.GONE)
             } else {
@@ -621,22 +735,6 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         }
 
         private const val TARGET_PX = 1024
-
-        fun loadDayPhoto(widgetData: SharedPreferences): Bitmap? {
-            val path = widgetData.getString("day_photo_path", "") ?: ""
-            if (path.isEmpty()) return null
-
-            // Self-expiry. The widget refreshes every 30 min, so the photo
-            // leaves the home screen within half an hour of its 24h mark
-            // even if the app is never opened again — which is the only way
-            // the "lasts a day" promise actually holds.
-            val expiresAt = widgetData.longOf("day_photo_expires_at")
-            if (expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
-                return null
-            }
-
-            return decodePhoto(path)
-        }
 
         /**
          * The flower's painting, copied out of the app bundle by Dart.

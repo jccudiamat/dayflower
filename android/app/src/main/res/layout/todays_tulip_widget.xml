@@ -76,6 +76,27 @@
         android:outAnimation="@android:anim/fade_out"
         android:visibility="gone" />
 
+    <!-- Their days as a list to scroll up and down, when Settings asks for
+         that instead of the rotation (widget_days_style = scroll), each day
+         the height of the card with its own caption and heart.
+
+         Filled by DayListService, one day at a time, not by the render:
+         the launcher asks for the rows it is about to show. Taps come back
+         through one template (DayLikeReceiver) and each row says which
+         day and whether it was the heart. -->
+    <ListView
+        android:id="@+id/widget_list"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:divider="@android:color/transparent"
+        android:dividerHeight="4dp"
+        android:listSelector="@android:color/transparent"
+        android:scrollbarStyle="insideOverlay"
+        android:scrollbarSize="3dp"
+        android:scrollbarThumbVertical="@drawable/widget_scroll_thumb"
+        android:scrollbars="vertical"
+        android:visibility="gone" />
+
     <!-- The flower's own painting, when the newest thing from them is a
          flower rather than a shared day.
 
@@ -208,29 +229,45 @@
          Hidden, heart and all, while days rotate: each of those carries its
          own caption and heart (widget_photo_item), because the launcher
          alone knows which one is showing. -->
+    <!-- 🔴 **The heart is centred on its line by the layout, not by
+         numbers.** It used to sit at the bottom of the caption and be
+         nudged into line in dp (a negative margin, uneven padding), which
+         was right for the emulator's font and nowhere else: the phone's
+         system font sets a taller line, and the heart sat below the words.
+         Now each line is a row with its heart in it, centred, so the heart
+         is level with its words whatever the font or its size.
+
+         A heart for each line, because it belongs on the last one: the
+         title on a day, the note under a flower's name. The render shows
+         the one on the last line and hides the other. The 44dp box is the
+         finger's; the note's row reaches 12dp up into the title's, which
+         is exactly what the box adds above a line, so the two lines sit
+         as close as they did before. That is why the note's heart is only
+         ever made invisible, never GONE: its box is what holds the row at
+         that height. -->
     <LinearLayout
         android:id="@+id/widget_caption"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="horizontal"
-        android:gravity="bottom"
+        android:orientation="vertical"
         android:background="@drawable/widget_caption_scrim"
         android:paddingLeft="18dp"
         android:paddingRight="10dp"
         android:paddingTop="32dp"
-        android:paddingBottom="10dp">
+        android:paddingBottom="2dp">
 
         <LinearLayout
-            android:layout_width="0dp"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
             <TextView
                 android:id="@+id/widget_title"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
+                android:layout_weight="1"
                 android:maxLines="1"
                 android:ellipsize="end"
                 android:text="Nothing here yet"
@@ -242,11 +279,32 @@
                 android:shadowDy="1"
                 android:shadowRadius="3" />
 
+            <ImageView
+                android:id="@+id/widget_heart"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginLeft="6dp"
+                android:padding="9dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_heart_off"
+                android:contentDescription="Love"
+                android:visibility="invisible" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/widget_body_row"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-12dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:visibility="gone">
+
             <TextView
                 android:id="@+id/widget_body"
-                android:layout_width="match_parent"
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_weight="1"
                 android:maxLines="2"
                 android:ellipsize="end"
                 android:text="Tap to send a flower."
@@ -256,27 +314,17 @@
                 android:shadowDx="0"
                 android:shadowDy="1"
                 android:shadowRadius="3" />
-        </LinearLayout>
 
-        <!-- 44dp to the touch, the heart 26dp inside it, and centred on the
-             caption's last line rather than on its own box: the glyph sits
-             low in the box (14dp above, 4 below) and the box hangs 8dp
-             below the words, which puts the heart's middle level with the
-             middle of that line. A heart centred in a 44dp box sat a line
-             higher than the words it belongs to. -->
-        <ImageView
-            android:id="@+id/widget_heart"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:layout_marginLeft="6dp"
-            android:layout_marginBottom="-8dp"
-            android:paddingLeft="9dp"
-            android:paddingRight="9dp"
-            android:paddingTop="14dp"
-            android:paddingBottom="4dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_widget_heart_off"
-            android:contentDescription="Love"
-            android:visibility="gone" />
+            <ImageView
+                android:id="@+id/widget_body_heart"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginLeft="6dp"
+                android:padding="9dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_heart_off"
+                android:contentDescription="Love"
+                android:visibility="invisible" />
+        </LinearLayout>
     </LinearLayout>
 </FrameLayout>

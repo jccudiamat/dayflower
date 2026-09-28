@@ -26,7 +26,7 @@ import 'features/onboarding/data/user_repository.dart';
 import 'features/pairing/data/pair_repository.dart';
 import 'features/home/data/mood_prefs.dart';
 import 'features/home/presentation/screens/home_screen.dart'
-    show openTheirDaysRequest;
+    show openTheirDaysOn, openTheirDaysRequest;
 import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
@@ -251,7 +251,10 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         goWhenReady(ref, Routes.events);
       case 'days':
         // Their day on the card: Home, then the My Day viewer over it on
-        // their days, so back lands on Home. See HomeScreen.
+        // their days, so back lands on Home. See HomeScreen. On the day
+        // that was showing, when the widget said which (a rotating or
+        // scrolled one); on their newest otherwise.
+        openTheirDaysOn = uri?.queryParameters['id'];
         openTheirDaysRequest.value = DateTime.now();
         goWhenReady(ref, Routes.home);
       default:

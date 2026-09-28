@@ -1057,6 +1057,61 @@ void main() {
     expect(find.byType(HomeScreen), findsOneWidget);
   });
 
+  // A rotating or scrolled widget knows which day was on it, and says so:
+  // the viewer opens on that one, not on their newest.
+  _homeTest('A widget tap on one of their days opens the viewer on it',
+      (tester) async {
+    FlowerMessage day(String id, int hoursAgo) => FlowerMessage(
+        id: id,
+        pairId: 'preview',
+        senderId: 'preview-b',
+        imagePath: 'partner.png',
+        sentAt: _now.subtract(Duration(hours: hoursAgo)),
+        toWidget: true);
+    openTheirDaysOn = 't2';
+    openTheirDaysRequest.value = DateTime.now();
+    addTearDown(() {
+      openTheirDaysRequest.value = null;
+      openTheirDaysOn = null;
+    });
+    await _pump(tester, Routes.home,
+        filled: true, theirDays: [day('t1', 1), day('t2', 3)]);
+    await tester.pumpAndSettle();
+    DayPhotoViewer? on(String id) => find
+        .byWidgetPredicate((w) => w is DayPhotoViewer && w.message.id == id)
+        .evaluate()
+        .map((e) => e.widget as DayPhotoViewer)
+        .firstOrNull;
+    expect(on('t2'), isNotNull, reason: 'the day that was on the widget');
+    expect(on('t1'), isNull);
+    expect(openTheirDaysOn, isNull, reason: 'answered once');
+  });
+
+  _homeTest('A widget tap on a day that has gone opens their newest',
+      (tester) async {
+    FlowerMessage day(String id, int hoursAgo) => FlowerMessage(
+        id: id,
+        pairId: 'preview',
+        senderId: 'preview-b',
+        imagePath: 'partner.png',
+        sentAt: _now.subtract(Duration(hours: hoursAgo)),
+        toWidget: true);
+    // Expired or deleted between the widget drawing it and the tap.
+    openTheirDaysOn = 'gone';
+    openTheirDaysRequest.value = DateTime.now();
+    addTearDown(() {
+      openTheirDaysRequest.value = null;
+      openTheirDaysOn = null;
+    });
+    await _pump(tester, Routes.home,
+        filled: true, theirDays: [day('t1', 1), day('t2', 3)]);
+    await tester.pumpAndSettle();
+    expect(
+        find.byWidgetPredicate(
+            (w) => w is DayPhotoViewer && w.message.id == 't1'),
+        findsOneWidget);
+  });
+
   _homeTest('A stale widget request does not open the viewer later',
       (tester) async {
     openTheirDaysRequest.value =

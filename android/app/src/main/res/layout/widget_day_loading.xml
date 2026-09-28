@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A day in the scrolling list before its photo has arrived: the card's
+     own colour and nothing else. Without this the launcher shows its own
+     "Loading…" text in each row, grey on the photo's space. Taller than any
+     card, so a row that is still loading never shows the next one below
+     it. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="640dp"
+    android:background="#171027" />

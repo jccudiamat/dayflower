@@ -190,30 +190,40 @@ class WidgetModeRow extends ConsumerWidget {
   }
 }
 
-/// Same shape as [WidgetModeRow] — one choice out of three, shown as an
-/// outline rather than a tick, per design.md.
-class WidgetRotationRow extends ConsumerWidget {
-  const WidgetRotationRow({super.key, 
+/// Same shape as [WidgetModeRow]: one choice out of four, shown as an
+/// outline rather than a tick, per design.md. Either rotating every
+/// [seconds] (0 holding still) or, with [scroll], the list to scroll.
+class WidgetDaysRow extends ConsumerWidget {
+  const WidgetDaysRow({super.key,
     required this.title,
     required this.subtitle,
-    required this.seconds,
+    this.seconds = 0,
+    this.scroll = false,
   });
 
   final String title;
   final String subtitle;
   final int seconds;
+  final bool scroll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final selected = ref.watch(widgetRotationProvider) == seconds;
+    final motion = ref.watch(widgetDaysProvider);
+    // The rotation is remembered while the list is on, so a rotation row
+    // is only chosen when the list is not.
+    final selected = scroll
+        ? motion.scroll
+        : !motion.scroll && motion.seconds == seconds;
     final enabled = DayflowerWidgets.isSupported;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: enabled
-            ? () =>
-                ref.read(widgetRotationProvider.notifier).setSeconds(seconds)
+            ? () {
+                final days = ref.read(widgetDaysProvider.notifier);
+                scroll ? days.scroll() : days.rotate(seconds);
+              }
             : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(

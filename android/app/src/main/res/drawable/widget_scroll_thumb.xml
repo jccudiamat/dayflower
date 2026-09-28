@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The scrolling list's scrollbar: a thin light line while it moves, so
+     it is plain there is more than the day on the card. The list fades it
+     out again when it stops. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#99FFFFFF" />
+    <corners android:radius="2dp" />
+</shape>
