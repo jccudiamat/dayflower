@@ -24,6 +24,24 @@ const model = load('app/bouquet/model.ts');
 const images = load('app/lib/image-file.ts');
 const makeRequest = body => new Request('https://mydayflower.com/api/gift', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: typeof body === 'string' ? body : JSON.stringify(body) });
 
+test('structured data cannot terminate its script element and preserves the original text', () => {
+  const { jsonForScript } = load('app/lib/structured-data.ts');
+  const value = { text: '</script><script>alert(1)</script> 愛 & flowers', nested: ['<!--', '<SCRIPT>'] };
+  const json = jsonForScript(value);
+  assert.ok(!json.includes('<'));
+  assert.deepEqual(JSON.parse(json), value);
+});
+
+test('analytics drops bearer gift links and strips query strings and fragments from public URLs', () => {
+  const { publicAnalyticsEvent } = load('app/lib/public-analytics.ts');
+  for (const url of ['https://mydayflower.com/g/secret-gift-id', 'https://mydayflower.com/g/secret-gift-id/opengraph-image', 'https://mydayflower.com/bouquet#gift=private-note', 'https://mydayflower.com/%67/secret', 'not a URL']) {
+    assert.equal(publicAnalyticsEvent({ type: 'pageview', url }), null);
+  }
+  const result = publicAnalyticsEvent({ type: 'pageview', url: 'https://mydayflower.com/bouquet?email=private@example.com#private' });
+  assert.deepEqual(result, { type: 'pageview', url: 'https://mydayflower.com/bouquet' });
+  assert.deepEqual(publicAnalyticsEvent({ type: 'event', url: 'https://mydayflower.com/#app' }), { type: 'event', url: 'https://mydayflower.com/' });
+});
+
 test('email and text rules reject header/control injection while preserving ordinary multilingual prose', () => {
   for (const value of [null, {}, [], 'a@b', 'a..b@example.com', '.a@example.com', 'a@-example.com', 'a@example..com', 'a@example.com\r\nBcc:x@y.com', 'Name <a@example.com>', 'x'.repeat(65) + '@example.com']) assert.equal(input.emailAddress(value), null);
   assert.equal(input.emailAddress(' Love+flowers@Example.COM '), 'love+flowers@example.com');

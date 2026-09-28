@@ -3,7 +3,7 @@ import { Quicksand, Lora } from "next/font/google";
 import "./globals.css";
 import { connection } from "next/server";
 import { JsonLd, ORGANISATION, WEBSITE, SITE, SITE_NAME } from "./lib/seo";
-import { Analytics } from "@vercel/analytics/next";
+import SiteAnalytics from "./components/SiteAnalytics";
 
 const quicksand = Quicksand({
   variable: "--font-quicksand",
@@ -72,7 +72,7 @@ export default async function RootLayout({
             If a future version switches to rendering the tag server-side,
             this goes silently dead rather than erroring, so check for the
             script in the DOM before trusting an empty dashboard. */}
-        <Analytics />
+        <SiteAnalytics />
       </body>
     </html>
   );

@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { jsonForScript } from "./structured-data";
 
 /** Canonical origin. Everything that emits an absolute URL reads it from here. */
 export const SITE = "https://mydayflower.com";
@@ -124,7 +125,7 @@ export async function JsonLd({ nodes }: { nodes: readonly object[] }) {
       nonce={nonce}
       type="application/ld+json"
       dangerouslySetInnerHTML={{
-        __html: JSON.stringify({ "@context": "https://schema.org", "@graph": nodes }),
+        __html: jsonForScript({ "@context": "https://schema.org", "@graph": nodes }),
       }}
     />
   );

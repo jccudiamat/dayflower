@@ -1,5 +1,7 @@
 # Website security controls
 
+Latest review: [September 28, 2026](./SECURITY-REVIEW-2026-09-28.md). Public-page analytics excludes gift routes and fragment-based gifts, and removes query strings and fragments. Embedded JSON-LD escapes HTML delimiters before insertion.
+
 All public writes pass through the website server. Apply migration 0041 before deploying this code, then 0042 after deployment. Migration 0042 removes anonymous/authenticated table access without deleting existing gifts or signups. Never restore the old broad bouquet SELECT policy or public INSERT grants.
 
 Server environment: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and existing email-provider settings. `RATE_LIMIT_SALT` is optional; the server-only service key provides the HMAC secret when it is absent. Never put these secrets in a Flutter asset or `NEXT_PUBLIC_*` variable. Forwarded IP headers are trusted only when running on Vercel, which overwrites them. Other deployments deliberately share a fallback bucket until a trusted proxy integration is implemented.
