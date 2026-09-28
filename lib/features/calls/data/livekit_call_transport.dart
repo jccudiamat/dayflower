@@ -80,7 +80,11 @@ class LiveKitCallTransport implements CallTransport {
       _events.add(CallFailed(
         message.contains('calling not configured')
             ? CallFailure.notConfigured
-            : CallFailure.unreachable,
+            // The server refuses a token once the call's row is closed
+            // (migration 0054), whoever closed it.
+            : message.contains('call has ended')
+                ? CallFailure.ended
+                : CallFailure.unreachable,
       ));
       return;
     }

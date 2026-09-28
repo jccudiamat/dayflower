@@ -106,6 +106,14 @@ enum CallFailure {
     'The connection gave out. Try again, or just send a message.',
   ),
 
+  /// The call was already over: joined from a stale screen, a late
+  /// notification or an old bubble. A call is for two, so once either of
+  /// them has left it nobody goes back into it (migration 0054).
+  ended(
+    'This call has ended',
+    'Call again from the chat whenever you’re both free.',
+  ),
+
   /// The month's calling is spent.
   ///
   /// The detail line is filled in at render time with the reset date —

@@ -1025,6 +1025,49 @@ void main() {
     expect(find.byType(DaysViewer), findsNothing);
   });
 
+  // 🔴 A tap on the home-screen widget showing their day opened the app
+  // and nothing else. It now asks Home for the viewer, on their days.
+  _homeTest('A widget tap on their day opens it in the viewer',
+      (tester) async {
+    FlowerMessage day(String id, int hoursAgo) => FlowerMessage(
+        id: id,
+        pairId: 'preview',
+        senderId: 'preview-b',
+        imagePath: 'partner.png',
+        sentAt: _now.subtract(Duration(hours: hoursAgo)),
+        toWidget: true);
+    // Asked before Home is even up, as on a cold start.
+    openTheirDaysRequest.value = DateTime.now();
+    addTearDown(() => openTheirDaysRequest.value = null);
+    await _pump(tester, Routes.home,
+        filled: true, theirDays: [day('t1', 1), day('t2', 3)]);
+    await tester.pumpAndSettle();
+    expect(find.byType(DaysViewer), findsOneWidget);
+    expect(
+        find.byWidgetPredicate(
+            (w) => w is DayPhotoViewer && w.message.id == 't1'),
+        findsOneWidget,
+        reason: 'their newest, the one the card shows first');
+    expect(openTheirDaysRequest.value, isNull, reason: 'answered once');
+
+    // Back is Home, underneath.
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+    expect(find.byType(DaysViewer), findsNothing);
+    expect(find.byType(HomeScreen), findsOneWidget);
+  });
+
+  _homeTest('A stale widget request does not open the viewer later',
+      (tester) async {
+    openTheirDaysRequest.value =
+        DateTime.now().subtract(const Duration(minutes: 1));
+    addTearDown(() => openTheirDaysRequest.value = null);
+    await _pump(tester, Routes.home, filled: true);
+    await tester.pumpAndSettle();
+    expect(find.byType(DaysViewer), findsNothing);
+    expect(openTheirDaysRequest.value, isNull);
+  });
+
   _homeTest('Their note takes the greeting\'s place, for a day',
       (tester) async {
     // Written an hour ago, by the real clock: a note's day is a real one.

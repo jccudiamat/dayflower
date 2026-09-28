@@ -30,6 +30,26 @@ class CallNotifier extends StateNotifier<CallSession?> {
     // lifecycle would drop the lock mid-call, and a lock left on after one
     // ends is a flat battery by morning.
     addListener(_holdTheScreen, fireImmediately: false);
+
+    // 🔴 **Over for one, over for both.** A call is for two, so the moment
+    // its row is closed, by whichever of them, this side ends too: the
+    // ringing screen of a call the caller gave up on, and a call whose
+    // other half hung up. CallPartnerLeft already does this for a partner
+    // the media server saw leave; the row is the signal that holds when it
+    // did not (the peer transport, a lost socket, a decline from the
+    // notification with the app closed).
+    _ref.listen<AsyncValue<List<FlowerMessage>>>(flowerMessagesProvider,
+        (_, next) {
+      final session = state;
+      if (session == null ||
+          session.status.isTerminal ||
+          session.messageId.isEmpty) {
+        return;
+      }
+      final row =
+          next.valueOrNull?.where((m) => m.id == session.messageId).firstOrNull;
+      if (row != null && row.callEndedAt != null) _endedElsewhere();
+    });
   }
 
   final Ref _ref;
@@ -148,6 +168,21 @@ class CallNotifier extends StateNotifier<CallSession?> {
     final mode = message.call;
     if (userId == null || mode == null) return;
     if (state != null && !state!.status.isTerminal) return;
+
+    // Once either of them has left, nobody goes back in (the server refuses
+    // the token too, migration 0054). Said on the call screen rather than
+    // silently doing nothing.
+    if (!message.isLiveCall) {
+      state = CallSession(
+        messageId: message.id,
+        room: message.callRoom ?? CallRepository.roomFor(message.pairId),
+        mode: mode,
+        status: CallStatus.failed,
+        isCaller: false,
+        failure: CallFailure.ended,
+      );
+      return;
+    }
 
     state = CallSession(
       messageId: message.id,
@@ -341,6 +376,16 @@ class CallNotifier extends StateNotifier<CallSession?> {
     // Only the row's own call needs closing, and only if it was ever
     // written — a call that failed before the insert has nothing to end.
     if (session.messageId.isNotEmpty) {
+      // 🔴 **Never answered: missed, not a duration.** A call the caller
+      // cancelled while it rang was closed with end_call, which stamps
+      // now(): the thread showed the seconds spent ringing as though they
+      // had been a conversation. startedAt is set only when both are in the
+      // call (CallPartnerJoined), so without it nobody answered, whoever is
+      // hanging up.
+      if (session.startedAt == null) {
+        await _closeUnanswered(session.messageId);
+        return;
+      }
       try {
         await _calls.end(session.messageId);
         // The minutes just spent are only counted once the row is closed
@@ -373,6 +418,45 @@ class CallNotifier extends StateNotifier<CallSession?> {
   /// Declines without answering. Ends the call for both — a two-person app
   /// has no third party for the caller to keep waiting on.
   Future<void> decline() => hangUp();
+
+  /// Declines [callId] from its notification, with or without a session.
+  ///
+  /// 🔴 Declining from the notification with the app closed used to decide
+  /// nothing: there was no session yet, so [hangUp] returned at once, the
+  /// row stayed open, and the caller kept ringing a phone that had said no.
+  Future<void> declineCall(String callId) async {
+    final session = state;
+    if (session != null && session.messageId == callId) return hangUp();
+    await CallAlerts.stop();
+    await _closeUnanswered(callId);
+  }
+
+  /// Closes a call nobody answered as missed (see migration 0054), and
+  /// with end_call if that is refused, so it is never left open.
+  Future<void> _closeUnanswered(String messageId) async {
+    try {
+      await _calls.missCall(messageId);
+    } catch (_) {
+      try {
+        await _calls.end(messageId);
+      } catch (_) {
+        // The call is over on this phone either way. See hangUp.
+      }
+    }
+  }
+
+  /// The other side closed the call. Everything [hangUp] does here, but
+  /// the row is already closed, so nothing is written.
+  Future<void> _endedElsewhere() async {
+    await CallAlerts.stop();
+    _stopTicking();
+    _stopNoAnswer();
+    await _events?.cancel();
+    _events = null;
+    state = null;
+    await _transport.leave();
+    _ref.invalidate(callUsageProvider);
+  }
 
   /// Leaves the call screen. Separate from [hangUp] because a terminal
   /// session stays on screen until it is dismissed, so the failure can be

@@ -816,8 +816,11 @@ class _FailureView extends ConsumerWidget {
             // build and a spent allowance both fail identically every time.
             // A button whose only outcome is the screen you are already on
             // is not an escape, it is a taunt.
+            // Nor a call that has ended: "Try again" would ring them, which
+            // is not what trying to join the old one meant.
             if (failure != CallFailure.notConfigured &&
-                failure != CallFailure.quotaExhausted) ...[
+                failure != CallFailure.quotaExhausted &&
+                failure != CallFailure.ended) ...[
               const SizedBox(height: AppSpace.xs),
               SizedBox(
                 width: double.infinity,

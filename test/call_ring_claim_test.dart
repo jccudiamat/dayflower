@@ -1,4 +1,6 @@
 import 'package:dayflower/features/calls/data/call_alerts.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -44,5 +46,47 @@ void main() {
   test('nothing claimed: this isolate rings', () async {
     SharedPreferences.setMockInitialValues({});
     expect(await CallAlerts.debugClaim('call-1'), isTrue);
+  });
+
+  // 🔴 A call rang a second time a minute into the conversation: the row
+  // stays live for the whole call and was rung on every emission.
+  test('the same call seen again does not ring again', () {
+    expect(CallAlerts.isNewCall(previousId: null, nextId: 'call-1'), isTrue);
+    expect(CallAlerts.isNewCall(previousId: 'call-1', nextId: 'call-1'),
+        isFalse);
+    expect(CallAlerts.isNewCall(previousId: 'call-1', nextId: 'call-2'),
+        isTrue);
+  });
+
+  testWidgets('a call the phone refuses is not rung, nor reported missed',
+      (tester) async {
+    // Answered or declined already, stale, or this phone is on a call:
+    // native says "handled", and Dart must neither post its plain fallback
+    // nor hold the call, or its end would be reported as a missed call.
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final asked = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('dayflower/native_calls'), (call) async {
+      asked.add(call.method);
+      return call.method == 'ring' ? 'handled' : null;
+    });
+    try {
+      SharedPreferences.setMockInitialValues({});
+      await CallAlerts.ring(
+        callId: 'call-1',
+        callerName: 'Wifey',
+        isVideo: true,
+        foreground: true,
+      );
+      expect(asked, ['ring']);
+      expect(CallAlerts.debugWouldReportMissed, isFalse);
+      // And no claim taken for a fallback ring.
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('ringing_call_id'), isNull);
+    } finally {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          const MethodChannel('dayflower/native_calls'), null);
+      debugDefaultTargetPlatformOverride = null;
+    }
   });
 }

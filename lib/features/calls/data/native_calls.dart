@@ -38,6 +38,11 @@ class NativeCalls {
   /// Takes the native ring down and releases its claim.
   static Future<void> stopRinging() => invoke<void>('stopRinging');
 
+  /// Whether this phone is on a call (placed, or answered). While it is,
+  /// nothing rings: see CallNotification.inCall.
+  static Future<void> setInCall(bool inCall) =>
+      invoke<void>('setInCall', {'inCall': inCall}).then((_) {});
+
   /// Why the last incoming call notification did or did not get restyled.
   ///
   /// ⚠️ Worth surfacing because every failure in that path is silent: the

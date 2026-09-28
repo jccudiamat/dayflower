@@ -137,7 +137,7 @@ class MainActivity : FlutterActivity() {
             MethodChannel(flutterEngine.dartExecutor.binaryMessenger, GameOverlay.CHANNEL)
                 .apply {
                     setMethodCallHandler { call, result ->
-                        GameOverlay.handle(this@MainActivity, call, result)
+                        GameOverlay.handle(this@MainActivity, flutterEngine, call, result)
                     }
                 }
 
@@ -348,6 +348,9 @@ class MainActivity : FlutterActivity() {
         // left floating would be a call that no longer exists.
         GameOverlay.hide()
         gameChannel = null
+        // No engine, no call: a flag left set would refuse the next real
+        // ring, from a push service that outlives this Activity.
+        CallNotification.inCall = false
         super.onDestroy()
     }
 

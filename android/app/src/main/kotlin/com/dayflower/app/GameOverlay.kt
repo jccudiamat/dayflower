@@ -27,6 +27,7 @@ import android.widget.ImageView
 import android.widget.TextView
 import com.cloudwebrtc.webrtc.FlutterWebRTCPlugin
 import com.cloudwebrtc.webrtc.utils.EglUtils
+import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
@@ -55,6 +56,15 @@ import org.webrtc.VideoTrack
  * the same frames, a second sink. That is why this module compiles against
  * org.webrtc (see build.gradle.kts) and reaches into FlutterWebRTCPlugin.
  *
+ * 🔴 **The main engine's plugin, never FlutterWebRTCPlugin.sharedSingleton.**
+ * The first build asked the singleton for the track and the circle only ever
+ * showed their face. The plugin's constructor writes that field, and every
+ * Flutter engine constructs its own: the FCM background isolate's engine,
+ * which starts as soon as the app does, and the home-screen widget's. The
+ * last engine up wins, it has no call in it, and the track is "not found".
+ * The plugin is looked up in MainActivity's own engine instead (see
+ * [webrtcOf]), which is the one holding the call.
+ *
  * The Dart side is lib/features/calls/data/game_mode.dart.
  */
 object GameOverlay {
@@ -74,9 +84,32 @@ object GameOverlay {
     private var track: VideoTrack? = null
     private var trackId: String? = null
 
+    /** flutter_webrtc in the engine that holds the call. See [webrtcOf]. */
+    private var webrtc: FlutterWebRTCPlugin? = null
+
+    /** Why the circle is or is not showing video, for the log. */
+    @Volatile
+    var lastStatus: String = "not started"
+        private set
+
     val showing: Boolean get() = root != null
 
-    fun handle(activity: MainActivity, call: MethodCall, result: MethodChannel.Result) {
+    /**
+     * The flutter_webrtc plugin registered with [engine], MainActivity's.
+     * sharedSingleton only as a last resort: it belongs to whichever engine
+     * started last (see the class comment).
+     */
+    private fun webrtcOf(engine: FlutterEngine): FlutterWebRTCPlugin? =
+        (engine.plugins.get(FlutterWebRTCPlugin::class.java) as? FlutterWebRTCPlugin)
+            ?: FlutterWebRTCPlugin.sharedSingleton
+
+    fun handle(
+        activity: MainActivity,
+        engine: FlutterEngine,
+        call: MethodCall,
+        result: MethodChannel.Result,
+    ) {
+        webrtcOf(engine)?.let { webrtc = it }
         when (call.method) {
             "supported" -> result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
             "canDraw" -> result.success(canDraw(activity))
@@ -253,20 +286,24 @@ object GameOverlay {
         this.trackId = trackId
         if (trackId == null) return
         val found = try {
-            FlutterWebRTCPlugin.sharedSingleton?.getRemoteTrack(trackId) as? VideoTrack
+            webrtc?.getRemoteTrack(trackId) as? VideoTrack
         } catch (e: Throwable) {
             null
         }
         val r = renderer
         if (found == null || r == null) {
-            Log.w(TAG, "no video track $trackId, showing their face")
+            lastStatus = "no video track $trackId (plugin ${webrtc != null}), showing their face"
+            Log.w(TAG, lastStatus)
             return
         }
         try {
             found.addSink(r)
             track = found
+            lastStatus = "showing video $trackId"
+            Log.i(TAG, lastStatus)
         } catch (e: Throwable) {
-            Log.w(TAG, "could not attach $trackId: $e")
+            lastStatus = "could not attach $trackId: $e"
+            Log.w(TAG, lastStatus)
         }
     }
 

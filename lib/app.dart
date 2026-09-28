@@ -25,6 +25,8 @@ import 'core/models/user_profile.dart';
 import 'features/onboarding/data/user_repository.dart';
 import 'features/pairing/data/pair_repository.dart';
 import 'features/home/data/mood_prefs.dart';
+import 'features/home/presentation/screens/home_screen.dart'
+    show openTheirDaysRequest;
 import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
@@ -238,26 +240,24 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   /// than assumed. Every tap used to open the conversation, which was right
   /// when the only widget was a flower and wrong the moment a countdown
   /// appeared beside it.
+  ///
+  /// 🔴 **Held through the router's gates** (goWhenReady), like a
+  /// notification tap. A plain go() on a cold start ran before sign-in had
+  /// resolved, and the splash's redirect sent it to Home: the widget
+  /// "just opened the app".
   void _openWidgetTarget(Uri? uri) {
-    if (uri?.host == 'events') {
-      // Router gates still apply — a signed-out tap lands on Welcome.
-      ref.read(routerProvider).go(Routes.events);
-      return;
+    switch (uri?.host) {
+      case 'events':
+        goWhenReady(ref, Routes.events);
+      case 'days':
+        // Their day on the card: Home, then the My Day viewer over it on
+        // their days, so back lands on Home. See HomeScreen.
+        openTheirDaysRequest.value = DateTime.now();
+        goWhenReady(ref, Routes.home);
+      default:
+        // A flower: the conversation it was sent in.
+        goWhenReady(ref, Routes.chat);
     }
-    _openTulip();
-  }
-
-  void _openTulip() {
-    // Router gates still apply — a signed-out tap lands on Welcome.
-    // Straight to the thread: the widget shows a flower, and the tap means
-    // "show me that", not "show me a list with it in".
-    //
-    // The widget's "Send message" pill lands here too, which is the point
-    // of it: a home-screen widget cannot host a text field, so the honest
-    // version of that control is a door to the place that can take one.
-    // The tulip beside it never reaches this method — it is a background
-    // action and deliberately costs no app launch.
-    ref.read(routerProvider).go(Routes.chat);
   }
 
   @override
@@ -409,6 +409,11 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       CallPip.setCallActive(
         session != null && !session.status.isTerminal,
       );
+      // On a call, nothing rings. Not while one is only ringing, or it
+      // would silence itself. See CallNotification.inCall.
+      NativeCalls.setInCall(session != null &&
+          session.status != CallStatus.ringing &&
+          !session.status.isTerminal);
     });
 
     // 🔴 An incoming call used to raise **nothing**. The ring lived entirely
@@ -432,6 +437,9 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
           callerName: _partnerName,
           isVideo: previous?.call == CallMode.video,
         );
+        return;
+      }
+      if (!CallAlerts.isNewCall(previousId: previous?.id, nextId: next.id)) {
         return;
       }
       _settled(() async => CallAlerts.ring(
@@ -624,9 +632,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   /// on the plugin's actions goes, so there is one behaviour rather than two
   /// that drift.
   void _wireNativeCallButtons() {
+    CallAlerts.onDecline =
+        (callId) => ref.read(callNotifierProvider.notifier).declineCall(callId);
     NativeCalls.onAction((action, callId) {
       if (action == 'decline') {
-        ref.read(callNotifierProvider.notifier).decline();
+        // By id: with the app closed there is no session yet, and a decline
+        // that closed nothing left the caller ringing.
+        ref.read(callNotifierProvider.notifier).declineCall(callId);
         return;
       }
       // The card rather than a button - or the full-screen intent on a

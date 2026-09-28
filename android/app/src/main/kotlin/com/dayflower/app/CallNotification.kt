@@ -9,23 +9,26 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
+import android.graphics.Typeface
 import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
-import android.widget.RemoteViews
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.app.Person
+import androidx.core.graphics.drawable.IconCompat
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 /**
- * The incoming call: the caller's face and name, and two round buttons in
- * the app's own colours.
+ * The incoming call: Android's own call notification (CallStyle), with the
+ * caller's face, the app's logo on its corner, and Decline and Answer.
  *
  * 🔴 **Native first, and from the push itself.** This used to *restyle* a
  * notification Dart had already posted, over a method channel that only
@@ -78,6 +81,13 @@ object CallNotification {
     private const val CLAIM_MS = 70_000L
 
     /**
+     * A call push older than this is for a call that has already rung out.
+     * Generous past [RING_MS], because this compares the server's clock with
+     * the phone's.
+     */
+    const val STALE_PUSH_MS = 90_000L
+
+    /**
      * Where Dart's CallAlerts keeps the same claim. Written from here so the
      * FCM background isolate - which rings through the plugin when it cannot
      * reach this - sees the call is already ringing and stays quiet.
@@ -97,6 +107,27 @@ object CallNotification {
      */
     @Volatile
     private var ringing: Pair<String, Long>? = null
+
+    /**
+     * Whether this phone is on a call right now: placed, or answered and
+     * connecting or connected. Not while one is only ringing. Set by Dart
+     * (CallNotifier's session, through "setInCall").
+     */
+    @Volatile
+    var inCall: Boolean = false
+
+    /**
+     * The last call answered, declined, or known to be over, which is never
+     * rung for again.
+     *
+     * 🔴 **A call rang a second time, a minute into the conversation.** The
+     * ring's only guard was [ringing], and answering clears it. So anything
+     * that asked to ring the same call afterwards got through: a push that
+     * FCM delivered late, or the app's own listener seeing the call's row
+     * again, which happens whenever the thread changes during a call.
+     */
+    @Volatile
+    private var handled: String? = null
 
     /**
      * Why the last ring did or did not go up. Every failure here falls back
@@ -132,6 +163,10 @@ object CallNotification {
                 stop(context)
                 result.success(null)
             }
+            "setInCall" -> {
+                inCall = call.argument<Boolean>("inCall") == true
+                result.success(null)
+            }
             "callStyleStatus" -> result.success(lastStatus)
             else -> result.notImplemented()
         }
@@ -139,8 +174,9 @@ object CallNotification {
 
     /**
      * Rings for [callId]. Returns "posted", "already" when this call is
-     * ringing already, or "failed" - in which case Dart posts its plain
-     * fallback, because a plain ring beats no ring.
+     * ringing already, "handled" when it must not ring at all (see
+     * [refuse]), or "failed" - in which case Dart posts its plain fallback,
+     * because a plain ring beats no ring.
      */
     fun ring(
         context: Context,
@@ -151,6 +187,10 @@ object CallNotification {
         source: String,
     ): String {
         val now = System.currentTimeMillis()
+        when {
+            inCall -> return refuse(context, callId, "$source, already on a call")
+            callId == handled -> return refuse(context, callId, "$source, already answered or declined")
+        }
         synchronized(this) {
             val held = ringing
             if (held != null && held.first == callId && now - held.second < CLAIM_MS) {
@@ -168,38 +208,41 @@ object CallNotification {
             // may have been dead a second ago.
             val bytes = avatar ?: cachedAvatar(context)
             val bitmap = bytes?.let { decode(it) }
-            val views = RemoteViews(context.packageName, R.layout.call_notification)
-            views.setTextViewText(R.id.call_name, name)
-            views.setTextViewText(R.id.call_subtitle, subtitle)
-            if (bitmap != null) {
-                views.setImageViewBitmap(R.id.call_avatar, circle(bitmap))
-            } else {
-                views.setImageViewResource(R.id.call_avatar, R.mipmap.ic_launcher)
-            }
-            // WARNING: no setBackgroundColor on the buttons. It replaces the
-            // pill drawable with a flat fill, so they rendered as squares.
-            // The colours live in call_answer_pill / call_decline_pill.
-            views.setOnClickPendingIntent(
-                R.id.call_answer,
-                pendingIntent(context, callId, ACTION_ANSWER),
-            )
-            views.setOnClickPendingIntent(
-                R.id.call_decline,
-                pendingIntent(context, callId, ACTION_DECLINE),
-            )
+            // Their face, or their initial. Android puts the app's logo on
+            // its corner itself: that is what CallStyle does with a Person.
+            val caller = Person.Builder()
+                .setName(name)
+                .setIcon(IconCompat.createWithBitmap(bitmap?.let { circle(it) } ?: initial(name)))
+                .setImportant(true)
+                .build()
 
             val open = pendingIntent(context, callId, ACTION_OPEN)
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(name)
                 .setContentText(subtitle)
-                // WARNING: bare custom views, no DecoratedCustomViewStyle.
-                // The decorated style falls back to the standard template if
-                // anything about the view displeases it, which from outside
-                // is indistinguishable from our layout never being used.
-                .setCustomContentView(views)
-                .setCustomBigContentView(views)
-                .setCustomHeadsUpContentView(views)
+                // 🔴 **Android's own call notification, not our layout.**
+                // Since Android 12 every custom-layout notification is
+                // wrapped in the system template, which puts the app's logo
+                // beside our picture of the caller, and no app can take it
+                // away. CallStyle is the one template that puts the caller's
+                // face there instead, with the logo small on its corner.
+                //
+                // ⚠️ The buttons are Android's, so their colours are hints.
+                // ColorOS once drew them as plain green text, which is why
+                // this was a custom layout until build 124; tried again at
+                // the user's request, with red and green asked for.
+                .setStyle(
+                    NotificationCompat.CallStyle.forIncomingCall(
+                        caller,
+                        pendingIntent(context, callId, ACTION_DECLINE),
+                        pendingIntent(context, callId, ACTION_ANSWER),
+                    )
+                        .setIsVideo(subtitle.contains("Video", ignoreCase = true))
+                        .setAnswerButtonColorHint(Color.parseColor("#FF1FA35A"))
+                        .setDeclineButtonColorHint(Color.parseColor("#FFE5383B")),
+                )
+                .addPerson(caller)
                 .setCategory(NotificationCompat.CATEGORY_CALL)
                 .setPriority(NotificationCompat.PRIORITY_MAX)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -255,9 +298,25 @@ object CallNotification {
         }
     }
 
+    /**
+     * Does not ring [callId], now or later, and says so to everything else
+     * that might: the claim is written for the FCM background isolate, which
+     * runs after the push service and would otherwise post its plain ring.
+     */
+    fun refuse(context: Context, callId: String, why: String): String {
+        handled = callId
+        writeClaim(context, callId, System.currentTimeMillis())
+        lastStatus = "not rung ($why)"
+        return "handled"
+    }
+
     /** Answered, declined, gave up, or ended elsewhere. */
     fun stop(context: Context) {
-        synchronized(this) { ringing = null }
+        synchronized(this) {
+            // Whatever was ringing is decided now: it never rings again.
+            ringing?.let { handled = it.first }
+            ringing = null
+        }
         clearClaim(context)
         try {
             NotificationManagerCompat.from(context).cancel(NOTIFICATION_ID)
@@ -347,8 +406,8 @@ object CallNotification {
     }
 
     /**
-     * A round face. WARNING: done to the bitmap - RemoteViews cannot clip an
-     * ImageView across the process boundary.
+     * A round face, cut into the bitmap itself: what arrives across the
+     * process boundary is drawn as it is, on every OEM's shade.
      */
     private fun circle(source: Bitmap): Bitmap {
         val size = minOf(source.width, source.height)
@@ -363,6 +422,30 @@ object CallNotification {
         val top = (source.height - size) / 2
         canvas.drawBitmap(source, Rect(left, top, left + size, top + size), rect, paint)
         return output
+    }
+
+
+    /** Side of the caller's picture, in pixels. */
+    private const val FACE_PX = 208
+
+    /**
+     * No photo: their initial on the app's purple, rather than Android's
+     * grey letter.
+     */
+    private fun initial(name: String): Bitmap {
+        val out = Bitmap.createBitmap(FACE_PX, FACE_PX, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = Color.parseColor("#906FE8")
+        canvas.drawCircle(FACE_PX / 2f, FACE_PX / 2f, FACE_PX / 2f, paint)
+        paint.color = Color.WHITE
+        paint.textSize = FACE_PX * 0.44f
+        paint.typeface = Typeface.DEFAULT_BOLD
+        paint.textAlign = Paint.Align.CENTER
+        val letter = name.trim().firstOrNull()?.uppercase() ?: "?"
+        val baseline = FACE_PX / 2f - (paint.descent() + paint.ascent()) / 2f
+        canvas.drawText(letter, FACE_PX / 2f, baseline, paint)
+        return out
     }
 
     /**

@@ -187,12 +187,17 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
             setTextOrHide(views, R.id.widget_body, widgetData.getString("tulip_body", ""))
 
+            // 🔴 **What it shows is what a tap opens.** Every tap opened the
+            // conversation, so a day on the card opened the app on the
+            // chat, or on Home when the app was cold, and never on the day.
+            // Their days now open in the My Day viewer; a flower still goes
+            // to the conversation it was sent in. See _openWidgetTarget.
             views.setOnClickPendingIntent(
                 R.id.widget_root,
                 HomeWidgetLaunchIntent.getActivity(
                     context,
                     MainActivity::class.java,
-                    Uri.parse("dayflower://flowers"),
+                    Uri.parse(if (photos.isNotEmpty()) "dayflower://days" else "dayflower://flowers"),
                 ),
             )
 

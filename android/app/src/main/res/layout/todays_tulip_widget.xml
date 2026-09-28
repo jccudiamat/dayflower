@@ -85,8 +85,9 @@
          of the middle — most of the bouquet gone. fitCenter keeps all of
          it, sitting on the card's own background.
 
-         The bottom padding clears the caption scrim so the flower's name
-         never lands on top of the flower. -->
+         Lower than centred, by about 36dp: the paintings end in a cut stem,
+         and that end now sits down in the caption's shade instead of in the
+         open above it. The flower's head still clears the name. -->
     <ImageView
         android:id="@+id/widget_flower_art"
         android:layout_width="match_parent"
@@ -95,8 +96,8 @@
         android:scaleType="fitCenter"
         android:paddingLeft="12dp"
         android:paddingRight="12dp"
-        android:paddingTop="12dp"
-        android:paddingBottom="58dp"
+        android:paddingTop="40dp"
+        android:paddingBottom="14dp"
         android:contentDescription="@string/widget_description"
         android:visibility="gone" />
 
@@ -124,10 +125,10 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:background="@drawable/widget_header_scrim"
-        android:paddingLeft="10dp"
-        android:paddingRight="12dp"
-        android:paddingTop="9dp"
-        android:paddingBottom="26dp"
+        android:paddingLeft="18dp"
+        android:paddingRight="16dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="24dp"
         android:visibility="gone">
 
         <!-- Their face, or their flower.
@@ -137,9 +138,11 @@
              circle either. The photo is rounded in Dart before it is
              cached, so what arrives here is already circular with a
              transparent corner — see DayflowerWidgets._cacheAvatar. -->
+        <!-- In from the card's rounded corner, and smaller: at 30dp and
+             10dp from the edge it sat in the curve of the corner. -->
         <FrameLayout
-            android:layout_width="30dp"
-            android:layout_height="30dp">
+            android:layout_width="24dp"
+            android:layout_height="24dp">
 
             <TextView
                 android:id="@+id/widget_avatar"
@@ -149,7 +152,7 @@
                 android:gravity="center"
                 android:text="?"
                 android:textColor="#FFFFFF"
-                android:textSize="14sp"
+                android:textSize="12sp"
                 android:textStyle="bold" />
 
             <ImageView
@@ -166,7 +169,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:layout_marginLeft="8dp"
+            android:layout_marginLeft="7dp"
             android:maxLines="1"
             android:ellipsize="end"
             android:text=""
@@ -201,8 +204,8 @@
         android:layout_gravity="bottom"
         android:orientation="vertical"
         android:background="@drawable/widget_caption_scrim"
-        android:paddingLeft="14dp"
-        android:paddingRight="14dp"
+        android:paddingLeft="18dp"
+        android:paddingRight="18dp"
         android:paddingTop="32dp"
         android:paddingBottom="14dp">
 

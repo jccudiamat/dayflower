@@ -48,10 +48,18 @@ class CallAlerts {
     return id == null || id.isEmpty ? null : id;
   }
 
+  /// Declines a call by id: set by the app once it can (CallNotifier's
+  /// declineCall). Null in a background isolate, which has no notifier.
+  static void Function(String callId)? onDecline;
+
   static bool handleTap(NotificationResponse response) {
     final id = callIdOf(response.payload);
     if (id == null) return false;
-    if (response.actionId == actionDecline) return true;
+    if (response.actionId == actionDecline) {
+      // The plain fallback's Decline: close the call, as the native one does.
+      onDecline?.call(id);
+      return true;
+    }
     pendingAnswerId = response.actionId == actionAnswer ? id : null;
     AppNotifications.pendingRoute.value = Routes.call;
     return true;
@@ -120,6 +128,15 @@ class CallAlerts {
 
   static bool get supported => AppNotifications.supported;
 
+  /// Whether a change to the partner's live call is a call to ring for.
+  ///
+  /// 🔴 **Once per call, not once per change.** A call's row stays "live"
+  /// for the whole conversation, and the thread re-emits it whenever
+  /// anything in the thread changes. Rung on every emission, it rang again
+  /// a minute into a call already answered. Only a new call id rings.
+  static bool isNewCall({required String? previousId, required String nextId}) =>
+      previousId != nextId;
+
   static Future<void> init() async {
     if (!supported || _initialised) return;
     try {
@@ -187,7 +204,9 @@ class CallAlerts {
   }) async {
     if (!supported) return;
 
-    final subtitle = isVideo ? 'Incoming video call' : 'Incoming call';
+    // Short, like a phone's own ("FaceTime Audio"): beside the round
+    // buttons there is room for two words, and "Incoming" was the one cut.
+    final subtitle = isVideo ? 'Video call' : 'Voice call';
     final native = await NativeCalls.ring(
       callId: callId,
       name: callerName,
@@ -199,6 +218,9 @@ class CallAlerts {
       _ringingId = callId;
       return;
     }
+    // Answered, declined, stale, or this phone is on a call: no ring, no
+    // fallback, and nothing held, so its end is not reported missed.
+    if (native == 'handled') return;
 
     // On screen already, or the push service or the other isolate got
     // there first.

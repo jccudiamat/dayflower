@@ -36,6 +36,16 @@ import '../../../../core/widgets/app_bottom_sheet.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../domain/note_backgrounds.dart';
 
+/// Set by a tap on the home-screen widget while it shows one of their days
+/// (see _openWidgetTarget in app.dart): Home opens the My Day viewer on
+/// their days as soon as it is up and has them.
+///
+/// ⚠️ A time, not a flag. On a cold start their days can take a moment to
+/// arrive, so the request waits for them, but only briefly: a request that
+/// outlived that would open the viewer out of nowhere the next time a day
+/// came in.
+final openTheirDaysRequest = ValueNotifier<DateTime?>(null);
+
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
@@ -76,13 +86,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    openTheirDaysRequest.addListener(_openTheirDaysSoon);
+    _openTheirDaysSoon();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    openTheirDaysRequest.removeListener(_openTheirDaysSoon);
     _ownScroll.dispose();
     super.dispose();
+  }
+
+  /// How long a widget tap waits for their days to arrive.
+  static const _theirDaysWait = Duration(seconds: 15);
+
+  /// Answers [openTheirDaysRequest], after the frame: the tap also sent
+  /// the router to Home, and a viewer pushed before that settles would be
+  /// pushed onto the page it was replacing.
+  void _openTheirDaysSoon() {
+    if (openTheirDaysRequest.value == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openTheirDays());
+  }
+
+  void _openTheirDays() {
+    final asked = openTheirDaysRequest.value;
+    if (asked == null || !mounted) return;
+    if (DateTime.now().difference(asked) > _theirDaysWait) {
+      openTheirDaysRequest.value = null;
+      return;
+    }
+    final days = ref.read(partnerDayPhotosProvider);
+    // Not here yet on a cold start: build's listener tries again when
+    // they are.
+    if (days.isEmpty) return;
+    openTheirDaysRequest.value = null;
+    // From their newest, which is the one the card shows first.
+    Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => const DaysViewer(own: false)));
   }
 
   /// The controller the page actually scrolls with.
@@ -108,6 +149,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    ref.listen(partnerDayPhotosProvider, (_, days) {
+      if (days.isNotEmpty) _openTheirDaysSoon();
+    });
     ref.listen(homeClockProvider, (previous, next) {
       if (previous?.hasValue != true || !next.hasValue) return;
       ref.invalidate(partnerMoodProvider);
