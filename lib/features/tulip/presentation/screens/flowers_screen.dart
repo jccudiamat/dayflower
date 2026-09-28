@@ -59,6 +59,10 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   final _composer = TextEditingController();
   final _focus = FocusNode();
 
+  /// Keeps the field's state as it moves between the pill's two layouts.
+  /// See _pill.
+  final _fieldKey = GlobalKey();
+
   bool _panelOpen = false;
   bool _sending = false;
   bool _marking = false;
@@ -725,157 +729,187 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
 
   /// The composer.
   ///
-  /// 🔴 **Stacked, not a pill.** The field used to share one row with five
-  /// icons, which gave the words about half the width and pushed the icons
-  /// around every time the text grew. Now the text has the full width on
-  /// top and the controls sit in their own row underneath, where they stay
-  /// in the same place whether you have typed one line or five. Claude's
-  /// composer, and every editor that has to hold both text and tools.
+  /// 🔴 **WhatsApp's shape, empty.** A one-line pill holding the flower
+  /// (where WhatsApp keeps its stickers), "Message", photos and the camera,
+  /// and outside it one round button that records a voice message until
+  /// there is something to send, then sends it. Nothing behind them: both
+  /// sit on the conversation itself.
+  ///
+  /// ⚠️ **Stacked once you type.** An earlier one-row pill failed because
+  /// its icons shared the row with the words and got them about half the
+  /// width. So the first letter lifts the words onto the full width and
+  /// drops the icons to a row of their own underneath, Claude's composer,
+  /// and none of them hides.
   Widget _buildComposer() {
-    final canSend = !_sending && !_sendingVoice;
+    final busy = _sending || _sendingVoice;
     final hasWords = _composer.text.trim().isNotEmpty;
+    final hasContent = hasWords || _attachments.isNotEmpty || _hasVoice;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // What is being answered, above the field it is answered in.
-          if (_replyingTo != null) _replyStrip(_replyingTo!),
-          if (_recording)
-            VoiceRecorderBar(
-              onCancel: () => setState(() => _recording = false),
-              onSend: _heldVoice,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: _recording
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // What is being answered, above what answers it.
+                if (_replyingTo != null) _replyStrip(_replyingTo!),
+                VoiceRecorderBar(
+                  onCancel: () => setState(() => _recording = false),
+                  onSend: _heldVoice,
+                ),
+              ],
             )
-          else
-            // A Material rather than a decorated Container so the icons
-            // inside splash onto the box itself — ink looks for the nearest
-            // Material, and on a plain Container that is the Scaffold
-            // underneath, where the ripple is hidden.
-            Material(
-              color: AppColors.surfaceSubtle,
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-              clipBehavior: Clip.antiAlias,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Waiting to go, above the words that will caption it.
-                    if (_pendingVoice != null)
-                      VoicePreview(
-                        key: ValueKey(_pendingVoice!.path),
-                        path: _pendingVoice!.path,
-                        length: _pendingVoice!.length,
-                        onRemove: _discardVoice,
-                      )
-                    else if (_attachments.isNotEmpty)
-                      _attachmentStrip(),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(8, 6, 8, 2),
-                      child: TextField(
-                        controller: _composer,
-                        focusNode: _focus,
-                        minLines: 1,
-                        // Taller than the old five: the field owns the full
-                        // width now, so a long message is worth showing.
-                        maxLines: 6,
-                        textCapitalization: TextCapitalization.sentences,
-                        textInputAction: TextInputAction.newline,
-                        keyboardType: TextInputType.multiline,
-                        style: AppText.body(AppColors.ink),
-                        decoration: InputDecoration(
-                          isDense: true,
-                          filled: false,
-                          border: InputBorder.none,
-                          enabledBorder: InputBorder.none,
-                          focusedBorder: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
-                          hintText: _attachments.isEmpty &&
-                                  _pendingVoice == null
-                              ? 'Message'
-                              : 'Add a caption',
-                          hintStyle: AppText.body(AppColors.muted),
-                        ),
-                        // Rebuilds the send button as the field fills, and
-                        // tells them you are writing. Stopping on an empty
-                        // field matters: clearing what you typed is changing
-                        // your mind, and the ellipsis should go with it.
-                        onChanged: (text) {
-                          final line = ref.read(typingLineProvider);
-                          text.trim().isEmpty ? line?.stop() : line?.poke();
-                          setState(() {});
-                        },
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        // The catalog opener. Becomes a keyboard glyph while
-                        // the drawer is up, so one button always toggles back
-                        // to the other input.
-                        _ComposerIcon(
-                          icon: _panelOpen
-                              ? CupertinoIcons.keyboard
-                              : Icons.local_florist_rounded,
-                          color: _panelOpen ? AppColors.muted : AppColors.brand,
-                          tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
-                          onTap: _togglePanel,
-                        ),
-                        // ⚠️ A recorded voice note is the whole message, so
-                        // the other ways to attach stand down until it is
-                        // sent or thrown away. A picture and a voice in one
-                        // bubble is a thing the thread cannot draw.
-                        _ComposerIcon(
-                          icon: CupertinoIcons.photo,
-                          tooltip: 'Attach a photo',
-                          onTap: _attaching || _full || _hasVoice
-                              ? () {}
-                              : _attachPhoto,
-                          color: _attaching || _full || _hasVoice
-                              ? AppColors.muted
-                              : null,
-                        ),
-                        _ComposerIcon(
-                          icon: CupertinoIcons.camera,
-                          tooltip: 'Take a photo',
-                          onTap: _hasVoice ? () {} : _openCamera,
-                          color: _hasVoice ? AppColors.muted : null,
-                        ),
-                        // ⚠️ Only where there is something to record with.
-                        // Every other platform gets no button rather than one
-                        // that fails when pressed.
-                        if (VoiceNotes.supported)
-                          _ComposerIcon(
-                            icon: CupertinoIcons.mic,
-                            tooltip: 'Record a voice message',
-                            onTap: _sendingVoice || _hasVoice
-                                ? () {}
-                                : _startRecording,
-                            color: _sendingVoice || _hasVoice
-                                ? AppColors.muted
-                                : null,
-                          ),
-                        const Spacer(),
-                        _SendButton(
-                          enabled: canSend &&
-                              (hasWords ||
-                                  _attachments.isNotEmpty ||
-                                  _hasVoice),
-                          loading: _sending || _sendingVoice,
-                          onTap: _sendText,
-                        ),
-                      ],
-                    ),
-                  ],
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(child: _pill(hasWords)),
+                const SizedBox(width: 6),
+                _RoundAction(
+                  // Sends whenever there is something to send, and wherever
+                  // there is no microphone to record with.
+                  mode: busy
+                      ? _RoundMode.busy
+                      : hasContent || !VoiceNotes.supported
+                          ? _RoundMode.send
+                          : _RoundMode.record,
+                  enabled: !busy && (hasContent || VoiceNotes.supported),
+                  onSend: _sendText,
+                  onRecord: _startRecording,
+                ),
+              ],
+            ),
+    );
+  }
+
+  /// The pill. What is being answered, and a recording or pictures waiting
+  /// to go, sit inside it above the words, as WhatsApp's do.
+  ///
+  /// Empty, it is one line: flower, "Message", photos, camera. Once there
+  /// are words they take the full width on top and the icons drop to a row
+  /// of their own underneath, all four still there, where they stay however
+  /// long the message grows.
+  Widget _pill(bool hasWords) {
+    // 🔴 The field moves between the two layouts on the first letter typed.
+    // The GlobalKey carries its state across, so the keyboard and cursor
+    // stay put rather than the field being built anew mid-word.
+    final field = KeyedSubtree(
+      key: _fieldKey,
+      child: TextField(
+        controller: _composer,
+        focusNode: _focus,
+        minLines: 1,
+        maxLines: 6,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.newline,
+        keyboardType: TextInputType.multiline,
+        style: AppText.body(AppColors.ink),
+        decoration: InputDecoration(
+          isDense: true,
+          filled: false,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          // On one line: body text (21pt) centred in the pill's 48, level
+          // with the icons either side. Above the icons: starting where the
+          // flower's glyph does, with the icon row's padding for the gap.
+          contentPadding: hasWords
+              ? const EdgeInsets.fromLTRB(19, 14, 16, 2)
+              : const EdgeInsets.fromLTRB(4, 13.5, 4, 13.5),
+          hintText: _attachments.isEmpty && _pendingVoice == null
+              ? 'Message'
+              : 'Add a caption',
+          hintStyle: AppText.body(AppColors.muted),
+        ),
+        // Rebuilds the pill and the round button as the field fills, and
+        // tells them you are writing. Stopping on an empty field matters:
+        // clearing what you typed is changing your mind, and the ellipsis
+        // should go with it.
+        onChanged: (text) {
+          final line = ref.read(typingLineProvider);
+          text.trim().isEmpty ? line?.stop() : line?.poke();
+          setState(() {});
+        },
+      ),
+    );
+
+    // The catalog opener. Becomes a keyboard glyph while the drawer is up,
+    // so one button always toggles back to the other input.
+    final flower = _ComposerIcon(
+      icon: _panelOpen ? CupertinoIcons.keyboard : Icons.local_florist_rounded,
+      tooltip: _panelOpen ? 'Keyboard' : 'Send a flower',
+      onTap: _togglePanel,
+    );
+    // ⚠️ A recorded voice note is the whole message, so the other ways to
+    // attach stand down until it is sent or thrown away. A picture and a
+    // voice in one bubble is a thing the thread cannot draw.
+    final photos = _ComposerIcon(
+      icon: CupertinoIcons.photo,
+      tooltip: 'Attach a photo',
+      onTap: _attaching || _full || _hasVoice ? () {} : _attachPhoto,
+      dimmed: _attaching || _full || _hasVoice,
+    );
+    final camera = _ComposerIcon(
+      icon: CupertinoIcons.camera,
+      tooltip: 'Take a photo',
+      onTap: _hasVoice ? () {} : _openCamera,
+      dimmed: _hasVoice,
+    );
+
+    return Material(
+      // A Material rather than a decorated Container so the icons splash
+      // onto the pill itself: ink looks for the nearest Material, and on a
+      // plain Container that is the Scaffold underneath, where the ripple is
+      // hidden. The hairline is for the light theme, where the pill is white
+      // on a near-white conversation.
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(_pillHeight / 2),
+        side: BorderSide(color: AppColors.border),
+      ),
+      clipBehavior: Clip.antiAlias,
+      // Grows from the bottom, so the icons hold still while the words
+      // open up above them.
+      child: AnimatedSize(
+        duration: AppMotion.micro,
+        curve: AppMotion.easeOut,
+        alignment: Alignment.bottomCenter,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (_replyingTo != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 4, 0),
+                child: _replyStrip(_replyingTo!),
+              ),
+            if (_pendingVoice != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+                child: VoicePreview(
+                  key: ValueKey(_pendingVoice!.path),
+                  path: _pendingVoice!.path,
+                  length: _pendingVoice!.length,
+                  onRemove: _discardVoice,
+                ),
+              )
+            else if (_attachments.isNotEmpty)
+              _attachmentStrip(),
+            if (hasWords) ...[
+              field,
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(children: [flower, const Spacer(), photos, camera]),
+              ),
+            ] else
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [flower, Expanded(child: field), photos, camera],
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1108,37 +1142,133 @@ class _FlowersScreenState extends ConsumerState<FlowersScreen> {
   }
 }
 
-/* ── Composer icon ───────────────────────────────── */
-/// Compact tap target for the controls living inside the input pill.
-/// [IconButton]'s default 48pt box would push the pill far taller than the
-/// single line of text it wraps.
+/* ── Composer ────────────────────────────────────── */
+
+/// One line of the composer: the pill with nothing in it but a line of
+/// text, and the round button beside it, which matches it.
+const double _pillHeight = 48;
+
+/// Compact tap target for the controls living inside the pill.
+/// [IconButton]'s default box is right for height but too wide, so the
+/// width is its own.
 class _ComposerIcon extends StatelessWidget {
   const _ComposerIcon({
     required this.icon,
     required this.onTap,
     required this.tooltip,
-    this.color,
+    this.dimmed = false,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final String tooltip;
-  final Color? color;
+
+  /// Standing down for now (see the composer), and looking it.
+  final bool dimmed;
 
   @override
   Widget build(BuildContext context) {
     return IconButton(
       onPressed: onTap,
       tooltip: tooltip,
-      iconSize: 21,
-      // Vertical padding matches the field's contentPadding, and
-      // VisualDensity.compact is deliberately NOT set: it silently shaves 8px
-      // off both axes, which made the icons 33px against the field's 45px.
-      // The row is bottom-aligned, so that mismatch parked the glyphs ~6px
-      // below the text's optical centre. Equal heights = equal centres.
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+      iconSize: 24,
+      // Exactly the pill's single-line height, so the glyphs share the
+      // text's centre. VisualDensity.compact is deliberately NOT set: it
+      // silently shaves 8px off both axes and parks the glyphs below it.
+      padding: const EdgeInsets.symmetric(
+          horizontal: 8, vertical: (_pillHeight - 24) / 2),
       constraints: const BoxConstraints(),
-      icon: AppIcon(icon, color: color ?? AppColors.muted),
+      icon: AppIcon(icon,
+          color: AppColors.muted.withValues(alpha: dimmed ? .45 : 1)),
+    );
+  }
+}
+
+enum _RoundMode { record, send, busy }
+
+/// The round button beside the pill: a microphone while there is nothing to
+/// send, the paper plane once there is, and a spinner while it goes.
+class _RoundAction extends StatelessWidget {
+  const _RoundAction({
+    required this.mode,
+    required this.enabled,
+    required this.onSend,
+    required this.onRecord,
+  });
+
+  final _RoundMode mode;
+  final bool enabled;
+  final VoidCallback onSend;
+  final VoidCallback onRecord;
+
+  @override
+  Widget build(BuildContext context) {
+    final record = mode == _RoundMode.record;
+    return Tooltip(
+      message: record ? 'Record a voice message' : 'Send',
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        // ⚠️ It once had no label at all: a screen reader announced the one
+        // control that sends the message as nothing.
+        label: record ? 'Record a voice message' : 'Send',
+        excludeSemantics: true,
+        child: AnimatedOpacity(
+          duration: AppMotion.micro,
+          opacity: enabled || mode == _RoundMode.busy ? 1 : 0.4,
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            clipBehavior: Clip.antiAlias,
+            child: Ink(
+              decoration: const BoxDecoration(
+                gradient: AppGradients.cta,
+                shape: BoxShape.circle,
+              ),
+              child: InkWell(
+                onTap: enabled ? (record ? onRecord : onSend) : null,
+                child: SizedBox.square(
+                  dimension: _pillHeight,
+                  child: AnimatedSwitcher(
+                    duration: AppMotion.micro,
+                    transitionBuilder: (child, animation) => ScaleTransition(
+                      scale: animation,
+                      child: FadeTransition(opacity: animation, child: child),
+                    ),
+                    child: switch (mode) {
+                      _RoundMode.busy => const Padding(
+                          key: ValueKey('busy'),
+                          padding: EdgeInsets.all(14),
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2.2,
+                          ),
+                        ),
+                      _RoundMode.record => const AppIcon(
+                          CupertinoIcons.mic_fill,
+                          key: ValueKey('record'),
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      _RoundMode.send => const Padding(
+                          key: ValueKey('send'),
+                          // The plane points up and to the right; this puts
+                          // its middle in the circle's.
+                          padding: EdgeInsets.only(right: 2, top: 1),
+                          child: AppIcon(
+                            CupertinoIcons.paperplane_fill,
+                            color: Colors.white,
+                            size: 21,
+                          ),
+                        ),
+                    },
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -1388,64 +1518,3 @@ class _EmptyThread extends StatelessWidget {
   }
 }
 
-/* ── Send button ─────────────────────────────────── */
-class _SendButton extends StatelessWidget {
-  const _SendButton({
-    required this.enabled,
-    required this.loading,
-    required this.onTap,
-  });
-
-  final bool enabled;
-  final bool loading;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      // ⚠️ It had no label at all: a screen reader announced the one control
-      // that sends the message as nothing.
-      label: 'Send',
-      excludeSemantics: true,
-      child: AnimatedOpacity(
-      duration: AppMotion.micro,
-      opacity: enabled ? 1 : 0.4,
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        clipBehavior: Clip.antiAlias,
-        child: Ink(
-          decoration: const BoxDecoration(
-            gradient: AppGradients.cta,
-            shape: BoxShape.circle,
-          ),
-          child: InkWell(
-            onTap: enabled ? onTap : null,
-            child: SizedBox(
-              // Matches the pill's single-line height so the circle sits
-              // flush with it instead of looking sunken against the bottom.
-              width: 44,
-              height: 44,
-              child: loading
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2.2,
-                      ),
-                    )
-                  : const AppIcon(
-                      CupertinoIcons.paperplane_fill,
-                      color: Colors.white,
-                      size: 19,
-                    ),
-            ),
-          ),
-        ),
-      ),
-    ),
-    );
-  }
-}
