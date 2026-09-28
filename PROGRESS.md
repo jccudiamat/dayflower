@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### One heart on the widget, not five emojis (2026-09-28, not yet published)
+### One heart on the widget, not five emojis (2026-09-28, build 125)
 
 The user asked for the widget's reactions to be a single heart at the bottom right, an outline until tapped and red after, like Instagram, X or Threads.
 
@@ -24,6 +24,7 @@ The user asked for the widget's reactions to be a single heart at the bottom rig
 - The flower card's heart loves the flower message (`flower_id`).
 - **The heart sits level with the caption's last line** (the user asked for the words to align with it): the glyph sits low in its 44dp tap box (padding 14 above, 4 below) and the box hangs 8dp below the words (`layout_marginBottom="-8dp"`), so its middle meets the middle of the note on a day and of the note line on a flower. Centred in its own box it sat a line higher. Checked on the emulator for both.
 - The user chose to try rotation with the heart before any scrolling version; scrolling (or a choice between scroll and rotate in Settings) comes later.
+- **Published as build 125.** Patches 3.9 to 4.6 MB from 124 to 121, each checked to rebuild 125 byte for byte.
 - Verified on the emulator with stand-in data written through `run-as`: the outline heart, red about a second after the tap with the home screen still in front and the background handler starting, taken back on a second tap; rotation with a caption and heart per day; the second day's heart hearting that day, and the card staying on it, red. ⚠️ Not yet with a real account: the posted and deleted replies need a signed-in phone.
 - The in-app widget preview (home_widget_gallery.dart) shows the heart instead of the emoji row. `react` taps from a widget an older build drew are still understood.
 - Tests: `test/widget_heart_test.dart` (my hearts are my ❤️ replies by what they answer; the widget heart and the viewer ❤️ are the same note; the keys agree), and day_reactions_test's native contract now checks the heart (the key shared with DayLikeReceiver, a heart on every card, the emoji row gone). 658 tests pass.
