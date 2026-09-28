@@ -16,6 +16,10 @@
     <!-- Live camera preview in the "Share your day" bar, and the outgoing
          video track on a video call. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Game mode: the call as a small circle over other apps (see
+         GameOverlay.kt). Granted by the user in Settings, once, when they
+         first turn game mode on; nothing asks for it before then. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <!-- Calls (see lib/features/calls/). RECORD_AUDIO is the microphone, and

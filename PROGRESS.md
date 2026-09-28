@@ -13,6 +13,43 @@
 
 ## Recent app work
 
+### Call controls like Google Meet, and game mode (2026-09-28, not yet published)
+
+The user asked for Meet's controls, with a ⋮ that opens a sheet holding the ring light and a new game mode: the call shrunk to a small circle of the partner, floating over a game.
+
+- **The bar** (`_ControlBar` in `call_screen.dart`): camera (video only), mic, the tulip, ⋮, a divider, then End. Meet's rounded pills (58x52, ⋮ narrower, End wider) in one dark bar, scaled down rather than wrapped on a narrow phone. The ring light is no longer in the bar, and its width slider no longer sits over the controls.
+- **The ⋮ sheet** (`_MoreSheet`): big rounded tiles, Ring light (video only; lit in the ring light's colour while on, with its width slider underneath) and Game mode (Android 8+ only). ⋮ is hidden when the sheet would be empty (a voice call on a phone that cannot float).
+- 🔴 **Fixed on the way: a muted mic was invisible in dark mode.** The "off" buttons drew `AppColors.ink`, which follows the app's theme and is near-white in dark mode, on a near-white button. The call screen is dark in both themes, so they use `darkCanvas` now.
+- **Game mode** (`presentation/game_mode.dart` and `GameOverlay.kt`): a 96dp circle of the partner over other apps, rim pink while they talk. Drag it anywhere and it settles against the nearer side; tap it to come back to the call. The app goes to the background when it starts (`moveTaskToBack`, which does not trigger picture-in-picture).
+  - **Not picture-in-picture**: a PiP window is a rectangle the system sizes. A small circle is a window of the app's own, which needs **"Display over other apps"** (`SYSTEM_ALERT_WINDOW`, new in the manifest). Asked for the first time game mode is used, with a dialog saying why; "Open settings" goes to Android's page for it, and coming back with it switched on floats the call without a second tap.
+  - **The video is drawn natively.** With the app in the background Flutter draws nothing, so the circle attaches its own sink (`EglRenderer` into a `TextureView`, cropped square, clipped round) to the WebRTC track flutter_webrtc is already receiving, looked up by id through `FlutterWebRTCPlugin.sharedSingleton.getRemoteTrack`. Dart sends the id (`remoteVideoTrackId` in `call_video.dart`) and follows the camera going off and on through a listener, not a widget, since nothing rebuilds in the background. No video (voice call, camera off): their photo from `filesDir/caller_avatar`, or a tulip.
+  - `build.gradle.kts` compiles against `io.github.webrtc-sdk:android:144.7559.09` as **compileOnly**: flutter_webrtc keeps it as `implementation`, invisible to the app module, and it is already in the APK. Move the version with flutter_webrtc.
+  - The circle goes when the app resumes by any route (`MainActivity.onResume`, which tells Dart "ended"), when the call ends (`setCallActive(false)` and the Dart listener), and with the Activity.
+  - The call keeps its camera and microphone in the background through the existing `ActiveCallService` (types microphone and camera).
+  - **Verified on the emulator** with a temporary build that floated the circle on Home: round with truly transparent corners, the rim, the tulip fallback, a drag across the screen settling against the left edge, and a tap bringing the app back with the circle gone. No crashes. The temporary build was removed. ⚠️ **Not yet seen with live video**: drawing the partner's track needs a real call on two phones.
+- Tests: `test/call_controls_test.dart` (the bar's buttons and order, the sheet, the ring light's tile and slider, the permission dialog then floating after Settings, updates only when something changed, the circle going with the call, no ⋮ where there is nothing behind it).
+- APK after this and the composer and self-view work: 52,242,845 bytes, **about 186 KB left** under the ceiling.
+
+### A call that ends while floating closes its window; the self-view's buttons (2026-09-28, not yet published)
+
+- 🔴 **The floating window stayed up after the call ended, with the rest of the app shrunk inside it** (reported by the user). `CallPipGate` handed the window back to the app once there was no live call, and nothing ever closed it. Now `MainActivity.leavePip()` calls `moveTaskToBack(true)` whenever Dart says the call stopped (`setCallActive(false)`) while floating, and whenever the Activity finds itself floating with no call. A floating task moved to the back leaves picture-in-picture and stays alive behind, as if Home had been pressed with no call up; `finish()` would have made the next open a cold start. Until the window has gone, the gate draws the call's dark canvas rather than a flash of the app.
+  - **Verified on the emulator** (API 36 image) with a temporary build that floated on Home with no call up: the log shows the PIP transition and then `moveTaskToBack` 140 ms later, the task back to `mode=fullscreen visible=false` with its process alive, and the home screen with no window left. The temporary build was removed. ⚠️ Not yet seen with a real call ending, which needs two phones.
+- **The self-view's two buttons moved to the bottom of the tile and grew** (`CallSelfView`, public now only so `test/call_self_view_test.dart` can pump it). They were 26pt circles in the top corners and the camera flip was hard to hit. Now 40pt circles in 48pt touch targets, one in each bottom corner.
+  - **Hide is a picture struck through, and hidden it is a picture** (`Icons.hide_image_outlined` drawn as `_photoOff`, and `CupertinoIcons.photo`), in place of the eye. `_photoOff` is its own drawing: `_photo` plus `_slash` ran the line through the sun and along the hills.
+  - **They fade after 3 seconds untouched** (`CallSelfView.controlsFor`), and a tap or drag on the tile brings them back. While faded they take no touches, so the first tap on a bare tile only shows them rather than pressing one you could not see. The test fails if they do (checked).
+
+### The chat composer: a pill while empty, stacked once you type (2026-09-28, not yet published)
+
+The user asked for WhatsApp's composer with the flower where WhatsApp keeps its sticker button, then for it to stack like Claude's once there are words (`_buildComposer` and `_pill` in `flowers_screen.dart`).
+
+- **Empty: a one-line pill** holding the flower (opens the flower drawer; a keyboard while it is open), "Message", photos (up to four, as before) and the camera. **Outside it, one round button:** a microphone while there is nothing to send, the paper plane once there is, and a spinner while it goes. `_SendButton` is gone; `_RoundAction` is both. Where voice notes are unsupported it is always Send, dimmed when there is nothing to send.
+- **With words: stacked.** The first letter lifts the words onto the pill's full width and drops all three icons to a row of their own underneath, flower on the left, photos and camera on the right. None of them hides. The pill grows from the bottom (`AnimatedSize`, bottom-aligned), so the icons hold still while the words open up above them, up to six lines. Emptying the field goes back to one line.
+- 🔴 **The field keeps its state across the switch through a GlobalKey (`_fieldKey`).** Without it the field is a new widget in the new layout, which drops the keyboard on the first letter typed. `test/chat_composer_test.dart` checks the EditableTextState is the same instance and still focused, and fails without the key (checked).
+- A reply being written, and a recording or pictures waiting to go, sit **inside** the pill above the words. The recorder bar still replaces the whole row while recording.
+- **Nothing behind it any more:** the old surface bar and its top hairline are gone, so the pill and button sit on the conversation. The pill has a hairline border for the light theme, where it is white on near-white.
+- Everything is sized off one `_pillHeight` (48): the one-line pill, the icon buttons and the round button, so the glyphs share the text's centre. `CupertinoIcons.mic` now maps to the same artwork as `mic_fill` in `app_icon.dart`.
+- Tooltips and semantics labels are unchanged ('Send a flower', 'Attach a photo', 'Take a photo', 'Record a voice message', 'Send'), so the existing chat and voice tests still cover it. Checked in light and dark, empty, typed and several-line states.
+
 ### Updates download only what changed (2026-09-28, build 122)
 
 Every update used to download the whole APK (49.7 MB). Now a phone on one of the last few builds downloads a **patch** of about 2 MB and rebuilds the new APK from the one it has installed.

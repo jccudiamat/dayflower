@@ -87,6 +87,16 @@ const _plus = '<path d="M12 4v16M4 12h16"/>';
 const _send = '<path d="m22 2-7 20-5-9-9-5ZM10 13 22 2"/>';
 const _photo =
     '<rect x="2.5" y="2.5" width="19" height="19" rx="3"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/>';
+// The picture struck through, for hiding one. Not _photo plus _slash: the
+// line ran through the sun and along the hills and read as clutter. The
+// frame breaks where the line leaves it, and what is inside stays clear of
+// it.
+const _photoOff =
+    '<path d="M7 2.5h11.5a3 3 0 0 1 3 3V17M17 21.5H5.5a3 3 0 0 1-3-3V7m1 10 5-5 4.5 4.5"/><circle cx="16" cy="8" r="1.5"/><path d="m2 2 20 20"/>';
+const _more =
+    '<g fill="black" stroke="none"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></g>';
+const _gamepad =
+    '<path d="M6.5 7h11a4.5 4.5 0 0 1 4.4 5.4l-.9 4.4a2.3 2.3 0 0 1-4 1L15 16H9l-2 1.8a2.3 2.3 0 0 1-4-1l-.9-4.4A4.5 4.5 0 0 1 6.5 7Z"/><path d="M7.5 10v4m-2-2h4"/><g fill="black" stroke="none"><circle cx="15.5" cy="11" r="1.1"/><circle cx="17.8" cy="13.2" r="1.1"/></g>';
 const _video =
     '<rect x="2" y="5" width="13" height="14" rx="3"/><path d="m15 10 7-5v14l-7-5"/>';
 const _slash = '<path d="m3 3 18 18"/>';
@@ -164,8 +174,12 @@ final _artwork = <IconData, String>{
   CupertinoIcons.phone_fill: _phone,
   CupertinoIcons.phone_down: _hangup,
   CupertinoIcons.phone_down_fill: _hangup,
+  CupertinoIcons.mic: _mic,
   CupertinoIcons.mic_fill: _mic,
   CupertinoIcons.mic_slash_fill: '$_mic$_slash',
+  Icons.hide_image_outlined: _photoOff,
+  CupertinoIcons.ellipsis_vertical: _more,
+  CupertinoIcons.gamecontroller: _gamepad,
   CupertinoIcons.eye: _eye,
   CupertinoIcons.eye_fill: _eye,
   CupertinoIcons.eye_slash: '$_eye$_slash',

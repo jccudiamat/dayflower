@@ -248,6 +248,37 @@ class _PeerVideoState extends State<_PeerVideo> {
 lk.Room? _roomOf(CallTransport transport) =>
     transport is LiveKitCallTransport ? transport.room : null;
 
+/// The id of their camera's WebRTC track, or null while it is off.
+///
+/// For game mode, which draws their picture natively from the same track
+/// once Flutter has stopped drawing anything (see GameOverlay.kt). An id, not
+/// the track: the track is a Dart handle, and the native side looks the id
+/// up in flutter_webrtc's own registry.
+String? remoteVideoTrackId(CallTransport transport) {
+  if (transport is PeerCallTransport) {
+    final tracks = transport.remoteStream?.getVideoTracks();
+    return tracks == null || tracks.isEmpty ? null : tracks.first.id;
+  }
+  return _roomOf(transport)
+      ?.remoteParticipants
+      .values
+      .expand((p) => p.videoTrackPublications)
+      .where((pub) => pub.subscribed && !pub.muted)
+      .map((pub) => pub.track)
+      .whereType<lk.VideoTrack>()
+      .firstOrNull
+      ?.mediaStreamTrack
+      .id;
+}
+
+/// What changes whenever [remoteVideoTrackId] might, or null with no media.
+///
+/// ⚠️ A listener, not a widget: with the app in the background Flutter draws
+/// no frames, so nothing rebuilds, and game mode still has to follow their
+/// camera going off and on.
+Listenable? remoteVideoChanges(CallTransport transport) =>
+    transport is PeerCallTransport ? transport.tracks : _roomOf(transport);
+
 /// What sits behind a call with no incoming picture: the plum hero gradient,
 /// not black. A black rectangle reads as a broken video; this reads as the
 /// app, waiting.

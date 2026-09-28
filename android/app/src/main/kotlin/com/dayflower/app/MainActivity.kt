@@ -29,6 +29,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
 
     private var channel: MethodChannel? = null
+    private var gameChannel: MethodChannel? = null
     private var callChannel: MethodChannel? = null
     private var screenshotChannel: MethodChannel? = null
 
@@ -130,6 +131,16 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+        // Game mode: the call as a small circle over other apps. See
+        // GameOverlay.
+        gameChannel =
+            MethodChannel(flutterEngine.dartExecutor.binaryMessenger, GameOverlay.CHANNEL)
+                .apply {
+                    setMethodCallHandler { call, result ->
+                        GameOverlay.handle(this@MainActivity, call, result)
+                    }
+                }
+
         // Whether a person is actually here, for the chat header's "Active
         // now". Its own channel because it has nothing to do with calls --
         // see DevicePresence.
@@ -200,6 +211,12 @@ class MainActivity : FlutterActivity() {
                     "supported" -> result.success(pipSupported())
                     "setCallActive" -> {
                         callActive = call.arguments as? Boolean ?: false
+                        // The call stopped while floating: close the window,
+                        // and the game-mode circle with it.
+                        if (!callActive) {
+                            leavePip()
+                            GameOverlay.hide()
+                        }
                         result.success(null)
                     }
                     "enter" -> result.success(enterPip())
@@ -238,6 +255,26 @@ class MainActivity : FlutterActivity() {
             // state where PiP is not allowed (already finishing, locked).
             // Staying full-screen is the right failure.
             false
+        }
+    }
+
+    /**
+     * Closes the floating window, leaving the app in the background.
+     *
+     * 🔴 A call that ended while floating left the window up, with the rest
+     * of the app shrunk inside it. The window is for the call; with the call
+     * over it should simply go, the way it does in every other call app.
+     *
+     * moveTaskToBack rather than finish: a floating task moved to the back
+     * leaves picture-in-picture and goes behind whatever is in front, still
+     * alive, exactly as if Home had been pressed with no call up. finish
+     * would throw the app away and make the next open a cold start.
+     */
+    private fun leavePip() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
+            isInPictureInPictureMode
+        ) {
+            moveTaskToBack(true)
         }
     }
 
@@ -284,6 +321,19 @@ class MainActivity : FlutterActivity() {
         screenshots.start()
     }
 
+    /**
+     * Back in the app, by the game-mode circle or any other way: the circle
+     * goes, since the call is on screen again, and Dart hears game mode is
+     * over.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (GameOverlay.showing) {
+            GameOverlay.hide()
+            gameChannel?.invokeMethod("ended", null)
+        }
+    }
+
     override fun onStop() {
         screenshots.stop()
         // Nothing should hold the microphone once the app is away, and a
@@ -294,6 +344,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         voiceChannel = null
+        // The engine, and the call in it, go with this Activity. A circle
+        // left floating would be a call that no longer exists.
+        GameOverlay.hide()
+        gameChannel = null
         super.onDestroy()
     }
 
@@ -381,6 +435,9 @@ class MainActivity : FlutterActivity() {
     ) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         channel?.invokeMethod("pipChanged", isInPictureInPictureMode)
+        // Floating with no call, which the system can do for reasons of its
+        // own, or a call that ended on the way in: nothing to float.
+        if (isInPictureInPictureMode && !callActive) leavePip()
     }
 
     companion object {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dayflower/core/widgets/app_icon.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -23,6 +25,7 @@ import '../../data/call_usage.dart';
 import '../../domain/call.dart';
 import '../../domain/call_notifier.dart';
 import '../widgets/call_video.dart';
+import '../game_mode.dart';
 
 /// The call, in all four of its states.
 ///
@@ -271,7 +274,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
           ),
         _ReactionOverlay(reactions: session.reactions),
         if (session.isVideo)
-          _SelfView(
+          CallSelfView(
             session: session,
             onSwitchCamera: notifier.switchCamera,
           ),
@@ -295,7 +298,7 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                   // The self-view used to live here, beside the timer. It
-                  // is a free-floating layer now — see _SelfView — because
+                  // is a free-floating layer now — see CallSelfView — because
                   // a tile you can move is a tile that can get out of the
                   // way of their face, and one pinned into a Row cannot.
                   child: _CallHeader(name: name, elapsed: elapsed),
@@ -328,77 +331,8 @@ class _LiveViewState extends ConsumerState<_LiveView> {
                 visible: _chrome,
                 offset: const Offset(0, 1.2),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 26),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                  // Only while the light is on: how wide it is, right where
-                  // it was switched on, and gone with the rest of the
-                  // controls when the picture is tapped.
-                  if (ringOn) ...[
-                    const _RingWidthSlider(),
-                    const SizedBox(height: 14),
-                  ],
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // The one control here that is not about plumbing. First
-                      // in the row so it is the easiest to reach mid-sentence,
-                      // and furthest from End.
-                      _ControlButton(
-                        icon: CupertinoIcons.smiley,
-                        emoji: '🌷',
-                        onTap: () => notifier.sendReaction('🌷'),
-                        tooltip: 'Send a tulip',
-                      ),
-                      const SizedBox(width: 12),
-                      _ControlButton(
-                        icon: session.micEnabled
-                            ? CupertinoIcons.mic_fill
-                            : CupertinoIcons.mic_slash_fill,
-                        // Filled means "off", matching design.md rule 7's
-                        // logic: state is shown by inverting the surface, not
-                        // by striking the icon through.
-                        inverted: !session.micEnabled,
-                        onTap: notifier.toggleMic,
-                        tooltip: session.micEnabled ? 'Mute' : 'Unmute',
-                      ),
-                      if (session.isVideo) ...[
-                        const SizedBox(width: 12),
-                        _ControlButton(
-                          icon: CupertinoIcons.video_camera_solid,
-                          inverted: !session.cameraEnabled,
-                          onTap: notifier.toggleCamera,
-                          tooltip: session.cameraEnabled
-                              ? 'Turn camera off'
-                              : 'Turn camera on',
-                        ),
-                        const SizedBox(width: 12),
-                        // ⚠️ Only on video, and only here. It is the screen
-                        // at full brightness around your face — it has no
-                        // meaning on a voice call and no business being a
-                        // setting you meet before you need it.
-                        _ControlButton(
-                          icon: CupertinoIcons.light_max,
-                          inverted: ref.watch(ringLightProvider),
-                          onTap: () =>
-                              ref.read(ringLightProvider.notifier).toggle(),
-                          tooltip: ref.watch(ringLightProvider)
-                              ? 'Turn ring light off'
-                              : 'Ring light',
-                        ),
-                      ],
-                      const SizedBox(width: 12),
-                      _ControlButton(
-                        icon: CupertinoIcons.phone_down_fill,
-                        color: AppColors.danger,
-                        onTap: notifier.hangUp,
-                        tooltip: 'End',
-                      ),
-                    ],
-                  ),
-                    ],
-                  ),
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 22),
+                  child: _ControlBar(session: session, name: name),
                 ),
               ),
             ],
@@ -410,8 +344,318 @@ class _LiveViewState extends ConsumerState<_LiveView> {
   }
 }
 
-/// How wide the ring light is. A slim bar in the controls' own glass,
-/// narrow at the left and wide at the right, as the icons at its ends say.
+/* ── Controls ───────────────────────────────────────── */
+
+/// The controls, Google Meet's way: the everyday ones in one bar, and the
+/// rest behind ⋮ in a sheet (the ring light, and game mode).
+///
+/// 🔴 The ring light used to be a fifth button in the row, with its width
+/// slider stacked over the controls whenever it was on. A bar that grows
+/// with every feature ends up as a wall of buttons over their face; the
+/// things you set once a call go in the sheet.
+class _ControlBar extends ConsumerWidget {
+  const _ControlBar({required this.session, required this.name});
+
+  final CallSession session;
+
+  /// Theirs, for the words asking to float the call.
+  final String name;
+
+  static const _gap = SizedBox(width: 8);
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(callNotifierProvider.notifier);
+    // ⋮ only when there is something behind it: the ring light on video,
+    // game mode on a phone that can float a call.
+    final more = session.isVideo ||
+        (ref.watch(gameModeSupportedProvider).valueOrNull ?? false);
+
+    // Scaled down, never wrapped or cut, on a phone too narrow for it.
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppColors.darkSurface.withValues(alpha: .92),
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          border: Border.all(color: AppColors.onDark.withValues(alpha: .08)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (session.isVideo) ...[
+              _ControlButton(
+                icon: CupertinoIcons.video_camera_solid,
+                inverted: !session.cameraEnabled,
+                onTap: notifier.toggleCamera,
+                tooltip: session.cameraEnabled
+                    ? 'Turn camera off'
+                    : 'Turn camera on',
+              ),
+              _gap,
+            ],
+            _ControlButton(
+              icon: session.micEnabled
+                  ? CupertinoIcons.mic_fill
+                  : CupertinoIcons.mic_slash_fill,
+              // Filled means "off", matching design.md rule 7's logic:
+              // state is shown by inverting the surface, not by striking
+              // the icon through.
+              inverted: !session.micEnabled,
+              onTap: notifier.toggleMic,
+              tooltip: session.micEnabled ? 'Mute' : 'Unmute',
+            ),
+            _gap,
+            // Where Meet keeps its reactions. The tulip is the artwork, not
+            // a glyph standing in for it.
+            _ControlButton(
+              icon: CupertinoIcons.smiley,
+              emoji: '🌷',
+              onTap: () => notifier.sendReaction('🌷'),
+              tooltip: 'Send a tulip',
+            ),
+            if (more) ...[
+              _gap,
+              _ControlButton(
+                icon: CupertinoIcons.ellipsis_vertical,
+                width: 44,
+                onTap: () => _more(context, ref),
+                tooltip: 'More options',
+              ),
+            ],
+            // End stands apart: the one control that cannot be undone.
+            Container(
+              width: 1,
+              height: 28,
+              margin: const EdgeInsets.symmetric(horizontal: 10),
+              color: AppColors.onDark.withValues(alpha: .14),
+            ),
+            _ControlButton(
+              icon: CupertinoIcons.phone_down_fill,
+              color: AppColors.danger,
+              width: 68,
+              onTap: notifier.hangUp,
+              tooltip: 'End',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _more(BuildContext context, WidgetRef ref) async {
+    final picked = await showModalBottomSheet<_More>(
+      context: context,
+      backgroundColor: AppColors.darkSurface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => const _MoreSheet(),
+    );
+    if (picked == _More.gameMode && context.mounted) {
+      await _gameMode(context, ref);
+    }
+  }
+
+  /// Floats the call, asking for "Display over other apps" first if it has
+  /// never been given.
+  Future<void> _gameMode(BuildContext context, WidgetRef ref) async {
+    final game = ref.read(gameModeProvider.notifier);
+    final result = await game.start();
+    if (!context.mounted) return;
+    switch (result) {
+      case GameModeStart.needsPermission:
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (_) => _GameModePermission(name: name),
+        );
+        if (go == true) await game.askPermission();
+      case GameModeStart.failed:
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Couldn't float the call. Try again?")),
+        );
+      case GameModeStart.floating || GameModeStart.unsupported:
+        break;
+    }
+  }
+}
+
+enum _More { gameMode }
+
+/// What is behind ⋮. Meet's sheet: a handle, then big rounded tiles.
+class _MoreSheet extends ConsumerWidget {
+  const _MoreSheet();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final session = ref.watch(callNotifierProvider);
+    final video = session?.isVideo ?? false;
+    final ringOn = ref.watch(ringLightProvider);
+    final canFloat = ref.watch(gameModeSupportedProvider).valueOrNull ?? false;
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.onDark.withValues(alpha: .3),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                // ⚠️ Only on video. It is the screen at full brightness
+                // around your face, which means nothing on a voice call.
+                if (video)
+                  Expanded(
+                    child: _SheetTile(
+                      icon: CupertinoIcons.light_max,
+                      label: 'Ring light',
+                      selected: ringOn,
+                      onTap: () =>
+                          ref.read(ringLightProvider.notifier).toggle(),
+                    ),
+                  ),
+                if (video && canFloat) const SizedBox(width: 12),
+                if (canFloat)
+                  Expanded(
+                    child: _SheetTile(
+                      icon: CupertinoIcons.gamecontroller,
+                      label: 'Game mode',
+                      onTap: () => Navigator.of(context).pop(_More.gameMode),
+                    ),
+                  ),
+              ],
+            ),
+            // How wide the light is, right under the switch that turned it
+            // on, while it is on.
+            if (video && ringOn) ...[
+              const SizedBox(height: 12),
+              const _RingWidthSlider(),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One tile in the ⋮ sheet. Lit, in the ring light's own colour, while what
+/// it switches is on.
+class _SheetTile extends StatelessWidget {
+  const _SheetTile({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.selected = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    // darkCanvas, not ink: ink follows the app's theme and is near-white
+    // in dark mode, and this screen is dark in both.
+    final foreground = selected ? AppColors.darkCanvas : AppColors.onDark;
+    return Semantics(
+      button: true,
+      toggled: selected ? true : null,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected
+            ? RingLight.glow
+            : AppColors.onDark.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(28),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: SizedBox(
+            height: 96,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                AppIcon(icon, size: 24, color: foreground),
+                const SizedBox(height: 8),
+                Text(
+                  label,
+                  style: AppText.body(foreground)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Asked once, the first time game mode is used: Android keeps drawing over
+/// other apps behind a switch in Settings, and sending someone there without
+/// saying why is how the switch stays off.
+class _GameModePermission extends StatelessWidget {
+  const _GameModePermission({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.darkSurface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+      ),
+      icon: const AppIcon(
+        CupertinoIcons.gamecontroller,
+        size: 30,
+        color: AppColors.onDark,
+      ),
+      title: Text(
+        'Play together, still together',
+        textAlign: TextAlign.center,
+        style: AppText.title(AppColors.onDark),
+      ),
+      content: Text(
+        'Game mode shrinks the call to a small circle over your game, so you '
+        'can still see and hear $name while you play. Tap the circle to '
+        'come back.\n\n'
+        'Android needs you to let Dayflower display over other apps. It is '
+        'one switch, and you only do it once.',
+        style: AppText.body(AppColors.onDarkMuted),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: Text('Not now', style: AppText.body(AppColors.onDarkMuted)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(true),
+          child: Text(
+            'Open settings',
+            style: AppText.body(AppColors.brandLight)
+                .copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// How wide the ring light is, in the ⋮ sheet under its switch. Narrow at
+/// the left and wide at the right, as the icons at its ends say.
 class _RingWidthSlider extends ConsumerWidget {
   const _RingWidthSlider();
 
@@ -419,46 +663,42 @@ class _RingWidthSlider extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final width = ref.watch(ringLightWidthProvider);
     final notifier = ref.read(ringLightWidthProvider.notifier);
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 340),
-      child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
-        decoration: BoxDecoration(
-          color: AppColors.darkCanvas.withValues(alpha: .45),
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          border: Border.all(color: AppColors.onDark.withValues(alpha: .1)),
-        ),
-        child: Row(
-          children: [
-            const AppIcon(CupertinoIcons.light_min,
-                size: 18, color: AppColors.onDark),
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 3,
-                  activeTrackColor: RingLight.glow,
-                  inactiveTrackColor: AppColors.onDark.withValues(alpha: .25),
-                  thumbColor: RingLight.glow,
-                  overlayColor: RingLight.glow.withValues(alpha: .18),
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 9),
-                ),
-                child: Slider(
-                  value: width,
-                  min: RingLight.minThickness,
-                  max: RingLight.maxThickness,
-                  semanticFormatterCallback: (v) =>
-                      'Ring light width ${v.round()}',
-                  onChanged: notifier.preview,
-                  onChangeEnd: notifier.save,
-                ),
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.onDark.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(AppRadius.pill),
+      ),
+      child: Row(
+        children: [
+          const AppIcon(CupertinoIcons.light_min,
+              size: 18, color: AppColors.onDark),
+          Expanded(
+            child: SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                trackHeight: 3,
+                activeTrackColor: RingLight.glow,
+                inactiveTrackColor: AppColors.onDark.withValues(alpha: .25),
+                thumbColor: RingLight.glow,
+                overlayColor: RingLight.glow.withValues(alpha: .18),
+                thumbShape:
+                    const RoundSliderThumbShape(enabledThumbRadius: 9),
+              ),
+              child: Slider(
+                value: width,
+                min: RingLight.minThickness,
+                max: RingLight.maxThickness,
+                semanticFormatterCallback: (v) =>
+                    'Ring light width ${v.round()}',
+                onChanged: notifier.preview,
+                onChangeEnd: notifier.save,
               ),
             ),
-            const AppIcon(CupertinoIcons.light_max,
-                size: 20, color: AppColors.onDark),
-          ],
-        ),
+          ),
+          const AppIcon(CupertinoIcons.light_max,
+              size: 20, color: AppColors.onDark),
+        ],
       ),
     );
   }
@@ -902,9 +1142,15 @@ class CallPipGate extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     if (!ref.watch(pipModeProvider)) return child;
     final session = ref.watch(callNotifierProvider);
-    // No call to show. Android can put an activity in PiP for reasons of its
-    // own, and a floating window of nothing is worse than the app itself.
-    if (session == null || session.status.isTerminal) return child;
+    // 🔴 **No call left to show: the window is closing.** A call that ended
+    // while floating used to leave the window up with the rest of the app
+    // shrunk inside it. The Activity now closes the window whenever the
+    // call stops, or it floats with no call at all (leavePip in
+    // MainActivity), and until it has, this is the dark of the call rather
+    // than a flash of the app.
+    if (session == null || session.status.isTerminal) {
+      return const ColoredBox(color: AppColors.darkCanvas);
+    }
     return CallPipView(session: session);
   }
 }
@@ -945,17 +1191,26 @@ class _Timer extends StatelessWidget {
 /// Position and hidden-ness are deliberately **local state, not session
 /// state**. Where you park your own thumbnail is not something the other
 /// side, the notifier, or a reconnect should ever know or reset.
-class _SelfView extends StatefulWidget {
-  const _SelfView({required this.session, required this.onSwitchCamera});
+///
+/// Public for its test only; the call screen is the one place it lives.
+class CallSelfView extends StatefulWidget {
+  const CallSelfView({
+    super.key,
+    required this.session,
+    required this.onSwitchCamera,
+  });
 
   final CallSession session;
   final VoidCallback onSwitchCamera;
 
+  /// How long the tile's two buttons stay up after the last touch.
+  static const controlsFor = Duration(seconds: 3);
+
   @override
-  State<_SelfView> createState() => _SelfViewState();
+  State<CallSelfView> createState() => _SelfViewState();
 }
 
-class _SelfViewState extends State<_SelfView> {
+class _SelfViewState extends State<CallSelfView> {
   // ⚠️ Sized so you can actually read your own framing. It has grown twice
   // — 74×104, then 112×158 — and this is the size at which a glance tells
   // you whether you are in shot.
@@ -969,7 +1224,34 @@ class _SelfViewState extends State<_SelfView> {
   Offset? _position;
   bool _hidden = false;
 
+  /// Whether the tile's buttons are showing. They go after
+  /// [CallSelfView.controlsFor] untouched, so they are not sat on your own
+  /// face for the whole call, and a tap on the tile brings them back.
+  bool _controls = true;
+  Timer? _fade;
+
   Size get _currentSize => _hidden ? _hiddenSize : _size;
+
+  @override
+  void initState() {
+    super.initState();
+    _wake();
+  }
+
+  @override
+  void dispose() {
+    _fade?.cancel();
+    super.dispose();
+  }
+
+  /// Shows the buttons, and starts the count to putting them away again.
+  void _wake() {
+    _fade?.cancel();
+    if (!_controls) setState(() => _controls = true);
+    _fade = Timer(CallSelfView.controlsFor, () {
+      if (mounted) setState(() => _controls = false);
+    });
+  }
 
   void _drag(DragUpdateDetails details) {
     final bounds = MediaQuery.sizeOf(context);
@@ -1016,7 +1298,12 @@ class _SelfViewState extends State<_SelfView> {
         // control with a handle.
         behavior: HitTestBehavior.opaque,
         onPanUpdate: _drag,
-        onTap: _hidden ? () => setState(() => _hidden = false) : null,
+        onTap: _hidden
+            ? () {
+                setState(() => _hidden = false);
+                _wake();
+              }
+            : null,
         child: _hidden ? _restoreButton() : _tile(),
       ),
     );
@@ -1035,71 +1322,76 @@ class _SelfViewState extends State<_SelfView> {
         // outer GestureDetector is `HitTestBehavior.opaque`, which should
         // have been enough — but the tile's whole face is a LiveKit
         // renderer, and a platform view consumes the touch before it ever
-        // reaches an ancestor. So the only draggable pixel was the eye
+        // reaches an ancestor. So the only draggable pixel was the hide
         // button, which is a real GestureDetector sitting *on top* of the
-        // video. This is that, for the rest of the tile.
+        // video. This is that, for the rest of the tile. A tap on it brings
+        // the buttons back; so does a drag, which keeps them up until the
+        // tile is let go of.
         Positioned.fill(
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
+            onTap: _wake,
+            onPanStart: (_) => _wake(),
             onPanUpdate: _drag,
-          ),
-        ),
-        // Top-left, away from the thumb that just dragged it in from the
-        // right, and small enough not to cover your own face.
-        Positioned(
-          left: 4,
-          top: 4,
-          child: GestureDetector(
-            onTap: () => setState(() => _hidden = true),
-            child: Semantics(
-              button: true,
-              label: 'Hide your self-view',
-              child: Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.darkCanvas.withValues(alpha: .6),
-                ),
-                alignment: Alignment.center,
-                // An eye, deliberately — this hides the *view*, it does
-                // not turn the camera off. A camera glyph here would read
-                // as a second, contradictory camera button.
-                child: const AppIcon(
-                  CupertinoIcons.eye_slash_fill,
-                  size: 14,
-                  color: AppColors.onDark,
-                ),
-              ),
-            ),
+            onPanEnd: (_) => _wake(),
           ),
         ),
 
-        // Turn the camera around, in the corner of your own picture — the
-        // same place a camera app puts it, and the picture it affects.
-        //
-        // ⚠️ Opposite corner from the eye. Two small circles side by side on
-        // a tile this size would be one target to a thumb, and the two do
-        // very different things: one hides the view, the other changes what
-        // is being sent.
+        // 🔴 **Along the bottom, and big enough for a thumb.** They were
+        // 26pt circles in the top corners, and the camera flip was hard to
+        // hit. Bottom corners now, one each side: a tile this narrow still
+        // leaves a clear gap between them, and the two do very different
+        // things. One hides the view, the other changes what is being sent.
         Positioned(
+          left: 4,
           right: 4,
-          top: 4,
-          child: _TileButton(
-            // Only while there is a picture to turn around. With the camera
-            // off there is nothing to flip and the button would be a
-            // control over a black rectangle.
-            enabled: widget.session.cameraEnabled,
-            onTap: widget.onSwitchCamera,
-            label: 'Switch camera',
-            icon: CupertinoIcons.camera_rotate_fill,
+          bottom: 4,
+          child: IgnorePointer(
+            // Faded out is gone: the first tap on a bare tile brings the
+            // buttons back rather than pressing one you cannot see.
+            ignoring: !_controls,
+            child: AnimatedOpacity(
+              duration: AppMotion.standard,
+              opacity: _controls ? 1 : 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // A picture with a line through it, deliberately: this
+                  // hides the *view*, it does not turn the camera off. A
+                  // camera glyph here would read as a second,
+                  // contradictory camera button.
+                  _TileButton(
+                    icon: Icons.hide_image_outlined,
+                    label: 'Hide your self-view',
+                    onTap: () {
+                      _fade?.cancel();
+                      setState(() => _hidden = true);
+                    },
+                  ),
+                  // Turn the camera around, on your own picture: the same
+                  // place a camera app puts it, and the picture it affects.
+                  _TileButton(
+                    // Only while there is a picture to turn around. With
+                    // the camera off there is nothing to flip and the
+                    // button would be a control over a black rectangle.
+                    enabled: widget.session.cameraEnabled,
+                    onTap: () {
+                      widget.onSwitchCamera();
+                      _wake();
+                    },
+                    label: 'Switch camera',
+                    icon: CupertinoIcons.camera_rotate_fill,
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ],
     );
   }
 
-  /// What is left when it is hidden: an eye, in the same place the tile
+  /// What is left when it is hidden: a picture, in the same place the tile
   /// was, so bringing it back happens where putting it away did.
   Widget _restoreButton() {
     return Semantics(
@@ -1115,8 +1407,8 @@ class _SelfViewState extends State<_SelfView> {
         ),
         alignment: Alignment.center,
         child: const AppIcon(
-          CupertinoIcons.eye_fill,
-          size: 20,
+          CupertinoIcons.photo,
+          size: 22,
           color: AppColors.onDark,
         ),
       ),
@@ -1124,7 +1416,10 @@ class _SelfViewState extends State<_SelfView> {
   }
 }
 
-/// A corner control on the self-view tile.
+/// A control along the bottom of the self-view tile.
+///
+/// A 40pt circle inside a 48pt touch target, so a thumb that lands a
+/// little off the circle still presses it.
 class _TileButton extends StatelessWidget {
   const _TileButton({
     required this.icon,
@@ -1141,22 +1436,28 @@ class _TileButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: enabled ? onTap : null,
       child: Semantics(
         button: true,
+        enabled: enabled,
         label: label,
-        child: Container(
-          width: 26,
-          height: 26,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: AppColors.darkCanvas.withValues(alpha: enabled ? .6 : .3),
-          ),
-          alignment: Alignment.center,
-          child: AppIcon(
-            icon,
-            size: 14,
-            color: AppColors.onDark.withValues(alpha: enabled ? 1 : .4),
+        excludeSemantics: true,
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.darkCanvas.withValues(alpha: enabled ? .6 : .3),
+            ),
+            alignment: Alignment.center,
+            child: AppIcon(
+              icon,
+              size: 21,
+              color: AppColors.onDark.withValues(alpha: enabled ? 1 : .4),
+            ),
           ),
         ),
       ),
@@ -1256,6 +1557,7 @@ class _ControlButton extends StatelessWidget {
     this.inverted = false,
     this.color,
     this.emoji,
+    this.width = 58,
   });
 
   final IconData icon;
@@ -1263,6 +1565,9 @@ class _ControlButton extends StatelessWidget {
   final String tooltip;
   final bool inverted;
   final Color? color;
+
+  /// Meet's pills are wider than they are tall; ⋮ is narrower, End wider.
+  final double width;
 
   /// Drawn in place of [icon] when set. The tulip is the artwork, not a
   /// glyph standing in for it — an outline flower icon would be the one
@@ -1277,7 +1582,10 @@ class _ControlButton extends StatelessWidget {
             : AppColors.onDark.withValues(alpha: .12));
     final foreground = color != null
         ? Colors.white
-        : (inverted ? AppColors.ink : AppColors.onDark);
+        // 🔴 darkCanvas, not ink. ink follows the app's theme and is
+        // near-white in dark mode, so a muted mic was a white icon on a white
+        // button for anyone using it. The call is dark in both themes.
+        : (inverted ? AppColors.darkCanvas : AppColors.onDark);
 
     return Tooltip(
       message: tooltip,
@@ -1287,10 +1595,10 @@ class _ControlButton extends StatelessWidget {
         child: GestureDetector(
           onTap: onTap,
           child: Container(
-            width: 54,
-            height: 54,
+            width: width,
+            height: 52,
             decoration: BoxDecoration(
-              shape: BoxShape.circle,
+              borderRadius: BorderRadius.circular(26),
               color: background,
               border: Border.all(
                 color: color != null

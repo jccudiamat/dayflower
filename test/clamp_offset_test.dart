@@ -71,7 +71,7 @@ void main() {
     });
 
     test('the self-view, whose tile is wider than the window', () {
-      // _SelfView is 150 wide with a 14 margin. In a 150-wide window the
+      // CallSelfView is 150 wide with a 14 margin. In a 150-wide window the
       // upper bound is -14.
       final at = clampToBox(
         value: const Offset(20, 20),

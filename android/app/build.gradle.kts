@@ -107,4 +107,11 @@ dependencies {
     // two that disagree. Move it with firebase_core.
     implementation(platform("com.google.firebase:firebase-bom:33.16.0"))
     implementation("com.google.firebase:firebase-messaging")
+    // GameOverlay draws the partner's video itself, from the WebRTC track
+    // flutter_webrtc is already receiving, and flutter_webrtc keeps WebRTC as
+    // an `implementation` dependency - invisible to this module. compileOnly:
+    // the classes are already in the APK through the plugin, so this adds
+    // nothing to it. The version is the plugin's own (its build.gradle);
+    // move them together.
+    compileOnly("io.github.webrtc-sdk:android:144.7559.09")
 }
