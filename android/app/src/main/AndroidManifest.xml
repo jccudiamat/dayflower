@@ -196,6 +196,13 @@
             </intent-filter>
         </receiver>
 
+        <!-- The widget's heart: lights it at once, then hands the tap to the
+             receiver above. See DayLikeReceiver. Explicit PendingIntents
+             only, so not exported. -->
+        <receiver
+            android:name=".DayLikeReceiver"
+            android:exported="false"/>
+
         <!-- flutter_local_notifications ships a manifest containing ONLY
              permissions - it declares none of its own receivers, exactly like
              home_widget's empty manifest above. Every scheduled notification

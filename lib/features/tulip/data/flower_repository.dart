@@ -812,6 +812,25 @@ final partnerDayPhotosProvider =
   ];
 });
 
+/// What a heart is, in the thread: a "❤️" reply to the message it loves.
+/// The widget's heart and the day viewer's ❤️ both send exactly this, so
+/// either one lights the other.
+const heartNote = '❤️';
+
+/// The messages I have hearted, by id: every one of my "❤️" replies, by
+/// what it answers. What the home-screen widget's heart is lit for.
+final myHeartsProvider = Provider.autoDispose<Set<String>>((ref) {
+  final userId = ref.watch(currentUserIdProvider);
+  final messages = ref.watch(flowerMessagesProvider).valueOrNull ?? const [];
+  return {
+    for (final m in messages)
+      if (m.senderId == userId &&
+          m.replyTo != null &&
+          m.note?.trim() == heartNote)
+        m.replyTo!,
+  };
+});
+
 /// My newest live day. Drives whether the story bar offers "Your day" as an
 /// add button or as a live ring.
 final myDayPhotoProvider = Provider.autoDispose<FlowerMessage?>((ref) {

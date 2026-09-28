@@ -294,6 +294,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       sentFlowerTodayProvider,
       (_, __) => _settled(() => _syncWidget(ref.read(widgetFlowerProvider))),
     );
+    // A heart given or taken back, here or from the widget, lights the
+    // widget's heart to match. A new set on every thread change, so only an
+    // actual difference syncs.
+    ref.listen<Set<String>>(myHeartsProvider, (previous, next) {
+      if (previous != null && setEquals(previous, next)) return;
+      _settled(() => _syncWidget(ref.read(widgetFlowerProvider)));
+    });
     // Changing your picture has to reach their home screen too — without
     // this the widget keeps the old face until the next flower arrives.
     ref.listen<AsyncValue<UserProfile?>>(
@@ -720,6 +727,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // widget layer: widget_sync has no Riverpod container and runs from a
       // background isolate too, where providers do not exist.
       downloadPhoto: ref.read(flowerRepositoryProvider).downloadPhoto,
+      hearted: ref.read(myHeartsProvider),
     );
   }
 

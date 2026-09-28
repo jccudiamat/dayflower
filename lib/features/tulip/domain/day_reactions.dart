@@ -34,10 +34,9 @@ class DayReaction {
   static const sad = DayReaction(id: 'sad', emoji: '😢', label: 'Sad');
   static const haha = DayReaction(id: 'haha', emoji: '😂', label: 'Haha');
 
-  /// ⚠️ Order and membership are mirrored by the widget layout's five views
-  /// and by `TodaysTulipWidget.REACTIONS` — changing this list means
-  /// changing both. Five because that is what fits across a widget without
-  /// the targets getting too small to hit.
+  /// The day viewer's row. The home-screen widget has only the heart now
+  /// (its ❤️ is [heart]'s emoji, see heartNote), and a `react` tap from a
+  /// widget an older build drew is still understood by these ids.
   static const values = [heart, like, flower, sad, haha];
 
   /// Null for an id this build does not know, which is how a widget left on

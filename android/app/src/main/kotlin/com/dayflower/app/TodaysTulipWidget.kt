@@ -111,7 +111,8 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             views.setViewVisibility(R.id.widget_flipper, View.GONE)
             views.setViewVisibility(R.id.widget_flower_art, View.GONE)
             views.setViewVisibility(R.id.widget_header, View.GONE)
-            views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
+            views.setViewVisibility(R.id.widget_caption, View.VISIBLE)
+            views.setViewVisibility(R.id.widget_heart, View.GONE)
             views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             views.setTextViewText(
                 R.id.widget_emoji,
@@ -140,17 +141,20 @@ class TodaysTulipWidget : HomeWidgetProvider() {
         ) {
             // A day photo takes the slot when there is a live one; otherwise
             // the flower glyph does. Never both.
-            val photos = loadDayPhotos(widgetData)
-                .map { roundCorners(context, it, options) }
+            val days = loadDays(widgetData)
+                .map { it.copy(photo = roundCorners(context, it.photo, options)) }
+            val photos = days.map { it.photo }
+            val hearted = linesOf(widgetData, DayLikeReceiver.KEY_HEARTED).toSet()
             // The flower's own painting, for when there is no day photo.
             // WARNING: fitted rather than full-bleed, and in a view of its
             // own - the catalogue art is a 512px square and this card is
             // tall, so centreCrop would keep a narrow vertical strip of it.
             val art = if (photos.isEmpty()) loadFlowerArt(widgetData) else null
+            var rotating = false
             if (photos.isNotEmpty()) {
                 // Which of the two photo views is shown is renderPhotos'
                 // decision — it depends on whether anything is rotating.
-                renderPhotos(context, views, widgetData, photos)
+                rotating = renderPhotos(context, views, widgetData, days, hearted)
                 views.setViewVisibility(R.id.widget_flower_art, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.GONE)
             } else if (art != null) {
@@ -167,7 +171,6 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 views.setViewVisibility(R.id.widget_flower_art, View.GONE)
                 views.setViewVisibility(R.id.widget_emoji, View.VISIBLE)
             }
-            val photo = photos.firstOrNull()
 
             // Not only over a photo any more. A flower now says who it is
             // from up here, with their face on it, rather than in the
@@ -187,6 +190,24 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             setTextOrHide(views, R.id.widget_title, widgetData.getString("tulip_title", ""))
             setTextOrHide(views, R.id.widget_body, widgetData.getString("tulip_body", ""))
 
+            // The card's own caption and heart, for one day or a flower.
+            // While days rotate, each carries its own (renderPhotos).
+            views.setViewVisibility(
+                R.id.widget_caption,
+                if (rotating) View.GONE else View.VISIBLE,
+            )
+            renderHeart(
+                context,
+                views,
+                R.id.widget_heart,
+                when {
+                    rotating -> null
+                    days.isNotEmpty() -> days.first().id
+                    else -> widgetData.getString("flower_id", "")
+                },
+                hearted,
+            )
+
             // 🔴 **What it shows is what a tap opens.** Every tap opened the
             // conversation, so a day on the card opened the app on the
             // chat, or on Home when the app was cold, and never on the day.
@@ -202,64 +223,37 @@ class TodaysTulipWidget : HomeWidgetProvider() {
             )
 
             roundTheWholeCard(views)
-            renderReactions(context, views, photo != null)
         }
 
         /**
-         * The five reactions, in place of the old reply bar.
-         *
-         * WARNING: there used to be a "Send message" pill beside a tulip.
-         * The pill could not be a text field - RemoteViews has no EditText -
-         * so it launched the app, which is not replying from the widget but
-         * leaving it. And the tulip sent a real classic_tulip FLOWER into
-         * the conversation: giving somebody a flower is a deliberate act in
-         * this app, not what a tap meaning "nice" should cost.
-         *
-         * Each of these posts its emoji as a reply to the photo on screen,
-         * in the background, without opening anything.
-         *
-         * Only shown alongside a live day photo: with the fallback glyph
-         * there is nothing being reacted *to*.
+         * A heart for message [id]: an outline, or red once hearted, and a
+         * tap that flips it (DayLikeReceiver). Gone when there is nothing
+         * to love.
          */
-        fun renderReactions(context: Context, views: RemoteViews, hasPhoto: Boolean) {
-            if (!hasPhoto) {
-                views.setViewVisibility(R.id.widget_reply_bar, View.GONE)
+        fun renderHeart(
+            context: Context,
+            views: RemoteViews,
+            viewId: Int,
+            id: String?,
+            hearted: Set<String>,
+        ) {
+            if (id.isNullOrBlank()) {
+                views.setViewVisibility(viewId, View.GONE)
                 return
             }
-            views.setViewVisibility(R.id.widget_reply_bar, View.VISIBLE)
-
-            REACTIONS.forEach { (viewId, reactionId) ->
-                views.setOnClickPendingIntent(
-                    viewId,
-                    HomeWidgetBackgroundIntent.getBroadcast(
-                        context,
-                        // The id travels, never the emoji: a URI is at the
-                        // mercy of whoever percent-encodes it on the way to
-                        // the isolate, and ascii cannot be mangled.
-                        //
-                        // Distinct data is also what keeps these five
-                        // PendingIntents apart - the plugin builds them all
-                        // with request code 0, and Intent.filterEquals
-                        // compares data.
-                        Uri.parse("dayflower://react?r=" + reactionId),
-                    ),
-                )
-            }
+            val on = hearted.contains(id)
+            views.setViewVisibility(viewId, View.VISIBLE)
+            views.setImageViewResource(
+                viewId,
+                if (on) R.drawable.ic_widget_heart_on else R.drawable.ic_widget_heart_off,
+            )
+            views.setContentDescription(viewId, if (on) "Loved. Tap to take it back" else "Love")
+            views.setOnClickPendingIntent(viewId, DayLikeReceiver.pendingIntent(context, id))
         }
 
-        /**
-         * WARNING: mirrors DayReaction.values in
-         * lib/features/tulip/domain/day_reactions.dart, which is the source
-         * of truth for what each id means. An id sent from here that Dart
-         * does not recognise is dropped there rather than posted.
-         */
-        private val REACTIONS = listOf(
-            R.id.widget_react_heart to "heart",
-            R.id.widget_react_like to "like",
-            R.id.widget_react_flower to "flower",
-            R.id.widget_react_sad to "sad",
-            R.id.widget_react_haha to "haha",
-        )
+        /** A newline-separated list the Dart side wrote. */
+        fun linesOf(widgetData: SharedPreferences, key: String): List<String> =
+            (widgetData.getString(key, "") ?: "").split('\n').filter { it.isNotBlank() }
 
         /**
          * Rounds the card and everything in it, the system's way.
@@ -428,16 +422,19 @@ class TodaysTulipWidget : HomeWidgetProvider() {
          * cycles every child it has, GONE included, so fixed slots would
          * flip through blank frames.
          */
+        /** Returns whether the days are rotating (each with its own heart). */
         fun renderPhotos(
             context: Context,
             views: RemoteViews,
             widgetData: SharedPreferences,
-            photos: List<Bitmap>,
-        ) {
+            days: List<Day>,
+            hearted: Set<String>,
+        ): Boolean {
+            val photos = days.map { it.photo }
             if (photos.isEmpty()) {
                 views.setViewVisibility(R.id.widget_photo_still, View.GONE)
                 views.setViewVisibility(R.id.widget_flipper, View.GONE)
-                return
+                return false
             }
 
             val seconds = widgetData.intOf("widget_rotate_seconds")
@@ -452,38 +449,68 @@ class TodaysTulipWidget : HomeWidgetProvider() {
                 views.setImageViewBitmap(R.id.widget_photo_still, photos.first())
                 views.setViewVisibility(R.id.widget_photo_still, View.VISIBLE)
                 views.setViewVisibility(R.id.widget_flipper, View.GONE)
-                return
+                return false
             }
 
-            for (bitmap in photos.take(MAX_ROTATION)) {
+            for (day in days.take(MAX_ROTATION)) {
                 val item = RemoteViews(context.packageName, R.layout.widget_photo_item)
-                item.setImageViewBitmap(R.id.widget_photo, bitmap)
+                item.setImageViewBitmap(R.id.widget_photo, day.photo)
+                // Its own words and its own heart: see widget_photo_item.
+                setTextOrHide(item, R.id.widget_item_note, day.note)
+                renderHeart(context, item, R.id.widget_item_heart, day.id, hearted)
                 views.addView(R.id.widget_flipper, item)
             }
             views.setInt(R.id.widget_flipper, "setFlipInterval", seconds * 1000)
+            // Back on the day whose heart was just tapped, not the newest.
+            val focus = widgetData.getString(DayLikeReceiver.KEY_FOCUS, "")
+            val focusAt = widgetData.longOf(DayLikeReceiver.KEY_FOCUS_AT)
+            if (!focus.isNullOrBlank() &&
+                System.currentTimeMillis() - focusAt < DayLikeReceiver.FOCUS_MS
+            ) {
+                val at = days.take(MAX_ROTATION).indexOfFirst { it.id == focus }
+                if (at > 0) views.setDisplayedChild(R.id.widget_flipper, at)
+            }
             views.setViewVisibility(R.id.widget_flipper, View.VISIBLE)
             views.setViewVisibility(R.id.widget_photo_still, View.GONE)
+            return true
         }
 
+        /** One live day on the card: its photo, message id and words. */
+        data class Day(val photo: Bitmap, val id: String?, val note: String?)
+
         /**
-         * Every cached day photo, newest first.
+         * The live days, newest first, each with the id its heart loves and
+         * the words written on it.
          *
-         * Dart writes them as a newline-separated list under one key rather
-         * than five: the count changes, and five keys would need clearing
-         * individually every time it shrank.
+         * ⚠️ Kept in step by index with what Dart wrote (day_photo_paths,
+         * day_photo_ids, day_photo_notes): a photo that will not decode is
+         * dropped with its id and note, never shifting the others onto the
+         * wrong day.
          */
-        fun loadDayPhotos(widgetData: SharedPreferences): List<Bitmap> {
+        fun loadDays(widgetData: SharedPreferences): List<Day> {
             val expiresAt = widgetData.longOf("day_photo_expires_at")
             if (expiresAt > 0L && System.currentTimeMillis() >= expiresAt) {
                 return emptyList()
             }
-            val joined = widgetData.getString("day_photo_paths", "") ?: ""
-            val paths = joined.split("\n").filter { it.isNotBlank() }
+            val paths = linesOf(widgetData, "day_photo_paths")
+            val ids = linesOf(widgetData, "day_photo_ids")
+            val notes = try {
+                val json = org.json.JSONArray(widgetData.getString("day_photo_notes", "[]") ?: "[]")
+                List(json.length()) { json.optString(it, "") }
+            } catch (_: Throwable) {
+                emptyList()
+            }
             if (paths.isEmpty()) {
                 // Older data, written before rotation existed.
-                return listOfNotNull(loadDayPhoto(widgetData))
+                return listOfNotNull(
+                    loadDayPhoto(widgetData)?.let {
+                        Day(it, widgetData.getString("day_photo_id", ""), null)
+                    },
+                )
             }
-            return paths.take(MAX_ROTATION).mapNotNull { decodePhoto(it) }
+            return paths.take(MAX_ROTATION).mapIndexedNotNull { i, path ->
+                decodePhoto(path)?.let { Day(it, ids.getOrNull(i), notes.getOrNull(i)) }
+            }
         }
 
         /**

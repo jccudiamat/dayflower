@@ -10,7 +10,6 @@ import '../../../../core/widgets/app_icon.dart';
 import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../reunion/data/reunion_repository.dart';
 import '../../../tulip/data/flower_repository.dart';
-import '../../../tulip/domain/day_reactions.dart';
 import '../../domain/home_moments.dart';
 import '../screens/home_screen.dart' show HomeDayPhoto;
 
@@ -202,26 +201,12 @@ class _WidgetPreview extends ConsumerWidget {
                   ? _label(CupertinoIcons.camera, 'Photo preview')
                   : Stack(fit: StackFit.expand, children: [
                       HomeDayPhoto(message: photo),
-                      Positioned(
-                          left: 4,
-                          right: 4,
+                      // The widget's heart, bottom right, as on the phone.
+                      const Positioned(
+                          right: 6,
                           bottom: 6,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                vertical: 5, horizontal: 3),
-                            decoration: BoxDecoration(
-                                color: Colors.black54,
-                                borderRadius:
-                                    BorderRadius.circular(AppRadius.pill)),
-                            child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceAround,
-                                children: [
-                                  for (final reaction in DayReaction.values)
-                                    Text(reaction.emoji,
-                                        style: AppText.caption(Colors.white)),
-                                ]),
-                          )),
+                          child: AppIcon(CupertinoIcons.heart,
+                              color: Colors.white, size: 20)),
                     ]),
               HomeWidgetKind.heartbeat => Container(
                   color: const Color(0xFF1D1430),

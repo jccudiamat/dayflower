@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -165,6 +166,29 @@ class DayflowerWidgets {
   /// on its fallback glyph and there is nothing to reply to.
   static const keyDayPhotoId = 'day_photo_id';
 
+  /// The message id of each photo in [keyDayPhotoPaths], in the same
+  /// order: each day on the card carries its own heart.
+  static const keyDayPhotoIds = 'day_photo_ids';
+
+  /// What each of those days says (its note), as a JSON list in the same
+  /// order: a rotating day shows its own words. JSON because a note can
+  /// hold a newline and the other lists are newline-separated.
+  static const keyDayPhotoNotes = 'day_photo_notes';
+
+  /// The flower's message id, when the card shows a flower: it has a heart
+  /// too.
+  static const keyFlowerId = 'flower_id';
+
+  /// Ids of what is on the card that I have hearted, one per line. The
+  /// widget lights its heart for these, and flips them itself the moment
+  /// the heart is tapped (DayLikeReceiver) before Dart has sent anything.
+  static const keyHearted = 'liked_ids';
+
+  /// A heart tapped on the widget, after DayLikeReceiver has already lit
+  /// or cleared it: `id` is the message, `on` is 1 to heart it, 0 to take
+  /// the heart back.
+  static const likeAction = 'dayflower://like';
+
   static const keyBeatPulseAt = 'beat_pulse_at';
   static const keyBeatPulseDir = 'beat_pulse_dir';
 
@@ -216,6 +240,8 @@ class DayflowerWidgets {
     String? partnerAvatarPath,
     Future<Uint8List> Function(String path)? downloadPhoto,
     Future<Uint8List> Function(String path)? downloadAvatar,
+    /// What I have hearted (myHeartsProvider), for the widget's hearts.
+    Set<String> hearted = const {},
   }) async {
     if (!isSupported) return;
 
@@ -226,6 +252,10 @@ class DayflowerWidgets {
     String photoPath = '';
     int photoExpiresAt = 0;
     final photoPaths = <String>[];
+    // In step with photoPaths: the day each photo is, for its heart, and
+    // what it says.
+    final photoIds = <String>[];
+    final photoNotes = <String>[];
     // Held as a variable rather than a bool so it stays promoted to
     // non-null through the branch — and so the flower case below can ask
     // "is this a day photo" without repeating the three conditions.
@@ -237,6 +267,8 @@ class DayflowerWidgets {
       photoPath = await _cachePhoto(dayPhoto, downloadPhoto) ?? '';
       if (photoPath.isNotEmpty) {
         photoPaths.add(photoPath);
+        photoIds.add(dayPhoto.id);
+        photoNotes.add(dayPhoto.note ?? '');
         photoExpiresAt = dayPhoto.sentAt
             .add(FlowerMessage.widgetLifetime)
             .millisecondsSinceEpoch;
@@ -247,7 +279,11 @@ class DayflowerWidgets {
       // rather than downloading all of them to show five.
       for (final m in alsoLive.take(_maxRotation - 1)) {
         final path = await _cachePhoto(m, downloadPhoto);
-        if (path != null && path.isNotEmpty) photoPaths.add(path);
+        if (path != null && path.isNotEmpty) {
+          photoPaths.add(path);
+          photoIds.add(m.id);
+          photoNotes.add(m.note ?? '');
+        }
       }
     }
 
@@ -325,6 +361,21 @@ class DayflowerWidgets {
       await HomeWidget.saveWidgetData<String>(keyDayOwnerAvatar, avatarPath);
       await HomeWidget.saveWidgetData<String>(
           keyDayPhotoId, photoPath.isEmpty ? '' : (received?.id ?? ''));
+      await HomeWidget.saveWidgetData<String>(
+          keyDayPhotoIds, photoIds.join('\n'));
+      await HomeWidget.saveWidgetData<String>(
+          keyDayPhotoNotes, jsonEncode(photoNotes));
+      // The flower on the card, when it is a flower: its heart loves it.
+      final flowerId =
+          dayPhoto == null && received?.flower != null ? received!.id : '';
+      await HomeWidget.saveWidgetData<String>(keyFlowerId, flowerId);
+      // Only what is on the card: the widget has no use for the rest.
+      await HomeWidget.saveWidgetData<String>(
+          keyHearted,
+          [
+            for (final id in [...photoIds, flowerId])
+              if (id.isNotEmpty && hearted.contains(id)) id,
+          ].join('\n'));
       await HomeWidget.saveWidgetData<String>(keyDayOwner, owner);
       await HomeWidget.saveWidgetData<String>(
           keyDayOwnerFlower, owner.isEmpty ? '' : partnerFlower);
@@ -660,7 +711,7 @@ class DayflowerWidgets {
 @pragma('vm:entry-point')
 Future<void> dayflowerWidgetBackground(Uri? uri) async {
   final host = uri?.host;
-  if (host != 'heartbeat' && host != 'react') return;
+  if (host != 'heartbeat' && host != 'react' && host != 'like') return;
 
   try {
     WidgetsFlutterBinding.ensureInitialized();
@@ -683,9 +734,46 @@ Future<void> dayflowerWidgetBackground(Uri? uri) async {
 
     final pairId = pairs.first['id'] as String;
 
+    // ❤️, or taking it back. DayLikeReceiver has already lit or cleared the
+    // heart on the card; this makes it true. A heart is a "❤️" reply to
+    // the message, the same one the day viewer sends, so it arrives in
+    // the thread saying what it loves, and taking it back deletes it.
+    if (host == 'like') {
+      final id = uri?.queryParameters['id'] ?? '';
+      if (id.isEmpty) return;
+      final on = uri?.queryParameters['on'] == '1';
+      final mine = await client
+          .from('flower_messages')
+          .select('id')
+          .eq('pair_id', pairId)
+          .eq('sender_id', userId)
+          .eq('reply_to', id)
+          .eq('note', heartNote);
+      if (on) {
+        // Once: a second tap arriving before the first landed must not
+        // love it twice.
+        if (mine.isNotEmpty) return;
+        await client.from('flower_messages').insert({
+          'pair_id': pairId,
+          'sender_id': userId,
+          'note': heartNote,
+          'to_widget': false,
+          'reply_to': id,
+        });
+      } else {
+        for (final row in mine) {
+          await client.rpc<void>('delete_message',
+              params: {'p_message_id': row['id']});
+        }
+      }
+      return;
+    }
+
     // A reaction is a reply to the day photo the widget is showing — a
     // text message carrying the emoji and `reply_to`, which is what makes
     // it still say what it was answering when it is read hours later.
+    // ⚠️ The five-emoji row is gone (the heart replaced it); kept for a
+    // widget still drawn by an older build until it next redraws.
     if (host == 'react') {
       final reaction = DayReaction.byId(
         uri?.queryParameters[DayflowerWidgets.reactParam],

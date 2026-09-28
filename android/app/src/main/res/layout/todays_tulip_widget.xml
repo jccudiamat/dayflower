@@ -197,117 +197,86 @@
             android:shadowRadius="3" />
     </LinearLayout>
 
-    <!-- Caption. Sits on the scrim at the bottom edge, story-style. -->
+    <!-- Caption, on the scrim at the bottom edge, story-style, with the
+         heart at its end.
+
+         🔴 **One heart, where the five reactions were.** The row of five
+         emojis was a menu; a heart is a like, the way every app has one: an
+         outline until you tap it, red once you have, and tapped again to take
+         it back (DayLikeReceiver). On a flower as well as on a day.
+
+         Hidden, heart and all, while days rotate: each of those carries its
+         own caption and heart (widget_photo_item), because the launcher
+         alone knows which one is showing. -->
     <LinearLayout
+        android:id="@+id/widget_caption"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
-        android:orientation="vertical"
+        android:orientation="horizontal"
+        android:gravity="bottom"
         android:background="@drawable/widget_caption_scrim"
         android:paddingLeft="18dp"
-        android:paddingRight="18dp"
+        android:paddingRight="10dp"
         android:paddingTop="32dp"
-        android:paddingBottom="14dp">
+        android:paddingBottom="10dp">
 
-        <TextView
-            android:id="@+id/widget_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:ellipsize="end"
-            android:text="Nothing here yet"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            android:shadowColor="#99000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3" />
-
-        <TextView
-            android:id="@+id/widget_body"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:maxLines="2"
-            android:ellipsize="end"
-            android:text="Tap to send a flower."
-            android:textColor="#E4DEEC"
-            android:textSize="12.5sp"
-            android:shadowColor="#99000000"
-            android:shadowDx="0"
-            android:shadowDy="1"
-            android:shadowRadius="3" />
-
-        <!-- Reaction row.
-
-             ⚠️ There was a "Send message" pill here. It could never be a
-             text field — RemoteViews has no EditText on its supported list
-             — so it opened the conversation instead, which is not replying
-             from the widget, it is leaving the widget. A row of reactions
-             is the part of a story reply bar a widget can actually do.
-
-             Each emoji is a background action, the same shape as the
-             heartbeat widget's tap: a one-tap reaction that costs an app
-             launch is not a one-tap reaction.
-
-             Ids and order mirror DayReaction.values in
-             lib/features/tulip/domain/day_reactions.dart. Shown only
-             alongside a live day photo — with the fallback glyph there is
-             nothing being reacted *to*. -->
         <LinearLayout
-            android:id="@+id/widget_reply_bar"
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:orientation="horizontal"
-            android:baselineAligned="false"
-            android:visibility="gone">
+            android:layout_weight="1"
+            android:orientation="vertical">
 
             <TextView
-                android:id="@+id/widget_react_heart"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="❤️"
-                android:textSize="22sp" />
+                android:id="@+id/widget_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:maxLines="1"
+                android:ellipsize="end"
+                android:text="Nothing here yet"
+                android:textColor="#FFFFFF"
+                android:textSize="15sp"
+                android:textStyle="bold"
+                android:shadowColor="#99000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3" />
 
             <TextView
-                android:id="@+id/widget_react_like"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="👍"
-                android:textSize="22sp" />
-
-            <TextView
-                android:id="@+id/widget_react_flower"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="🌷"
-                android:textSize="22sp" />
-
-            <TextView
-                android:id="@+id/widget_react_sad"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="😢"
-                android:textSize="22sp" />
-
-            <TextView
-                android:id="@+id/widget_react_haha"
-                android:layout_width="0dp"
-                android:layout_height="38dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:text="😂"
-                android:textSize="22sp" />
+                android:id="@+id/widget_body"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:maxLines="2"
+                android:ellipsize="end"
+                android:text="Tap to send a flower."
+                android:textColor="#E4DEEC"
+                android:textSize="12.5sp"
+                android:shadowColor="#99000000"
+                android:shadowDx="0"
+                android:shadowDy="1"
+                android:shadowRadius="3" />
         </LinearLayout>
+
+        <!-- 44dp to the touch, the heart 26dp inside it, and centred on the
+             caption's last line rather than on its own box: the glyph sits
+             low in the box (14dp above, 4 below) and the box hangs 8dp
+             below the words, which puts the heart's middle level with the
+             middle of that line. A heart centred in a 44dp box sat a line
+             higher than the words it belongs to. -->
+        <ImageView
+            android:id="@+id/widget_heart"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginLeft="6dp"
+            android:layout_marginBottom="-8dp"
+            android:paddingLeft="9dp"
+            android:paddingRight="9dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="4dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_widget_heart_off"
+            android:contentDescription="Love"
+            android:visibility="gone" />
     </LinearLayout>
 </FrameLayout>

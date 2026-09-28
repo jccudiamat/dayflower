@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- One photo inside the day widget's flipper.
+<!-- One day in the widget's rotation: the photo, and its own caption and
+     heart.
 
      Added at render time with RemoteViews.addView, one per live day, rather
      than declared five times in the parent layout.
@@ -7,10 +8,64 @@
      ⚠️ That is not a style choice. A ViewFlipper cycles every child it has,
      including GONE ones — so pre-declaring five slots and hiding the unused
      ones would flip through blank frames. The number of children has to BE
-     the number of photos. -->
-<ImageView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_photo"
+     the number of photos.
+
+     🔴 **The caption and the heart are in here, not over the flipper.**
+     Which day is showing is known only to the launcher, which drives the
+     flipper, so a heart outside it would love whichever day the app last
+     guessed. In here, each day's heart is that day's. Same measurements as
+     the card's own caption (widget_caption), so nothing moves between a
+     still day and a rotating one. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:scaleType="centerCrop"
-    android:contentDescription="@string/widget_description" />
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/widget_photo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="@string/widget_description" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="horizontal"
+        android:gravity="bottom"
+        android:background="@drawable/widget_caption_scrim"
+        android:paddingLeft="18dp"
+        android:paddingRight="10dp"
+        android:paddingTop="32dp"
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:id="@+id/widget_item_note"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:maxLines="2"
+            android:ellipsize="end"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:shadowColor="#99000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="3" />
+
+        <ImageView
+            android:id="@+id/widget_item_heart"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginLeft="6dp"
+            android:layout_marginBottom="-8dp"
+            android:paddingLeft="9dp"
+            android:paddingRight="9dp"
+            android:paddingTop="14dp"
+            android:paddingBottom="4dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_widget_heart_off"
+            android:contentDescription="Love" />
+    </LinearLayout>
+</FrameLayout>

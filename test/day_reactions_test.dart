@@ -74,32 +74,34 @@ void main() {
     // a button that does nothing, with no error anywhere. So read the other
     // side rather than restating it.
 
-    test('the Kotlin sends exactly the ids Dart knows', () {
+    // 🔴 The five-emoji row became one heart: an outline, red once given,
+    // tapped again to take it back. DayLikeReceiver flips it in the
+    // widget's data before Dart sends anything, so the key they share is
+    // the contract now.
+    test('the Kotlin and Dart agree on where hearts are kept', () {
       final kotlin = File(
-        'android/app/src/main/kotlin/com/dayflower/app/TodaysTulipWidget.kt',
+        'android/app/src/main/kotlin/com/dayflower/app/DayLikeReceiver.kt',
       ).readAsStringSync();
-      final block = RegExp(r'private val REACTIONS = listOf\(([^)]*)\)')
-          .firstMatch(kotlin);
-      expect(block, isNotNull, reason: 'REACTIONS list not found in Kotlin');
-
-      final ids = RegExp(r'to "(\w+)"')
-          .allMatches(block!.group(1)!)
-          .map((m) => m.group(1))
-          .toList();
-
-      expect(ids, DayReaction.values.map((r) => r.id).toList());
+      final key = RegExp(r'const val KEY_HEARTED = "(\w+)"').firstMatch(kotlin);
+      expect(key, isNotNull, reason: 'KEY_HEARTED not found in Kotlin');
+      expect(key!.group(1), DayflowerWidgets.keyHearted);
+      // And the tap it forwards is the one Dart handles.
+      expect(kotlin, contains('dayflower://like?id='));
+      expect(Uri.parse(DayflowerWidgets.likeAction).host, 'like');
     });
 
-    test('the layout has a view for each of them', () {
+    test('every card has its heart, and the emoji row is gone', () {
       final layout =
           File('android/app/src/main/res/layout/todays_tulip_widget.xml')
               .readAsStringSync();
+      expect(layout, contains('@+id/widget_heart'));
+      // A rotating day carries its own, so it hearts the day on screen.
+      final item = File('android/app/src/main/res/layout/widget_photo_item.xml')
+          .readAsStringSync();
+      expect(item, contains('@+id/widget_item_heart'));
       for (final r in DayReaction.values) {
-        expect(layout, contains('@+id/widget_react_${r.id}'), reason: r.id);
-        // The emoji is drawn by the layout and sent by Dart. Two copies,
-        // so they have to agree — a widget showing 👍 that posts ❤️ is a
-        // worse bug than either being wrong on its own.
-        expect(layout, contains(r.emoji), reason: r.emoji);
+        expect(layout, isNot(contains('@+id/widget_react_${r.id}')),
+            reason: r.id);
       }
     });
 
