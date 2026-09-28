@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### Background taps sent as the wrong account; a reply bubble on the widget; the heart stays right (2026-09-29, not yet published)
+### Background taps sent as the wrong account; a reply bubble on the widget; the heart stays right (2026-09-29, build 127)
 
 The user found, on build 126, that with the phone signed in as Hubby the heartbeat widget's taps arrived as Wifey's heartbeats (Hubby got "Wifey sent you a heartbeat"). Also: the heart went to the bottom left on a day with no caption, and they asked for a chat bubble right of the heart that opens the chat replying to that day, as a draft.
 
@@ -24,6 +24,7 @@ The user found, on build 126, that with the phone signed in as Hubby the heartbe
 - **A reply bubble right of every heart** (`ic_widget_reply`, a round outline bubble with its tail at the lower left, drawn at the heart's weight; `widget_reply`/`widget_body_reply`, `widget_item_reply`, `widget_day_reply`, 44dp boxes 6dp into the heart's). The heart and the bubble always show and hide together (`renderActions`). The bubble opens `dayflower://reply?id=` (directly on the card and a rotating day; through DayLikeReceiver's `open?reply=` in the scrolling list), and `_openWidgetTarget` sets `replyFromWidgetRequest` and goes to the chat, which starts a reply to that message on the composer with the keyboard up (`_replyFromWidget`: waits up to 15s for the thread on a cold start, and does nothing if the message has gone). On a flower it replies to the flower.
 - Verified on the emulator: a day with no caption (heart and bubble at the bottom right), a flower (both on the note line), the scrolling list (both on every day, including one with no caption), and a scrolled day's bubble starting MainActivity with `dayflower://reply?id=day-2`. The chat half is covered by a widget test; the emulator cannot sign in. ⚠️ Still to see on the phone: heartbeats from the widget arriving as Hubby after a switch.
 - Tests: `test/background_supabase_test.dart` switches accounts under a background isolate's cached session and checks each tap goes out as whoever is signed in at the time (it fails with the old initialize-once code: Expected hubby, Actual wifey), and that runs are one at a time. `test/widget_reply_test.dart`: the chat opens with the reply started, a stale request starts nothing, every heart has its bubble, only main.dart and the helper initialize Supabase, sign-out empties the widgets. `shared_preferences_platform_interface` is now a dev dependency, for the first. 675 tests pass.
+- **Published as build 127.** Patches 4.3 MB (from 126) to 4.5 MB (123), each checked to rebuild 127 byte for byte. Release APK 52,245,751 bytes. On build 126, force-closing the app after an account switch clears the stale background session. The heartbeats already sent as Wifey stay in the table; deleting them is the user's call.
 
 ### Widgets stop blinking; the heart on its line; their days as a list to scroll (2026-09-28, build 126)
 
