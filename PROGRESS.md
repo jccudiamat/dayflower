@@ -13,13 +13,14 @@
 
 ## Recent app work
 
-### The widget opens what it shows, and sits better (2026-09-28, not yet published)
+### The widget opens what it shows, and sits better (2026-09-28, build 124)
 
 - 🔴 **A tap on the home-screen widget "just opened the app".** Every tap sent `dayflower://flowers` and the app answered with a plain `go(Routes.chat)`. On a cold start that ran before sign-in had resolved, and the splash's redirect sent it to Home; and a day photo on the card never opened the day at all. Now the card links to what it shows (`TodaysTulipWidget.renderFlower`): `dayflower://days` when it shows their day photos, `dayflower://flowers` for a flower. `_openWidgetTarget` sends both through `goWhenReady`, like a notification tap: a flower to the chat, their day to Home with **`openTheirDaysRequest`** set, which Home answers by pushing the My Day viewer on their days (newest first, as the card) once it is up and has them, so back lands on Home. The request is a time and lapses after 15s, so a cold start that never gets their days does not open the viewer out of nowhere later. Events were given `goWhenReady` too.
 - **The widget's layout** (`todays_tulip_widget.xml`), from the user's screenshot: the flower painting sits about 36dp lower (padding 40/14 in place of 12/58), so its cut stem ends down in the caption's shade rather than in the open above it; the header's avatar is 24dp (was 30) and the header starts 18dp in and 16dp down (was 10 and 9), out of the card's rounded corner; the caption moved in to 18dp to line up with it. Checked on the emulator by writing stand-in widget data (`HomeWidgetPreferences.xml`, avatar and flower files) through `run-as` and adding the widget from the launcher.
 - Tests: two in `home_screen_test.dart` (a request opens the viewer on their newest, back is Home; a stale request does nothing). 655 tests pass.
+- **Published as build 124** with migration **0054 applied** first (checked live: livekit_token refuses once no call is live, miss_call open to either member, grants unchanged). Patches 4.2 to 4.6 MB from 123 to 120, each checked to rebuild 124 byte for byte.
 
-### A call ends for both; an unanswered call is missed; the ring is Android's call notification (2026-09-28, not yet published)
+### A call ends for both; an unanswered call is missed; the ring is Android's call notification (2026-09-28, build 124)
 
 - 🔴 **A call is for two: when it ends, it is over for both, and nobody goes back in.** Needs migration **0054** (`0054_calls_end_for_both.sql`), applied with the publish.
   - **The row is the signal.** `CallNotifier` listens to the thread and ends this side (`_endedElsewhere`, which writes nothing) the moment its call's row is closed, by whichever of them. `CallPartnerLeft` already did this when the media server saw the partner leave; the row holds when it did not (a lost socket, the peer transport, a decline from a closed app). It also takes down the ring screen of a call the caller gave up on.
@@ -32,7 +33,7 @@
   - Also discussed: ConnectionService (self-managed) would still leave the notification to us, so it does not change this; worth doing on its own later for Bluetooth/car buttons and cellular-call interplay. CallKit is for the iOS build.
 - Tests: `test/call_end_for_both_test.dart` (an unanswered hang-up is missed; declining with no session still closes it; the row closing ends this side without writing; an ended call cannot be joined). 653 tests pass.
 
-### A call that rang again mid-call; the ring's colours; game mode's missing video (2026-09-28, not yet published)
+### A call that rang again mid-call; the ring's colours; game mode's missing video (2026-09-28, build 124)
 
 Three reports from a real call on build 123.
 
