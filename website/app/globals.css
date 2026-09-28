@@ -1,14 +1,14 @@
 @import "tailwindcss";
 
-/* ── Dayflower design tokens (from design.md, Design System v3) ─────────────── */
+/* Shared cream, rose, and ink palette used by the homepage and public pages. */
 :root {
-  --bg: #f8f6fb;
+  --bg: #fdfbf8;
   --surface: #ffffff;
-  --surface-subtle: #efeaf8;
-  --ink: #1c1024;
-  --body-color: #564a5e;
-  --muted: #8e8698;
-  --border: #eae5f0;
+  --surface-subtle: #eee6e9;
+  --ink: #302331;
+  --body-color: #655863;
+  --muted: #74656f;
+  --border: #e8dfe2;
 
   --dark-canvas: #100a1e;
   --dark-surface: #1d1430;
@@ -19,11 +19,11 @@
 
   --g-pink: #f0709f;
   --g-purple: #906fe8;
-  --brand: #ee6fa8;
-  --brand-dark: #d5568f;
-  --secondary: #8b72e0;
-  --blush: #fcedf4;
-  --blush-mid: #f6d3e4;
+  --brand: #883b59;
+  --brand-dark: #883b59;
+  --secondary: #883b59;
+  --blush: #f5e9ec;
+  --blush-mid: #e7cbd5;
 
   --hero-top: #171027;
   --hero-mid: #221838;
@@ -70,32 +70,33 @@ body {
   font-family: var(--font-quicksand), system-ui, sans-serif;
 }
 
-/* The serif is sacred: Lora italic only for words between the two of them. */
+/* Editorial headings use Lora; controls and body copy use Quicksand. */
+.site-page h1, .site-page h2 { font-family: var(--font-lora), Georgia, serif; font-weight: 500; letter-spacing: -.045em; line-height: 1.2; }
+.site-page h1 { line-height: 1.12; }
+.site-page .gift-catalog h2 { font-family: var(--font-quicksand), system-ui, sans-serif; font-weight: 700; letter-spacing: normal; line-height: 1.4; }
+.site-page :is(a, button, input, select, summary):focus-visible { outline: 3px solid var(--brand); outline-offset: 4px; }
 .note {
   font-family: var(--font-lora), Georgia, serif;
   font-style: italic;
 }
 
-/* Two-tone headline accent: the one gradient, meaning "primary". */
+/* Keep legacy accent classes aligned with the shared brand. */
 .gradient-text {
-  background: var(--gradient-cta);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--brand);
 }
 
-/* THE primary CTA: full-width-ish pill, gradient fill, soft glow. */
-.site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--border-soft); background: #faf7fcf5; backdrop-filter: blur(16px); }
+/* Shared navigation and primary actions. */
+.site-header { position: sticky; top: 0; z-index: 50; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 96%, transparent); backdrop-filter: blur(16px); }
 .site-nav { position: relative; display: flex; align-items: center; gap: 12px; max-width: 1024px; min-height: 68px; margin: auto; padding: 10px 20px; }
-.site-brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 19px; font-weight: 700; }
-.site-nav-secondary { display: flex; align-items: center; gap: 28px; margin-left: auto; font-size: 14px; font-weight: 600; color: #735f78; }
+.site-brand { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; font-size: 21px; font-weight: 700; letter-spacing: -.06em; }
+.site-nav-secondary { display: flex; align-items: center; gap: 28px; margin-left: auto; font-size: 14px; font-weight: 600; color: var(--body-color); }
 .site-nav-secondary a { display: inline-flex; align-items: center; min-height: 44px; border-bottom: 2px solid transparent; }
-.site-nav-secondary a[aria-current="page"] { color: #754766; border-bottom-color: #a97896; }
-.site-waitlist-link { display: inline-flex; align-items: center; justify-content: center; margin-left: 15px; min-height: 44px; padding: 0 20px; border-radius: 999px; background: #754766; color: #fff; font-size: 14px; font-weight: 700; white-space: nowrap; }
-.site-waitlist-link:hover { background: #5e3551; }
-.site-booth-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; background: #733952; color: white; font-size: 14px; font-weight: 700; white-space: nowrap; }
-.site-booth-link:hover { background: #592a40; }
-.site-nav a:focus-visible, .site-mobile-menu summary:focus-visible { outline: 2px solid #733952; outline-offset: 4px; }
+.site-nav-secondary a[aria-current="page"] { color: var(--brand); border-bottom-color: var(--brand); }
+.site-waitlist-link { display: inline-flex; align-items: center; justify-content: center; margin-left: 15px; min-height: 44px; padding: 0 20px; border-radius: 9px; background: var(--brand); color: #fff; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.site-waitlist-link:hover { background: #6d2d46; }
+.site-booth-link { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 9px; background: var(--brand); color: white; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.site-booth-link:hover { background: #6d2d46; }
+.site-nav a:focus-visible, .site-mobile-menu summary:focus-visible { outline: 2px solid var(--brand); outline-offset: 4px; }
 .site-mobile-menu { display: none; }
 @media (max-width: 767px) {
   .site-nav { min-height: 64px; padding: 8px 16px 0; gap: 4px 8px; flex-wrap: wrap; justify-content: space-between; }
@@ -106,10 +107,10 @@ body {
   .site-waitlist-link { margin-left: auto; font-size: 12px; padding: 0 15px; min-height: 40px; }
   .site-booth-link { margin-left: auto; padding: 0 12px; font-size: 12px; gap: 5px; }
   .site-mobile-menu { display: block; }
-  .site-mobile-menu summary { display: grid; place-items: center; width: 36px; height: 44px; list-style: none; cursor: pointer; color: #733952; font-size: 21px; }
+  .site-mobile-menu summary { display: grid; place-items: center; width: 36px; height: 44px; list-style: none; cursor: pointer; color: var(--brand); font-size: 21px; }
   .site-mobile-menu summary::-webkit-details-marker { display: none; }
   .site-menu-panel { position: absolute; top: calc(100% + 8px); right: 16px; width: 230px; padding: 8px; border: 1px solid #eae0ea; border-radius: 18px; background: #fff; box-shadow: 0 12px 32px #1c10241a; }
-  .site-menu-panel a { display: block; padding: 14px; border-radius: 10px; font-size: 14px; color: #733952; }
+  .site-menu-panel a { display: block; padding: 14px; border-radius: 10px; font-size: 14px; color: var(--brand); }
   .site-menu-panel a:hover { background: #fcedf4; }
 }
 
@@ -119,18 +120,17 @@ body {
   justify-content: center;
   height: 50px;
   padding: 0 28px;
-  border-radius: 999px;
-  background: var(--gradient-cta);
+  border-radius: 9px;
+  background: var(--brand);
   color: #fff;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   white-space: nowrap;
-  box-shadow: 0 6px 24px rgba(240, 112, 159, 0.35);
   transition: opacity 150ms cubic-bezier(0.25, 0.1, 0.25, 1),
     transform 150ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 .gradient-button:hover {
-  opacity: 0.92;
+  background: #6d2d46;
 }
 .gradient-button:active {
   transform: scale(0.98);
@@ -146,7 +146,7 @@ body {
   justify-content: center;
   height: 44px;
   padding: 0 22px;
-  border-radius: 999px;
+  border-radius: 9px;
   border: 1.5px solid color-mix(in srgb, var(--secondary) 45%, transparent);
   color: var(--secondary);
   font-size: 14px;
@@ -167,7 +167,7 @@ body {
   display: flex;
   gap: 8px;
   padding: 6px;
-  border-radius: 999px;
+  border-radius: 9px;
   background: var(--surface);
   border: 1px solid var(--border);
 }
@@ -177,7 +177,7 @@ body {
 }
 
 .waitlist-input {
-  border-radius: 999px;
+  border-radius: 9px;
   flex: 1;
   min-width: 0;
   border: none;
@@ -227,7 +227,7 @@ body {
   margin-top: 10px;
   padding-left: 16px;
   font-size: 13px;
-  color: var(--g-pink);
+  color: #a33b63;
 }
 
 .waitlist-success {
@@ -264,7 +264,7 @@ body {
 @media (max-width: 480px) {
   .waitlist-row {
     flex-direction: column;
-    border-radius: 24px;
+    border-radius: 9px;
     padding: 8px;
   }
   .waitlist-input {

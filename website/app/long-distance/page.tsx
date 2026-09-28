@@ -50,7 +50,7 @@ const questions = [
 export default async function LongDistancePage() {
   return <>
     <SiteHeader />
-    <main className="mx-auto max-w-4xl px-5 py-10 sm:py-16">
+    <main className="site-page mx-auto max-w-4xl px-5 py-10 sm:py-16">
       <p className="text-xs font-bold uppercase tracking-[0.18em] text-brand-dark">Dayflower · for couples apart</p>
       <h1 className="mt-4 max-w-3xl text-3xl font-bold leading-tight sm:text-5xl">Long-distance relationship ideas for everyday connection.</h1>
       <p className="mt-6 max-w-2xl text-lg leading-relaxed text-body">Most advice for long-distance couples is either a list of grand gestures nobody has the energy for, or a reminder to communicate. This page is the smaller stuff: what to do on an ordinary Tuesday, how to plan around a time difference that is not going to change, and a few free tools for sending something across it.</p>
@@ -92,11 +92,11 @@ export default async function LongDistancePage() {
         </details>)}</div>
       </section>
 
-      <section className="mt-14 rounded-3xl bg-dark-canvas p-8 text-on-dark sm:p-12">
+      <section className="mt-14 rounded-3xl bg-blush p-8 text-ink sm:p-12">
         <h2 className="text-2xl font-bold sm:text-3xl">A private space for the two of you.</h2>
-        <p className="my-5 max-w-xl leading-relaxed text-on-dark-muted">Dayflower is an app for exactly two people: flowers, messages, calls, and the small everyday things, with nobody else in it. It is in private testing. Leave your email and we will tell you when it opens.</p>
-        <WaitlistForm dark />
-        <p className="mt-5 text-sm text-on-dark-muted">A signup confirmation, then a launch email. No newsletter.</p>
+        <p className="my-5 max-w-xl leading-relaxed text-body">Dayflower is an app for exactly two people: flowers, messages, calls, and the small everyday things, with nobody else in it. It is in private testing. Leave your email and we will tell you when it opens.</p>
+        <WaitlistForm />
+        <p className="mt-5 text-sm text-body">A signup confirmation, then a launch email. No newsletter.</p>
       </section>
     </main>
     <footer className="mx-auto flex max-w-4xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/bouquet">Bouquet</Link><Link href="/photobooth">Photo booth</Link><Link href="/gifts">Gifts</Link><Link href="/journal">Journal</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>

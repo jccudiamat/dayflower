@@ -48,7 +48,7 @@ const ideas = [
 
 export default async function Article() {
   return <><SiteHeader />
-    <main className="mx-auto max-w-3xl px-5 py-12 sm:py-20">
+    <main className="site-page mx-auto max-w-3xl px-5 py-12 sm:py-20">
       <nav aria-label="Breadcrumb" className="mb-8 text-sm text-brand-dark"><Link href="/journal" className="underline underline-offset-4">Dayflower Journal</Link><span aria-hidden="true"> / </span><span>Date ideas</span></nav>
       <article>
         <header className="border-b border-border-soft pb-9">
@@ -75,7 +75,7 @@ export default async function Article() {
           <p className="mt-5 rounded-2xl bg-surface p-5 leading-relaxed text-body"><strong>A question to try:</strong> “{idea.prompt}”</p>
         </section>)}
         <section className="py-9"><h2 className="text-2xl font-bold">An easy plan for tonight</h2><p className="mt-4 leading-8 text-body">Spend five minutes catching up, fifteen minutes on one activity, and five minutes saying goodbye without rushing. Before you hang up, decide whether you want to do it again or choose something different next time. Keeping the plan small makes it easier to fit into an actual evening.</p></section>
-        <aside className="rounded-3xl bg-dark-canvas p-7 text-on-dark sm:p-9"><h2 className="text-2xl font-bold">Keep a little piece of tonight.</h2><p className="my-5 leading-relaxed text-on-dark-muted">Make a photo strip you can both save. Dayflower’s photo booth is free to use now; our private app for two is still in testing.</p><Link href="/photobooth" className="gradient-button">Make a photo strip</Link><p className="mt-5 text-sm"><Link href="/journal/how-to-make-photo-strips" className="underline underline-offset-4">Read the photo strip tutorial</Link></p><p className="mt-5 text-sm"><Link href="/journal/digital-bouquet-messages#long-distance" className="underline underline-offset-4">Find a little note for someone you miss</Link></p></aside>
+        <aside className="rounded-3xl bg-blush p-7 text-ink sm:p-9"><h2 className="text-2xl font-bold">Keep a little piece of tonight.</h2><p className="my-5 leading-relaxed text-body">Make a photo strip you can both save. Dayflower’s photo booth is free to use now; our private app for two is still in testing.</p><Link href="/photobooth" className="gradient-button">Make a photo strip</Link><p className="mt-5 text-sm"><Link href="/journal/how-to-make-photo-strips" className="underline underline-offset-4">Read the photo strip tutorial</Link></p><p className="mt-5 text-sm"><Link href="/journal/digital-bouquet-messages#long-distance" className="underline underline-offset-4">Find a little note for someone you miss</Link></p></aside>
       </article>
     </main>
     <footer className="mx-auto flex max-w-3xl flex-wrap gap-6 px-5 py-8 text-sm text-body"><Link href="/">Dayflower</Link><Link href="/journal">Journal</Link><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link></footer>

@@ -25,10 +25,7 @@ const questions = [
 
 const screens = [
   { name: "Home", x: 16, note: "A little window into their day.", alt: "Dayflower Home preview with a daily photo, moods, local times, and an upcoming anniversary" },
-  { name: "Chat", x: 270, note: "Your everyday conversation.", alt: "Dayflower Chat preview with messages and shared daily photos" },
-  { name: "Dayflower", x: 520, note: "Small gestures, just because.", alt: "Dayflower preview with flowers, bouquets, cards, a photo booth, and a shared garden" },
   { name: "Memories", x: 770, note: "The little things, kept together.", alt: "Dayflower Memories preview with a timeline of flowers, photo strips, and journal entries" },
-  { name: "Together", x: 1022, note: "More to look forward to.", alt: "Dayflower Together preview with shared plans, reminders, trips, and activities" },
 ] as const;
 
 function PhotoStrip() {
@@ -77,8 +74,7 @@ export default function Home() {
       <section id="app" className="home-app" aria-labelledby="app-title">
         <div className="home-shell">
           <div className="home-app-heading"><p className="home-eyebrow">THE DAYFLOWER APP · COMING SOON</p><h2 id="app-title">Your everyday.<br /><em>A little closer.</em></h2><p className="home-lede">A private space for the two of you. Share your day, leave a little love, and keep the moments that make your story.</p><a className="home-button" href="#waitlist">Join the app waitlist <span aria-hidden="true">↗</span></a><p className="home-app-status">In private testing. Not available to download yet.</p></div>
-          <p className="home-swipe-hint">Scroll through the five app previews →</p>
-          <div className="home-screens" role="region" aria-label="Five Dayflower app previews, scroll horizontally to see more" tabIndex={0}>
+          <div className="home-screens" role="region" aria-label="Home and Memories app previews">
             {screens.map(screen => <figure key={screen.name}>
               {/* CSS windows preserve the supplied contact sheet and its UI. */}
               <div className="home-screen-window"><Image src="/models/app-preview.jpg" alt={screen.alt} width={1280} height={853} sizes="1280px" style={{ left: `${-screen.x / 244 * 100}%` }} /></div>

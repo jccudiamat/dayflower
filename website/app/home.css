@@ -1,4 +1,4 @@
-.home-page { --home-ink: #302331; --home-body: #655863; --home-rose: #883b59; --home-line: #e8dfe2; background: #fdfbf8; color: var(--home-ink); }
+.home-page { --home-ink: var(--ink); --home-body: var(--body-color); --home-rose: var(--brand); --home-line: var(--border); background: var(--bg); color: var(--home-ink); }
 .home-shell { width: min(1240px, 100%); margin-inline: auto; padding-inline: clamp(22px, 4vw, 56px); }
 .home-page a:focus-visible, .home-page summary:focus-visible, .home-page button:focus-visible, .home-page input:focus-visible, .home-screens:focus-visible { outline: 3px solid #883b59; outline-offset: 5px; }
 .home-page a { text-underline-offset: 5px; }
@@ -56,7 +56,7 @@
 .home-app-heading h2 { margin-top: 18px; font-size: clamp(38px, 4vw, 54px); }
 .home-app-heading .home-lede { margin: 20px auto 24px; }
 .home-app-status { margin-top: 12px; font-size: 12px; color: var(--home-body); }
-.home-screens { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px; margin-top: 46px; padding: 5px 2px 15px; }
+.home-screens { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; max-width: 516px; margin: 46px auto 0; padding: 5px 2px 15px; }
 .home-screen-window { position: relative; aspect-ratio: 244 / 600; overflow: hidden; border-radius: 24px; }
 .home-screen-window img { position: absolute; top: -1.166667%; width: 524.590164%; max-width: none; height: auto; }
 .home-screens figcaption { margin-top: 20px; text-align: center; }
@@ -64,7 +64,6 @@
 .home-screens figcaption p { margin-top: 6px; font-size: 11px; line-height: 1.6; color: var(--home-body); }
 .home-preview-note { margin-top: 22px; font-size: 11px; color: var(--home-body); text-align: center; }
 .home-distance-link { display: block; margin: 28px auto 0; width: fit-content; max-width: 100%; text-align: center; font-size: 13px; line-height: 1.8; color: var(--home-rose); text-decoration: underline; }
-.home-swipe-hint { display: none; }
 .home-questions { display: grid; grid-template-columns: .9fr 1.2fr; gap: 80px; padding-block: 80px; }
 .home-questions h2 { margin-top: 16px; font-size: clamp(30px, 3vw, 40px); }
 .home-questions > div > p:not(.home-eyebrow) { margin-top: 22px; color: var(--home-body); font-size: 14px; line-height: 1.8; }
@@ -99,10 +98,6 @@
   .home-bouquet-preview { width: 74%; }
   .home-strip-preview { top: 110px; }
   .home-actions { flex-direction: column; align-items: flex-start; }
-  .home-screens { grid-template-columns: repeat(5, 210px); overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 22px; }
-  .home-screens figure { scroll-snap-align: start; }
-  .home-swipe-hint { display: block; margin-top: 36px; font-size: 11px; color: var(--home-body); }
-  .home-screens { margin-top: 16px; }
   .home-questions { gap: 40px; }
   .home-waitlist-inner { gap: 26px; padding: 32px; }
   .home-signup .waitlist-row { flex-direction: column; }
@@ -132,7 +127,8 @@
   .home-tools-section { padding-bottom: 44px; }
   .home-app { padding-top: 44px; }
   .home-app-heading h2 { font-size: 40px; }
-  .home-screens { grid-template-columns: repeat(5, 224px); }
+  .home-screens { gap: 14px; margin-top: 30px; }
+  .home-screen-window { border-radius: 16px; }
   .home-questions { grid-template-columns: 1fr; gap: 28px; padding-block: 48px; }
   .home-questions > div > p:not(.home-eyebrow) { margin-top: 14px; }
   .home-waitlist { padding-bottom: 44px; }

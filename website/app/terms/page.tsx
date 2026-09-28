@@ -50,7 +50,7 @@ const sections = [
   ]
 ];
 export default function PolicyPage() {
-return <main className="mx-auto max-w-3xl px-5 py-16">
+return <main className="site-page mx-auto max-w-3xl px-5 py-16">
 <Link href="/" className="text-sm font-semibold text-brand-dark hover:underline">← Dayflower</Link>
 <h1 className="mt-8 text-4xl font-bold">Terms of Service</h1>
 <p className="mt-3 text-sm text-body">Review draft · Updated September 6, 2026</p>
