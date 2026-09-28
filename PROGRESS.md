@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### Widgets stop blinking; the heart on its line; their days as a list to scroll (2026-09-28, not yet published)
+### Widgets stop blinking; the heart on its line; their days as a list to scroll (2026-09-28, build 126)
 
 The user saw every Dayflower widget blink for a moment whenever any widget did something (a heartbeat, a heart), found the heart too low on the phone, and asked for the scroll-or-rotate choice for My Day in Settings.
 
@@ -27,6 +27,7 @@ The user saw every Dayflower widget blink for a moment whenever any widget did s
 - **The viewer opens on the day that was on the widget.** A rotating day's photo (per child, direct activity intent) and a scrolled day both send `dayflower://days?id=`; `_openWidgetTarget` sets `openTheirDaysOn` and Home opens `DaysViewer` at that day's index, their newest if it has gone.
 - Hearts in the list verified: the island's heart went red in place and the list stayed on it.
 - Release APK 52,244,843 bytes (2.3 KB more than 125; about 180 KB under the 50 MB ceiling).
+- **Published as build 126.** Patches 3.9 MB (from 125 and 124), 4.3 MB (123) and 4.6 MB (122), each checked to rebuild 126 byte for byte. ⚠️ Still to see on the phone: that the widgets no longer blink, the heart's place in its system font, and whether its launcher lets a tap on a scrolled day open the app.
 - Tests: `test/widget_days_test.dart` (the setting's states and rows; the Kotlin key and value; the list service declared and launcher-only; rows send an Icon and fill in their taps; the Application keeps WorkManager steady), and two in home_screen_test (a widget tap opens the viewer on that day; a day that has gone opens their newest). 667 tests pass.
 
 ### One heart on the widget, not five emojis (2026-09-28, build 125)
