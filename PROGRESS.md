@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### Call controls like Google Meet, and game mode (2026-09-28, not yet published)
+### Call controls like Google Meet, and game mode (2026-09-28, build 123)
 
 The user asked for Meet's controls, with a ⋮ that opens a sheet holding the ring light and a new game mode: the call shrunk to a small circle of the partner, floating over a game.
 
@@ -29,8 +29,9 @@ The user asked for Meet's controls, with a ⋮ that opens a sheet holding the ri
   - **Verified on the emulator** with a temporary build that floated the circle on Home: round with truly transparent corners, the rim, the tulip fallback, a drag across the screen settling against the left edge, and a tap bringing the app back with the circle gone. No crashes. The temporary build was removed. ⚠️ **Not yet seen with live video**: drawing the partner's track needs a real call on two phones.
 - Tests: `test/call_controls_test.dart` (the bar's buttons and order, the sheet, the ring light's tile and slider, the permission dialog then floating after Settings, updates only when something changed, the circle going with the call, no ⋮ where there is nothing behind it).
 - APK after this and the composer and self-view work: 52,242,845 bytes, **about 186 KB left** under the ceiling.
+- **Published as build 123**, the first with patches for phones on the new updater: 4.3 to 4.4 MB from 122, 121, 120 and 119 against the 49.8 MB APK, each downloaded back from the bucket and checked to rebuild 123 byte for byte. ⚠️ Still to see on a phone: 122 to 123 actually downloading the patch (the update sheet should say about 4.4 MB).
 
-### A call that ends while floating closes its window; the self-view's buttons (2026-09-28, not yet published)
+### A call that ends while floating closes its window; the self-view's buttons (2026-09-28, build 123)
 
 - 🔴 **The floating window stayed up after the call ended, with the rest of the app shrunk inside it** (reported by the user). `CallPipGate` handed the window back to the app once there was no live call, and nothing ever closed it. Now `MainActivity.leavePip()` calls `moveTaskToBack(true)` whenever Dart says the call stopped (`setCallActive(false)`) while floating, and whenever the Activity finds itself floating with no call. A floating task moved to the back leaves picture-in-picture and stays alive behind, as if Home had been pressed with no call up; `finish()` would have made the next open a cold start. Until the window has gone, the gate draws the call's dark canvas rather than a flash of the app.
   - **Verified on the emulator** (API 36 image) with a temporary build that floated on Home with no call up: the log shows the PIP transition and then `moveTaskToBack` 140 ms later, the task back to `mode=fullscreen visible=false` with its process alive, and the home screen with no window left. The temporary build was removed. ⚠️ Not yet seen with a real call ending, which needs two phones.
@@ -38,7 +39,7 @@ The user asked for Meet's controls, with a ⋮ that opens a sheet holding the ri
   - **Hide is a picture struck through, and hidden it is a picture** (`Icons.hide_image_outlined` drawn as `_photoOff`, and `CupertinoIcons.photo`), in place of the eye. `_photoOff` is its own drawing: `_photo` plus `_slash` ran the line through the sun and along the hills.
   - **They fade after 3 seconds untouched** (`CallSelfView.controlsFor`), and a tap or drag on the tile brings them back. While faded they take no touches, so the first tap on a bare tile only shows them rather than pressing one you could not see. The test fails if they do (checked).
 
-### The chat composer: a pill while empty, stacked once you type (2026-09-28, not yet published)
+### The chat composer: a pill while empty, stacked once you type (2026-09-28, build 123)
 
 The user asked for WhatsApp's composer with the flower where WhatsApp keeps its sticker button, then for it to stack like Claude's once there are words (`_buildComposer` and `_pill` in `flowers_screen.dart`).
 
