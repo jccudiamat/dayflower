@@ -51,7 +51,7 @@ test('email and text rules reject header/control injection while preserving ordi
 });
 
 test('strict bouquet validation rejects forged options, non-finite numbers, oversized fields and unsafe image URLs', () => {
-  for (const change of [{ to: 'a\r\nb' }, { from: 'a\u0000b' }, { message: 'x'.repeat(281) }, { border: '1' }, { wrapScale: Infinity }, { background: 900 }, { admin: true }]) assert.equal(model.validateBouquet({ ...model.makeBouquet(), ...change }, true), null);
+  for (const change of [{ to: 'a\r\nb' }, { from: 'a\u0000b' }, { message: 'x'.repeat(model.MAX_NOTE_LENGTH + 1) }, { border: '1' }, { wrapScale: Infinity }, { background: 900 }, { admin: true }]) assert.equal(model.validateBouquet({ ...model.makeBouquet(), ...change }, true), null);
   const photo = { frame: 0, x: 200, y: 300, angle: 0, scale: 1, zoom: 1, cropX: 50, cropY: 50, caption: '', layer: 'front' };
   for (const src of ['javascript:alert(1)', 'https://example.com/a.png', 'data:image/svg+xml;base64,PHN2Zz4=', 'data:text/html;base64,AAAA']) assert.equal(model.validateBouquet({ ...model.makeBouquet(), photos: [{ ...photo, src }] }, true), null);
   assert.ok(model.validateBouquet({ ...model.makeBouquet(), message: '<script>alert(1)</script> 愛' }, true)); // Rendered as text, never HTML.

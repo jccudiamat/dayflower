@@ -6,7 +6,7 @@ import ts from 'typescript';
 const compiled = ts.transpileModule(readFileSync(new URL('../app/bouquet/model.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
 const model = { exports: {} };
 new Function('module', 'exports', compiled)(model, model.exports);
-const { makeBouquet, arrange, encodeBouquet, decodeBouquet, validateBouquet, renderBouquet, spriteRect, MAX_STEMS } = model.exports;
+const { makeBouquet, arrange, encodeBouquet, decodeBouquet, validateBouquet, renderBouquet, spriteRect, MAX_STEMS, MAX_NOTE_LENGTH, MAX_PRIVATE_LINK_LENGTH, papers, wrappingLayers, wrapperAsset, noteLayout } = model.exports;
 
 test('shared bouquet preserves flowers, placement, wrapping, and multilingual note', () => {
   const bouquet = makeBouquet(1);
@@ -21,9 +21,9 @@ test('shared bouquet preserves flowers, placement, wrapping, and multilingual no
 });
 
 test('invalid or truncated links fail closed', () => {
-  for (const encoded of ['', 'undefined', '<script>', 'x'.repeat(9001), encodeBouquet(makeBouquet()).slice(0, -10), btoa('{"v":99}')]) assert.equal(decodeBouquet(encoded), null);
+  for (const encoded of ['', 'undefined', '<script>', 'x'.repeat(MAX_PRIVATE_LINK_LENGTH + 1), encodeBouquet(makeBouquet()).slice(0, -10), btoa('{"v":99}')]) assert.equal(decodeBouquet(encoded), null);
   const b = makeBouquet();
-  for (const value of [null, {}, { ...b, v: 2 }, { ...b, paper: 9 }, { ...b, paper: .5 }, { ...b, message: 'x'.repeat(281) }, { ...b, stems: Array(MAX_STEMS + 1).fill(b.stems[0]) }]) assert.equal(validateBouquet(value), null);
+  for (const value of [null, {}, { ...b, v: 2 }, { ...b, paper: papers.length }, { ...b, paper: .5 }, { ...b, message: 'x'.repeat(MAX_NOTE_LENGTH + 1) }, { ...b, stems: Array(MAX_STEMS + 1).fill(b.stems[0]) }]) assert.equal(validateBouquet(value), null);
   for (const stem of [{ ...b.stems[0], flower: 99 }, { ...b.stems[0], flower: 1.2 }, { ...b.stems[0], x: Infinity }, { ...b.stems[0], angle: 46 }, { ...b.stems[0], scale: .1 }]) assert.equal(validateBouquet({ ...b, stems: [stem] }), null);
   assert.throws(() => encodeBouquet({ ...b, stems: [] }), /at least one flower/);
 });
@@ -58,15 +58,15 @@ function recordingCanvas() {
 }
 
 test('export draws every flower and wrapping, omits editing marks, and fits long notes', () => {
-  for (let paper = 0; paper < 3; paper++) for (const message of ['x'.repeat(280), '🌷'.repeat(140), 'hello\n'.repeat(46), '', 'You make my day.']) {
+  for (let paper = 0; paper < 3; paper++) for (const message of ['x'.repeat(2000), '🌷'.repeat(1000), 'hello\n'.repeat(333), '', 'You make my day.']) {
     const b = { ...makeBouquet(), paper, message };
     const { canvas, calls } = recordingCanvas();
     renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
-    assert.equal(canvas.width, 1120); assert.equal(canvas.height, 1120);
+    assert.equal(canvas.width, 1120); assert.ok(canvas.height >= 1120);
     assert.equal(calls.filter(c => c[0] === 'drawImage').length, b.stems.length + (paper < 2 ? 1 : 0));
     assert.equal(calls.filter(c => c[0] === 'arc').length, 0);
     for (const call of calls) for (const arg of call.slice(1)) if (typeof arg === 'number') assert.ok(Number.isFinite(arg));
-    for (const [, text, x, y] of calls.filter(c => c[0] === 'fillText')) { assert.ok(x >= 0 && x <= 1120); assert.ok(y >= 0 && y <= 1120, `Text outside image: ${text}`); }
+    for (const [, text, x, y] of calls.filter(c => c[0] === 'fillText')) { assert.ok(x >= 0 && x <= 1120); assert.ok(y >= 0 && y < canvas.height, `Text outside image: ${text}`); }
   }
   const { canvas, calls } = recordingCanvas();
   renderBouquet(canvas, makeBouquet(), { naturalWidth: 1536, naturalHeight: 1024 }, 1);
@@ -96,9 +96,9 @@ test('each wrapper brackets all flowers and photos between back and front layers
     const b = { ...makeBouquet(), paper, stems: arrange([0, 12, 36, 53]) };
     renderBouquet(canvas, b, art, undefined, assets);
     const images = calls.filter(c => c[0] === 'drawImage');
-    assert.equal(images.length, b.stems.length + (paper === 2 ? 0 : 2));
+    assert.equal(images.length, b.stems.length + (paper === 2 ? 0 : 2 * wrappingLayers(paper).length));
     if (paper !== 2) {
-      assert.equal(images[0][1], paper < 5 ? wrapped : special);
+      assert.equal(images[0][1], assets[wrapperAsset(paper)]);
       assert.equal(images.at(-1)[1], images[0][1]);
       assert.notEqual(images[0][2], images.at(-1)[2], 'Back and front use distinct sprite cells');
     }
@@ -151,7 +151,47 @@ test('note stationery and lettering round-trip and reject untrusted choices', ()
     const b = { ...makeBouquet(), ...style };
     assert.ok(validateBouquet(b, true), name);
     const { canvas } = recordingCanvas(); renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
-    assert.equal(canvas.width, canvas.height);
+    assert.ok(canvas.height >= canvas.width);
+  }
+});
+
+test('full multilingual notes survive sharing and expand without losing text', () => {
+  const b = { ...makeBouquet(), paper: 12, wrapScale: 1.65, stems: arrange(Array(MAX_STEMS).fill(0)), message: '愛'.repeat(MAX_NOTE_LENGTH) };
+  const encoded = encodeBouquet(b);
+  assert.ok(encoded.length <= MAX_PRIVATE_LINK_LENGTH);
+  assert.deepEqual(decodeBouquet(encoded), b);
+  assert.ok(validateBouquet(b, true));
+  const { canvas, calls } = recordingCanvas();
+  const layout = noteLayout(canvas.getContext('2d'), b);
+  assert.equal(layout.lines.join(''), b.message);
+  assert.ok(layout.canvasHeight > 1120);
+  assert.match(layout.font, /32px/);
+  renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
+  assert.equal(canvas.height, layout.canvasHeight);
+  assert.ok(!calls.some(c => c[0] === 'fillText' && /a little something/i.test(c[1])));
+  assert.deepEqual(noteLayout(canvas.getContext('2d'), { ...b, message: 'First paragraph\n\nSecond paragraph' }).lines, ['First paragraph', '', 'Second paragraph']);
+  const pathological = noteLayout(canvas.getContext('2d'), { ...b, message: 'a\n'.repeat(1000) });
+  assert.equal(pathological.lines.join('').replace(/\s/g, ''), 'a'.repeat(1000));
+  assert.ok(pathological.canvasHeight < 5500);
+});
+
+test('larger layered wrapping stays inside the card at every size and lean extreme', () => {
+  const { fitScale, WRAP_PIVOT: pivot, ARRANGEMENT_OFFSET: offset } = model.exports;
+  for (const paper of [9, 10, 11, 12]) for (const wrapScale of [.75, 1.65]) for (const wrapAngle of [-20, 20]) {
+    const fit = fitScale({ ...makeBouquet(), paper, wrapScale, wrapAngle });
+    const layers = wrappingLayers(paper);
+    assert.equal(layers.length, paper < 11 ? 2 : 3);
+    for (const layer of layers) {
+      const angle = (wrapAngle + layer.angle) * Math.PI / 180;
+      for (const x of [104, 104 + 512 * (layer.paper >= 5 ? 1.055 : 1)]) for (const y of [130, 730]) {
+        const dx = (x - pivot.x) * layer.sx * wrapScale;
+        const dy = (y - pivot.y) * layer.sy * wrapScale;
+        const px = offset.x + pivot.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) * fit;
+        const py = offset.y + pivot.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) * fit;
+        assert.ok(px >= 24 - 1e-6 && px <= 1096 + 1e-6);
+        assert.ok(py >= 112 - 1e-6 && py <= 887 + 1e-6);
+      }
+    }
   }
 });
 

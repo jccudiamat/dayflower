@@ -70,6 +70,11 @@ export const papers = [
   { name: "Blue toile", background: "#eaf0f8", ink: "#506080", sprite: 2 },
   { name: "Blush mesh", background: "#faedf3", ink: "#85506c", sprite: 4 },
   { name: "Vintage print", background: "#f2efe8", ink: "#66594b", sprite: 6 },
+  // Append only: existing gift links store these indices.
+  { name: "Rose double wrap", background: "#f7edf0", ink: "#703e54", sprite: 6 },
+  { name: "Kraft double wrap", background: "#f4eee3", ink: "#795840", sprite: 0 },
+  { name: "Lilac triple wrap", background: "#eee9f7", ink: "#65507c", sprite: 7 },
+  { name: "Ivory triple wrap", background: "#faf6ec", ink: "#78634b", sprite: 6 },
 ] as const;
 
 export const backgrounds = [
@@ -149,7 +154,11 @@ export function fitScale(bouquet: Bouquet) {
   }
   if (papers[bouquet.paper].sprite >= 0 && hasContents(bouquet)) {
     const k = bouquet.wrapScale ?? 1;
-    box(WRAP_PIVOT.x, WRAP_PIVOT.y, (104 - WRAP_PIVOT.x) * k, (130 - WRAP_PIVOT.y) * k, 512 * (bouquet.paper >= 5 ? 1.055 : 1) * k, 600 * k, (bouquet.wrapAngle ?? 0) * Math.PI / 180);
+    for (const layer of wrappingLayers(bouquet.paper)) {
+      box(WRAP_PIVOT.x, WRAP_PIVOT.y, (104 - WRAP_PIVOT.x) * layer.sx * k, (130 - WRAP_PIVOT.y) * layer.sy * k,
+        512 * (layer.paper >= 5 ? 1.055 : 1) * layer.sx * k, 600 * layer.sy * k,
+        ((bouquet.wrapAngle ?? 0) + layer.angle) * Math.PI / 180);
+    }
   }
   return fit;
 }
@@ -240,6 +249,9 @@ export const prints = [
 export const DEFAULT_PRINT_OPACITY = 30;
 export const VESSEL_W = 520;
 export const VESSEL_H = 380;
+export const MAX_NOTE_LENGTH = 2000;
+export const MAX_PRIVATE_LINK_LENGTH = 24000;
+export const MAX_WRAP_SCALE = 1.65;
 export const MAX_STEMS = 24;
 export const MAX_PHOTOS = 8;
 export const MAX_PHOTO_LENGTH = 180_000;
@@ -285,13 +297,13 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
   if (!value || typeof value !== "object") return null;
   const b = value as Record<string, unknown>;
   if (b.v !== 1 || !Number.isInteger(b.paper) || !finiteIn(b.paper, 0, papers.length - 1) ||
-      !validText(b.to, 40) || !validText(b.from, 40) || !validText(b.message, 280, true) || !Array.isArray(b.stems) || b.stems.length > MAX_STEMS) return null;
+      !validText(b.to, 40) || !validText(b.from, 40) || !validText(b.message, MAX_NOTE_LENGTH, true) || !Array.isArray(b.stems) || b.stems.length > MAX_STEMS) return null;
   if (strict) {
     if (Object.keys(b).some(k => !["v", "stems", "paper", "to", "from", "message", "photos", "vessel", "print", "printOpacity", "wrapScale", "wrapAngle", "stemFlower", "background", "border", "notePaper", "lettering"].includes(k))) return null;
     for (const [key, max] of [["vessel", vessels.length - 1], ["print", prints.length - 1], ["stemFlower", flowers.length - 1], ["background", backgrounds.length - 1], ["border", borders.length - 1], ["notePaper", notePapers.length - 1], ["lettering", letterings.length - 1]] as const) {
       if (b[key] !== undefined && (!Number.isInteger(b[key]) || !finiteIn(b[key], 0, max))) return null;
     }
-    if (b.printOpacity !== undefined && !finiteIn(b.printOpacity, 0, 100) || b.wrapScale !== undefined && !finiteIn(b.wrapScale, .75, 1.3) || b.wrapAngle !== undefined && !finiteIn(b.wrapAngle, -20, 20)) return null;
+    if (b.printOpacity !== undefined && !finiteIn(b.printOpacity, 0, 100) || b.wrapScale !== undefined && !finiteIn(b.wrapScale, .75, MAX_WRAP_SCALE) || b.wrapAngle !== undefined && !finiteIn(b.wrapAngle, -20, 20)) return null;
   }
   const stems: Stem[] = [];
   for (const item of b.stems) {
@@ -328,7 +340,7 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
   const vessel = Number.isInteger(b.vessel) && finiteIn(b.vessel, 0, vessels.length - 1) ? b.vessel as number : 0;
   const print = Number.isInteger(b.print) && finiteIn(b.print, 0, prints.length - 1) ? b.print as number : 0;
   const printOpacity = finiteIn(b.printOpacity, 0, 100) ? Math.round(b.printOpacity as number) : DEFAULT_PRINT_OPACITY;
-  const wrapScale = finiteIn(b.wrapScale, .75, 1.3) ? b.wrapScale as number : 1;
+  const wrapScale = finiteIn(b.wrapScale, .75, MAX_WRAP_SCALE) ? b.wrapScale as number : 1;
   const wrapAngle = finiteIn(b.wrapAngle, -20, 20) ? b.wrapAngle as number : 0;
   const stemFlower = Number.isInteger(b.stemFlower) && finiteIn(b.stemFlower, 0, flowers.length - 1) ? b.stemFlower as number : undefined;
   const background = Number.isInteger(b.background) && finiteIn(b.background, 0, backgrounds.length - 1) ? b.background as number : 0;
@@ -361,7 +373,7 @@ export function encodeBouquet(bouquet: Bouquet): string {
   return btoa(Array.from(bytes, b => String.fromCharCode(b)).join("")).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
 }
 export function decodeBouquet(encoded: string): Bouquet | null {
-  if (!encoded || encoded.length > 9000 || !/^[\w-]+$/.test(encoded)) return null;
+  if (!encoded || encoded.length > MAX_PRIVATE_LINK_LENGTH || !/^[\w-]+$/.test(encoded)) return null;
   try {
     const base64 = encoded.replaceAll("-", "+").replaceAll("_", "/");
     const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
@@ -377,15 +389,45 @@ export function stemGeometry(stem: Stem) {
   const h = 470 * stem.scale;
   return { w: h * .75, h, angle: stem.angle * Math.PI / 180 };
 }
-/** Special rear paper tips extend into the following cell's empty margin. */
+type WrappingLayer = { paper: number; sx: number; sy: number; angle: number };
+export function wrappingLayers(paper: number): WrappingLayer[] {
+  const double = (outer: number, inner: number) => [
+    { paper: outer, sx: 1.5, sy: .96, angle: -7 },
+    { paper: inner, sx: 1.18, sy: 1, angle: 6 },
+  ];
+  const triple = (outer: number, middle: number, inner: number) => [
+    { paper: outer, sx: 1.7, sy: .98, angle: -8 },
+    { paper: middle, sx: 1.43, sy: .97, angle: 9 },
+    { paper: inner, sx: 1.18, sy: 1, angle: 0 },
+  ];
+  if (paper === 9) return double(4, 0);
+  if (paper === 10) return double(8, 5);
+  if (paper === 11) return triple(3, 1, 1);
+  if (paper === 12) return triple(4, 0, 0);
+  return [{ paper, sx: 1, sy: 1, angle: 0 }];
+}
+export function wrapperAsset(paper: number) {
+  return wrappingLayers(paper)[0].paper >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL;
+}
+export function wrapperLayerTransform(ctx: CanvasRenderingContext2D, layer: WrappingLayer) {
+  ctx.translate(WRAP_PIVOT.x, WRAP_PIVOT.y);
+  ctx.rotate(layer.angle * Math.PI / 180); ctx.scale(layer.sx, layer.sy);
+  ctx.translate(-WRAP_PIVOT.x, -WRAP_PIVOT.y);
+}
+/** Fan real paper layers around the same tie; draw all backs before flowers. */
 export function drawWrapperLayer(ctx: CanvasRenderingContext2D, paper: number, front: boolean, image: HTMLImageElement) {
-  const index = paper >= 5 ? (paper - 5) * 2 : paper === 0 ? 0 : paper === 1 ? 2 : paper === 3 ? 4 : 6;
-  const crop = spriteRect(index + (front ? 1 : 0), image.naturalWidth, image.naturalHeight);
-  const inset = paper >= 5 && front ? .07 : 0;
-  const bleed = paper >= 5 && !front ? .055 : 0;
-  const width = 1 - inset + bleed;
-  ctx.drawImage(image, crop.x + crop.w * inset, crop.y, crop.w * width, crop.h,
-    104 + 512 * inset, 130, 512 * width, 600);
+  for (const layer of wrappingLayers(paper)) {
+    ctx.save(); wrapperLayerTransform(ctx, layer);
+    const base = layer.paper;
+    const index = base >= 5 ? (base - 5) * 2 : base === 0 ? 0 : base === 1 ? 2 : base === 3 ? 4 : 6;
+    const crop = spriteRect(index + (front ? 1 : 0), image.naturalWidth, image.naturalHeight);
+    const inset = base >= 5 && front ? .07 : 0;
+    const bleed = base >= 5 && !front ? .055 : 0;
+    const width = 1 - inset + bleed;
+    ctx.drawImage(image, crop.x + crop.w * inset, crop.y, crop.w * width, crop.h,
+      104 + 512 * inset, 130, 512 * width, 600);
+    ctx.restore();
+  }
 }
 
 /** Centre of the bloom end, which is what the selection ring circles. */
@@ -439,7 +481,7 @@ export function hitStem(stems: Stem[], x: number, y: number): Stem | undefined {
 
 function wrappedLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
   const lines: string[] = [];
-  for (const paragraph of text.replace(/\s+/g, " ").trim().split("\n")) {
+  for (const paragraph of text.replace(/\r\n?/g, "\n").replace(/[^\S\n]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().split("\n")) {
     let line = "";
     // Break at characters as well as spaces: long words and CJK must fit too.
     for (const word of paragraph.split(/(\s+)/)) {
@@ -453,6 +495,20 @@ function wrappedLines(ctx: CanvasRenderingContext2D, text: string, width: number
     lines.push(line.trimEnd());
   }
   return lines;
+}
+
+/** Keep lettering readable and add paper below the arrangement as needed. */
+export function noteLayout(ctx: CanvasRenderingContext2D, bouquet: Bouquet) {
+  const lettering = letterings[bouquet.lettering ?? 0];
+  const font = `${lettering.style} 32px ${lettering.family}`;
+  ctx.font = font;
+  let lines = wrappedLines(ctx, bouquet.message, WIDTH - 208);
+  // Pathological one-character-per-line input must not create a 40,000px
+  // canvas. Reflow it without removing words; ordinary paragraphs stay intact.
+  if (lines.length > 96) lines = wrappedLines(ctx, bouquet.message.replace(/\s+/g, " "), WIDTH - 208);
+  const lineHeight = 44;
+  const noteHeight = Math.max(166, lines.length * lineHeight + 82);
+  return { font, lines, lineHeight, noteHeight, canvasHeight: 903 + noteHeight + 51 };
 }
 
 export function photoGeometry(photo: Photo) {
@@ -539,25 +595,26 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   canvas.height = HEIGHT;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Your browser could not create the bouquet image.");
+  const layout = noteLayout(ctx, bouquet);
+  canvas.height = layout.canvasHeight;
+  const height = canvas.height;
   const paper = papers[bouquet.paper];
   const colors = bouquetColors(bouquet);
   ctx.fillStyle = colors.color;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  ctx.fillRect(0, 0, WIDTH, height);
   // Stationery sits under everything, including the title, so a border frames
   // the whole card the way a printed sheet would.
-  drawPrint(ctx, bouquet.print ?? 0, bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY, colors.ink);
-  drawCardBorder(ctx, bouquet.border ?? 0, colors.ink);
+  drawPrint(ctx, bouquet.print ?? 0, bouquet.printOpacity ?? DEFAULT_PRINT_OPACITY, colors.ink, height);
+  drawCardBorder(ctx, bouquet.border ?? 0, colors.ink, height);
   ctx.textAlign = "center";
   ctx.fillStyle = colors.ink;
-  ctx.font = '16px sans-serif';
-  ctx.fillText("A LITTLE SOMETHING, JUST FOR YOU", WIDTH / 2, 42);
   const lettering = letterings[bouquet.lettering ?? 0];
   ctx.font = `${lettering.style} 40px ${lettering.family}`;
   ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 86, 620);
   ctx.save();
   ctx.beginPath(); ctx.rect(24, 112, WIDTH - 48, 775); ctx.clip();
   ctx.translate(ARRANGEMENT_OFFSET.x, ARRANGEMENT_OFFSET.y);
-  const wrapper = assets[bouquet.paper >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL];
+  const wrapper = assets[wrapperAsset(bouquet.paper)];
   // Both halves of the paper and the taper below share one transform, or the
   // front would slide off the back the moment the wrapper is turned.
   const wrapTransform = () => {
@@ -588,10 +645,11 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     // Clip at the front paper's V-shaped opening, not its outer silhouette.
     // A small underlap hides seams; lower leaves cannot escape beside the bow.
     // Apply exactly the same rotation and scale as both paper layers.
-    const special = bouquet.paper >= 5;
+    const inner = wrappingLayers(bouquet.paper).at(-1)!;
+    const special = inner.paper >= 5;
     const left = special ? 148 : 182, right = special ? 572 : 538;
     const shoulder = special ? 357 : 402;
-    ctx.save(); wrapTransform();
+    ctx.save(); wrapTransform(); wrapperLayerTransform(ctx, inner);
     ctx.beginPath(); ctx.moveTo(-5000, -5000); ctx.lineTo(5000, -5000);
     ctx.lineTo(right, shoulder); ctx.lineTo(360, 510); ctx.lineTo(left, shoulder); ctx.closePath();
     ctx.restore();
@@ -636,39 +694,38 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.restore();   // end shrink-to-fit
   ctx.restore();
   const note = notePapers[bouquet.notePaper ?? 0];
+  const noteY = 903, noteBottom = noteY + layout.noteHeight;
   ctx.fillStyle = "#44332612";
-  ctx.beginPath(); ctx.roundRect(67, 909, WIDTH - 128, 166, 8); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(67, noteY + 6, WIDTH - 128, layout.noteHeight, 8); ctx.fill();
   ctx.fillStyle = note.color;
-  ctx.beginPath(); ctx.roundRect(64, 903, WIDTH - 128, 166, 8); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(64, noteY, WIDTH - 128, layout.noteHeight, 8); ctx.fill();
+  const textTop = noteY + 24 + (layout.noteHeight - 82 - layout.lines.length * layout.lineHeight) / 2;
   ctx.save(); ctx.strokeStyle = note.ink; ctx.globalAlpha = .15;
   if (bouquet.notePaper === 4) {
-    for (let y = 937; y < 1040; y += 26) { ctx.beginPath(); ctx.moveTo(84, y); ctx.lineTo(WIDTH - 84, y); ctx.stroke(); }
-    ctx.strokeStyle = "#ad6974"; ctx.beginPath(); ctx.moveTo(105, 910); ctx.lineTo(105, 1062); ctx.stroke();
+    for (let y = textTop + 39; y < noteBottom - 48; y += layout.lineHeight) { ctx.beginPath(); ctx.moveTo(84, y); ctx.lineTo(WIDTH - 84, y); ctx.stroke(); }
+    ctx.strokeStyle = "#ad6974"; ctx.beginPath(); ctx.moveTo(94, noteY + 7); ctx.lineTo(94, noteBottom - 7); ctx.stroke();
   } else if (bouquet.notePaper === 1 || bouquet.notePaper === 5) {
-    ctx.strokeRect(73, 912, WIDTH - 146, 148);
+    ctx.strokeRect(73, noteY + 9, WIDTH - 146, layout.noteHeight - 18);
   }
   ctx.restore();
-  ctx.fillStyle = note.ink;
-  let size = 30;
-  let lines: string[] = [];
-  do { ctx.font = `${lettering.style} ${size}px ${lettering.family}`; lines = wrappedLines(ctx, bouquet.message, WIDTH - 144); if (lines.length * (size + 6) <= 100) break; size--; } while (size > 10);
-  const lineHeight = size + 6;
-  lines.forEach((line, i) => ctx.fillText(line, WIDTH / 2, 927 + (100 - lines.length * lineHeight) / 2 + i * lineHeight + size));
+  ctx.fillStyle = note.ink; ctx.font = layout.font;
+  ctx.textAlign = layout.lines.length > 4 ? "left" : "center";
+  layout.lines.forEach((line, i) => ctx.fillText(line, layout.lines.length > 4 ? 104 : WIDTH / 2, textTop + i * layout.lineHeight + 32));
+  ctx.textAlign = "center";
   ctx.font = "16px sans-serif";
-  ctx.fillText(bouquet.from.trim() ? `With love, ${bouquet.from.trim()}` : "With love", WIDTH / 2, 1049, 590);
-  ctx.font = "13px sans-serif";
-  ctx.fillStyle = colors.ink;
-  ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, 1098);
+  ctx.fillText(bouquet.from.trim() ? `With love, ${bouquet.from.trim()}` : "With love", WIDTH / 2, noteBottom - 22, 590);
+  ctx.font = "13px sans-serif"; ctx.fillStyle = colors.ink;
+  ctx.fillText("MADE WITH LOVE · DAYFLOWER", WIDTH / 2, height - 22);
 }
 
-export function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: string) {
+export function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, ink: string, height = HEIGHT) {
   if (!border) return;
   ctx.save(); ctx.strokeStyle = ink; ctx.globalAlpha = .5; ctx.lineWidth = 1.5;
   if (border >= 6) {
     if (border === 6 || border === 7) {
       ctx.strokeStyle = border === 7 ? "#aa8850" : ink;
-      ctx.strokeRect(28, 28, WIDTH - 56, HEIGHT - 56);
-      for (const [x, y, rotation] of [[50, 50, .7], [WIDTH - 50, 50, -.7], [50, HEIGHT - 50, 2.4], [WIDTH - 50, HEIGHT - 50, -2.4]]) {
+      ctx.strokeRect(28, 28, WIDTH - 56, height - 56);
+      for (const [x, y, rotation] of [[50, 50, .7], [WIDTH - 50, 50, -.7], [50, height - 50, 2.4], [WIDTH - 50, height - 50, -2.4]]) {
         ctx.save(); ctx.translate(x, y); ctx.rotate(rotation);
         ctx.fillStyle = ctx.strokeStyle;
         motifSprig(ctx, border === 7 ? 22 : 32);
@@ -676,31 +733,36 @@ export function drawCardBorder(ctx: CanvasRenderingContext2D, border: number, in
         ctx.restore();
       }
     } else if (border === 8) {
-      ctx.strokeRect(34, 34, WIDTH - 68, HEIGHT - 68);
+      ctx.strokeRect(34, 34, WIDTH - 68, height - 68);
       for (let n = 46; n < WIDTH - 40; n += 16) {
-        for (const y of [23, HEIGHT - 23]) { ctx.beginPath(); ctx.arc(n, y, 5, 0, Math.PI * 2); ctx.stroke(); }
+        for (const y of [23, height - 23]) { ctx.beginPath(); ctx.arc(n, y, 5, 0, Math.PI * 2); ctx.stroke(); }
+      }
+      for (let n = 46; n < height - 40; n += 16) {
         for (const x of [23, WIDTH - 23]) { ctx.beginPath(); ctx.arc(x, n, 5, 0, Math.PI * 2); ctx.stroke(); }
       }
     } else if (border === 9) {
       ctx.lineWidth = 5;
       for (let n = 35; n < WIDTH - 35; n += 32) {
         ctx.strokeStyle = n % 64 < 32 ? "#a9606b" : "#6c8296";
-        for (const y of [22, HEIGHT - 22]) { ctx.beginPath(); ctx.moveTo(n, y); ctx.lineTo(n + 12, y); ctx.stroke(); }
+        for (const y of [22, height - 22]) { ctx.beginPath(); ctx.moveTo(n, y); ctx.lineTo(n + 12, y); ctx.stroke(); }
+      }
+      for (let n = 35; n < height - 35; n += 32) {
+        ctx.strokeStyle = n % 64 < 32 ? "#a9606b" : "#6c8296";
         for (const x of [22, WIDTH - 22]) { ctx.beginPath(); ctx.moveTo(x, n); ctx.lineTo(x, n + 12); ctx.stroke(); }
       }
-    } else { ctx.strokeRect(32, 32, WIDTH - 64, HEIGHT - 64); ctx.lineWidth = 3; ctx.strokeRect(39, 39, WIDTH - 78, HEIGHT - 78); }
+    } else { ctx.strokeRect(32, 32, WIDTH - 64, height - 64); ctx.lineWidth = 3; ctx.strokeRect(39, 39, WIDTH - 78, height - 78); }
     ctx.restore(); return;
   }
   if (border === 3) ctx.setLineDash([3, 7]);
   if (border === 4) {
-    for (const [x, y, dx, dy] of [[20, 20, 1, 1], [WIDTH - 20, 20, -1, 1], [20, HEIGHT - 20, 1, -1], [WIDTH - 20, HEIGHT - 20, -1, -1]]) {
+    for (const [x, y, dx, dy] of [[20, 20, 1, 1], [WIDTH - 20, 20, -1, 1], [20, height - 20, 1, -1], [WIDTH - 20, height - 20, -1, -1]]) {
       ctx.beginPath(); ctx.moveTo(x + dx * 50, y); ctx.lineTo(x, y); ctx.lineTo(x, y + dy * 50); ctx.stroke();
     }
   } else if (border === 5) {
     ctx.beginPath();
-    for (let x = 20; x <= WIDTH - 20; x += 20) { ctx.moveTo(x - 10, 17); ctx.quadraticCurveTo(x, 29, x + 10, 17); ctx.moveTo(x - 10, HEIGHT - 17); ctx.quadraticCurveTo(x, HEIGHT - 29, x + 10, HEIGHT - 17); }
-    for (let y = 20; y <= HEIGHT - 20; y += 20) { ctx.moveTo(17, y - 10); ctx.quadraticCurveTo(29, y, 17, y + 10); ctx.moveTo(WIDTH - 17, y - 10); ctx.quadraticCurveTo(WIDTH - 29, y, WIDTH - 17, y + 10); } ctx.stroke();
-  } else { ctx.strokeRect(18, 18, WIDTH - 36, HEIGHT - 36); if (border === 2) ctx.strokeRect(24, 24, WIDTH - 48, HEIGHT - 48); }
+    for (let x = 20; x <= WIDTH - 20; x += 20) { ctx.moveTo(x - 10, 17); ctx.quadraticCurveTo(x, 29, x + 10, 17); ctx.moveTo(x - 10, height - 17); ctx.quadraticCurveTo(x, height - 29, x + 10, height - 17); }
+    for (let y = 20; y <= height - 20; y += 20) { ctx.moveTo(17, y - 10); ctx.quadraticCurveTo(29, y, 17, y + 10); ctx.moveTo(WIDTH - 17, y - 10); ctx.quadraticCurveTo(WIDTH - 29, y, WIDTH - 17, y + 10); } ctx.stroke();
+  } else { ctx.strokeRect(18, 18, WIDTH - 36, height - 36); if (border === 2) ctx.strokeRect(24, 24, WIDTH - 48, height - 48); }
   ctx.restore();
 }
 
@@ -745,19 +807,19 @@ function motifSprig(ctx: CanvasRenderingContext2D, s: number) {
 /** A deterministic wobble, so the tiling looks hand-stamped but never changes. */
 function jitter(n: number) { return (Math.sin(n * 12.9898) * 43758.5453) % 1; }
 
-function drawPattern(ctx: CanvasRenderingContext2D, name: string) {
+function drawPattern(ctx: CanvasRenderingContext2D, name: string, height = HEIGHT) {
   if (name === "Gingham") {
     // Overlapping bands at partial alpha make the darker squares for free.
     const step = 48;
     ctx.globalAlpha *= .5;
-    for (let x = 0; x < WIDTH; x += step * 2) ctx.fillRect(x, 0, step, HEIGHT);
-    for (let y = 0; y < HEIGHT; y += step * 2) ctx.fillRect(0, y, WIDTH, step);
+    for (let x = 0; x < WIDTH; x += step * 2) ctx.fillRect(x, 0, step, height);
+    for (let y = 0; y < height; y += step * 2) ctx.fillRect(0, y, WIDTH, step);
     return;
   }
   const motif = name === "Hearts" ? motifHeart : name === "Little stars" ? motifStar : name === "Bows" ? motifBow : motifSprig;
   const stepX = 96, stepY = 92, size = name === "Bows" ? 11 : 13;
   let n = 0;
-  for (let row = 0; row * stepY < HEIGHT + stepY; row++) {
+  for (let row = 0; row * stepY < height + stepY; row++) {
     for (let col = 0; col * stepX < WIDTH + stepX; col++) {
       const x = col * stepX + (row % 2 ? stepX / 2 : 0) + jitter(++n) * 9;
       const y = row * stepY + jitter(n + 99) * 9;
@@ -766,14 +828,14 @@ function drawPattern(ctx: CanvasRenderingContext2D, name: string) {
   }
 }
 
-function drawBorder(ctx: CanvasRenderingContext2D, name: string) {
+function drawBorder(ctx: CanvasRenderingContext2D, name: string, height = HEIGHT) {
   const m = 32;
   if (name === "Scalloped") {
     ctx.lineWidth = 2;
     const r = 16;
-    for (const [len, horizontal] of [[WIDTH, true], [HEIGHT, false]] as const) {
+    for (const [len, horizontal] of [[WIDTH, true], [height, false]] as const) {
       for (let i = m + r; i < len - m; i += r * 2) {
-        for (const edge of horizontal ? [m, HEIGHT - m] : [m, WIDTH - m]) {
+        for (const edge of horizontal ? [m, height - m] : [m, WIDTH - m]) {
           ctx.beginPath();
           if (horizontal) ctx.arc(i, edge, r, Math.PI, 0, edge !== m);
           else ctx.arc(edge, i, r, Math.PI * .5, Math.PI * 1.5, edge === m);
@@ -781,7 +843,7 @@ function drawBorder(ctx: CanvasRenderingContext2D, name: string) {
         }
       }
     }
-    ctx.strokeRect(m + 14, m + 14, WIDTH - (m + 14) * 2, HEIGHT - (m + 14) * 2);
+    ctx.strokeRect(m + 14, m + 14, WIDTH - (m + 14) * 2, height - (m + 14) * 2);
     return;
   }
   if (name === "Vines") {
@@ -789,12 +851,12 @@ function drawBorder(ctx: CanvasRenderingContext2D, name: string) {
     const place = (x: number, y: number, rotation: number, s: number) => {
       ctx.save(); ctx.translate(x, y); ctx.rotate(rotation); motifSprig(ctx, s); ctx.restore();
     };
-    for (let x = m + 26; x < WIDTH - m; x += 58) { place(x, m, Math.PI / 2, 10); place(x, HEIGHT - m, Math.PI / 2, 10); }
-    for (let y = m + 26; y < HEIGHT - m; y += 58) { place(m, y, 0, 10); place(WIDTH - m, y, 0, 10); }
+    for (let x = m + 26; x < WIDTH - m; x += 58) { place(x, m, Math.PI / 2, 10); place(x, height - m, Math.PI / 2, 10); }
+    for (let y = m + 26; y < height - m; y += 58) { place(m, y, 0, 10); place(WIDTH - m, y, 0, 10); }
     return;
   }
   // Petals: clusters tucked into the four corners, thinning as they trail away.
-  for (const [cx, cy, sx, sy] of [[m, m, 1, 1], [WIDTH - m, m, -1, 1], [m, HEIGHT - m, 1, -1], [WIDTH - m, HEIGHT - m, -1, -1]] as const) {
+  for (const [cx, cy, sx, sy] of [[m, m, 1, 1], [WIDTH - m, m, -1, 1], [m, height - m, 1, -1], [WIDTH - m, height - m, -1, -1]] as const) {
     for (let i = 0; i < 9; i++) {
       const t = i / 8, along = 26 + t * 150, drift = 14 + jitter(i + 3) * 16;
       const flip = i % 2 ? 1 : -1;
@@ -809,7 +871,7 @@ function drawBorder(ctx: CanvasRenderingContext2D, name: string) {
 }
 
 /** Lays the stationery under the bouquet. A no-op for "Plain" or zero opacity. */
-export function drawPrint(ctx: CanvasRenderingContext2D, index: number, opacity: number, ink: string) {
+export function drawPrint(ctx: CanvasRenderingContext2D, index: number, opacity: number, ink: string, height = HEIGHT) {
   const print = prints[index];
   if (!print || print.kind === "none" || opacity <= 0) return;
   ctx.save();
@@ -818,19 +880,20 @@ export function drawPrint(ctx: CanvasRenderingContext2D, index: number, opacity:
   if (print.kind === "texture") {
     ctx.globalAlpha *= .3;
     if (index === 9) {
-      for (let i = 0; i < 2200; i++) { const x = Math.abs(jitter(i + 1)) * WIDTH, y = Math.abs(jitter(i + 6000)) * HEIGHT; ctx.fillRect(x, y, 1.4, .7); }
+      for (let i = 0; i < 2200; i++) { const x = Math.abs(jitter(i + 1)) * WIDTH, y = Math.abs(jitter(i + 6000)) * height; ctx.fillRect(x, y, 1.4, .7); }
     } else if (index === 10) {
       ctx.lineWidth = .35;
-      for (let n = 0; n < WIDTH; n += 7) { ctx.beginPath(); ctx.moveTo(n, 0); ctx.lineTo(n, HEIGHT); ctx.moveTo(0, n); ctx.lineTo(WIDTH, n); ctx.stroke(); }
+      for (let n = 0; n < WIDTH; n += 7) { ctx.beginPath(); ctx.moveTo(n, 0); ctx.lineTo(n, height); ctx.stroke(); }
+      for (let n = 0; n < height; n += 7) { ctx.beginPath(); ctx.moveTo(0, n); ctx.lineTo(WIDTH, n); ctx.stroke(); }
     } else {
-      for (const [x, y, r] of [[88, 140, -.5], [WIDTH - 90, HEIGHT - 250, 2.6]]) {
+      for (const [x, y, r] of [[88, 140, -.5], [WIDTH - 90, height - 250, 2.6]]) {
         ctx.save(); ctx.translate(x, y); ctx.rotate(r);
         if (index === 12) motifSprig(ctx, 90);
         else for (let i = 0; i < 7; i++) { ctx.rotate(Math.PI / 3.5); ctx.beginPath(); ctx.ellipse(45, 0, 85, 28, 0, 0, Math.PI * 2); ctx.fill(); }
         ctx.restore();
       }
     }
-  } else if (print.kind === "pattern") drawPattern(ctx, print.name); else drawBorder(ctx, print.name);
+  } else if (print.kind === "pattern") drawPattern(ctx, print.name, height); else drawBorder(ctx, print.name, height);
   ctx.restore();
 }
 

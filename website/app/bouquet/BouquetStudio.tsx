@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from "react";
-import { drawWrapperLayer, notePapers, letterings, stationerySets, drawPrint, drawCardBorder, ARRANGEMENT_OFFSET, ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { MAX_NOTE_LENGTH, MAX_WRAP_SCALE, wrapperAsset, drawWrapperLayer, notePapers, letterings, stationerySets, drawPrint, drawCardBorder, ARRANGEMENT_OFFSET, ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import { SPECIAL_WRAPPER_URL, REVEAL_ART, backgrounds, borders, bouquetColors } from "./model";
 import "./bouquet.css";
@@ -16,7 +16,7 @@ function WrapperThumb({ paper, image }: { paper: number; image?: HTMLImageElemen
   useEffect(() => {
     const ctx = ref.current?.getContext("2d");
     if (!ctx || !image) return;
-    ctx.clearRect(0, 0, 80, 100); ctx.save(); ctx.scale(80 / 600, 100 / 650); ctx.translate(-70, -100);
+    ctx.clearRect(0, 0, 80, 100); ctx.save(); ctx.scale(80 / 1000, 100 / 820); ctx.translate(140, 0);
     drawWrapperLayer(ctx, paper, false, image); drawWrapperLayer(ctx, paper, true, image); ctx.restore();
   }, [paper, image]);
   return <canvas ref={ref} width={80} height={100} aria-hidden="true" />;
@@ -243,7 +243,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   }, [opened]);
 
   function update(next: Bouquet) {
-    setBouquet({ ...next, to: textInput(next.to, 40), from: textInput(next.from, 40), message: textInput(next.message, 280, true),
+    setBouquet({ ...next, to: textInput(next.to, 40), from: textInput(next.from, 40), message: textInput(next.message, MAX_NOTE_LENGTH, true),
       ...(next.photos ? { photos: next.photos.map(photo => ({ ...photo, caption: textInput(photo.caption, 35) })) } : {}) });
     setShareUrl(""); setNotice("");
   }
@@ -290,7 +290,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   function point(event: PointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();
     const x = (event.clientX - rect.left) * WIDTH / rect.width - ARRANGEMENT_OFFSET.x;
-    const y = (event.clientY - rect.top) * HEIGHT / rect.height - ARRANGEMENT_OFFSET.y;
+    const y = (event.clientY - rect.top) * event.currentTarget.height / rect.height - ARRANGEMENT_OFFSET.y;
     // renderBouquet shrinks a too-tall arrangement about the tie so nothing is
     // clipped; undo exactly that here, or every drag lands offset from the
     // flower the finger is actually on.
@@ -529,7 +529,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   return <>
     {creatorHeading}
     <div className="bouquet-studio">
-      <section className="bouquet-preview" aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Tap a bloom to pick it up. Drag the flower to move it, or its little dial to tilt it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
+      <section className={`bouquet-preview${bouquet.message.length > 240 || bouquet.message.split("\n").length > 3 ? " has-long-note" : ""}`} aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Tap a bloom to pick it up. Drag the flower to move it, or its little dial to tilt it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
       <section className="bouquet-controls" aria-label="Bouquet creator">
         <div className="bouquet-steps" aria-label="Creation steps">{["Flowers", "Photos", "Your note", "Send love"].map((label, i) => <button key={label} aria-current={step === i ? "step" : undefined} disabled={i > 1 && !hasContents(bouquet)} onClick={() => { setStep(i); setSelected(undefined); setSelectedPhoto(undefined); setNotice(""); }}><span>{i + 1}</span>{label}</button>)}</div>
         {step === 0 && <div className="bouquet-panel">
@@ -558,10 +558,10 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
             {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={220} max={500} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={490} max={690} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={.7} max={1.15} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><div className="bouquet-depth"><span>Depth</span><div><button onClick={() => update(reorder(bouquet, "stem", active.id, -1))}>Send back</button><button onClick={() => update(reorder(bouquet, "stem", active.id, 1))}>Bring forward</button></div></div><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
             <div className="bouquet-arrange-actions"><button onClick={() => { update({ ...bouquet, stems: arrange(bouquet.stems.map(s => s.flower)) }); setSelected(undefined); }}>Arrange for me</button><button disabled={!bouquet.stems.length} onClick={() => { update({ ...bouquet, stems: [] }); setSelected(undefined); }}>Clear flowers</button></div>
           </details>
-          <details className="bouquet-fold"><summary>Wrapping</summary><fieldset className="bouquet-paper bouquet-wraps"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span className="bouquet-wrap-thumb" style={{ backgroundColor: paper.background }}>{paper.sprite < 0 ? <span aria-hidden="true">—</span> : <WrapperThumb paper={i} image={assets[i >= 5 ? SPECIAL_WRAPPER_URL : WRAPPER_URL]} />}</span><strong>{paper.name}</strong></button>)}</div></fieldset>
+          <details className="bouquet-fold"><summary>Wrapping</summary><fieldset className="bouquet-paper bouquet-wraps"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span className="bouquet-wrap-thumb" style={{ backgroundColor: paper.background }}>{paper.sprite < 0 ? <span aria-hidden="true">—</span> : <WrapperThumb paper={i} image={assets[wrapperAsset(i)]} />}</span><strong>{paper.name}</strong></button>)}</div></fieldset>
           {papers[bouquet.paper].sprite >= 0 && <fieldset className="bouquet-paper bouquet-print"><legend>The wrapping</legend>
 
-            <label className="bouquet-print-opacity">Size<input aria-label="Wrapper size" type="range" min={.75} max={1.3} step={.01} value={bouquet.wrapScale ?? 1} onChange={e => update({ ...bouquet, wrapScale: +e.target.value })} /></label>
+            <label className="bouquet-print-opacity">Size<input aria-label="Wrapper size" type="range" min={.75} max={MAX_WRAP_SCALE} step={.01} value={bouquet.wrapScale ?? 1} onChange={e => update({ ...bouquet, wrapScale: +e.target.value })} /></label>
             <label className="bouquet-print-opacity">Lean<input aria-label="Wrapper lean" type="range" min={-20} max={20} value={bouquet.wrapAngle ?? 0} onChange={e => update({ ...bouquet, wrapAngle: +e.target.value })} /></label>
           </fieldset>}
           </details><details className="bouquet-fold"><summary>Letter paper & border</summary>
@@ -613,7 +613,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
         {step === 2 && <div className="bouquet-panel bouquet-note-panel"><p className="bouquet-eyebrow">THE BEST PART IS WHAT YOU SAY</p><h2>A few words, just for them.</h2><label>Their name <span>optional</span><input maxLength={40} value={bouquet.to} placeholder="Someone special" onChange={e => update({ ...bouquet, to: e.target.value })} autoComplete="off" /></label><details className="bouquet-fold"><summary>Note paper & lettering</summary>
             <div className="bouquet-note-swatches">{notePapers.map((paper, i) => <button key={paper.name} aria-pressed={(bouquet.notePaper ?? 0) === i} style={{ background: paper.color, color: paper.ink }} onClick={() => update({ ...bouquet, notePaper: i })}><span>A little love</span>{paper.name}</button>)}</div>
             <div className="bouquet-letterings">{letterings.map((font, i) => <button key={font.name} aria-pressed={(bouquet.lettering ?? 0) === i} style={{ fontFamily: font.family, fontStyle: font.style }} onClick={() => update({ ...bouquet, lettering: i })}>{font.name}</button>)}</div>
-          </details><label>Your note<textarea maxLength={280} rows={5} value={bouquet.message} onChange={e => update({ ...bouquet, message: e.target.value })} placeholder="I saw these and thought of you…" /><small>{bouquet.message.length}/280</small></label><details className="bouquet-note-ideas"><summary>Note ideas</summary>{["Just because you’re you.", "Different places. Still my favorite person.", "You make the ordinary days feel special."].map(text => <button key={text} onClick={() => update({ ...bouquet, message: text })}>{text}</button>)}</details><label>From <span>optional</span><input maxLength={40} value={bouquet.from} placeholder="Your name" onChange={e => update({ ...bouquet, from: e.target.value })} autoComplete="name" /></label><button className="bouquet-button primary bouquet-next" onClick={() => setStep(3)}>Ready to make their day <span aria-hidden="true">→</span></button><button className="bouquet-text-button" onClick={() => setStep(0)}>Back to flowers</button></div>}
+          </details><label>Your note<textarea maxLength={MAX_NOTE_LENGTH} rows={5} value={bouquet.message} onChange={e => update({ ...bouquet, message: e.target.value })} placeholder="I saw these and thought of you…" /><small>{bouquet.message.length}/{MAX_NOTE_LENGTH}</small><span className="bouquet-note-help">The card grows with your note. Paragraphs are welcome.</span></label><details className="bouquet-note-ideas"><summary>Note ideas</summary>{["Just because you’re you.", "Different places. Still my favorite person.", "You make the ordinary days feel special."].map(text => <button key={text} onClick={() => update({ ...bouquet, message: text })}>{text}</button>)}</details><label>From <span>optional</span><input maxLength={40} value={bouquet.from} placeholder="Your name" onChange={e => update({ ...bouquet, from: e.target.value })} autoComplete="name" /></label><button className="bouquet-button primary bouquet-next" onClick={() => setStep(3)}>Ready to make their day <span aria-hidden="true">→</span></button><button className="bouquet-text-button" onClick={() => setStep(0)}>Back to flowers</button></div>}
         {step === 3 && <div className="bouquet-panel bouquet-send-panel"><span className="bouquet-send-heart" aria-hidden="true">♡</span><p className="bouquet-eyebrow">HAPPINESS, READY FOR DELIVERY</p><h2>Good things are<br />meant to be shared.</h2><p>Send a little surprise. They’ll open your bouquet and the note you tucked inside.</p>
           <div className="bouquet-vessel">
             <p className="bouquet-eyebrow">HOW IT ARRIVES</p>

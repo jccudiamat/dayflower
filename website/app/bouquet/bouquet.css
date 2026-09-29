@@ -301,6 +301,11 @@
 .bouquet-delivery-check { margin: 18px 0 8px; min-width: 0; text-align: left; }
 .bouquet-delivery-check p { font-size: 13px; color: var(--body-color); line-height: 1.5; }
 
+/* A long letter scrolls naturally instead of trapping a tall sticky preview. */
+.bouquet-preview.has-long-note { position: static; }
+.bouquet-note-panel > label > .bouquet-note-help { display: block; margin-top: 8px; color: var(--body-color); font-size: 12px; line-height: 1.6; }
+.bouquet-note-panel textarea { field-sizing: content; max-height: 480px; }
+
 /* The worked example sits beside the copy that describes it, and drops under
    it on a phone rather than shrinking both into two unreadable columns. */
 .bouquet-about { display: grid; gap: 40px; align-items: start; }
