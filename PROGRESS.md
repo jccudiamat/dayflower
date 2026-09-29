@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### The heartbeat widget: five scenes, no counts, and a ripple the launcher plays (2026-09-29, not yet published)
+### The heartbeat widget: five scenes, no counts, and a ripple the launcher plays (2026-09-29, build 128)
 
 The user supplied five finished widget designs (a dark card with "HEARTBEAT", an illustration round a big heart, and a "Tap to send" button): the heart with the moon and clouds as the default, and a kitten, tulips, a puppy and a capybara for Premium only. No more counts, still a ripple on sending and receiving, 4:5 by default, the art fitting perfectly, and a better-looking ripple. Mid-way they added that the whole widget must be tappable, not only the button (it is; checked).
 
@@ -28,6 +28,7 @@ The user supplied five finished widget designs (a dark card with "HEARTBEAT", an
 - 🔴 **APK room made first**: `assets/images/brand_mark.png` was byte-identical to `mark.png` (the nav bar uses `mark.png` now), and `assets/images/logo.png`, which nothing in the app draws, moved to `assets/icon/logo.png` (unbundled; `make_icons.py` writes it there). Together 344 KB. Release APK 52,064,824 bytes: **364 KB under the ceiling**, more than before this change.
 - Verified on the emulator: the picker preview and the placed widget match the designs; a tap on the title, both bottom corners and the button each sends; the ripple recorded frame by frame (heart rings growing out of the heart, fading, the echo after, the bloom); the widget settles with nothing left over; the kitten scene renders when set. ⚠️ Not on a phone yet: received ripples, and the animations at full frame rate (the emulator records at 6 to 8 fps).
 - Tests: `test/heartbeat_widget_test.dart` (the scenes and Premium, every scene on both sides at 4:5, Kotlin mapping and keys, 4:5 info, no counts, the flippers and their animations, the tap receiver, a pulse reported twice plays once, and the Settings picker, which captures `build/review/heartbeat-themes.png` with `--dart-define=CAPTURE_REVIEW=true`). 686 tests pass.
+- **Published as build 128.** Patches 4.6 MB (from 127) to 4.8 MB (124), each checked to rebuild 128 byte for byte; release APK 52,064,824 bytes. ⚠️ The first publish attempt failed in R8 (`minifyReleaseWithR8`) and an identical rebuild straight after passed: a flaky Gradle run, not the code. If it recurs, rerun before looking for a cause.
 
 ### Background taps sent as the wrong account; a reply bubble on the widget; the heart stays right (2026-09-29, build 127)
 
