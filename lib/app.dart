@@ -108,6 +108,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         _syncWidget(ref.read(widgetFlowerProvider));
         _syncReminders(ref.read(pairOpenRemindersProvider));
         _syncHeartbeatNudge();
+        _syncBeatReady();
         ref.read(updateControllerProvider.notifier).check();
         _maybeAskForNotifications(ref.read(currentPairProvider));
       }
@@ -129,6 +130,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       // MoodPrefs.refresh for why this is not a midnight timer.
       ref.read(moodProvider.notifier).refresh();
       _syncHeartbeatNudge();
+      _syncBeatReady();
     } else {
       ref.read(presencePingerProvider).stop();
     }
@@ -251,6 +253,11 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     switch (uri?.host) {
       case 'events':
         goWhenReady(ref, Routes.events);
+      case 'heartbeat':
+        // The heartbeat widget tapped with nobody signed in or paired: the
+        // app, to fix that (HeartbeatTapReceiver). The gate routes on to
+        // sign-in or pairing from Home.
+        goWhenReady(ref, Routes.home);
       case 'days':
         // Their day on the card: Home, then the My Day viewer over it on
         // their days, so back lands on Home. See HomeScreen. On the day
@@ -375,6 +382,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       (_, next) => _settled(() {
         _maybeAskForNotifications(next);
         _syncHeartbeatNudge();
+        _syncBeatReady();
         if (next.valueOrNull?.isLinked != true) _incomingHeartbeats.reset();
       }),
     );
@@ -807,12 +815,20 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
             : counts.partner > prev.partner
                 ? false
                 : null;
-    DayflowerWidgets.syncHeartbeat(
-      mine: counts.mine,
-      partner: counts.partner,
-      partnerName: _partnerName,
-      pulseSent: pulseSent,
-    );
+    // Only a pulse: the widget no longer shows counts.
+    if (pulseSent != null) DayflowerWidgets.pulse(sent: pulseSent);
+  }
+
+  /// Whether a tap on the heartbeat widget has someone to send as and to.
+  /// Signed out or not paired, the tap opens the app instead (see
+  /// HeartbeatTapReceiver).
+  void _syncBeatReady() {
+    final pair = ref.read(currentPairProvider);
+    // Not while the pair is still loading: that guess would tell the widget
+    // nobody is signed in, for as long as it took.
+    if (pair.isLoading) return;
+    unawaited(DayflowerWidgets.setBeatReady(pair.valueOrNull?.isLinked == true &&
+        ref.read(currentUserIdProvider) != null));
   }
 }
 

@@ -7,9 +7,10 @@ import '../../../../app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_icon.dart';
-import '../../../heartbeat/data/heartbeat_repository.dart';
 import '../../../reunion/data/reunion_repository.dart';
 import '../../../tulip/data/flower_repository.dart';
+import '../../../widget/heartbeat_themes.dart';
+import '../../../widget/heartbeat_widget_preview.dart';
 import '../../domain/home_moments.dart';
 import '../screens/home_screen.dart' show HomeDayPhoto;
 
@@ -151,6 +152,12 @@ class _WidgetFeature extends StatelessWidget {
                             'My Day photos appear in the “Today’s Flower” widget.',
                             style: AppText.caption())
                       ],
+                      if (kind == HomeWidgetKind.heartbeat) ...[
+                        const SizedBox(height: AppSpace.sm),
+                        Text(
+                            'Tap it to send a heartbeat. You can change its picture in widget settings.',
+                            style: AppText.body()),
+                      ],
                       if (kind == HomeWidgetKind.reunion) ...[
                         const SizedBox(height: AppSpace.sm),
                         Text(
@@ -181,7 +188,7 @@ class _WidgetPreview extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final photo = ref.watch(partnerDayPhotoProvider);
-    final counts = ref.watch(todayHeartbeatCountsProvider);
+    final beatTheme = ref.watch(heartbeatThemeProvider);
     final reunion = ref.watch(reunionProvider).valueOrNull;
     final now = ref.watch(homeClockProvider).valueOrNull ?? DateTime.now();
     final days = reunion == null
@@ -208,22 +215,10 @@ class _WidgetPreview extends ConsumerWidget {
                           child: AppIcon(CupertinoIcons.heart,
                               color: Colors.white, size: 20)),
                     ]),
-              HomeWidgetKind.heartbeat => Container(
-                  color: const Color(0xFF1D1430),
-                  child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const AppIcon(CupertinoIcons.heart_fill,
-                                color: AppColors.brand, size: 40),
-                            const SizedBox(height: 8),
-                            Text('Tap to send',
-                                style: AppText.caption(Colors.white)),
-                            if (counts.partner > 0)
-                              Text('${counts.partner} today',
-                                  style: AppText.caption(Colors.white70)),
-                          ]))),
+              // The scene they picked, as the widget draws it. No counts: the
+              // widget does not keep them any more.
+              HomeWidgetKind.heartbeat =>
+                HeartbeatWidgetPreview(theme: beatTheme),
               HomeWidgetKind.reunion => days == null || days < 0
                   ? _label(CupertinoIcons.calendar, 'Choose a date')
                   : Padding(

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The heartbeat widget's scene beats once, lub-dub, when a heartbeat is
+     sent or arrives: a quick swell and settle, then a smaller one.
+
+     🔴 Played by the launcher, not pushed frame by frame from the app. The
+     scene sits in a ViewFlipper, and showing a flipper's child starts its
+     in-animation, even when it is the child already showing; that is the
+     whole trick (HeartbeatRipple.start). The old ripple was five complete
+     widget updates 80ms apart, which launchers applied unevenly: it
+     stuttered.
+
+     Scales compose in a set: each one holds its end once done, so 1.05 then
+     0.952381 is back to 1, and 1.03 then 0.970874 is too. Never below 1, or
+     the card's edge would show round a scene that is meant to fill it. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shareInterpolator="false">
+    <scale
+        android:fromXScale="1"
+        android:toXScale="1.05"
+        android:fromYScale="1"
+        android:toYScale="1.05"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:duration="110"
+        android:interpolator="@android:anim/decelerate_interpolator" />
+    <scale
+        android:fromXScale="1"
+        android:toXScale="0.952381"
+        android:fromYScale="1"
+        android:toYScale="0.952381"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:startOffset="110"
+        android:duration="170"
+        android:interpolator="@android:anim/accelerate_decelerate_interpolator" />
+    <scale
+        android:fromXScale="1"
+        android:toXScale="1.03"
+        android:fromYScale="1"
+        android:toYScale="1.03"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:startOffset="300"
+        android:duration="100"
+        android:interpolator="@android:anim/decelerate_interpolator" />
+    <scale
+        android:fromXScale="1"
+        android:toXScale="0.970874"
+        android:fromYScale="1"
+        android:toYScale="0.970874"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:startOffset="400"
+        android:duration="220"
+        android:interpolator="@android:anim/accelerate_decelerate_interpolator" />
+</set>

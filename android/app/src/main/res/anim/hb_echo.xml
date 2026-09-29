@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The second ripple (the "dub"), 300ms after the first, in step with the
+     scene's second, smaller beat (anim/hb_thump): fainter, and it does not
+     travel as far. Everything waits the 300ms, and until then its alpha
+     holds 0, so it is not there at all. See anim/hb_ring. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shareInterpolator="false"
+    android:fillAfter="true">
+    <scale
+        android:fromXScale="0.46"
+        android:toXScale="1.0"
+        android:fromYScale="0.46"
+        android:toYScale="1.0"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:startOffset="300"
+        android:duration="950"
+        android:interpolator="@android:anim/decelerate_interpolator" />
+    <alpha
+        android:fromAlpha="0"
+        android:toAlpha="0.7"
+        android:startOffset="300"
+        android:duration="90"
+        android:interpolator="@android:anim/linear_interpolator" />
+    <alpha
+        android:fromAlpha="1"
+        android:toAlpha="0"
+        android:startOffset="390"
+        android:duration="860"
+        android:interpolator="@android:anim/linear_interpolator" />
+</set>

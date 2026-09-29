@@ -4,29 +4,25 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
-import android.net.Uri
 import android.widget.RemoteViews
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import es.antonborri.home_widget.HomeWidgetBackgroundIntent
 import es.antonborri.home_widget.HomeWidgetPlugin
 import es.antonborri.home_widget.HomeWidgetProvider
 
 /**
- * Heartbeat widget. Tapping fires a *background* broadcast — the Dart
- * callback in lib/features/widget/widget_sync.dart sends the pulse without
- * ever opening the app.
+ * Heartbeat widget: a scene, "HEARTBEAT", and "Tap to send". A tap sends a
+ * heartbeat without opening the app (HeartbeatTapReceiver), and a beat sent
+ * or arrived ripples (HeartbeatRipple).
  *
- * Keys in [widgetData] are written from Dart by DayflowerWidgets.syncHeartbeat();
- * they must stay in sync.
+ * No counts any more: it used to say how many you had sent and how many had
+ * come today. The scene is the one picked in Settings → Home screen widgets
+ * ([KEY_THEME], written by DayflowerWidgets.setBeatTheme).
  */
 class HeartbeatWidget : HomeWidgetProvider() {
 
     /**
-     * `goAsync` keeps this receiver's process alive while [HeartbeatRipple]
-     * pushes its frames — without it Android is free to kill us mid-burst and
-     * the widget would be left frozen on a half-expanded ring.
+     * `goAsync` keeps this receiver's process alive until [HeartbeatRipple]
+     * has put a pulse away; without it Android is free to kill us first and
+     * leave the launcher's copy of the widget on the pulse.
      */
     override fun onReceive(context: Context, intent: Intent) {
         val pending = goAsync()
@@ -54,9 +50,7 @@ class HeartbeatWidget : HomeWidgetProvider() {
         appWidgetIds.forEach { widgetId ->
             // 🔴 A provider runs in the app's own process, so a throw in
             // here closes the app about a second after it opens - see
-            // TodaysTulipWidget.renderSafely. Nothing in this one draws a
-            // bitmap, but the frame costs nothing and the failure it
-            // prevents is not proportional to the risk.
+            // TodaysTulipWidget.renderSafely.
             try {
                 val views = RemoteViews(context.packageName, R.layout.heartbeat_widget)
                 renderHeartbeat(context, views, widgetData)
@@ -68,55 +62,33 @@ class HeartbeatWidget : HomeWidgetProvider() {
     }
 
     companion object {
+        /** DayflowerWidgets.keyBeatTheme in Dart. Change them together. */
+        const val KEY_THEME = "beat_theme"
+
+        /**
+         * The scene for [theme], a HeartbeatTheme's name in Dart. Anything
+         * else, including a theme written by a newer build than this one,
+         * is the default.
+         */
+        fun artFor(theme: String?): Int = when (theme) {
+            "cat" -> R.drawable.hb_art_cat
+            "tulips" -> R.drawable.hb_art_tulips
+            "puppy" -> R.drawable.hb_art_puppy
+            "capybara" -> R.drawable.hb_art_capybara
+            else -> R.drawable.hb_art_moon
+        }
+
         /** Shared with DayflowerWidget so the adaptive variant renders identically. */
         fun renderHeartbeat(
             context: Context,
             views: RemoteViews,
             widgetData: SharedPreferences,
         ) {
-            // Daily reset happens HERE, not in Dart. The counts carry the
-            // local day they were written for; once that is no longer today
-            // they are yesterday's news and the widget zeroes them itself.
-            // Widgets refresh every 30 min, so the reset lands shortly
-            // after midnight even if the app is never opened.
-            val stamped = widgetData.getString("beat_date", "") ?: ""
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val fresh = stamped.isEmpty() || stamped == today
-
-            val mine =
-                if (fresh) widgetData.getString("beat_mine", "0") ?: "0" else "0"
-            val partner =
-                if (fresh) widgetData.getString("beat_partner", "0") ?: "0" else "0"
-            val partnerName =
-                widgetData.getString("beat_partner_name", "Your partner")
-                    ?: "Your partner"
-
-            views.setTextViewText(
-                R.id.beat_mine,
-                if (mine == "0") {
-                    context.getString(R.string.heartbeat_widget_prompt)
-                } else {
-                    "You sent $mine"
-                },
-            )
-            views.setTextViewText(
-                R.id.beat_partner,
-                if (partner == "0") {
-                    "Nothing from $partnerName yet"
-                } else {
-                    "$partnerName sent $partner today"
-                },
-            )
-
-            HeartbeatRipple.applyRest(views)
-
-            views.setOnClickPendingIntent(
-                R.id.beat_root,
-                HomeWidgetBackgroundIntent.getBroadcast(
-                    context,
-                    Uri.parse("dayflower://heartbeat"),
-                ),
-            )
+            // A resource, not a bitmap: the launcher loads it itself, so
+            // nothing large crosses to it on every redraw.
+            views.setImageViewResource(R.id.beat_art, artFor(widgetData.getString(KEY_THEME, null)))
+            views.setOnClickPendingIntent(R.id.beat_root, HeartbeatTapReceiver.pendingIntent(context))
+            HeartbeatRipple.applyRest(views, widgetData)
         }
     }
 }

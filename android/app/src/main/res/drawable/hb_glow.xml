@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The bloom behind a pulse on the heartbeat widget: a soft disc of light
+     over the scene's heart that swells and fades (anim/hb_glow). White,
+     tinted per pulse like the rings. A size of its own so the view keeps it
+     round (fitCenter) rather than stretching it to the widget's shape. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <size
+        android:width="100dp"
+        android:height="100dp" />
+    <gradient
+        android:type="radial"
+        android:gradientRadius="50%"
+        android:startColor="#66FFFFFF"
+        android:centerColor="#24FFFFFF"
+        android:endColor="#00FFFFFF" />
+</shape>

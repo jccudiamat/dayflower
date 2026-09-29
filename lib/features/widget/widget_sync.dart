@@ -86,22 +86,21 @@ class DayflowerWidgets {
   /// full-bleed and croppable, a 512px square painting is neither. The
   /// widget fits this one inside the card instead.
   static const keyFlowerArt = 'flower_art';
-  static const keyBeatMine = 'beat_mine';
-  static const keyBeatPartner = 'beat_partner';
-  static const keyBeatPartnerName = 'beat_partner_name';
 
-  /// The local calendar day the counts above belong to, `yyyy-MM-dd`.
+  /// The heartbeat widget's scene: a [HeartbeatTheme]'s name, picked in
+  /// Settings. HeartbeatWidget.KEY_THEME in Kotlin; change them together.
   ///
-  /// The widget compares this to its own idea of today and renders zero when
-  /// they differ. Without it a phone that never opens the app shows
-  /// yesterday's tally indefinitely — counts only change when Dart syncs,
-  /// and midnight is not an event Dart hears about.
-  static const keyBeatDate = 'beat_date';
+  /// ⚠️ No counts are written any more: the widget stopped showing how many
+  /// were sent and received today. It shows a scene, and ripples.
+  static const keyBeatTheme = 'beat_theme';
+
+  /// "0" when a tap on the heartbeat widget has nobody to send as or to
+  /// (signed out, or not paired): it then opens the app rather than ripple
+  /// as if something went. Anything else, and nothing at all (a phone that
+  /// has not run this build yet), sends. HeartbeatTapReceiver.KEY_READY.
+  static const keyBeatReady = 'beat_ready';
   static const keyMode = 'widget_mode';
 
-  /// Marks a pulse the widget should ripple for. Read by HeartbeatRipple.kt,
-  /// which ignores markers older than 10s so a widget rebuilt after a reboot
-  /// doesn't replay one.
   /// Absolute path to the day photo on disk, or empty when there is none.
   /// A file path rather than bytes: RemoteViews has a hard IPC size limit and
   /// a full-size bitmap blows straight through it.
@@ -199,6 +198,11 @@ class DayflowerWidgets {
   /// the heart back.
   static const likeAction = 'dayflower://like';
 
+  /// Marks a pulse the heartbeat widget should ripple for: when (a string
+  /// of millis) and which way, "sent" or "received". Read by
+  /// HeartbeatRipple.kt, which ignores markers older than 10s so a widget
+  /// rebuilt after a reboot does not replay one. HeartbeatTapReceiver
+  /// writes one too, for the widget's own tap.
   static const keyBeatPulseAt = 'beat_pulse_at';
   static const keyBeatPulseDir = 'beat_pulse_dir';
 
@@ -410,7 +414,8 @@ class DayflowerWidgets {
   /// on purpose.
   static Future<void> clearAccount() async {
     await syncFlower(received: null, sentToday: false, partnerName: '');
-    await syncHeartbeat(mine: 0, partner: 0, partnerName: 'Your partner');
+    // Nobody to send a heartbeat as: its tap opens the app now.
+    await setBeatReady(false);
     await syncReunion(title: null, place: null, happensAt: null);
   }
 
@@ -639,48 +644,102 @@ class DayflowerWidgets {
     }
   }
 
-  /// Pushes today's heartbeat counts.
-  ///
-  /// [pulseSent] makes the widget ripple: true for a beat you just sent, false
-  /// for one that just arrived, null for a plain refresh with no animation.
-  static Future<void> syncHeartbeat({
-    required int mine,
-    required int partner,
-    required String partnerName,
-    bool? pulseSent,
-  }) async {
+  /// Ripples the heartbeat widget: pink for a heartbeat just sent, lavender
+  /// for one that just arrived. Once per heartbeat, however many things
+  /// report it ([isSamePulse]).
+  static Future<void> pulse({required bool sent}) async {
     if (!isSupported) return;
     try {
-      await HomeWidget.saveWidgetData<String>(keyBeatMine, '$mine');
-      await HomeWidget.saveWidgetData<String>(keyBeatPartner, '$partner');
-      await HomeWidget.saveWidgetData<String>(keyBeatDate, _localDateKey());
-      await HomeWidget.saveWidgetData<String>(keyBeatPartnerName, partnerName);
-      if (pulseSent != null) await _markPulse(sent: pulseSent);
-      await _refresh();
+      if (!await _markPulse(sent: sent)) return;
+      await _refreshBeat();
     } catch (e) {
-      debugPrint('widget heartbeat sync failed: $e');
+      debugPrint('widget pulse failed: $e');
     }
   }
 
-  /// `yyyy-MM-dd` in local time. Must match the format HeartbeatWidget.kt
-  /// builds, or the widget reads every day as stale and shows zero forever.
-  static String _localDateKey() {
-    final n = DateTime.now();
-    final m = n.month.toString().padLeft(2, '0');
-    final d = n.day.toString().padLeft(2, '0');
-    return '${n.year}-$m-$d';
+  /// How long a second report of a pulse the same way is the same pulse.
+  ///
+  /// Sent: the widget's own tap ripples at once (HeartbeatTapReceiver), and
+  /// the app hears of the same heartbeat again when the row comes back to
+  /// it, after the background send: seconds later on a cold start, so 30.
+  /// Received: the push and the app's own stream both report an arrival,
+  /// and a burst of taps on their side is one ripple here, not a strobe.
+  static const _sameSent = Duration(seconds: 30);
+  static const _sameReceived = Duration(seconds: 4);
+
+  /// Whether a pulse [sent] (or received) at [now] is the one already
+  /// marked, [lastDir] at [lastAt].
+  @visibleForTesting
+  static bool isSamePulse({
+    required bool sent,
+    required String? lastDir,
+    required int? lastAt,
+    required int now,
+  }) {
+    if (lastAt == null || lastDir != (sent ? 'sent' : 'received')) return false;
+    return now - lastAt < (sent ? _sameSent : _sameReceived).inMilliseconds;
   }
 
-  /// Leaves the marker HeartbeatRipple.kt looks for on its next redraw.
-  static Future<void> _markPulse({required bool sent}) async {
+  /// Leaves the marker HeartbeatRipple.kt plays on its next redraw, unless
+  /// it is there already. Returns whether it was left.
+  static Future<bool> _markPulse({required bool sent}) async {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (isSamePulse(
+      sent: sent,
+      lastDir: await HomeWidget.getWidgetData<String>(keyBeatPulseDir),
+      lastAt: int.tryParse(
+          await HomeWidget.getWidgetData<String>(keyBeatPulseAt) ?? ''),
+      now: now,
+    )) {
+      return false;
+    }
+    await HomeWidget.saveWidgetData<String>(keyBeatPulseAt, '$now');
     await HomeWidget.saveWidgetData<String>(
-      keyBeatPulseAt,
-      '${DateTime.now().millisecondsSinceEpoch}',
-    );
-    await HomeWidget.saveWidgetData<String>(
-      keyBeatPulseDir,
-      sent ? 'sent' : 'received',
-    );
+        keyBeatPulseDir, sent ? 'sent' : 'received');
+    return true;
+  }
+
+  /// Redraws the widgets that can show a heartbeat: the dedicated one and
+  /// the adaptive one (which plays it only while showing the heartbeat).
+  static Future<void> _refreshBeat() async {
+    for (final provider in [heartbeatProvider, adaptiveProvider]) {
+      await HomeWidget.updateWidget(qualifiedAndroidName: provider);
+    }
+  }
+
+  /// Whether a tap on the heartbeat widget has someone to send as and to.
+  /// See [keyBeatReady]. Written only when it changes: this runs on every
+  /// resume.
+  static Future<void> setBeatReady(bool ready) async {
+    if (!isSupported) return;
+    try {
+      final value = ready ? '1' : '0';
+      if (await HomeWidget.getWidgetData<String>(keyBeatReady) == value) return;
+      await HomeWidget.saveWidgetData<String>(keyBeatReady, value);
+    } catch (e) {
+      debugPrint('widget beat ready failed: $e');
+    }
+  }
+
+  /// The heartbeat widget's scene, a [HeartbeatTheme]'s name.
+  static Future<void> setBeatTheme(String theme) async {
+    if (!isSupported) return;
+    try {
+      await HomeWidget.saveWidgetData<String>(keyBeatTheme, theme);
+      await _refreshBeat();
+    } catch (e) {
+      debugPrint('widget beat theme set failed: $e');
+    }
+  }
+
+  static Future<String?> currentBeatTheme() async {
+    if (!isSupported) return null;
+    try {
+      return await HomeWidget.getWidgetData<String>(keyBeatTheme);
+    } catch (e) {
+      debugPrint('widget beat theme read failed: $e');
+      return null;
+    }
   }
 
   /// How My Day moves through their days: a list to [scroll], or rotating
@@ -854,29 +913,8 @@ Future<void> _widgetAction(
   });
 
   // A successful widget tap also cancels this device's pending reminder.
+  // The widget has rippled already, on the tap (HeartbeatTapReceiver).
   await HeartbeatNudge.sync(sentToday: true);
-
-  // Bump the count straight away so the widget acknowledges the tap
-  // without waiting for the app to next run a sync.
-  final shown =
-      int.tryParse(await HomeWidget.getWidgetData<String>(
-            DayflowerWidgets.keyBeatMine,
-          ) ??
-          '0') ??
-      0;
-  await HomeWidget.saveWidgetData<String>(
-    DayflowerWidgets.keyBeatMine,
-    '${shown + 1}',
-  );
-  // Ripple the widget the tap came from. This isolate is alive precisely
-  // because of that tap, so it's the one case that always animates.
-  await DayflowerWidgets._markPulse(sent: true);
-  await HomeWidget.updateWidget(
-    qualifiedAndroidName: DayflowerWidgets.heartbeatProvider,
-  );
-  await HomeWidget.updateWidget(
-    qualifiedAndroidName: DayflowerWidgets.adaptiveProvider,
-  );
 }
 
 /// Crops [bytes] to a circle and downscales it, for the widget's avatar.

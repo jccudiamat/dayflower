@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The first ripple (the "lub"): a heart's outline that grows from just
+     outside the scene's heart to past the card's edges, fading as it goes.
+     See drawable/hb_ring for why 0.46 is the heart's edge.
+
+     fillAfter: it ends invisible and stays so until the next pulse, and
+     HeartbeatRipple puts it away properly (the flipper back on its empty
+     child) once the pulse has had time to play. Before it starts, each
+     alpha holds its starting value, so nothing shows early. -->
+<set xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shareInterpolator="false"
+    android:fillAfter="true">
+    <scale
+        android:fromXScale="0.46"
+        android:toXScale="1.18"
+        android:fromYScale="0.46"
+        android:toYScale="1.18"
+        android:pivotX="50%"
+        android:pivotY="50%"
+        android:duration="1100"
+        android:interpolator="@android:anim/decelerate_interpolator" />
+    <alpha
+        android:fromAlpha="0"
+        android:toAlpha="1"
+        android:duration="90"
+        android:interpolator="@android:anim/linear_interpolator" />
+    <alpha
+        android:fromAlpha="1"
+        android:toAlpha="0"
+        android:startOffset="90"
+        android:duration="1010"
+        android:interpolator="@android:anim/linear_interpolator" />
+</set>

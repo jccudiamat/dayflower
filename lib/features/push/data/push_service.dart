@@ -10,6 +10,7 @@ import '../../../core/services/partner_alerts.dart';
 import '../../../core/services/pulse_alerts.dart';
 import '../../calls/data/call_alerts.dart';
 import '../../calls/data/caller_avatar.dart';
+import '../../widget/widget_sync.dart';
 import '../domain/push_message.dart';
 import 'push_repository.dart';
 
@@ -178,6 +179,11 @@ class PushService {
 /// Reads the toggle from storage rather than from `pulseAlertsEnabledProvider`
 /// — the background isolate has no container to read a provider out of.
 Future<void> _heartbeat(PushMessage push, {required bool foreground}) async {
+  // The widget ripples whether or not heartbeat notifications are on: it is
+  // on the home screen, not in the shade. With the app closed, this push is
+  // the only thing awake to tell it; with it open, the app's own stream
+  // says the same, and DayflowerWidgets.pulse plays it once.
+  await DayflowerWidgets.pulse(sent: false);
   if (!await PulseAlerts.enabled()) return;
   await PulseAlerts.handleIncoming(
     from: push.title,

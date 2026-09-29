@@ -1,8 +1,6 @@
 package com.dayflower.app
 
-import android.appwidget.AppWidgetManager
 import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -66,8 +64,8 @@ class DayLikeReceiver : BroadcastReceiver() {
             .putLong(KEY_FOCUS_AT, System.currentTimeMillis())
             .commit()
 
-        redraw(context, TodaysTulipWidget::class.java)
-        redraw(context, DayflowerWidget::class.java)
+        redrawWidgets(context, TodaysTulipWidget::class.java)
+        redrawWidgets(context, DayflowerWidget::class.java)
 
         try {
             HomeWidgetBackgroundIntent.getBroadcast(
@@ -104,17 +102,6 @@ class DayLikeReceiver : BroadcastReceiver() {
         } catch (e: Throwable) {
             android.util.Log.w("DayLikeReceiver", "could not open $target: $e")
         }
-    }
-
-    private fun redraw(context: Context, provider: Class<*>) {
-        val manager = AppWidgetManager.getInstance(context)
-        val ids = manager.getAppWidgetIds(ComponentName(context, provider))
-        if (ids.isEmpty()) return
-        context.sendBroadcast(
-            Intent(context, provider)
-                .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
-                .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids),
-        )
     }
 
     companion object {

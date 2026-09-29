@@ -133,7 +133,7 @@
                 android:resource="@xml/todays_tulip_widget_info"/>
         </receiver>
 
-        <!-- Heartbeat widget — taps send a pulse via the background receiver -->
+        <!-- Heartbeat widget. Taps go to HeartbeatTapReceiver below. -->
         <receiver
             android:name=".HeartbeatWidget"
             android:exported="true">
@@ -144,6 +144,13 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/heartbeat_widget_info"/>
         </receiver>
+
+        <!-- The heartbeat widget, tapped: ripples at once, then hands the
+             send to the background receiver. See HeartbeatTapReceiver.
+             Explicit PendingIntents only, so not exported. -->
+        <receiver
+            android:name=".HeartbeatTapReceiver"
+            android:exported="false"/>
 
         <!-- Reunion countdown widget — tap opens Events -->
         <receiver

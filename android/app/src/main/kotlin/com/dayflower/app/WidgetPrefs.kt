@@ -1,5 +1,9 @@
 package com.dayflower.app
 
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.content.SharedPreferences
 
 /**
@@ -33,3 +37,19 @@ fun SharedPreferences.longOf(key: String, default: Long = 0L): Long =
 /** [longOf], for a value that is only ever small — seconds, not millis. */
 fun SharedPreferences.intOf(key: String, default: Int = 0): Int =
     longOf(key, default.toLong()).toInt()
+
+/**
+ * Asks [provider] to redraw every widget of its on the home screen, the way
+ * the system does: an APPWIDGET_UPDATE to its own receiver, so its
+ * onReceive runs (and a heartbeat widget gets to play a pulse there).
+ */
+fun redrawWidgets(context: Context, provider: Class<*>) {
+    val manager = AppWidgetManager.getInstance(context)
+    val ids = manager.getAppWidgetIds(ComponentName(context, provider))
+    if (ids.isEmpty()) return
+    context.sendBroadcast(
+        Intent(context, provider)
+            .setAction(AppWidgetManager.ACTION_APPWIDGET_UPDATE)
+            .putExtra(AppWidgetManager.EXTRA_APPWIDGET_IDS, ids),
+    )
+}

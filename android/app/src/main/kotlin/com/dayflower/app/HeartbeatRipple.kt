@@ -7,67 +7,87 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.os.Handler
 import android.os.Looper
-import android.util.TypedValue
 import android.widget.RemoteViews
 
 /**
- * The ripple burst on the home-screen widget.
+ * A pulse on the heartbeat widget: the scene beats (lub-dub), light blooms
+ * over its heart, and two heart-shaped ripples grow out of it and fade.
+ * Pink for a heartbeat sent, lavender for one that arrived.
  *
- * Home-screen widgets genuinely cannot animate: `RemoteViews` has no animator,
- * no view references escape the launcher's process, and the framework only
- * redraws when someone calls `updateAppWidget`. So this is not an animation in
- * the usual sense — it is five complete widget redraws pushed ~80ms apart from
- * whichever of *our* processes learned about the pulse. That buys a ~400ms
- * expanding ring and a heart that swells and settles, which is about the
- * ceiling for what a widget can do.
+ * 🔴 **The launcher plays it; this only starts it.** It used to be five
+ * complete widget redraws pushed ~80ms apart, the only animation a
+ * RemoteViews seemed to allow, and launchers applied those unevenly: it
+ * stuttered, and a ring stepping between five sizes never looked like it
+ * moved. Now every moving part sits in a ViewFlipper whose in-animation is
+ * that part's move (res/anim/hb_*), and showing a flipper's child starts its
+ * in-animation, even when it is the child already showing. So a pulse is
+ * one widget update, and the launcher animates it smoothly at the screen's
+ * rate. See layout/heartbeat_widget.
  *
- * The consequence worth remembering: nothing here can fire on its own. A ripple
- * only plays if the app or the widget's background isolate is running to push
- * the frames — a received pulse cannot ripple on a phone where Dayflower is fully
- * closed. Sends from the widget itself always ripple, because tapping the
- * widget *is* what starts the isolate.
+ * Then, once it has played, one more update puts the rings away (their
+ * flippers back on an empty child). The launcher keeps the last update it
+ * was sent and applies it again whenever it rebuilds the widget, on a
+ * rotation or a restart; left on the pulse, a rebuild would ripple again
+ * out of nowhere.
+ *
+ * Something has to be running to send the update: a pulse plays when the
+ * app, the widget's own tap (HeartbeatTapReceiver), or a heartbeat's push
+ * wakes one of our processes. Ordinary redraws never start one.
  */
 object HeartbeatRipple {
 
-    /** Written from Dart — see DayflowerWidgets.syncHeartbeat. */
+    /** Written by Dart (DayflowerWidgets._markPulse) and HeartbeatTapReceiver. */
     const val KEY_AT = "beat_pulse_at"
     const val KEY_DIR = "beat_pulse_dir"
 
-    /** Ours alone; stored as a Long, so never read these from Dart. Kept per
+    /** Ours alone; stored as Longs, so never read these from Dart. Kept per
      *  provider so that a phone with both the dedicated and the adaptive
      *  widget placed sees both of them ripple, not whichever woke first. */
     private fun shownKey(provider: Class<*>) = "beat_pulse_shown_${provider.simpleName}"
+    private const val PLAYED_AT = "beat_pulse_played_at"
 
-    private const val FRAME_MS = 80L
-
-    /** A marker older than this is stale — a widget rebuilt after a reboot or
+    /** A marker older than this is stale: a widget rebuilt after a reboot or
      *  a launcher restart must not replay a pulse from hours ago. */
     private const val FRESH_MS = 10_000L
 
-    private const val COLOR_SENT = 0xFFF58FB4.toInt() // brand pink
-    private const val COLOR_RECEIVED = 0xFFC4B0FF.toInt() // lavender
+    /** How long a pulse takes to play: the echo ring's 300ms wait and 950ms
+     *  of growing (anim/hb_echo), with room to spare. */
+    private const val PLAY_MS = 1_500L
 
-    /** ring drawable, ring alpha (0-255), heart size in sp. */
-    private val FRAMES = arrayOf(
-        Frame(R.drawable.ripple_ring_1, 255, 38f),
-        Frame(R.drawable.ripple_ring_2, 220, 40f),
-        Frame(R.drawable.ripple_ring_3, 170, 36f),
-        Frame(R.drawable.ripple_ring_4, 110, 34f),
-        Frame(R.drawable.ripple_ring_5, 55, 33f),
-        Frame(R.drawable.ripple_ring_5, 0, 32f), // rest — matches the layout
-    )
+    private const val COLOR_SENT = 0xFFFF7AB6.toInt()      // pink
+    private const val COLOR_RECEIVED = 0xFFC9B6FF.toInt()  // lavender
 
-    private data class Frame(val ring: Int, val alpha: Int, val heartSp: Float)
+    /** The flippers with an empty first child to rest on. The scene's is
+     *  not one of them: showing its only child would beat it. */
+    private val RINGS = intArrayOf(R.id.beat_glow_flip, R.id.beat_ring_flip, R.id.beat_echo_flip)
 
-    /** Resting look, applied on every ordinary render. */
-    fun applyRest(views: RemoteViews) {
-        applyFrame(views, FRAMES.last(), COLOR_RECEIVED)
+    /**
+     * An ordinary redraw's part: the rings put away. Unless a pulse is
+     * playing, because a redraw that lands mid-pulse (the app refreshing
+     * the widgets as the heartbeat it just sent comes back) would cut it off.
+     */
+    fun applyRest(views: RemoteViews, widgetData: SharedPreferences) {
+        val played = widgetData.longOf(PLAYED_AT)
+        if (System.currentTimeMillis() - played < PLAY_MS) return
+        settle(views)
+    }
+
+    private fun settle(views: RemoteViews) {
+        for (flip in RINGS) views.setDisplayedChild(flip, 0)
+    }
+
+    private fun start(views: RemoteViews, color: Int) {
+        views.setInt(R.id.beat_glow, "setColorFilter", color)
+        views.setInt(R.id.beat_ring, "setColorFilter", color)
+        views.setInt(R.id.beat_echo, "setColorFilter", color)
+        views.setDisplayedChild(R.id.beat_art_flip, 0)
+        for (flip in RINGS) views.setDisplayedChild(flip, 1)
     }
 
     /**
-     * Plays the burst if [widgetData] carries a pulse marker this widget has
-     * not shown yet. Returns true when frames were scheduled, in which case
-     * [pending] is finished by the last frame rather than by the caller.
+     * Plays the pulse if [widgetData] carries a marker this widget has not
+     * shown yet. Returns true when it did, in which case [pending] is
+     * finished once the pulse has been put away rather than by the caller.
      */
     fun playIfPulsed(
         context: Context,
@@ -78,57 +98,46 @@ object HeartbeatRipple {
     ): Boolean {
         val at = widgetData.getString(KEY_AT, null)?.toLongOrNull() ?: return false
         val shownKey = shownKey(provider)
-        val shown = try {
-            widgetData.getLong(shownKey, 0L)
-        } catch (_: ClassCastException) {
-            0L
-        }
+        val shown = widgetData.longOf(shownKey)
         if (at <= shown) return false
-        if (System.currentTimeMillis() - at > FRESH_MS) return false
+        val now = System.currentTimeMillis()
+        if (now - at > FRESH_MS) return false
 
         val manager = AppWidgetManager.getInstance(context)
         val ids = manager.getAppWidgetIds(ComponentName(context, provider))
         if (ids.isEmpty()) return false
 
-        // Claim the marker before the first frame — every widget update we push
-        // below comes straight back as another broadcast, and without this each
-        // one would start a fresh burst.
-        widgetData.edit().putLong(shownKey, at).apply()
+        // Claimed before anything is drawn: every update below comes back as
+        // another broadcast, and without this each one would start a pulse.
+        // The time it started is what keeps ordinary redraws off it.
+        widgetData.edit().putLong(shownKey, at).putLong(PLAYED_AT, now).apply()
 
         val color = if (widgetData.getString(KEY_DIR, "sent") == "sent") {
             COLOR_SENT
         } else {
             COLOR_RECEIVED
         }
+        val pulse = RemoteViews(context.packageName, layoutId)
+        HeartbeatWidget.renderHeartbeat(context, pulse, widgetData)
+        start(pulse, color)
+        ids.forEach { manager.updateAppWidget(it, pulse) }
 
-        val handler = Handler(Looper.getMainLooper())
-        FRAMES.forEachIndexed { i, frame ->
-            handler.postDelayed({
-                try {
-                    val views = RemoteViews(context.packageName, layoutId)
-                    HeartbeatWidget.renderHeartbeat(context, views, widgetData)
-                    applyFrame(views, frame, color)
-                    ids.forEach { manager.updateAppWidget(it, views) }
-                } finally {
-                    // Always release the receiver, even if a frame throws —
-                    // leaking a PendingResult is an ANR.
-                    if (i == FRAMES.size - 1) pending?.finish()
+        Handler(Looper.getMainLooper()).postDelayed({
+            try {
+                // A newer pulse started meanwhile: it puts itself away.
+                if (widgetData.longOf(PLAYED_AT) == now) {
+                    val rest = RemoteViews(context.packageName, layoutId)
+                    HeartbeatWidget.renderHeartbeat(context, rest, widgetData)
+                    settle(rest)
+                    ids.forEach { manager.updateAppWidget(it, rest) }
                 }
-            }, i * FRAME_MS)
-        }
+            } catch (e: Throwable) {
+                android.util.Log.e("DayflowerWidget", "heartbeat pulse could not settle", e)
+            } finally {
+                // Always released, or the receiver it holds is an ANR.
+                pending?.finish()
+            }
+        }, PLAY_MS)
         return true
-    }
-
-    private fun applyFrame(views: RemoteViews, frame: Frame, color: Int) {
-        views.setImageViewResource(R.id.beat_ring, frame.ring)
-        // Both of these are @RemotableViewMethod on ImageView; tinting a white
-        // ring is what lets one set of drawables serve both directions.
-        views.setInt(R.id.beat_ring, "setColorFilter", color)
-        views.setInt(R.id.beat_ring, "setImageAlpha", frame.alpha)
-        views.setTextViewTextSize(
-            R.id.beat_heart,
-            TypedValue.COMPLEX_UNIT_SP,
-            frame.heartSp,
-        )
     }
 }

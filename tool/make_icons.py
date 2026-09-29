@@ -16,7 +16,6 @@ import os
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, 'assets', 'icon', 'src')
 OUT = os.path.join(ROOT, 'assets', 'icon')
-IMAGES = os.path.join(ROOT, 'assets', 'images')
 
 CANVAS = 1024
 
@@ -36,10 +35,12 @@ MARK_FRACTION = 0.71 * (72 / 108)
 appicon = Image.open(os.path.join(SRC, 'appicon.png')).convert('RGB')
 cutout = Image.open(os.path.join(SRC, 'cutout.png')).convert('RGBA')
 
-# ── The in-app logo, on the welcome screen. ─────────────────────────
-# Small on purpose: it draws at 96dp and this one *is* bundled in the APK.
+# ── The logo at 512², for the website's icon. ───────────────────────
+# Beside the masters, not in assets/images: that folder is bundled whole,
+# and nothing in the app draws this any more (the welcome screen that did is
+# gone), so there it was 239 KB of APK for nothing.
 appicon.resize((512, 512), Image.LANCZOS).save(
-    os.path.join(IMAGES, 'logo.png'), optimize=True)
+    os.path.join(OUT, 'logo.png'), optimize=True)
 
 # ── Adaptive foreground: the mark, centred, with its margin. ────────
 # Bounds on alpha > 32 rather than > 0: the antialiased fringe reaches a few

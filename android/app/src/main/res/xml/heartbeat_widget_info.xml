@@ -1,8 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 4:5 by default, the shape of the scenes it shows (160 by 200dp, and two
+     cells by two on Android 12+ launchers, which on a phone come out close
+     to that). Other shapes still fit: the scene is centre-cropped round its
+     heart, and the title and the button stay pinned (layout/heartbeat_widget).
+
+     previewLayout: the picker shows the real thing, on the default scene. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/heartbeat_widget"
-    android:minWidth="110dp"
-    android:minHeight="110dp"
+    android:previewLayout="@layout/heartbeat_widget"
+    android:minWidth="160dp"
+    android:minHeight="200dp"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:minResizeWidth="120dp"
+    android:minResizeHeight="150dp"
+    android:maxResizeWidth="400dp"
+    android:maxResizeHeight="500dp"
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:description="@string/heartbeat_widget_description"

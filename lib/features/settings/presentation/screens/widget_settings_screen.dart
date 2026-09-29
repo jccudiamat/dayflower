@@ -92,6 +92,17 @@ class WidgetSettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: AppSpace.md),
 
+                  Text('HEARTBEAT WIDGET', style: AppText.label()),
+                  const SizedBox(height: AppSpace.xs),
+                  Text(
+                    'The picture on it. Moonlight is free; the others come '
+                    'with Dayflower Premium.',
+                    style: AppText.caption(),
+                  ),
+                  const SizedBox(height: AppSpace.xs),
+                  HeartbeatThemePicker(),
+                  const SizedBox(height: AppSpace.md),
+
                   Text('REUNION WIDGET', style: AppText.label()),
                   const SizedBox(height: AppSpace.xs),
                   Text(

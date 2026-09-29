@@ -14,6 +14,8 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_icon.dart';
+import '../../../widget/heartbeat_themes.dart';
+import '../../../widget/heartbeat_widget_preview.dart';
 import '../../../widget/widget_mode_provider.dart';
 import '../../../widget/widget_sync.dart';
 
@@ -260,6 +262,129 @@ class WidgetDaysRow extends ConsumerWidget {
                     width: selected && enabled ? 6 : 1.5,
                   ),
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The heartbeat widget's scene: the five, as the widget draws them, the
+/// chosen one outlined and the premium ones locked.
+///
+/// ⚠️ A locked scene says why when tapped rather than doing nothing, and
+/// what it says is the truth: Premium cannot be bought yet (see
+/// premiumProvider). HeartbeatThemeNotifier refuses it too, so this is not
+/// the only thing keeping it off the widget.
+class HeartbeatThemePicker extends ConsumerWidget {
+  const HeartbeatThemePicker({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final chosen = ref.watch(heartbeatThemeProvider);
+    final premium = ref.watch(premiumProvider);
+    final enabled = DayflowerWidgets.isSupported;
+
+    return SizedBox(
+      height: 186,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: HeartbeatTheme.values.length,
+        separatorBuilder: (_, __) => const SizedBox(width: AppSpace.sm),
+        itemBuilder: (context, i) {
+          final theme = HeartbeatTheme.values[i];
+          final locked = theme.premium && !premium;
+          return _HeartbeatThemeChoice(
+            theme: theme,
+            selected: theme == chosen,
+            locked: locked,
+            onTap: !enabled
+                ? null
+                : locked
+                    ? () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(
+                            '${theme.label} comes with Dayflower Premium, '
+                            'which isn’t available yet.')))
+                    : () => ref.read(heartbeatThemeProvider.notifier).choose(theme),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _HeartbeatThemeChoice extends StatelessWidget {
+  const _HeartbeatThemeChoice({
+    required this.theme,
+    required this.selected,
+    required this.locked,
+    required this.onTap,
+  });
+
+  final HeartbeatTheme theme;
+  final bool selected;
+  final bool locked;
+  final VoidCallback? onTap;
+
+  static const _width = 112.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: locked ? '${theme.label}, Premium, locked' : theme.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: _width,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AnimatedContainer(
+                duration: AppMotion.micro,
+                width: _width,
+                height: _width * 5 / 4,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadius.lg + 3),
+                  border: Border.all(
+                    color: selected ? AppColors.secondary : Colors.transparent,
+                    width: 2.5,
+                  ),
+                ),
+                // The lock is under the card, not on it: on it, it sat
+                // on the scene's own title.
+                child: HeartbeatWidgetPreview(theme: theme),
+              ),
+              const SizedBox(height: 6),
+              Text(theme.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppText.body(AppColors.ink)
+                      .copyWith(fontWeight: FontWeight.w600)),
+              Row(
+                children: [
+                  if (locked) ...[
+                    AppIcon(CupertinoIcons.lock,
+                        color: AppColors.muted, size: 12),
+                    const SizedBox(width: 3),
+                  ],
+                  Flexible(
+                    child: Text(
+                      selected
+                          ? 'On your widget'
+                          : (theme.premium ? 'Premium' : 'Free'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppText.caption(),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

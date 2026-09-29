@@ -1,69 +1,152 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Heartbeat widget. Tapping anywhere fires a background broadcast that
-     sends a pulse without opening the app (see dayflowerWidgetBackground in
-     lib/features/widget/widget_sync.dart). -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Heartbeat widget: a scene (the theme picked in Settings), "HEARTBEAT"
+     over it and "Tap to send" under it, as the supplied designs have them.
+     No counts: a tap sends a heartbeat, and a beat sent or arrived ripples.
+
+     The scene fills the card, centre-cropped. Every scene has its big heart
+     at its exact centre (tool/make_heartbeat_art.py), so the heart is the
+     card's middle at any size or shape the launcher gives it, and the
+     ripples, which grow from the card's middle, grow from the heart. The
+     title and the button are drawn here rather than baked into the picture,
+     so they stay crisp and pinned to the top and the bottom.
+
+     🔴 **The ripple is the launcher's animation, not the app's.** Each
+     moving part is in a ViewFlipper whose in-animation is the move: showing
+     a child plays it, showing it again plays it again (HeartbeatRipple).
+     The rings' flippers rest on an empty first child, so a widget drawn
+     fresh shows no ring; the scene's flipper has only the scene.
+
+     Tapping anywhere is HeartbeatTapReceiver: it ripples at once, then
+     sends. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/beat_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:gravity="center"
     android:background="@drawable/widget_background"
-    android:padding="12dp">
+    android:clipToOutline="true">
 
-    <TextView
-        android:id="@+id/beat_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/heartbeat_widget_label"
-        android:textColor="#9C92AC"
-        android:textSize="10sp"
-        android:letterSpacing="0.08"
-        android:textStyle="bold" />
+    <ViewFlipper
+        android:id="@+id/beat_art_flip"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:animateFirstView="true"
+        android:inAnimation="@anim/hb_thump">
 
-    <!-- The heart sits inside a fixed square so the ripple ring behind it has
-         somewhere to expand into without moving the text below. -->
-    <FrameLayout
-        android:layout_width="64dp"
-        android:layout_height="64dp"
-        android:layout_marginTop="2dp">
+        <ImageView
+            android:id="@+id/beat_art"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:src="@drawable/hb_art_moon"
+            android:contentDescription="@string/heartbeat_widget_description" />
+    </ViewFlipper>
+
+    <ViewFlipper
+        android:id="@+id/beat_glow_flip"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:animateFirstView="true"
+        android:inAnimation="@anim/hb_glow">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ImageView
+            android:id="@+id/beat_glow"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:src="@drawable/hb_glow"
+            android:contentDescription="@null" />
+    </ViewFlipper>
+
+    <ViewFlipper
+        android:id="@+id/beat_ring_flip"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:animateFirstView="true"
+        android:inAnimation="@anim/hb_ring">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
 
         <ImageView
             android:id="@+id/beat_ring"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_gravity="center"
-            android:src="@drawable/ripple_ring_1"
+            android:scaleType="fitCenter"
+            android:src="@drawable/hb_ring"
             android:contentDescription="@null" />
+    </ViewFlipper>
 
-        <TextView
-            android:id="@+id/beat_heart"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="💗"
-            android:textSize="32sp" />
-    </FrameLayout>
+    <ViewFlipper
+        android:id="@+id/beat_echo_flip"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:animateFirstView="true"
+        android:inAnimation="@anim/hb_echo">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <ImageView
+            android:id="@+id/beat_echo"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="fitCenter"
+            android:src="@drawable/hb_ring"
+            android:contentDescription="@null" />
+    </ViewFlipper>
 
     <TextView
-        android:id="@+id/beat_mine"
+        android:id="@+id/beat_label"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:text="@string/heartbeat_widget_prompt"
-        android:textColor="#F5F2F8"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="18dp"
+        android:fontFamily="sans-serif"
+        android:letterSpacing="0.32"
+        android:text="@string/heartbeat_widget_label"
+        android:textColor="#F5A5BF"
         android:textSize="13sp"
-        android:textStyle="bold" />
+        android:shadowColor="#66000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="2" />
 
-    <TextView
-        android:id="@+id/beat_partner"
-        android:layout_width="match_parent"
+    <LinearLayout
+        android:id="@+id/beat_pill"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="1dp"
-        android:gravity="center"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:text=""
-        android:textColor="#9C92AC"
-        android:textSize="11sp" />
-</LinearLayout>
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/hb_pill"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="22dp"
+        android:paddingRight="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:text="@string/heartbeat_widget_prompt"
+            android:textColor="#FDF0F5"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:layout_width="14dp"
+            android:layout_height="14dp"
+            android:layout_marginLeft="7dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_widget_heart_off"
+            android:contentDescription="@null" />
+    </LinearLayout>
+</FrameLayout>

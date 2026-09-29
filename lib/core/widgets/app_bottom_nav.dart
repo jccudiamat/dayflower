@@ -252,7 +252,7 @@ class _BrandMark extends StatelessWidget {
     return AnimatedSwitcher(
       duration: AppMotion.micro,
       child: selected
-          ? Image.asset('assets/images/brand_mark.png',
+          ? Image.asset('assets/images/mark.png',
               key: const ValueKey(true),
               width: 28,
               height: 28,
