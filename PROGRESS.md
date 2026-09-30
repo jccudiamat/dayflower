@@ -13,12 +13,13 @@
 
 ## Recent app work
 
-### A smaller button on the heartbeat widget; the heartbeat card's ripple on Home (2026-09-29, not yet published)
+### A smaller button on the heartbeat widget; the heartbeat card's ripple on Home (2026-09-29, build 129)
 
 - **The widget's button is smaller** (the user tried it without one first and kept it; everything from that try was reverted to build 128, including the art, and a copy of the try is in the session scratchpad only). 12sp words in 6dp above and below and 15/13dp either side (it was 14sp, 10dp and 22/20dp), an 11dp heart 5dp after the words: about a quarter shorter and a fifth narrower. `HeartbeatWidgetPreview` has the same numbers. Checked on the emulator beside build 128.
 - 🔴 **The Home heartbeat card's ripple** (the card with the mood check-in under it) was barely a ripple. Your tap grew one ring from the 64pt heart by 24pt, theirs three rings by 32pt: sized to stay on the heart's stage, because they were drawn over the words beside the heart and past the card's edge. They hugged the heart and faded before they read as anything. Now they are drawn behind the words (a layer under the heartbeat half, over the heart's stage) and the card clips to its own rounded edge, so they travel: two pink rings for yours and three lavender for theirs, out to about three hearts across, a fine line with a soft glow and a bloom in the first, fading late (`_RingPainter`). The heart beats lub-dub both ways, harder for theirs (`_sentBeat`, `_receivedBeat`).
 - 🔴 **And rings started over.** Each ring's key was on the ring inside an unkeyed OverflowBox, so the boxes were matched by position: when the first ring finished and was removed, the next box took its place with a new ring's state and every ring still going started again from the heart. The pulse stuttered and repeated after it should have ended. The key is on the OverflowBox now, and each ring's wait and growth are one controller (no timers left behind).
 - Seen frame by frame in a test (`CAPTURE: the heartbeat card's ripples` in home_screen_test.dart, review only, with `--dart-define=CAPTURE_REVIEW=true`; `_pump` takes `beatCounts` so a heartbeat can arrive mid-test). A regression test steps through the pulse in 50ms frames, as a phone draws it, and fails on the old key placement (checked). 688 tests pass.
+- **Published as build 129.** Patches 2.1 MB (from 128) to 4.7 MB (125), each checked to rebuild 129 byte for byte.
 
 ### The heartbeat widget: five scenes, no counts, and a ripple the launcher plays (2026-09-29, build 128)
 
