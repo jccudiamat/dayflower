@@ -79,12 +79,66 @@ void main() {
   });
 
   group('the widget', () {
-    test('is 4:5 by default', () {
+    // 🔴 It was 160 by 200dp, the 2 by 2 size itself, and a launcher adds
+    // its padding before counting cells: on the user's phone it came out
+    // 3 by 3 and had to be shrunk by hand to the size they wanted.
+    test('is 2 by 2 by default', () {
       final info = read('${res}xml/heartbeat_widget_info.xml');
       int dp(String attr) => int.parse(
           RegExp('android:$attr="(\\d+)dp"').firstMatch(info)!.group(1)!);
-      expect(dp('minWidth') * 5, dp('minHeight') * 4);
+      expect(info, contains('android:targetCellWidth="2"'));
+      expect(info, contains('android:targetCellHeight="2"'));
+      // More than one cell (up to 100dp across, 125 down) and, with 16dp
+      // of launcher padding, within two (130dp across, 160 down).
+      expect(dp('minWidth'), inInclusiveRange(101, 114));
+      expect(dp('minHeight'), inInclusiveRange(126, 144));
+      expect(dp('minResizeWidth'), lessThanOrEqualTo(dp('minWidth')));
+      expect(dp('minResizeHeight'), lessThanOrEqualTo(dp('minHeight')));
       expect(info, contains('android:previewLayout="@layout/heartbeat_widget"'));
+    });
+
+    test('the ripple passes over the title and the button', () {
+      final layout = read('${res}layout/heartbeat_widget.xml');
+      int at(String id) => layout.indexOf('android:id="@+id/$id"');
+      for (final ring in ['beat_glow_flip', 'beat_ring_flip', 'beat_echo_flip']) {
+        for (final words in ['beat_label', 'beat_pill']) {
+          expect(at(ring), greaterThan(at(words)),
+              reason: '$ring is drawn after $words, so over it');
+        }
+      }
+    });
+
+    // The button looked too big at 2 by 2: its words are sized to the
+    // widget now (HeartbeatWidget.sizeChrome), from the same numbers the
+    // layout has for the default size.
+    test('the title and the button are sized to the widget', () {
+      final layout = read('${res}layout/heartbeat_widget.xml');
+      final widget = read('${kotlin}HeartbeatWidget.kt');
+      double constant(String name) => double.parse(
+          RegExp('const val $name = ([\\d.]+)f').firstMatch(widget)!.group(1)!);
+      String tag(String id) {
+        final at = layout.indexOf('android:id="@+id/$id"');
+        return layout.substring(layout.lastIndexOf('<', at), layout.indexOf('>', at));
+      }
+      double attr(String id, String name) => double.parse(
+          RegExp('android:$name="([\\d.]+)dp"').firstMatch(tag(id))!.group(1)!);
+      expect(attr('beat_chrome', 'paddingTop'), constant('TITLE_TOP'));
+      expect(attr('beat_chrome', 'paddingBottom'), constant('PILL_BOTTOM'));
+      expect(attr('beat_label', 'textSize'), constant('TITLE_TEXT'));
+      expect(attr('beat_pill', 'paddingLeft'), constant('PILL_LEFT'));
+      expect(attr('beat_pill', 'paddingRight'), constant('PILL_RIGHT'));
+      expect(attr('beat_pill', 'paddingTop'), constant('PILL_Y'));
+      expect(attr('beat_pill', 'paddingBottom'), constant('PILL_Y'));
+      expect(attr('beat_prompt', 'textSize'), constant('PROMPT_TEXT'));
+      expect(attr('beat_prompt_heart', 'layout_width'), constant('HEART'));
+      expect(attr('beat_prompt_heart', 'layout_height'), constant('HEART'));
+      expect(attr('beat_prompt_heart', 'layout_marginLeft'), constant('HEART_GAP'));
+      // dp, not sp: a larger system font would grow the button over the
+      // scene again.
+      expect(layout, isNot(contains('sp"')));
+      expect(widget, contains('override fun onAppWidgetOptionsChanged'));
+      expect(read('${kotlin}DayflowerWidget.kt'),
+          contains('override fun onAppWidgetOptionsChanged'));
     });
 
     test('shows no counts', () {

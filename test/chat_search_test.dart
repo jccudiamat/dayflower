@@ -9,6 +9,7 @@ import 'package:dayflower/core/theme/app_theme.dart';
 import 'package:dayflower/features/calls/data/call_usage.dart';
 import 'package:dayflower/features/onboarding/data/user_repository.dart';
 import 'package:dayflower/features/presence/data/presence_repository.dart';
+import 'package:dayflower/features/tulip/data/chat_shortcut.dart';
 import 'package:dayflower/features/tulip/data/flower_repository.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
 import 'package:dayflower/features/tulip/presentation/screens/chat_search_screen.dart';
@@ -211,6 +212,50 @@ void main() {
       }
       expect(tester.takeException(), isNull);
       if (_capture) await _shoot(tester, boundary, 'chat-settings-actions');
+    });
+
+    testWidgets('puts their chat on the home screen, as WhatsApp does',
+        (tester) async {
+      ChatShortcut.debugSupported = true;
+      addTearDown(() => ChatShortcut.debugSupported = null);
+      const channel = MethodChannel('dayflower/chat_shortcut');
+      final pins = <Map<Object?, Object?>>[];
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+          (call) async {
+        if (call.method != 'pin') return true;
+        pins.add(call.arguments as Map<Object?, Object?>);
+        // A launcher that cannot be handed one.
+        return 'unsupported';
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null));
+
+      final boundary = GlobalKey();
+      await _pump(tester,
+          messages: Stream.value(_thread(DateTime.now())), boundary: boundary);
+      await tester.tap(find.text('Wifey'));
+      await tester.pumpAndSettle();
+      final add = find.text('Add to home screen');
+      await tester.scrollUntilVisible(add, 200,
+          scrollable: find
+              .descendant(
+                  of: find.byType(ChatSettingsScreen),
+                  matching: find.byType(Scrollable))
+              .first);
+      // The icon is drawn by the engine, which fake time cannot wait for.
+      await tester.runAsync(() async {
+        await tester.tap(add);
+        for (var i = 0; i < 100 && pins.isEmpty; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+        }
+      });
+      await tester.pump();
+
+      expect(pins.single['name'], 'Wifey');
+      expect(pins.single['icon'], isA<Uint8List>());
+      expect(find.textContaining('Touch and hold the Dayflower icon'),
+          findsOneWidget);
+      if (_capture) await _shoot(tester, boundary, 'chat-settings-shortcut');
     });
 
     testWidgets('Message goes back to the chat, ready to write',

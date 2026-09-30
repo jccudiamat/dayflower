@@ -16,8 +16,10 @@ import '../../../calls/data/call_usage.dart';
 import '../../../calls/domain/call.dart';
 import '../../../calls/presentation/start_call.dart';
 import '../../../onboarding/data/user_repository.dart';
+import '../../data/chat_shortcut.dart';
 import '../../data/flower_repository.dart';
 import '../../data/reaction_choices.dart';
+import '../widgets/chat_shortcut_action.dart';
 import '../widgets/media_viewer.dart';
 import '../widgets/share_your_day.dart';
 import '../../../../core/widgets/app_icon.dart';
@@ -82,6 +84,10 @@ class ChatSettingsScreen extends ConsumerWidget {
           const _CallUsage(),
           const SizedBox(height: AppSpace.md),
           const _ReactionSettings(),
+          if (ChatShortcut.supported) ...[
+            const SizedBox(height: AppSpace.md),
+            const _HomeScreenShortcut(),
+          ],
           const SizedBox(height: AppSpace.md),
           const _SharedMedia(),
           const SizedBox(height: AppSpace.lg),
@@ -431,6 +437,51 @@ class _Thumb extends ConsumerWidget {
           error: (_) => const SizedBox.expand(),
         ),
       ),
+      ),
+    );
+  }
+}
+
+/* ── Home screen ─────────────────────────────────── */
+
+/// Their chat as an icon on the home screen (ChatShortcut). Here because
+/// this is the conversation's own menu, where WhatsApp keeps its Add
+/// shortcut; Home's widget gallery has it too.
+class _HomeScreenShortcut extends ConsumerWidget {
+  const _HomeScreenShortcut();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return _Section(
+      label: 'HOME SCREEN',
+      child: Semantics(
+        button: true,
+        label: 'Add their chat to your home screen',
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          onTap: () => addChatShortcut(context, ref),
+          child: Row(
+            children: [
+              const AppIcon(CupertinoIcons.add_circled,
+                  size: 22, color: AppColors.secondary),
+              const SizedBox(width: AppSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Add to home screen', style: AppText.subtitle()),
+                    const SizedBox(height: 2),
+                    Text('Their chat, one tap away, like an app.',
+                        style: AppText.caption()),
+                  ],
+                ),
+              ),
+              AppIcon(CupertinoIcons.chevron_right,
+                  size: 16, color: AppColors.muted),
+            ],
+          ),
+        ),
       ),
     );
   }

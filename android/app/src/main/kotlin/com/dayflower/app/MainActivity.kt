@@ -119,6 +119,12 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // Their chat as an icon on the home screen - see ChatShortcut.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ChatShortcut.CHANNEL)
+            .setMethodCallHandler { call, result ->
+                ChatShortcut.handle(applicationContext, call, result)
+            }
+
         // Recording and playing a voice message - see VoiceNotes. Its own
         // channel for the same reason as the others: MediaRecorder is an
         // Android API, and the pub packages that wrap it carry a whole

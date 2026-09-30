@@ -5,13 +5,13 @@ import 'heartbeat_themes.dart';
 
 /// The heartbeat widget in miniature, as layout/heartbeat_widget.xml draws
 /// it: the [theme]'s scene filling the card, "HEARTBEAT" over it and "Tap to
-/// send" under it. Laid out at the widget's 180dp and scaled to whatever
-/// width it is given, so Settings and the widget gallery show the real
-/// proportions at their own sizes.
+/// send" under it. Laid out at the widget's default 160dp across and scaled
+/// to whatever width it is given, so Settings and the widget gallery show
+/// the real proportions at their own sizes.
 ///
-/// ⚠️ Keep the numbers in step with the XML (margins 18 and 16, text 13 and
-/// 12, the button's padding and colours): this is the only look at the widget most
-/// people get before they place it.
+/// ⚠️ Keep the numbers in step with the XML and HeartbeatWidget.sizeChrome
+/// (margins 16 and 14, text 12 and 10, the button's padding and colours):
+/// this is the only look at the widget most people get before they place it.
 class HeartbeatWidgetPreview extends StatelessWidget {
   const HeartbeatWidgetPreview({super.key, required this.theme});
 
@@ -23,7 +23,7 @@ class HeartbeatWidgetPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      final u = box.maxWidth / 180;
+      final u = box.maxWidth / 160;
       return MediaQuery.withNoTextScaling(
         child: ClipRRect(
           borderRadius: BorderRadius.circular(20 * u),
@@ -34,7 +34,7 @@ class HeartbeatWidgetPreview extends StatelessWidget {
               Image.asset(theme.thumbnail,
                   fit: BoxFit.cover, excludeFromSemantics: true),
               Positioned(
-                top: 18 * u,
+                top: 16 * u,
                 left: 0,
                 right: 0,
                 child: Text(
@@ -43,14 +43,14 @@ class HeartbeatWidgetPreview extends StatelessWidget {
                   maxLines: 1,
                   style: TextStyle(
                     color: _title,
-                    fontSize: 13 * u,
-                    letterSpacing: 0.32 * 13 * u,
+                    fontSize: 12 * u,
+                    letterSpacing: 0.32 * 12 * u,
                     height: 1.2,
                   ),
                 ),
               ),
               Positioned(
-                bottom: 16 * u,
+                bottom: 14 * u,
                 left: 0,
                 right: 0,
                 child: Center(
@@ -73,7 +73,8 @@ class HeartbeatWidgetPreview extends StatelessWidget {
                       ],
                     ),
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(15 * u, 6 * u, 13 * u, 6 * u),
+                      padding:
+                          EdgeInsets.fromLTRB(12 * u, 5 * u, 10 * u, 5 * u),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -82,14 +83,14 @@ class HeartbeatWidgetPreview extends StatelessWidget {
                             maxLines: 1,
                             style: TextStyle(
                               color: _label,
-                              fontSize: 12 * u,
+                              fontSize: 10 * u,
                               fontWeight: FontWeight.w600,
                               height: 1.2,
                             ),
                           ),
-                          SizedBox(width: 5 * u),
+                          SizedBox(width: 4 * u),
                           AppIcon(CupertinoIcons.heart,
-                              color: _label, size: 11 * u),
+                              color: _label, size: 9 * u),
                         ],
                       ),
                     ),

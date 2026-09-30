@@ -87,6 +87,17 @@
              intent launches this activity. Without these two the intent
              resolves but the phone stays dark and locked, so the alarm looks
              like nothing happened even while it is ringing. -->
+        <!-- A chat shortcut's tap, on its way to MainActivity: in a task of
+             its own, because Android clears a shortcut's task first and
+             MainActivity's holds the running app (ChatShortcut.kt). Not
+             exported: the launcher starts a shortcut as this app. -->
+        <activity
+            android:name=".ShortcutActivity"
+            android:exported="false"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

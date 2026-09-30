@@ -4,6 +4,7 @@ import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.os.Bundle
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetPlugin
 import es.antonborri.home_widget.HomeWidgetProvider
@@ -59,7 +60,7 @@ class DayflowerWidget : HomeWidgetProvider() {
                     "heartbeat" -> {
                         val views =
                             RemoteViews(context.packageName, R.layout.heartbeat_widget)
-                        HeartbeatWidget.renderHeartbeat(context, views, widgetData)
+                        HeartbeatWidget.renderHeartbeat(context, views, widgetData, widgetId)
                         appWidgetManager.updateAppWidget(widgetId, views)
                     }
                     "reunion" -> ReunionWidget.renderSafely(
@@ -81,5 +82,17 @@ class DayflowerWidget : HomeWidgetProvider() {
                 android.util.Log.e("DayflowerWidget", "adaptive render failed", e)
             }
         }
+    }
+
+    /** Resized while it shows the heartbeat, whose words are sized to it. */
+    override fun onAppWidgetOptionsChanged(
+        context: Context,
+        appWidgetManager: AppWidgetManager,
+        appWidgetId: Int,
+        newOptions: Bundle,
+    ) {
+        val data = HomeWidgetPlugin.getData(context)
+        if (data.getString("widget_mode", "flower") != "heartbeat") return
+        onUpdate(context, appWidgetManager, intArrayOf(appWidgetId), data)
     }
 }

@@ -13,7 +13,9 @@ import 'package:dayflower/features/memories/presentation/views/all_memories_view
 import 'package:dayflower/features/dayflower/presentation/dayflower_screen.dart';
 import 'package:dayflower/features/travel/data/map_pin_repository.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
+import 'package:dayflower/features/tulip/data/chat_shortcut.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
+import 'package:dayflower/features/tulip/presentation/widgets/chat_shortcut_action.dart';
 import 'package:dayflower/features/booth/presentation/screens/booth_archive_screen.dart';
 import 'package:dayflower/features/tulip/presentation/widgets/media_viewer.dart';
 import 'package:dayflower/features/booth/presentation/screens/booth_studio_screen.dart';
@@ -1701,6 +1703,51 @@ void main() {
       await tester.pumpAndSettle();
     }
     expect(_beats.sends, 0);
+  });
+
+  _homeTest('Their chat goes on the home screen from the widget gallery',
+      (tester) async {
+    ChatShortcut.debugSupported = true;
+    addTearDown(() => ChatShortcut.debugSupported = null);
+    const channel = MethodChannel('dayflower/chat_shortcut');
+    final pins = <Map<Object?, Object?>>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+        (call) async {
+      if (call.method != 'pin') return true;
+      pins.add(call.arguments as Map<Object?, Object?>);
+      return 'already';
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    // Drawing the icon lets real time run, and the map then asks for a
+    // cache folder, as in the ripple capture above.
+    const paths = MethodChannel('plugins.flutter.io/path_provider');
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, (_) async => Directory.systemTemp.path);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, null));
+
+    await _pump(tester, Routes.home, filled: true);
+    final add = find.byWidgetPredicate((w) =>
+        w is Semantics &&
+        w.properties.label == 'Add their chat to your home screen');
+    await _reveal(tester, add);
+    await tester.pumpAndSettle();
+    expect(find.text('Their chat, one tap from your home screen.'),
+        findsOneWidget);
+    expect(find.byType(ChatShortcutPreview), findsOneWidget);
+    await _screenshot(tester, 'home-widget-gallery-chat');
+    await tester.runAsync(() async {
+      await tester.tap(add);
+      for (var i = 0; i < 100 && pins.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+      }
+    });
+    await tester.pump();
+    expect(pins.single['name'], 'Wifey');
+    expect(find.text('Wifey is already on your home screen.'), findsOneWidget);
+    // Not a widget: nothing to set up.
+    expect(find.text('Set up Chat'), findsNothing);
   });
 
   _homeTest(

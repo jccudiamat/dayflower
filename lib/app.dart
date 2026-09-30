@@ -33,6 +33,7 @@ import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
+import 'features/tulip/data/chat_shortcut.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
 import 'features/calls/data/caller_avatar.dart';
@@ -274,6 +275,9 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
           replyFromWidgetRequest.value = (id: id, at: DateTime.now());
         }
         goWhenReady(ref, Routes.chat);
+      case 'chat':
+        // Their chat's icon on the home screen (ChatShortcut).
+        goWhenReady(ref, Routes.chat);
       default:
         // A flower: the conversation it was sent in.
         goWhenReady(ref, Routes.chat);
@@ -432,6 +436,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // so without this leaving the home screen would float a call that is
     // not happening. Only Dart knows one is live.
     _rememberCallerFace();
+    _keepChatShortcut();
 
     ref.listen<CallSession?>(callNotifierProvider, (_, session) {
       CallPip.setCallActive(
@@ -719,6 +724,28 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         final url = await ref.read(avatarUrlProvider(path).future);
         if (url != null) await CallerAvatar.remember(url);
       });
+    });
+  }
+
+  /// Keeps their chat's shortcut on them: the one in the app icon's menu,
+  /// and any the person has put on the home screen, which would otherwise
+  /// keep an old photo, or the last account's partner after a switch.
+  ///
+  /// Called from build for the reason [_rememberCallerFace] is. Unpaired,
+  /// it leaves the menu; AuthRepository.signOut takes it out on a sign-out.
+  void _keepChatShortcut() {
+    if (!ChatShortcut.supported) return;
+    ref.listen<AsyncValue<UserProfile?>>(partnerProfileProvider,
+        (previous, next) {
+      if (next.isLoading) return;
+      final partner = next.valueOrNull;
+      if (partner == null) {
+        if (previous?.valueOrNull != null) _settled(ChatShortcut.clear);
+        return;
+      }
+      _settled(() => ChatShortcut.publish(partner,
+          download: (path) =>
+              ref.read(userRepositoryProvider).downloadAvatar(path)));
     });
   }
 

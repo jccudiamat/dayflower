@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../core/widgets/storage_image.dart';
+import '../../tulip/data/chat_shortcut.dart';
 import '../../widget/widget_sync.dart';
 
 class AuthRepository {
@@ -54,6 +55,8 @@ class AuthRepository {
     // And off the home screen: the widgets held their partner, their days
     // and today's heartbeats, and kept showing them after the sign-out.
     await DayflowerWidgets.clearAccount();
+    // Their chat, out of the app icon's menu (ChatShortcut).
+    await ChatShortcut.clear();
   }
 
   Session? get currentSession => _client.auth.currentSession;

@@ -8,9 +8,9 @@
     android:fillAfter="true">
     <scale
         android:fromXScale="0.46"
-        android:toXScale="1.0"
+        android:toXScale="1.25"
         android:fromYScale="0.46"
-        android:toYScale="1.0"
+        android:toYScale="1.25"
         android:pivotX="50%"
         android:pivotY="50%"
         android:startOffset="300"

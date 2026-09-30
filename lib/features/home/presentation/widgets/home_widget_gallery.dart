@@ -8,13 +8,17 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_icon.dart';
 import '../../../reunion/data/reunion_repository.dart';
+import '../../../tulip/data/chat_shortcut.dart';
 import '../../../tulip/data/flower_repository.dart';
+import '../../../tulip/presentation/widgets/chat_shortcut_action.dart';
 import '../../../widget/heartbeat_themes.dart';
 import '../../../widget/heartbeat_widget_preview.dart';
 import '../../domain/home_moments.dart';
 import '../screens/home_screen.dart' show HomeDayPhoto;
 
-enum HomeWidgetKind { myDay, heartbeat, reunion }
+/// [chat] is not a widget but their chat's icon (ChatShortcut), which
+/// people look for in the same place. Android only.
+enum HomeWidgetKind { myDay, heartbeat, reunion, chat }
 
 class HomeWidgetGallery extends ConsumerWidget {
   const HomeWidgetGallery({super.key});
@@ -35,38 +39,48 @@ class HomeWidgetGallery extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(AppRadius.xl),
                   border: Border.all(color: AppColors.border)),
               child: Column(children: [
-                for (final kind in HomeWidgetKind.values) ...[
-                  if (kind != HomeWidgetKind.myDay)
-                    Divider(height: 1, color: AppColors.border),
-                  _WidgetFeature(kind: kind),
-                ],
+                for (final kind in HomeWidgetKind.values)
+                  if (kind != HomeWidgetKind.chat ||
+                      ChatShortcut.supported) ...[
+                    if (kind != HomeWidgetKind.myDay)
+                      Divider(height: 1, color: AppColors.border),
+                    _WidgetFeature(kind: kind),
+                  ],
               ]),
             ),
           ]);
 }
 
-class _WidgetFeature extends StatelessWidget {
+class _WidgetFeature extends ConsumerWidget {
   const _WidgetFeature({required this.kind});
   final HomeWidgetKind kind;
   String get title => switch (kind) {
         HomeWidgetKind.myDay => 'My Day',
         HomeWidgetKind.heartbeat => 'Heartbeat',
-        HomeWidgetKind.reunion => 'Reunion'
+        HomeWidgetKind.reunion => 'Reunion',
+        HomeWidgetKind.chat => 'Chat',
       };
   String get description => switch (kind) {
         HomeWidgetKind.myDay => 'Their photos, right on your home screen.',
         HomeWidgetKind.heartbeat => 'Send love in a tap.',
         HomeWidgetKind.reunion => 'Until your next hug.',
+        HomeWidgetKind.chat => 'Their chat, one tap from your home screen.',
       };
+  bool get _isChat => kind == HomeWidgetKind.chat;
   @override
-  Widget build(BuildContext context) => Semantics(
-        label: 'Set up $title widget',
+  Widget build(BuildContext context, WidgetRef ref) => Semantics(
+        label: _isChat
+            ? 'Add their chat to your home screen'
+            : 'Set up $title widget',
         button: true,
         child: Material(
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(AppRadius.lg),
-              onTap: () => _setup(context),
+              // The chat has nothing to set up: the launcher is asked
+              // straight away, the way WhatsApp's Add shortcut does.
+              onTap: () =>
+                  _isChat ? addChatShortcut(context, ref) : _setup(context),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: LayoutBuilder(builder: (context, box) {
@@ -77,7 +91,7 @@ class _WidgetFeature extends StatelessWidget {
                         const SizedBox(height: 6),
                         Text(description, style: AppText.body()),
                         const SizedBox(height: 12),
-                        Text('Set up ›',
+                        Text(_isChat ? 'Add ›' : 'Set up ›',
                             style: AppText.subtitle(AppColors.brandDark)),
                       ]);
                   final preview = ExcludeSemantics(
@@ -219,6 +233,7 @@ class _WidgetPreview extends ConsumerWidget {
               // widget does not keep them any more.
               HomeWidgetKind.heartbeat =>
                 HeartbeatWidgetPreview(theme: beatTheme),
+              HomeWidgetKind.chat => const ChatShortcutPreview(),
               HomeWidgetKind.reunion => days == null || days < 0
                   ? _label(CupertinoIcons.calendar, 'Choose a date')
                   : Padding(

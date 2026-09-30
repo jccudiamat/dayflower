@@ -1,19 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4:5 by default, the shape of the scenes it shows (160 by 200dp, and two
-     cells by two on Android 12+ launchers, which on a phone come out close
-     to that). Other shapes still fit: the scene is centre-cropped round its
-     heart, and the title and the button stay pinned (layout/heartbeat_widget).
+<!-- Two cells by two by default, which on a phone comes out close to the
+     scenes' 4:5. Other shapes still fit: the scene is centre-cropped round
+     its heart, the title and the button stay pinned (layout/heartbeat_widget)
+     and are sized to the widget (HeartbeatWidget.sizeChrome).
+
+     🔴 minWidth and minHeight are what most launchers place a widget at,
+     and they were 160 by 200dp, the 2 by 2 size itself. A launcher adds its
+     own padding before it counts cells, so on the user's phone, where 2 by 2
+     is about 175 by 215dp, that tipped into 3 by 3 and the widget had to be
+     shrunk by hand. Now they only have to be more than one cell and less
+     than two: 110dp across (one cell is 60 to 100dp, two at least 130) and
+     130dp down (one row is 80 to 125dp, two at least 160). Android 12+
+     launchers go by targetCell instead.
 
      previewLayout: the picker shows the real thing, on the default scene. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/heartbeat_widget"
     android:previewLayout="@layout/heartbeat_widget"
-    android:minWidth="160dp"
-    android:minHeight="200dp"
+    android:minWidth="110dp"
+    android:minHeight="130dp"
     android:targetCellWidth="2"
     android:targetCellHeight="2"
-    android:minResizeWidth="120dp"
-    android:minResizeHeight="150dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="130dp"
     android:maxResizeWidth="400dp"
     android:maxResizeHeight="500dp"
     android:resizeMode="horizontal|vertical"

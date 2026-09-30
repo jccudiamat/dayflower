@@ -117,19 +117,24 @@ object HeartbeatRipple {
         } else {
             COLOR_RECEIVED
         }
-        val pulse = RemoteViews(context.packageName, layoutId)
-        HeartbeatWidget.renderHeartbeat(context, pulse, widgetData)
-        start(pulse, color)
-        ids.forEach { manager.updateAppWidget(it, pulse) }
+        // One each: the words on each are sized to that widget.
+        ids.forEach { id ->
+            val pulse = RemoteViews(context.packageName, layoutId)
+            HeartbeatWidget.renderHeartbeat(context, pulse, widgetData, id)
+            start(pulse, color)
+            manager.updateAppWidget(id, pulse)
+        }
 
         Handler(Looper.getMainLooper()).postDelayed({
             try {
                 // A newer pulse started meanwhile: it puts itself away.
                 if (widgetData.longOf(PLAYED_AT) == now) {
-                    val rest = RemoteViews(context.packageName, layoutId)
-                    HeartbeatWidget.renderHeartbeat(context, rest, widgetData)
-                    settle(rest)
-                    ids.forEach { manager.updateAppWidget(it, rest) }
+                    ids.forEach { id ->
+                        val rest = RemoteViews(context.packageName, layoutId)
+                        HeartbeatWidget.renderHeartbeat(context, rest, widgetData, id)
+                        settle(rest)
+                        manager.updateAppWidget(id, rest)
+                    }
                 }
             } catch (e: Throwable) {
                 android.util.Log.e("DayflowerWidget", "heartbeat pulse could not settle", e)

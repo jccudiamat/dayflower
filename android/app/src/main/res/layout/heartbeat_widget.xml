@@ -16,6 +16,9 @@
      The rings' flippers rest on an empty first child, so a widget drawn
      fresh shows no ring; the scene's flipper has only the scene.
 
+     The rings are the last children, so they pass over the title and the
+     button, not behind them: the user asked for the button behind.
+
      Tapping anywhere is HeartbeatTapReceiver: it ripples at once, then
      sends. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -40,6 +43,72 @@
             android:src="@drawable/hb_art_moon"
             android:contentDescription="@string/heartbeat_widget_description" />
     </ViewFlipper>
+
+    <!-- The words. Sized to the widget in code (HeartbeatWidget.sizeChrome),
+         so the button is the same part of the card at any size: 2 by 2 on a
+         phone was the size it looked too big at. The numbers here are the
+         160 by 200dp default, and what the widget picker shows.
+
+         dp, not sp: the words belong to the picture, and a larger system
+         font would push the button over the scene again. Their distance
+         from the edges is this frame's padding because RemoteViews can set
+         a padding on any Android and a margin only from 12. -->
+    <FrameLayout
+        android:id="@+id/beat_chrome"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:paddingTop="16dp"
+        android:paddingBottom="14dp">
+
+        <TextView
+            android:id="@+id/beat_label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|center_horizontal"
+            android:fontFamily="sans-serif"
+            android:letterSpacing="0.32"
+            android:text="@string/heartbeat_widget_label"
+            android:textColor="#F5A5BF"
+            android:textSize="12dp"
+            android:shadowColor="#66000000"
+            android:shadowDx="0"
+            android:shadowDy="1"
+            android:shadowRadius="2" />
+
+        <LinearLayout
+            android:id="@+id/beat_pill"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|center_horizontal"
+            android:background="@drawable/hb_pill"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingLeft="12dp"
+            android:paddingRight="10dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="5dp">
+
+            <TextView
+                android:id="@+id/beat_prompt"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:maxLines="1"
+                android:text="@string/heartbeat_widget_prompt"
+                android:textColor="#FDF0F5"
+                android:textSize="10dp" />
+
+            <ImageView
+                android:id="@+id/beat_prompt_heart"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:layout_marginLeft="4dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_widget_heart_off"
+                android:contentDescription="@null" />
+        </LinearLayout>
+    </FrameLayout>
 
     <ViewFlipper
         android:id="@+id/beat_glow_flip"
@@ -100,57 +169,4 @@
             android:src="@drawable/hb_ring"
             android:contentDescription="@null" />
     </ViewFlipper>
-
-    <TextView
-        android:id="@+id/beat_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top|center_horizontal"
-        android:layout_marginTop="18dp"
-        android:fontFamily="sans-serif"
-        android:letterSpacing="0.32"
-        android:text="@string/heartbeat_widget_label"
-        android:textColor="#F5A5BF"
-        android:textSize="13sp"
-        android:shadowColor="#66000000"
-        android:shadowDx="0"
-        android:shadowDy="1"
-        android:shadowRadius="2" />
-
-    <!-- Smaller than the designs draw it, at the user's asking: 12sp words
-         in 6dp above and below, 15 and 13 either side (it was 14sp, 10 and
-         22/20), so the button sits under the scene rather than across it.
-         HeartbeatWidgetPreview keeps the same numbers. -->
-    <LinearLayout
-        android:id="@+id/beat_pill"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="16dp"
-        android:background="@drawable/hb_pill"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="15dp"
-        android:paddingRight="13dp"
-        android:paddingTop="6dp"
-        android:paddingBottom="6dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:fontFamily="sans-serif-medium"
-            android:maxLines="1"
-            android:text="@string/heartbeat_widget_prompt"
-            android:textColor="#FDF0F5"
-            android:textSize="12sp" />
-
-        <ImageView
-            android:layout_width="11dp"
-            android:layout_height="11dp"
-            android:layout_marginLeft="5dp"
-            android:scaleType="fitCenter"
-            android:src="@drawable/ic_widget_heart_off"
-            android:contentDescription="@null" />
-    </LinearLayout>
 </FrameLayout>

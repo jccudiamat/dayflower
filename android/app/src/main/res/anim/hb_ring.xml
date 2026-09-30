@@ -3,6 +3,10 @@
      outside the scene's heart to past the card's edges, fading as it goes.
      See drawable/hb_ring for why 0.46 is the heart's edge.
 
+     1.7: far enough for its point to sweep down over "Tap to send" on a
+     2 by 2 widget (at 1.18 it stopped short of the button). The rings are
+     drawn over the button (layout/heartbeat_widget).
+
      fillAfter: it ends invisible and stays so until the next pulse, and
      HeartbeatRipple puts it away properly (the flipper back on its empty
      child) once the pulse has had time to play. Before it starts, each
@@ -12,9 +16,9 @@
     android:fillAfter="true">
     <scale
         android:fromXScale="0.46"
-        android:toXScale="1.18"
+        android:toXScale="1.7"
         android:fromYScale="0.46"
-        android:toYScale="1.18"
+        android:toYScale="1.7"
         android:pivotX="50%"
         android:pivotY="50%"
         android:duration="1100"
