@@ -12,10 +12,10 @@ import { url } from "./lib/seo";
  * only because other crawlers still read them.
  */
 const pages = [
-  ["", "2026-09-27", 1],
-  ["/bouquet", "2026-09-27", 1],
+  ["", "2026-09-30", 1],
+  ["/bouquet", "2026-09-30", 1],
   ["/photobooth", "2026-09-27", 1],
-  ["/long-distance", "2026-09-27", 0.9],
+  ["/long-distance", "2026-09-30", 0.9],
   ["/gifts", "2026-09-16", 0.7],
   ["/journal", "2026-09-27", 0.6],
   ["/journal/long-distance-date-ideas", "2026-09-27", 0.8],
