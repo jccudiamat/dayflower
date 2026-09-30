@@ -119,6 +119,12 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
+        // A widget on the home screen in one tap - see WidgetPin.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, WidgetPin.CHANNEL)
+            .setMethodCallHandler { call, result ->
+                WidgetPin.handle(applicationContext, call, result)
+            }
+
         // Their chat as an icon on the home screen - see ChatShortcut.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, ChatShortcut.CHANNEL)
             .setMethodCallHandler { call, result ->

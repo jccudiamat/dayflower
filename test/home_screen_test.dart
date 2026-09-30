@@ -14,6 +14,7 @@ import 'package:dayflower/features/dayflower/presentation/dayflower_screen.dart'
 import 'package:dayflower/features/travel/data/map_pin_repository.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
 import 'package:dayflower/features/tulip/data/chat_shortcut.dart';
+import 'package:dayflower/features/widget/widget_pinner.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
 import 'package:dayflower/features/tulip/presentation/widgets/chat_shortcut_action.dart';
 import 'package:dayflower/features/booth/presentation/screens/booth_archive_screen.dart';
@@ -1692,9 +1693,12 @@ void main() {
             .dx));
     await _reveal(tester, find.byKey(const ValueKey('home-widget-gallery')));
     await tester.pumpAndSettle();
+    // Where the launcher cannot be asked (as here, off Android), the steps
+    // through the widget tray.
     for (final title in ['My Day', 'Heartbeat', 'Reunion']) {
       final setup = find.byWidgetPredicate((w) =>
-          w is Semantics && w.properties.label == 'Set up $title widget');
+          w is Semantics &&
+          w.properties.label == 'Add the $title widget to your home screen');
       await _reveal(tester, setup);
       await tester.tap(setup);
       await tester.pumpAndSettle();
@@ -1702,6 +1706,66 @@ void main() {
       await tester.tap(find.byTooltip('Close widget setup'));
       await tester.pumpAndSettle();
     }
+    expect(_beats.sends, 0);
+  });
+
+  _homeTest('Widgets go on the home screen in one tap, as the chat does',
+      (tester) async {
+    WidgetPinner.debugSupported = true;
+    addTearDown(() => WidgetPinner.debugSupported = null);
+    const channel = MethodChannel('dayflower/widget_pin');
+    final asked = <Object?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(channel,
+        (call) async {
+      asked.add(call.arguments);
+      return true;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, null));
+    // For the screenshot's real time: the map asks for a cache folder.
+    const paths = MethodChannel('plugins.flutter.io/path_provider');
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, (_) async => Directory.systemTemp.path);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, null));
+
+    await _pump(tester, Routes.home, filled: true);
+    await _reveal(tester, find.byKey(const ValueKey('home-widget-gallery')));
+    await tester.pumpAndSettle();
+    // The My Day preview is a sample, not whatever they shared today.
+    expect(
+        find.byWidgetPredicate((w) =>
+            w is Image &&
+            w.image is AssetImage &&
+            (w.image as AssetImage).assetName ==
+                'assets/images/together/couple_sunset.webp'),
+        findsOneWidget);
+    expect(find.text('Sunset walk'), findsOneWidget);
+    expect(find.text('Set up ›'), findsNothing);
+    if (_capture) {
+      await tester.runAsync(() => precacheImage(
+          const AssetImage('assets/images/together/couple_sunset.webp'),
+          tester.element(find.text('Sunset walk'))));
+      await tester.pump();
+      await _screenshot(tester, 'home-widget-gallery-sample');
+    }
+
+    for (final title in ['My Day', 'Heartbeat', 'Reunion']) {
+      final add = find.byWidgetPredicate((w) =>
+          w is Semantics &&
+          w.properties.label == 'Add the $title widget to your home screen');
+      await _reveal(tester, add);
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+      expect(find.text('Set up $title'), findsNothing, reason: 'no steps');
+    }
+    expect(asked, ['myDay', 'heartbeat', 'reunion']);
+    // No reunion yet: the countdown's date is one tap further.
+    expect(find.text('Choose your reunion date to start the countdown.'),
+        findsOneWidget);
+    await tester.tap(find.text('Choose'));
+    await tester.pumpAndSettle();
+    expect(find.byType(EventsScreen), findsOneWidget);
     expect(_beats.sends, 0);
   });
 

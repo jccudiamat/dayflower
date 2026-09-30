@@ -13,6 +13,13 @@
 
 ## Recent app work
 
+### Widgets added in one tap; a sample day on the My Day preview (2026-09-30, not yet published)
+
+- **My Day, Heartbeat and Reunion go on the home screen the way the chat does**: "Add ›" in Home's "Keep each other close" asks the launcher straight away (its own "Add to home screen" dialog, `requestPinAppWidget`) instead of opening steps through the widget tray. `WidgetPinner` (lib/features/widget/widget_pinner.dart) and `WidgetPin.kt`, by HomeWidgetKind name. The steps are what shows only where the launcher cannot be asked (iOS, the web, Android 7, a launcher that takes no requests). A reunion with no date yet: a snackbar with Choose, to Events (the widget itself says "Tap to set a date").
+- **The My Day preview is a sample**, not whatever they shared today (it was "Photo preview", an empty box, when they had shared nothing): Together's couple at sunset, already in the app so it costs no APK, with a caption and the widget's heart and reply bubble.
+- Seen on the emulator with a throwaway entrypoint: the launcher's dialog for each of the three, and each lands. ⚠️ **The Pixel Launcher crashed itself** ("Can't find space to add the item", in its own WorkspaceItemSpaceFinder) when two of the large ones (My Day 3 by 4, Reunion 4 by 2) were added back to back before going home: it places queued items together and lost them. One at a time, every one landed. A launcher bug, not ours; noted in case a Pixel user reports widgets vanishing.
+- 704 tests pass.
+
 ### The heartbeat widget at 2 by 2; their chat on the home screen (2026-09-30, build 130)
 
 - 🔴 **The heartbeat widget went on bigger than 2 by 2**, and the user shrank it by hand to the size they wanted, where the button then looked too big. Its minWidth and minHeight were 160 by 200dp, the 2 by 2 size itself, and a launcher adds its padding before counting cells: on their phone (2 by 2 is about 175 by 215dp) that tipped into 3 by 3. Now 110 by 130dp, more than one cell and less than two anywhere (`heartbeat_widget_info.xml`, and a test holds the range).

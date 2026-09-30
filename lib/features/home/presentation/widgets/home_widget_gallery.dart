@@ -9,12 +9,11 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_icon.dart';
 import '../../../reunion/data/reunion_repository.dart';
 import '../../../tulip/data/chat_shortcut.dart';
-import '../../../tulip/data/flower_repository.dart';
 import '../../../tulip/presentation/widgets/chat_shortcut_action.dart';
 import '../../../widget/heartbeat_themes.dart';
 import '../../../widget/heartbeat_widget_preview.dart';
+import '../../../widget/widget_pinner.dart';
 import '../../domain/home_moments.dart';
-import '../screens/home_screen.dart' show HomeDayPhoto;
 
 /// [chat] is not a widget but their chat's icon (ChatShortcut), which
 /// people look for in the same place. Android only.
@@ -71,16 +70,17 @@ class _WidgetFeature extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => Semantics(
         label: _isChat
             ? 'Add their chat to your home screen'
-            : 'Set up $title widget',
+            : 'Add the $title widget to your home screen',
         button: true,
         child: Material(
             color: Colors.transparent,
             child: InkWell(
               borderRadius: BorderRadius.circular(AppRadius.lg),
-              // The chat has nothing to set up: the launcher is asked
-              // straight away, the way WhatsApp's Add shortcut does.
-              onTap: () =>
-                  _isChat ? addChatShortcut(context, ref) : _setup(context),
+              // Nothing to set up first: the launcher is asked straight
+              // away, the way WhatsApp's Add shortcut does.
+              onTap: () => _isChat
+                  ? addChatShortcut(context, ref)
+                  : _add(context, ref),
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: LayoutBuilder(builder: (context, box) {
@@ -91,7 +91,7 @@ class _WidgetFeature extends ConsumerWidget {
                         const SizedBox(height: 6),
                         Text(description, style: AppText.body()),
                         const SizedBox(height: 12),
-                        Text(_isChat ? 'Add ›' : 'Set up ›',
+                        Text('Add ›',
                             style: AppText.subtitle(AppColors.brandDark)),
                       ]);
                   final preview = ExcludeSemantics(
@@ -130,6 +130,30 @@ class _WidgetFeature extends ConsumerWidget {
               ),
             )),
       );
+  /// The launcher's own "Add to home screen" dialog (WidgetPinner), as the
+  /// chat's shortcut is added. It used to be steps through the widget tray
+  /// every time; they are only what shows now where the launcher cannot be
+  /// asked (iOS, the web, a launcher that takes no requests).
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final router = GoRouter.of(context);
+    // A countdown with nothing to count to says so on the widget ("Tap to
+    // set a date"), but the date is quicker to choose from here.
+    final noDate = kind == HomeWidgetKind.reunion &&
+        ref.read(reunionProvider).valueOrNull == null;
+    if (!await WidgetPinner.pin(kind.name)) {
+      if (context.mounted) _setup(context);
+      return;
+    }
+    if (noDate) {
+      messenger.showSnackBar(SnackBar(
+        content: const Text('Choose your reunion date to start the countdown.'),
+        action: SnackBarAction(
+            label: 'Choose', onPressed: () => router.push(Routes.events)),
+      ));
+    }
+  }
+
   void _setup(BuildContext context) {
     // ⚠️ Was overridden to "Today's Flower" here while the card above it
     // said "My Day" — the same widget under two names, in one sheet.
@@ -201,7 +225,6 @@ class _WidgetPreview extends ConsumerWidget {
   final HomeWidgetKind kind;
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final photo = ref.watch(partnerDayPhotoProvider);
     final beatTheme = ref.watch(heartbeatThemeProvider);
     final reunion = ref.watch(reunionProvider).valueOrNull;
     final now = ref.watch(homeClockProvider).valueOrNull ?? DateTime.now();
@@ -218,17 +241,7 @@ class _WidgetPreview extends ConsumerWidget {
                 ? AppColors.onDark
                 : AppColors.surfaceSubtle,
             child: switch (kind) {
-              HomeWidgetKind.myDay => photo == null
-                  ? _label(CupertinoIcons.camera, 'Photo preview')
-                  : Stack(fit: StackFit.expand, children: [
-                      HomeDayPhoto(message: photo),
-                      // The widget's heart, bottom right, as on the phone.
-                      const Positioned(
-                          right: 6,
-                          bottom: 6,
-                          child: AppIcon(CupertinoIcons.heart,
-                              color: Colors.white, size: 20)),
-                    ]),
+              HomeWidgetKind.myDay => const _SampleDay(),
               // The scene they picked, as the widget draws it. No counts: the
               // widget does not keep them any more.
               HomeWidgetKind.heartbeat =>
@@ -260,4 +273,46 @@ class _WidgetPreview extends ConsumerWidget {
         const SizedBox(height: 8),
         Text(label, textAlign: TextAlign.center, style: AppText.caption()),
       ]));
+}
+
+/// A made-up day on the My Day widget, so its preview shows what the widget
+/// does rather than whatever they shared today, or an empty box when they
+/// have shared nothing. The picture is one the app already carries
+/// (Together's couple at sunset), so it costs the APK nothing.
+class _SampleDay extends StatelessWidget {
+  const _SampleDay();
+
+  @override
+  Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
+        Image.asset('assets/images/together/couple_sunset.webp',
+            fit: BoxFit.cover, excludeFromSemantics: true),
+        // Dark enough at the foot for the caption, as on the widget.
+        const DecoratedBox(
+            decoration: BoxDecoration(
+                gradient: LinearGradient(
+                    begin: Alignment.center,
+                    end: Alignment.bottomCenter,
+                    colors: [Color(0x00000000), Color(0xA6000000)]))),
+        // The caption, then the heart and the reply bubble, bottom right,
+        // as on the phone.
+        const Positioned(
+            left: 8,
+            right: 6,
+            bottom: 7,
+            child: Row(children: [
+              Expanded(
+                  child: Text('Sunset walk',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600))),
+              SizedBox(width: 4),
+              AppIcon(CupertinoIcons.heart, color: Colors.white, size: 14),
+              SizedBox(width: 4),
+              AppIcon(CupertinoIcons.chat_bubble,
+                  color: Colors.white, size: 14),
+            ])),
+      ]);
 }
