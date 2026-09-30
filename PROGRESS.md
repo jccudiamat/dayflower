@@ -13,7 +13,7 @@
 
 ## Recent app work
 
-### The heartbeat widget at 2 by 2; their chat on the home screen (2026-09-30, not yet published)
+### The heartbeat widget at 2 by 2; their chat on the home screen (2026-09-30, build 130)
 
 - 🔴 **The heartbeat widget went on bigger than 2 by 2**, and the user shrank it by hand to the size they wanted, where the button then looked too big. Its minWidth and minHeight were 160 by 200dp, the 2 by 2 size itself, and a launcher adds its padding before counting cells: on their phone (2 by 2 is about 175 by 215dp) that tipped into 3 by 3. Now 110 by 130dp, more than one cell and less than two anywhere (`heartbeat_widget_info.xml`, and a test holds the range).
 - **The title and the button are sized to the widget** (`HeartbeatWidget.sizeChrome`): text sizes and paddings from the widget's reported size, by whichever of width and height has less room, redrawn on a resize (`onAppWidgetOptionsChanged`, on the adaptive widget too while it shows the heartbeat). At 2 by 2 the button is about half the card's width; the user's screenshot, still build 128, had it at 80%. dp, not sp, so a larger system font does not push it over the scene. Layout, Kotlin constants and `HeartbeatWidgetPreview` (now laid out at 160dp) share the numbers, checked by a test.
@@ -22,6 +22,7 @@
   - 🔴 **The launcher starts a shortcut with FLAG_ACTIVITY_CLEAR_TASK** (seen: flags 0x10808000). Aimed at MainActivity it would end the running app, and a call in it. It goes through `ShortcutActivity`, in a task of its own, which brings MainActivity forward with home_widget's launch action and `dayflower://chat`; seen on the emulator: onNewIntent, same process, and a cold start opens with it too.
   - The icon is drawn in Dart as an adaptive icon's whole layer: the picture fills the middle 72dp a launcher shows, as a face fills an avatar's circle in the app, with a blurred copy round it. Drawn across the whole layer, the launcher would cut the face at the forehead and chin.
   - Tested natively with a throwaway entrypoint (not committed) standing in a partner, since the emulator never signs in. 701 tests pass.
+- **Published as build 130.** Patches 4.2 MB (from 129) to 4.7 MB (126), each checked to rebuild 130 byte for byte. APK 52,065,048 bytes, about 364 KB under the ceiling.
 
 ### A smaller button on the heartbeat widget; the heartbeat card's ripple on Home (2026-09-29, build 129)
 
