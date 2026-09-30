@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type PointerEvent } from "react";
-import { MAX_NOTE_LENGTH, MAX_WRAP_SCALE, wrapperAsset, drawWrapperLayer, notePapers, letterings, stationerySets, drawPrint, drawCardBorder, ARRANGEMENT_OFFSET, ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
+import { STEM_BOUNDS, arrangementStyles, vaseStyles, arrangementExtraHeight, drawVase, MAX_NOTE_LENGTH, MAX_WRAP_SCALE, wrapperAsset, drawWrapperLayer, notePapers, letterings, stationerySets, drawPrint, drawCardBorder, ARRANGEMENT_OFFSET, ART_URL, DEFAULT_PRINT_OPACITY, EXTRA_ART_URLS, HEIGHT, MAX_PHOTOS, MAX_STEMS, VESSEL_H, VESSEL_W, WIDTH, WRAPPER_URL, WRAP_PIVOT, angleToward, arrange, fitScale, layeredItems, decodeBouquet, encodeBouquet, flowerSprite, flowers, hasContents, hitPhoto, hitStem, makeBouquet, papers, photoCount, photoFrames, photoAngleToward, photoScaleHandle, photoTiltHandle, prints, singleStem, renderBouquet, renderVessel, reorder, stemHandle, stemScaleHandle, topZ, validateBouquet, vessels, type Bouquet, type Photo, type RenderAssets, type Stem } from "./model";
 import { makeCutout, newPhoto, readPhoto } from "./photos";
 import { SPECIAL_WRAPPER_URL, REVEAL_ART, backgrounds, borders, bouquetColors } from "./model";
 import "./bouquet.css";
@@ -11,12 +11,23 @@ import { emailAddress, textInput } from "../lib/input";
 const DRAFT_KEY = "dayflower-bouquet-v1";
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
+function VaseThumb({ style }: { style: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const ctx = ref.current?.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, 100, 100); ctx.save(); ctx.scale(.25, .25); ctx.translate(-160, -740);
+    drawVase(ctx, style, false); drawVase(ctx, style, true); ctx.restore();
+  }, [style]);
+  return <canvas ref={ref} width={100} height={100} aria-hidden="true" />;
+}
+
 function WrapperThumb({ paper, image }: { paper: number; image?: HTMLImageElement }) {
   const ref = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     const ctx = ref.current?.getContext("2d");
     if (!ctx || !image) return;
-    ctx.clearRect(0, 0, 80, 100); ctx.save(); ctx.scale(80 / 1000, 100 / 820); ctx.translate(140, 0);
+    ctx.clearRect(0, 0, 80, 100); ctx.save(); ctx.scale(80 / 600, 100 / 650); ctx.translate(-70, -100);
     drawWrapperLayer(ctx, paper, false, image); drawWrapperLayer(ctx, paper, true, image); ctx.restore();
   }, [paper, image]);
   return <canvas ref={ref} width={80} height={100} aria-hidden="true" />;
@@ -250,10 +261,15 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   function updateStem(values: Partial<Stem>) {
     update({ ...bouquet, stems: bouquet.stems.map(stem => stem.id === selected ? { ...stem, ...values } : stem) });
   }
+  function changeArrangement(arrangement: number, vase = bouquet.vase ?? 0) {
+    update({ ...bouquet, arrangement, vase, stems: arrange(bouquet.stems.map(s => s.flower), arrangement, vase) });
+    setSelected(undefined);
+  }
   function addFlower(flower: number) {
     if (bouquet.stems.length >= MAX_STEMS) return;
     const id = Math.max(0, ...bouquet.stems.map(s => s.id)) + 1;
-    const stem = { id, flower, x: 360, y: 646, angle: (bouquet.stems.length % 5 - 2) * 13, scale: .94, z: topZ(bouquet) };
+    const placement = arrange([...bouquet.stems.map(s => s.flower), flower], bouquet.arrangement, bouquet.vase).at(-1)!;
+    const stem = { ...placement, id, z: topZ(bouquet) };
     update({ ...bouquet, stems: [...bouquet.stems, stem] }); setSelected(id);
   }
   function updatePhoto(values: Partial<Photo>) {
@@ -362,7 +378,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
     } else if (moving.kind === "size") {
       const reach = Math.hypot(p.x - moving.x, p.y - moving.y) / (moving.grab ?? 1);
       setBouquet(current => ({ ...current, stems: current.stems.map(stem =>
-        stem.id === moving.id ? { ...stem, scale: +clamp((moving.from ?? 1) * reach, .7, 1.15).toFixed(2) } : stem) }));
+        stem.id === moving.id ? { ...stem, scale: +clamp((moving.from ?? 1) * reach, STEM_BOUNDS.minScale, STEM_BOUNDS.maxScale).toFixed(2) } : stem) }));
     } else if (moving.kind === "photoTilt") {
       setBouquet(current => ({ ...current, photos: (current.photos ?? []).map(photo => {
         if (photo.id !== moving.id) return photo;
@@ -374,7 +390,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
       setBouquet(current => ({ ...current, photos: (current.photos ?? []).map(photo =>
         photo.id === moving.id ? { ...photo, scale: +clamp((moving.from ?? 1) * reach, .55, 1.5).toFixed(2) } : photo) }));
     } else if (moving.kind === "stem") {
-      setBouquet(current => ({ ...current, stems: current.stems.map(s => s.id === moving.id ? { ...s, x: Math.round(clamp(x, 220, 500)), y: Math.round(clamp(y, 490, 690)) } : s) }));
+      setBouquet(current => ({ ...current, stems: current.stems.map(s => s.id === moving.id ? { ...s, x: Math.round(clamp(x, STEM_BOUNDS.minX, STEM_BOUNDS.maxX)), y: Math.round(clamp(y, STEM_BOUNDS.minY, STEM_BOUNDS.maxY)) } : s) }));
     } else {
       setBouquet(current => ({ ...current, photos: (current.photos ?? []).map(item => item.id === moving.id ? { ...item, x: Math.round(clamp(x, 110, 610)), y: Math.round(clamp(y, 190, 570)) } : item) }));
     }
@@ -529,7 +545,7 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
   return <>
     {creatorHeading}
     <div className="bouquet-studio">
-      <section className={`bouquet-preview${bouquet.message.length > 240 || bouquet.message.split("\n").length > 3 ? " has-long-note" : ""}`} aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Tap a bloom to pick it up. Drag the flower to move it, or its little dial to tilt it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
+      <section className={`bouquet-preview${arrangementExtraHeight(bouquet) > 0 || bouquet.message.length > 240 || bouquet.message.split("\n").length > 3 ? " has-long-note" : ""}`} aria-label="Your bouquet preview">{artwork}<p className="bouquet-preview-hint">{step === 0 ? "Tap a bloom to pick it up. Drag the flower to move it, or its little dial to tilt it." : step === 1 ? "Drag a photo to tuck it in where you like." : "Made by you. Meant for them."}</p></section>
       <section className="bouquet-controls" aria-label="Bouquet creator">
         <div className="bouquet-steps" aria-label="Creation steps">{["Flowers", "Photos", "Your note", "Send love"].map((label, i) => <button key={label} aria-current={step === i ? "step" : undefined} disabled={i > 1 && !hasContents(bouquet)} onClick={() => { setStep(i); setSelected(undefined); setSelectedPhoto(undefined); setNotice(""); }}><span>{i + 1}</span>{label}</button>)}</div>
         {step === 0 && <div className="bouquet-panel">
@@ -553,18 +569,23 @@ export default function BouquetStudio({ gift: served }: { gift?: Bouquet } = {})
           {matches.length > 0 && <p className="bouquet-grid-hint">{search ? `${matches.length} of ${flowers.length}` : `All ${flowers.length} flowers`}{matches.length > 9 ? " · swipe sideways for more" : ""}</p>}
           {bouquet.stems.length >= MAX_STEMS && <p className="bouquet-help">A full bunch! Remove a stem to add another.</p>}
           {lostSheets.length > 0 && <p className="bouquet-help">Some flowers couldn’t load just now. <button className="bouquet-text-button" onClick={() => setAttempt(n => n + 1)}>Try again</button></p>}
-          <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: next.stems, paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>
+          <fieldset className="bouquet-arrangement-picker"><legend>Shape your arrangement</legend>
+            <div>{arrangementStyles.map((name, i) => <button key={name} aria-pressed={(bouquet.arrangement ?? 0) === i} onClick={() => changeArrangement(i)}>{name}</button>)}</div>
+            <p className="bouquet-help">Choose the height of your flowers, then move individual stems to make it yours.</p>
+          </fieldset>
+          <fieldset className="bouquet-vase-picker"><legend>Flowers in a vase</legend><div>{vaseStyles.map((name, i) => <button key={name} aria-pressed={(bouquet.vase ?? 0) === i} onClick={() => changeArrangement(bouquet.arrangement ?? 0, i)}>{i ? <VaseThumb style={i} /> : <span className="bouquet-no-vase" aria-hidden="true">—</span>}<strong>{name}</strong></button>)}</div></fieldset>
+          <div className="bouquet-starter"><span>Start with a little inspiration</span><div>{["Soft & sweet", "Love letter", "Pocket sunshine"].map((name, i) => <button key={name} onClick={() => { const next = makeBouquet(i); update({ ...bouquet, stems: arrange(next.stems.map(s => s.flower), bouquet.arrangement, bouquet.vase), paper: next.paper }); setSelected(undefined); }}>{name}</button>)}</div></div>
           <details className="bouquet-arrange" open={selected !== undefined ? true : undefined}><summary>Arrange your flowers <span>{bouquet.stems.length}</span></summary><div className="bouquet-stem-list">{bouquet.stems.map((stem, i) => <button aria-pressed={selected === stem.id} key={stem.id} onClick={() => setSelected(stem.id)}>{i + 1}. {flowers[stem.flower].name}</button>)}</div>
-            {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={220} max={500} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={490} max={690} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={.7} max={1.15} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><div className="bouquet-depth"><span>Depth</span><div><button onClick={() => update(reorder(bouquet, "stem", active.id, -1))}>Send back</button><button onClick={() => update(reorder(bouquet, "stem", active.id, 1))}>Bring forward</button></div></div><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
-            <div className="bouquet-arrange-actions"><button onClick={() => { update({ ...bouquet, stems: arrange(bouquet.stems.map(s => s.flower)) }); setSelected(undefined); }}>Arrange for me</button><button disabled={!bouquet.stems.length} onClick={() => { update({ ...bouquet, stems: [] }); setSelected(undefined); }}>Clear flowers</button></div>
+            {active && <div className="bouquet-adjust"><p>Adjust your {flowers[active.flower].name.toLowerCase()}</p><label>Left / right<input aria-label="Stem horizontal position" type="range" min={STEM_BOUNDS.minX} max={STEM_BOUNDS.maxX} value={active.x} onChange={e => updateStem({ x: +e.target.value })} /></label><label>Up / down<input aria-label="Stem vertical position" type="range" min={STEM_BOUNDS.minY} max={STEM_BOUNDS.maxY} value={active.y} onChange={e => updateStem({ y: +e.target.value })} /></label><label>Rotation<input aria-label="Stem rotation" type="range" min={-45} max={45} value={active.angle} onChange={e => updateStem({ angle: +e.target.value })} /></label><label>Size<input aria-label="Stem size" type="range" min={STEM_BOUNDS.minScale} max={STEM_BOUNDS.maxScale} step={.01} value={active.scale} onChange={e => updateStem({ scale: +e.target.value })} /></label><div className="bouquet-depth"><span>Depth</span><div><button onClick={() => update(reorder(bouquet, "stem", active.id, -1))}>Send back</button><button onClick={() => update(reorder(bouquet, "stem", active.id, 1))}>Bring forward</button></div></div><button className="bouquet-text-button" onClick={() => { update({ ...bouquet, stems: bouquet.stems.filter(s => s.id !== selected) }); setSelected(undefined); }}>Remove this stem</button></div>}
+            <div className="bouquet-arrange-actions"><button onClick={() => { update({ ...bouquet, stems: arrange(bouquet.stems.map(s => s.flower), bouquet.arrangement, bouquet.vase) }); setSelected(undefined); }}>Arrange for me</button><button disabled={!bouquet.stems.length} onClick={() => { update({ ...bouquet, stems: [] }); setSelected(undefined); }}>Clear flowers</button></div>
           </details>
-          <details className="bouquet-fold"><summary>Wrapping</summary><fieldset className="bouquet-paper bouquet-wraps"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span className="bouquet-wrap-thumb" style={{ backgroundColor: paper.background }}>{paper.sprite < 0 ? <span aria-hidden="true">—</span> : <WrapperThumb paper={i} image={assets[wrapperAsset(i)]} />}</span><strong>{paper.name}</strong></button>)}</div></fieldset>
+          {!bouquet.vase && <details className="bouquet-fold"><summary>Wrapping</summary><fieldset className="bouquet-paper bouquet-wraps"><legend>Wrap it with love</legend><div>{papers.map((paper, i) => <button key={paper.name} aria-pressed={bouquet.paper === i} onClick={() => update({ ...bouquet, paper: i })}><span className="bouquet-wrap-thumb" style={{ backgroundColor: paper.background }}>{paper.sprite < 0 ? <span aria-hidden="true">—</span> : <WrapperThumb paper={i} image={assets[wrapperAsset(i)]} />}</span><strong>{paper.name}</strong></button>)}</div></fieldset>
           {papers[bouquet.paper].sprite >= 0 && <fieldset className="bouquet-paper bouquet-print"><legend>The wrapping</legend>
 
             <label className="bouquet-print-opacity">Size<input aria-label="Wrapper size" type="range" min={.75} max={MAX_WRAP_SCALE} step={.01} value={bouquet.wrapScale ?? 1} onChange={e => update({ ...bouquet, wrapScale: +e.target.value })} /></label>
             <label className="bouquet-print-opacity">Lean<input aria-label="Wrapper lean" type="range" min={-20} max={20} value={bouquet.wrapAngle ?? 0} onChange={e => update({ ...bouquet, wrapAngle: +e.target.value })} /></label>
           </fieldset>}
-          </details><details className="bouquet-fold"><summary>Letter paper & border</summary>
+          </details>}<details className="bouquet-fold"><summary>Letter paper & border</summary>
           <div className="bouquet-style-sets">{stationerySets.map(({ name, ...style }) => <button key={name} onClick={() => update({ ...bouquet, ...style })}>{name}</button>)}</div>
           <fieldset className="bouquet-paper bouquet-background"><legend>Set the mood</legend><div>{backgrounds.map((background, i) => <button key={background.name} aria-pressed={(bouquet.background ?? 0) === i} onClick={() => update({ ...bouquet, background: i })}><span style={{ background: background.color || papers[bouquet.paper].background, color: background.ink || papers[bouquet.paper].ink }}>{(bouquet.background ?? 0) === i ? "✓" : ""}</span>{background.name}</button>)}</div></fieldset>
           <fieldset className="bouquet-paper bouquet-print"><legend>Paper pattern</legend>

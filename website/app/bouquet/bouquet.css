@@ -310,3 +310,14 @@
    it on a phone rather than shrinking both into two unreadable columns. */
 .bouquet-about { display: grid; gap: 40px; align-items: start; }
 @media (min-width: 1000px) { .bouquet-about { grid-template-columns: 1fr auto; gap: 56px; } }
+
+.bouquet-arrangement-picker, .bouquet-vase-picker { margin: 22px 0; border: 0; min-width: 0; }
+.bouquet-arrangement-picker legend, .bouquet-vase-picker legend { font-weight: 700; font-size: 14px; margin-bottom: 12px; }
+.bouquet-arrangement-picker > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bouquet-arrangement-picker button { padding: 12px 8px; border: 1px solid var(--border); border-radius: 9px; font-size: 12px; }
+.bouquet-vase-picker > div { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.bouquet-vase-picker button { min-width: 0; padding: 5px 4px 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.bouquet-vase-picker canvas, .bouquet-no-vase { width: 100%; aspect-ratio: 1; display: block; }
+.bouquet-no-vase { display: grid; place-items: center; font-size: 26px; color: var(--muted); }
+.bouquet-vase-picker strong { font-size: 10px; display: block; line-height: 1.4; }
+.bouquet-arrangement-picker button[aria-pressed="true"], .bouquet-vase-picker button[aria-pressed="true"] { border-color: var(--brand); background: var(--blush); box-shadow: inset 0 0 0 1px var(--brand); }

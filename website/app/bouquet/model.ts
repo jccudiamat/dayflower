@@ -70,11 +70,6 @@ export const papers = [
   { name: "Blue toile", background: "#eaf0f8", ink: "#506080", sprite: 2 },
   { name: "Blush mesh", background: "#faedf3", ink: "#85506c", sprite: 4 },
   { name: "Vintage print", background: "#f2efe8", ink: "#66594b", sprite: 6 },
-  // Append only: existing gift links store these indices.
-  { name: "Rose double wrap", background: "#f7edf0", ink: "#703e54", sprite: 6 },
-  { name: "Kraft double wrap", background: "#f4eee3", ink: "#795840", sprite: 0 },
-  { name: "Lilac triple wrap", background: "#eee9f7", ink: "#65507c", sprite: 7 },
-  { name: "Ivory triple wrap", background: "#faf6ec", ink: "#78634b", sprite: 6 },
 ] as const;
 
 export const backgrounds = [
@@ -119,7 +114,7 @@ export const stationerySets = [
   { name: "Found in a journal", print: 9, border: 9, notePaper: 4, lettering: 2, background: 3 },
   { name: "Modern muse", print: 10, border: 10, notePaper: 7, lettering: 5, background: 1 },
 ] as const;
-export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number; background?: number; border?: number; notePaper?: number; lettering?: number };
+export type Bouquet = { v: 1; stems: Stem[]; paper: number; to: string; from: string; message: string; photos?: Photo[]; vessel?: number; print?: number; printOpacity?: number; wrapScale?: number; wrapAngle?: number; stemFlower?: number; background?: number; border?: number; notePaper?: number; lettering?: number; arrangement?: number; vase?: number };
 
 /** The wrapper turns and grows about its tie, not its middle, so it leans the way a held bouquet does. */
 export const WRAP_PIVOT = { x: 360, y: 690 };
@@ -131,13 +126,14 @@ export const ARRANGEMENT_AREA = { left: -176, right: 896, top: FIT_CEILING, bott
 
 /** Fit every rotated corner, including the wrapper, within the arrangement area. */
 export function fitScale(bouquet: Bouquet) {
+  const extra = arrangementExtraHeight(bouquet);
   let fit = 1;
   const corner = (x: number, y: number) => {
     const dx = x - WRAP_PIVOT.x, dy = y - WRAP_PIVOT.y;
     if (dx < 0) fit = Math.min(fit, (ARRANGEMENT_AREA.left - WRAP_PIVOT.x) / dx);
     if (dx > 0) fit = Math.min(fit, (ARRANGEMENT_AREA.right - WRAP_PIVOT.x) / dx);
     if (dy < 0) fit = Math.min(fit, (ARRANGEMENT_AREA.top - WRAP_PIVOT.y) / dy);
-    if (dy > 0) fit = Math.min(fit, (ARRANGEMENT_AREA.bottom - WRAP_PIVOT.y) / dy);
+    if (dy > 0) fit = Math.min(fit, (ARRANGEMENT_AREA.bottom + extra - WRAP_PIVOT.y) / dy);
   };
   const box = (x: number, y: number, left: number, top: number, w: number, h: number, angle: number) => {
     for (const lx of [left, left + w]) for (const ly of [top, top + h])
@@ -152,14 +148,15 @@ export function fitScale(bouquet: Bouquet) {
     // Include the frame shadow and selection border in the safe area.
     box(photo.x, photo.y, -w / 2 - 12, -h / 2 - 12, w + 24, h + 24, angle);
   }
-  if (papers[bouquet.paper].sprite >= 0 && hasContents(bouquet)) {
+  if (!bouquet.vase && papers[bouquet.paper].sprite >= 0 && hasContents(bouquet)) {
     const k = bouquet.wrapScale ?? 1;
     for (const layer of wrappingLayers(bouquet.paper)) {
-      box(WRAP_PIVOT.x, WRAP_PIVOT.y, (104 - WRAP_PIVOT.x) * layer.sx * k, (130 - WRAP_PIVOT.y) * layer.sy * k,
+      box(WRAP_PIVOT.x, WRAP_PIVOT.y + extra, (104 - WRAP_PIVOT.x) * layer.sx * k, (130 - WRAP_PIVOT.y) * layer.sy * k,
         512 * (layer.paper >= 5 ? 1.055 : 1) * layer.sx * k, 600 * layer.sy * k,
         ((bouquet.wrapAngle ?? 0) + layer.angle) * Math.PI / 180);
     }
   }
+  if (bouquet.vase && hasContents(bouquet)) box(360, 0, -190, 780, 380, 330, 0);
   return fit;
 }
 
@@ -278,8 +275,101 @@ export function hasContents(b: Bouquet) { return b.stems.length > 0 || photoCoun
 export const WIDTH = 1120;
 export const HEIGHT = 1120;
 
+export const STEM_BOUNDS = { minX: 120, maxX: 600, minY: 360, maxY: 1050, minScale: .55, maxScale: 1.55 };
+export const arrangementStyles = ["Classic bunch", "Two tiers", "Three tiers", "Airy garden"] as const;
+export const vaseStyles = ["No vase", "Ribbed ivory", "Terracotta urn", "Clear glass"] as const;
+export function arrangementExtraHeight(b: Bouquet) { return b.arrangement || b.vase ? 360 : 0; }
+
+/** Place bloom heads at different heights, then work back to each stem's base. */
+function arrangeTall(types: readonly number[], layout: number, vase: number): Stem[] {
+  const tiers = layout === 2 ? 3 : 2;
+  return types.map((flower, i) => {
+    const tier = i % tiers, column = Math.floor(i / tiers);
+    const count = Math.ceil((types.length - tier) / tiers);
+    const t = count <= 1 ? .5 : column / (count - 1);
+    const airy = layout === 3;
+    const bloomX = 360 + (t - .5) * (airy ? 450 : 340) + (tier % 2 ? 24 : -18);
+    const bloomY = (layout === 2 ? 170 + tier * 215 : 250 + tier * 300) + (airy ? Math.sin(i * 2.4) * 95 : Math.sin(t * Math.PI) * -35);
+    const scale = tier === 0 ? 1.35 : tier === 1 ? 1.05 : .82;
+    const angle = (t - .5) * (airy ? 50 : 36);
+    const radians = angle * Math.PI / 180, reach = 470 * scale * .70;
+    return { id: i + 1, flower, x: Math.round(bloomX - Math.sin(radians) * reach),
+      y: Math.round(bloomY + Math.cos(radians) * reach + (vase && layout === 0 ? 40 : 0)), angle, scale, z: tier * 100 + column };
+  });
+}
+
+function drawStemExtensions(ctx: CanvasRenderingContext2D, b: Bouquet) {
+  ctx.save(); ctx.lineCap = "round";
+  for (const stem of b.stems) {
+    const { h, angle } = stemGeometry(stem);
+    const endX = stem.x + Math.sin(angle) * h * .13;
+    const endY = stem.y - Math.cos(angle) * h * .13;
+    ctx.strokeStyle = ["#63734b", "#748453", "#536a42"][stem.flower % 3]; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(endX, endY);
+    const baseX = 340 + stem.id % 5 * 10;
+    ctx.quadraticCurveTo(endX, (endY + 1010) / 2, baseX, b.vase ? 1045 : 1020); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Vase rim behind stems and body in front; shared by preview and PNG export. */
+export function drawVase(ctx: CanvasRenderingContext2D, style: number, front: boolean) {
+  if (!style) return;
+  ctx.save();
+  const glass = style === 3, urn = style === 2;
+  const rim = urn ? 72 : 94;
+  if (!front) {
+    ctx.fillStyle = "#483b3020"; ctx.beginPath(); ctx.ellipse(360, 1105, 148, 14, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = glass ? "#b6cdca80" : urn ? "#81634b" : "#b7b4a7";
+    ctx.beginPath(); ctx.ellipse(360, 795, rim, 15, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore(); return;
+  }
+  if (urn) {
+    ctx.strokeStyle = "#b28b68"; ctx.lineWidth = 19;
+    for (const side of [-1, 1]) { ctx.beginPath(); ctx.ellipse(360 + side * 117, 879, 40, 57, side * -.25, 0, Math.PI * 2); ctx.stroke(); }
+  }
+  ctx.beginPath(); ctx.moveTo(360 - rim, 795);
+  if (urn) {
+    ctx.bezierCurveTo(292, 848, 217, 842, 243, 984);
+    ctx.bezierCurveTo(250, 1040, 272, 1088, 290, 1097);
+    ctx.quadraticCurveTo(360, 1112, 430, 1097);
+    ctx.bezierCurveTo(448, 1088, 470, 1040, 477, 984);
+    ctx.bezierCurveTo(503, 842, 428, 848, 432, 795);
+  } else {
+    ctx.bezierCurveTo(257, 870, 250, 1035, 270, 1093);
+    ctx.quadraticCurveTo(360, 1115, 450, 1093);
+    ctx.bezierCurveTo(470, 1035, 463, 870, 454, 795);
+  }
+  ctx.quadraticCurveTo(360, 817, 360 - rim, 795); ctx.closePath();
+  const gradient = ctx.createLinearGradient(240, 0, 480, 0);
+  const colors = glass ? ["#bed5d57a", "#f8ffff38", "#c8deda55", "#8faaa877"] : urn ? ["#98704f", "#dbc0a0", "#c5a17c", "#8e674b"] : ["#c7c6bc", "#fffef5", "#e8e7de", "#babbb1"];
+  colors.forEach((color, i) => gradient.addColorStop(i / 3, color));
+  ctx.fillStyle = gradient; ctx.fill();
+  ctx.save(); ctx.clip();
+  if (style === 1) {
+    for (let x = 272; x < 458; x += 17) {
+      ctx.lineWidth = 5; ctx.strokeStyle = "#a4a99c45"; ctx.beginPath(); ctx.moveTo(x, 805); ctx.lineTo(x - 4, 1105); ctx.stroke();
+      ctx.lineWidth = 3; ctx.strokeStyle = "#ffffffb0"; ctx.beginPath(); ctx.moveTo(x + 5, 805); ctx.lineTo(x + 1, 1105); ctx.stroke();
+    }
+  } else if (urn) {
+    for (let i = 0; i < 700; i++) {
+      ctx.fillStyle = i % 2 ? "#fff4d926" : "#65483222";
+      ctx.fillRect(235 + Math.abs(Math.sin(i * 37)) * 250, 801 + Math.abs(Math.sin(i * 19)) * 305, 2, 2);
+    }
+  } else {
+    ctx.fillStyle = "#abc9c532"; ctx.fillRect(245, 957, 235, 160);
+    ctx.strokeStyle = "#94b5b399"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(360, 957, 105, 12, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "#ffffffc0"; ctx.lineWidth = 8; ctx.beginPath(); ctx.moveTo(285, 832); ctx.quadraticCurveTo(272, 980, 286, 1060); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.strokeStyle = glass ? "#93aaa9" : urn ? "#aa8563" : "#d2d2c7"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.ellipse(360, 795, rim, 15, 0, 0, Math.PI); ctx.stroke();
+  ctx.restore();
+}
+
 const arrangements = [ [4, 0, 5, 2, 0, 5, 2], [4, 1, 5, 1, 0, 5, 1], [4, 3, 2, 3, 2, 0, 2] ];
-export function arrange(types: readonly number[]): Stem[] {
+export function arrange(types: readonly number[], layout = 0, vase = 0): Stem[] {
+  if (layout || vase) return arrangeTall(types, layout, vase);
   return types.map((flower, i) => ({ id: i + 1, flower, x: 360 + (i % 3 - 1) * 15, y: 644 + (i % 2) * 24,
     angle: types.length === 1 ? 0 : -31 + i * 62 / (types.length - 1), scale: 1 - (i % 3) * .06 }));
 }
@@ -296,11 +386,11 @@ function validText(value: unknown, max: number, multiline = false): value is str
 export function validateBouquet(value: unknown, strict = false): Bouquet | null {
   if (!value || typeof value !== "object") return null;
   const b = value as Record<string, unknown>;
-  if (b.v !== 1 || !Number.isInteger(b.paper) || !finiteIn(b.paper, 0, papers.length - 1) ||
+  if (b.v !== 1 || !Number.isInteger(b.paper) || !finiteIn(b.paper, 0, 12) ||
       !validText(b.to, 40) || !validText(b.from, 40) || !validText(b.message, MAX_NOTE_LENGTH, true) || !Array.isArray(b.stems) || b.stems.length > MAX_STEMS) return null;
   if (strict) {
-    if (Object.keys(b).some(k => !["v", "stems", "paper", "to", "from", "message", "photos", "vessel", "print", "printOpacity", "wrapScale", "wrapAngle", "stemFlower", "background", "border", "notePaper", "lettering"].includes(k))) return null;
-    for (const [key, max] of [["vessel", vessels.length - 1], ["print", prints.length - 1], ["stemFlower", flowers.length - 1], ["background", backgrounds.length - 1], ["border", borders.length - 1], ["notePaper", notePapers.length - 1], ["lettering", letterings.length - 1]] as const) {
+    if (Object.keys(b).some(k => !["v", "stems", "paper", "to", "from", "message", "photos", "vessel", "print", "printOpacity", "wrapScale", "wrapAngle", "stemFlower", "background", "border", "notePaper", "lettering", "arrangement", "vase"].includes(k))) return null;
+    for (const [key, max] of [["vessel", vessels.length - 1], ["print", prints.length - 1], ["stemFlower", flowers.length - 1], ["background", backgrounds.length - 1], ["border", borders.length - 1], ["notePaper", notePapers.length - 1], ["lettering", letterings.length - 1], ["arrangement", arrangementStyles.length - 1], ["vase", vaseStyles.length - 1]] as const) {
       if (b[key] !== undefined && (!Number.isInteger(b[key]) || !finiteIn(b[key], 0, max))) return null;
     }
     if (b.printOpacity !== undefined && !finiteIn(b.printOpacity, 0, 100) || b.wrapScale !== undefined && !finiteIn(b.wrapScale, .75, MAX_WRAP_SCALE) || b.wrapAngle !== undefined && !finiteIn(b.wrapAngle, -20, 20)) return null;
@@ -309,8 +399,8 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
   for (const item of b.stems) {
     if (!item || typeof item !== "object") return null;
     const s = item as Record<string, unknown>;
-    if (!Number.isInteger(s.flower) || !finiteIn(s.flower, 0, flowers.length - 1) || !finiteIn(s.x, 220, 500) ||
-        !finiteIn(s.y, 490, 690) || !finiteIn(s.angle, -45, 45) || !finiteIn(s.scale, .7, 1.15)) return null;
+    if (!Number.isInteger(s.flower) || !finiteIn(s.flower, 0, flowers.length - 1) || !finiteIn(s.x, STEM_BOUNDS.minX, STEM_BOUNDS.maxX) ||
+        !finiteIn(s.y, STEM_BOUNDS.minY, STEM_BOUNDS.maxY) || !finiteIn(s.angle, -45, 45) || !finiteIn(s.scale, STEM_BOUNDS.minScale, STEM_BOUNDS.maxScale)) return null;
     const z = Number.isInteger(s.z) && finiteIn(s.z, 0, 9999) ? s.z as number : undefined;
     stems.push({ id: stems.length + 1, flower: s.flower, x: s.x, y: s.y, angle: s.angle, scale: s.scale, ...(z !== undefined ? { z } : {}) });
   }
@@ -348,8 +438,10 @@ export function validateBouquet(value: unknown, strict = false): Bouquet | null 
   const notePaper = Number.isInteger(b.notePaper) && finiteIn(b.notePaper, 0, notePapers.length - 1) ? b.notePaper as number : 0;
   const lettering = Number.isInteger(b.lettering) && finiteIn(b.lettering, 0, letterings.length - 1) ? b.lettering as number : 0;
   return {
-    v: 1, stems, paper: b.paper, to: b.to, from: b.from, message: b.message,
+    v: 1, stems, paper: b.paper < 9 ? b.paper : [0, 5, 1, 0][b.paper - 9], to: b.to, from: b.from, message: b.message,
     ...(photos.length ? { photos } : {}),
+    ...(Number.isInteger(b.arrangement) && finiteIn(b.arrangement, 1, arrangementStyles.length - 1) ? { arrangement: b.arrangement } : {}),
+    ...(Number.isInteger(b.vase) && finiteIn(b.vase, 1, vaseStyles.length - 1) ? { vase: b.vase } : {}),
     // Defaults are left out so a plain bouquet's link stays as short as it was.
     ...(vessel ? { vessel } : {}), ...(print ? { print } : {}),
     ...(print && printOpacity !== DEFAULT_PRINT_OPACITY ? { printOpacity } : {}),
@@ -391,19 +483,6 @@ export function stemGeometry(stem: Stem) {
 }
 type WrappingLayer = { paper: number; sx: number; sy: number; angle: number };
 export function wrappingLayers(paper: number): WrappingLayer[] {
-  const double = (outer: number, inner: number) => [
-    { paper: outer, sx: 1.5, sy: .96, angle: -7 },
-    { paper: inner, sx: 1.18, sy: 1, angle: 6 },
-  ];
-  const triple = (outer: number, middle: number, inner: number) => [
-    { paper: outer, sx: 1.7, sy: .98, angle: -8 },
-    { paper: middle, sx: 1.43, sy: .97, angle: 9 },
-    { paper: inner, sx: 1.18, sy: 1, angle: 0 },
-  ];
-  if (paper === 9) return double(4, 0);
-  if (paper === 10) return double(8, 5);
-  if (paper === 11) return triple(3, 1, 1);
-  if (paper === 12) return triple(4, 0, 0);
   return [{ paper, sx: 1, sy: 1, angle: 0 }];
 }
 export function wrapperAsset(paper: number) {
@@ -508,7 +587,7 @@ export function noteLayout(ctx: CanvasRenderingContext2D, bouquet: Bouquet) {
   if (lines.length > 96) lines = wrappedLines(ctx, bouquet.message.replace(/\s+/g, " "), WIDTH - 208);
   const lineHeight = 44;
   const noteHeight = Math.max(166, lines.length * lineHeight + 82);
-  return { font, lines, lineHeight, noteHeight, canvasHeight: 903 + noteHeight + 51 };
+  return { font, lines, lineHeight, noteHeight, canvasHeight: 903 + arrangementExtraHeight(bouquet) + noteHeight + 51 };
 }
 
 export function photoGeometry(photo: Photo) {
@@ -598,6 +677,7 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   const layout = noteLayout(ctx, bouquet);
   canvas.height = layout.canvasHeight;
   const height = canvas.height;
+  const extra = arrangementExtraHeight(bouquet);
   const paper = papers[bouquet.paper];
   const colors = bouquetColors(bouquet);
   ctx.fillStyle = colors.color;
@@ -612,19 +692,20 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.font = `${lettering.style} 40px ${lettering.family}`;
   ctx.fillText(bouquet.to.trim() ? `For ${bouquet.to.trim()}` : "You deserve flowers.", WIDTH / 2, 86, 620);
   ctx.save();
-  ctx.beginPath(); ctx.rect(24, 112, WIDTH - 48, 775); ctx.clip();
+  ctx.beginPath(); ctx.rect(24, 112, WIDTH - 48, 775 + extra); ctx.clip();
   ctx.translate(ARRANGEMENT_OFFSET.x, ARRANGEMENT_OFFSET.y);
   const wrapper = assets[wrapperAsset(bouquet.paper)];
   // Both halves of the paper and the taper below share one transform, or the
   // front would slide off the back the moment the wrapper is turned.
   const wrapTransform = () => {
+    ctx.translate(0, extra);
     ctx.translate(WRAP_PIVOT.x, WRAP_PIVOT.y);
     ctx.rotate((bouquet.wrapAngle ?? 0) * Math.PI / 180);
     ctx.scale(bouquet.wrapScale ?? 1, bouquet.wrapScale ?? 1);
     ctx.translate(-WRAP_PIVOT.x, -WRAP_PIVOT.y);
   };
   const drawWrapper = (front: boolean) => {
-    if (!wrapper || paper.sprite < 0 || !hasContents(bouquet)) return;
+    if (bouquet.vase || !wrapper || paper.sprite < 0 || !hasContents(bouquet)) return;
     ctx.save(); wrapTransform();
     drawWrapperLayer(ctx, bouquet.paper, front, wrapper);
     ctx.restore();
@@ -640,8 +721,10 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
     ctx.translate(-WRAP_PIVOT.x, -WRAP_PIVOT.y);
   }
   drawWrapper(false);
+  if (bouquet.vase && hasContents(bouquet)) drawVase(ctx, bouquet.vase, false);
+  if (extra && bouquet.stems.length) drawStemExtensions(ctx, bouquet);
   ctx.save();
-  if (paper.sprite >= 0 && wrapper) {
+  if (!bouquet.vase && paper.sprite >= 0 && wrapper) {
     // Clip at the front paper's V-shaped opening, not its outer silhouette.
     // A small underlap hides seams; lower leaves cannot escape beside the bow.
     // Apply exactly the same rotation and scale as both paper layers.
@@ -675,9 +758,10 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   }
   ctx.restore();
   drawWrapper(true);
-  if (!wrapper && paper.sprite >= 0 && bouquet.stems.length) {
+  if (bouquet.vase && hasContents(bouquet)) drawVase(ctx, bouquet.vase, true);
+  if (!bouquet.vase && !wrapper && paper.sprite >= 0 && bouquet.stems.length) {
     const crop = spriteRect(paper.sprite, art.naturalWidth, art.naturalHeight);
-    ctx.drawImage(art, crop.x, crop.y, crop.w, crop.h, 207, 398, 306, 340);
+    ctx.drawImage(art, crop.x, crop.y, crop.w, crop.h, 207, 398 + extra, 306, 340);
   }
   const active = bouquet.stems.find(s => s.id === selected);
   if (active) {
@@ -694,7 +778,7 @@ export function renderBouquet(canvas: HTMLCanvasElement, bouquet: Bouquet, art: 
   ctx.restore();   // end shrink-to-fit
   ctx.restore();
   const note = notePapers[bouquet.notePaper ?? 0];
-  const noteY = 903, noteBottom = noteY + layout.noteHeight;
+  const noteY = 903 + extra, noteBottom = noteY + layout.noteHeight;
   ctx.fillStyle = "#44332612";
   ctx.beginPath(); ctx.roundRect(67, noteY + 6, WIDTH - 128, layout.noteHeight, 8); ctx.fill();
   ctx.fillStyle = note.color;

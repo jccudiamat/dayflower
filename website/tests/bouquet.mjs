@@ -23,7 +23,7 @@ test('shared bouquet preserves flowers, placement, wrapping, and multilingual no
 test('invalid or truncated links fail closed', () => {
   for (const encoded of ['', 'undefined', '<script>', 'x'.repeat(MAX_PRIVATE_LINK_LENGTH + 1), encodeBouquet(makeBouquet()).slice(0, -10), btoa('{"v":99}')]) assert.equal(decodeBouquet(encoded), null);
   const b = makeBouquet();
-  for (const value of [null, {}, { ...b, v: 2 }, { ...b, paper: papers.length }, { ...b, paper: .5 }, { ...b, message: 'x'.repeat(MAX_NOTE_LENGTH + 1) }, { ...b, stems: Array(MAX_STEMS + 1).fill(b.stems[0]) }]) assert.equal(validateBouquet(value), null);
+  for (const value of [null, {}, { ...b, v: 2 }, { ...b, paper: 13 }, { ...b, paper: .5 }, { ...b, message: 'x'.repeat(MAX_NOTE_LENGTH + 1) }, { ...b, stems: Array(MAX_STEMS + 1).fill(b.stems[0]) }]) assert.equal(validateBouquet(value), null);
   for (const stem of [{ ...b.stems[0], flower: 99 }, { ...b.stems[0], flower: 1.2 }, { ...b.stems[0], x: Infinity }, { ...b.stems[0], angle: 46 }, { ...b.stems[0], scale: .1 }]) assert.equal(validateBouquet({ ...b, stems: [stem] }), null);
   assert.throws(() => encodeBouquet({ ...b, stems: [] }), /at least one flower/);
 });
@@ -51,7 +51,7 @@ test('all presets and arrangements remain valid through the stem limit', () => {
 
 function recordingCanvas() {
   const calls = [];
-  const ctx = new Proxy({ font: '', measureText(text) { return { width: Array.from(text).length * (parseFloat(this.font.match(/([\d.]+)px/)?.[1] || '23')) * .65 }; } }, {
+  const ctx = new Proxy({ font: '', createLinearGradient() { return { addColorStop() {} }; }, measureText(text) { return { width: Array.from(text).length * (parseFloat(this.font.match(/([\d.]+)px/)?.[1] || '23')) * .65 }; } }, {
     get(obj, key) { return key in obj ? obj[key] : (...args) => calls.push([key, ...args]); }
   });
   return { canvas: { getContext: () => ctx }, calls };
@@ -156,7 +156,7 @@ test('note stationery and lettering round-trip and reject untrusted choices', ()
 });
 
 test('full multilingual notes survive sharing and expand without losing text', () => {
-  const b = { ...makeBouquet(), paper: 12, wrapScale: 1.65, stems: arrange(Array(MAX_STEMS).fill(0)), message: '愛'.repeat(MAX_NOTE_LENGTH) };
+  const b = { ...makeBouquet(), paper: 0, wrapScale: 1.65, stems: arrange(Array(MAX_STEMS).fill(0)), message: '愛'.repeat(MAX_NOTE_LENGTH) };
   const encoded = encodeBouquet(b);
   assert.ok(encoded.length <= MAX_PRIVATE_LINK_LENGTH);
   assert.deepEqual(decodeBouquet(encoded), b);
@@ -175,23 +175,32 @@ test('full multilingual notes survive sharing and expand without losing text', (
   assert.ok(pathological.canvasHeight < 5500);
 });
 
-test('larger layered wrapping stays inside the card at every size and lean extreme', () => {
-  const { fitScale, WRAP_PIVOT: pivot, ARRANGEMENT_OFFSET: offset } = model.exports;
-  for (const paper of [9, 10, 11, 12]) for (const wrapScale of [.75, 1.65]) for (const wrapAngle of [-20, 20]) {
-    const fit = fitScale({ ...makeBouquet(), paper, wrapScale, wrapAngle });
-    const layers = wrappingLayers(paper);
-    assert.equal(layers.length, paper < 11 ? 2 : 3);
-    for (const layer of layers) {
-      const angle = (wrapAngle + layer.angle) * Math.PI / 180;
-      for (const x of [104, 104 + 512 * (layer.paper >= 5 ? 1.055 : 1)]) for (const y of [130, 730]) {
-        const dx = (x - pivot.x) * layer.sx * wrapScale;
-        const dy = (y - pivot.y) * layer.sy * wrapScale;
-        const px = offset.x + pivot.x + (dx * Math.cos(angle) - dy * Math.sin(angle)) * fit;
-        const py = offset.y + pivot.y + (dx * Math.sin(angle) + dy * Math.cos(angle)) * fit;
-        assert.ok(px >= 24 - 1e-6 && px <= 1096 + 1e-6);
-        assert.ok(py >= 112 - 1e-6 && py <= 887 + 1e-6);
-      }
+test('tall layouts and vases preserve their geometry through saved links', () => {
+  const { bloomPoint, fitScale, arrangementExtraHeight, STEM_BOUNDS } = model.exports;
+  for (let layout = 0; layout < 4; layout++) for (let vase = 0; vase < 4; vase++) for (let count = 1; count <= 24; count++) {
+    const b = { ...makeBouquet(), arrangement: layout, vase, stems: arrange(Array(count).fill(0), layout, vase) };
+    const clean = validateBouquet(b, true);
+    assert.ok(clean, `layout ${layout}, vase ${vase}, count ${count}`);
+    assert.deepEqual(decodeBouquet(encodeBouquet(b)), clean);
+    assert.ok(fitScale(b) > 0 && fitScale(b) <= 1);
+    for (const stem of b.stems) assert.ok(stem.y >= STEM_BOUNDS.minY && stem.y <= STEM_BOUNDS.maxY);
+    if (count >= 3 && layout === 2) {
+      const heights = b.stems.slice(0, 3).map(s => bloomPoint(s).y);
+      assert.ok(heights[1] - heights[0] > 150 && heights[2] - heights[1] > 150, 'Three tiers are vertically separated blooms');
     }
+    const { canvas, calls } = recordingCanvas();
+    renderBouquet(canvas, b, { naturalWidth: 1536, naturalHeight: 1024 });
+    assert.ok(canvas.height >= 1120 + arrangementExtraHeight(b));
+    assert.equal(calls.filter(c => c[0] === 'drawImage').length, count + (vase ? 0 : 1), 'Vases replace the paper wrapper');
+  }
+  for (const key of ['vase', 'arrangement']) for (const bad of [-1, 4, .5, '1', Infinity]) assert.equal(validateBouquet({ ...makeBouquet(), [key]: bad }, true), null);
+});
+
+test('retired wraps map to single papers so existing gifts still open', () => {
+  assert.equal(papers.length, 9);
+  for (const [old, current] of [[9, 0], [10, 5], [11, 1], [12, 0]]) {
+    assert.equal(validateBouquet({ ...makeBouquet(), paper: old }).paper, current);
+    assert.equal(wrappingLayers(current).length, 1);
   }
 });
 
