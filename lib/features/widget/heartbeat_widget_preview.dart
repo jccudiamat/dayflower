@@ -10,7 +10,7 @@ import 'heartbeat_themes.dart';
 /// proportions at their own sizes.
 ///
 /// ⚠️ Keep the numbers in step with the XML (margins 18 and 16, text 13 and
-/// 14, the button's colours): this is the only look at the widget most
+/// 12, the button's padding and colours): this is the only look at the widget most
 /// people get before they place it.
 class HeartbeatWidgetPreview extends StatelessWidget {
   const HeartbeatWidgetPreview({super.key, required this.theme});
@@ -73,7 +73,7 @@ class HeartbeatWidgetPreview extends StatelessWidget {
                       ],
                     ),
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(20 * u, 8 * u, 18 * u, 8 * u),
+                      padding: EdgeInsets.fromLTRB(15 * u, 6 * u, 13 * u, 6 * u),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -82,14 +82,14 @@ class HeartbeatWidgetPreview extends StatelessWidget {
                             maxLines: 1,
                             style: TextStyle(
                               color: _label,
-                              fontSize: 14 * u,
+                              fontSize: 12 * u,
                               fontWeight: FontWeight.w600,
                               height: 1.2,
                             ),
                           ),
-                          SizedBox(width: 7 * u),
+                          SizedBox(width: 5 * u),
                           AppIcon(CupertinoIcons.heart,
-                              color: _label, size: 13 * u),
+                              color: _label, size: 11 * u),
                         ],
                       ),
                     ),

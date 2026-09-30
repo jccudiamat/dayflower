@@ -108,6 +108,7 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
     double textScale = 1,
     bool unpaired = false,
     Mood? partnerMood,
+    ValueNotifier<({int mine, int partner})>? beatCounts,
     Future<bool> Function(Uri)? openLink}) async {
   _boundary = GlobalKey();
   debugNetworkImageHttpClientProvider = () => _PhotoClient();
@@ -223,8 +224,17 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
           const CoupleStats(hearts: 128, flowers: 42, photos: 36, streak: 7)),
       callUsageProvider.overrideWith((ref) async => const CallUsage()),
       partnerMoodProvider.overrideWithValue(filled ? Mood.loved : partnerMood),
-      todayHeartbeatCountsProvider.overrideWithValue(
-          filled ? (mine: 3, partner: 2) : (mine: 0, partner: 0)),
+      if (beatCounts == null)
+        todayHeartbeatCountsProvider.overrideWithValue(
+            filled ? (mine: 3, partner: 2) : (mine: 0, partner: 0))
+      else
+        // Counts a test can move, as a heartbeat arriving does.
+        todayHeartbeatCountsProvider.overrideWith((ref) {
+          void changed() => ref.invalidateSelf();
+          beatCounts.addListener(changed);
+          ref.onDispose(() => beatCounts.removeListener(changed));
+          return beatCounts.value;
+        }),
       myDayPhotoProvider.overrideWithValue(
           filled ? (framed ? _mineFramed : _mine) : null),
       myDayPhotosProvider.overrideWithValue(
@@ -945,6 +955,80 @@ void main() {
         .map((e) => (e.widget as SizedBox))
         .firstWhere((b) => b.width == 96);
     expect(stage.height, lessThan(96));
+  });
+
+  // 🔴 The rings hugged the heart (24 and 32pt of growth) and faded before
+  // they read as a ripple; and keyed one level too deep, the next ring took
+  // a finished one's place and started again from the heart, so the pulse
+  // stuttered on after it should have ended.
+  _homeTest('A heartbeat ripples out across the card, once, and ends',
+      (tester) async {
+    await _pump(tester, Routes.home, filled: true);
+    await _reveal(tester, find.byKey(const ValueKey('home-heartbeat')));
+    Finder rings() => find.byWidgetPredicate((w) =>
+        w is CustomPaint && w.painter.runtimeType.toString() == '_RingPainter');
+    final heart = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Send a heartbeat');
+    await tester.tap(heart);
+    // The first frame starts the rings' clocks; they run from there.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(rings(), findsWidgets);
+    final widest = rings()
+        .evaluate()
+        .map((e) => e.size!.width)
+        .fold<double>(0, (a, b) => a > b ? a : b);
+    expect(widest, greaterThan(120), reason: 'well past the 64pt heart');
+    // Drawn inside the card, which keeps them to its rounded edge.
+    expect(
+        tester
+            .widget<Container>(find.byKey(const ValueKey('home-heartbeat')))
+            .clipBehavior,
+        Clip.antiAlias);
+    // Frame by frame, as a phone draws it: the first ring has to finish
+    // on a frame of its own for a ring after it to be able to start over.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(rings(), findsNothing, reason: 'over once its rings have faded');
+  });
+
+  // Review only: frames of the heartbeat card's ripples, sent and received,
+  // to build/review/heartbeat-ripple-*.png.
+  //   flutter test test/home_screen_test.dart --plain-name "heartbeat card's ripples" --dart-define=CAPTURE_REVIEW=true
+  _homeTest("CAPTURE: the heartbeat card's ripples", (tester) async {
+    if (!_capture) return;
+    // Screenshots let real time run, and the map further down then asks
+    // for a cache folder, which no test has (as in maps_test.dart).
+    const paths = MethodChannel('plugins.flutter.io/path_provider');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, (_) async => Directory.systemTemp.path);
+    addTearDown(() => TestDefaultBinaryMessengerBinding
+        .instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, null));
+    final beats = ValueNotifier((mine: 3, partner: 2));
+    await _pump(tester, Routes.home, filled: true, beatCounts: beats);
+    await _reveal(tester, find.byKey(const ValueKey('home-heartbeat')));
+    final card = tester.getRect(find.byKey(const ValueKey('home-heartbeat')));
+    File('build/review/heartbeat-ripple-card.txt')
+      ..createSync(recursive: true)
+      ..writeAsStringSync('${card.left},${card.top},${card.right},${card.bottom}');
+    final heart = find.byWidgetPredicate(
+        (w) => w is Semantics && w.properties.label == 'Send a heartbeat');
+    await _screenshot(tester, 'heartbeat-ripple-sent-0000');
+    await tester.tap(heart);
+    for (var t = 100; t <= 1300; t += 100) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await _screenshot(tester, 'heartbeat-ripple-sent-${'$t'.padLeft(4, '0')}');
+    }
+    await tester.pumpAndSettle();
+    beats.value = (mine: 4, partner: 3);
+    await tester.pump();
+    for (var t = 100; t <= 1700; t += 100) {
+      await tester.pump(const Duration(milliseconds: 100));
+      await _screenshot(tester, 'heartbeat-ripple-received-${'$t'.padLeft(4, '0')}');
+    }
+    await tester.pumpAndSettle();
   });
 
   _homeTest('Every day is on Home, a swipe apart, theirs first',

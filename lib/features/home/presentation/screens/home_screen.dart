@@ -472,23 +472,34 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
   /// The heart itself. Ripples are sized relative to it.
   static const double _heartSize = 64;
 
-  /// Wide enough to hold a fully expanded incoming ripple, which is how
-  /// much of the row the heart takes.
+  /// The heart's column, as wide as it always was, so the words keep their
+  /// room.
   static const double _stageSize = 96;
 
-  /// Only as tall as the heart: the ripples spill past it (the stage does
-  /// not clip), rather than a 96pt stage setting the height of the whole
-  /// card round a 64pt heart.
+  /// Only as tall as the heart: the ripples spill past it rather than a
+  /// taller stage setting the height of the whole card round a 64pt heart.
   static const double _stageHeight = _heartSize;
 
-  static const double _incomingGrowth = 32;
-  static const Duration _incomingDuration = Duration(milliseconds: 1200);
+  /// How much wider than the heart a ring gets by the time it fades: out to
+  /// about three hearts across.
+  ///
+  /// 🔴 It was 24 for yours and 32 for theirs, because the rings were drawn
+  /// over the words beside the heart and past the card's edge, so they had
+  /// to stay small. They hugged the heart and were gone before they read as
+  /// a ripple at all; your own was barely there. Now they are drawn behind
+  /// the card's words and inside its rounded edge (see build), and can go
+  /// as far as a ripple should.
+  static const double _reach = 124;
 
-  late final AnimationController _scaleCtrl;
+  /// Room for a ring at its widest, with its glow.
+  static const double _rippleBox = _heartSize + _reach + 24;
 
-  /// Double-thump (lub-dub) played on the receiving side only.
+  /// The heart beats lub-dub for a heartbeat either way, harder for theirs:
+  /// receiving should feel bigger than sending.
   late final AnimationController _beatCtrl;
-  late final Animation<double> _beat;
+  late final Animation<double> _sentBeat;
+  late final Animation<double> _receivedBeat;
+  late Animation<double> _beat;
 
   int _rippleSeed = 0;
   final List<_Ripple> _ripples = [];
@@ -496,95 +507,70 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
   @override
   void initState() {
     super.initState();
-    _scaleCtrl = AnimationController(
-      vsync: this,
-      duration: AppMotion.standard,
-      lowerBound: 0,
-      upperBound: 0.12,
-    );
     _beatCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _beat = TweenSequence<double>([
-      TweenSequenceItem(
-        tween: Tween(begin: 1.0, end: 1.22).chain(
-          CurveTween(curve: Curves.easeOut),
-        ),
-        weight: 12,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 1.22, end: 1.04).chain(
-          CurveTween(curve: Curves.easeIn),
-        ),
-        weight: 16,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 1.04, end: 1.14).chain(
-          CurveTween(curve: Curves.easeOut),
-        ),
-        weight: 10,
-      ),
-      TweenSequenceItem(
-        tween: Tween(begin: 1.14, end: 1.0).chain(
-          CurveTween(curve: Curves.easeInOut),
-        ),
-        weight: 24,
-      ),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 38),
-    ]).animate(_beatCtrl);
+    Animation<double> lubDub(double lub, double dub) => TweenSequence<double>([
+          TweenSequenceItem(
+            tween: Tween(begin: 1.0, end: lub)
+                .chain(CurveTween(curve: Curves.easeOut)),
+            weight: 12,
+          ),
+          TweenSequenceItem(
+            tween: Tween(begin: lub, end: 1.03)
+                .chain(CurveTween(curve: Curves.easeIn)),
+            weight: 16,
+          ),
+          TweenSequenceItem(
+            tween: Tween(begin: 1.03, end: dub)
+                .chain(CurveTween(curve: Curves.easeOut)),
+            weight: 10,
+          ),
+          TweenSequenceItem(
+            tween: Tween(begin: dub, end: 1.0)
+                .chain(CurveTween(curve: Curves.easeInOut)),
+            weight: 24,
+          ),
+          TweenSequenceItem(tween: ConstantTween(1.0), weight: 38),
+        ]).animate(_beatCtrl);
+    _sentBeat = lubDub(1.14, 1.08);
+    _receivedBeat = lubDub(1.22, 1.14);
+    _beat = _sentBeat;
   }
 
   @override
   void dispose() {
-    _scaleCtrl.dispose();
     _beatCtrl.dispose();
     super.dispose();
   }
 
-  void _addRipple(_Ripple ripple) {
-    setState(() => _ripples.add(ripple));
-    Future.delayed(ripple.delay + ripple.duration, () {
-      if (mounted) setState(() => _ripples.remove(ripple));
-    });
-  }
-
-  /// Your own tap — a single modest ring. Deliberately smaller than the
-  /// incoming one: receiving should feel bigger than sending.
-  void _spawnSentRipple() {
-    _addRipple(
-      _Ripple(
-        id: _rippleSeed++,
-        color: AppColors.brand,
-        growth: 24,
-        duration: AppMotion.emotional,
-        strokeWidth: 2,
-      ),
-    );
-  }
-
-  /// Their tap — three staggered rings sweeping out to the edge of the stage,
-  /// the first carrying a soft bloom behind the heart.
-  void _spawnIncomingRipples() {
-    for (var i = 0; i < 3; i++) {
-      _addRipple(
-        _Ripple(
+  /// A heartbeat, sent or arrived: the heart beats and rings go out from
+  /// it, one after another, pink for yours and lavender for theirs, the
+  /// first with a soft bloom behind it. Theirs has one ring more and goes
+  /// further.
+  void _pulse({required bool incoming}) {
+    setState(() {
+      final rings = incoming ? 3 : 2;
+      for (var i = 0; i < rings; i++) {
+        _ripples.add(_Ripple(
           id: _rippleSeed++,
-          color: AppColors.lavender,
-          growth: _incomingGrowth,
-          duration: _incomingDuration,
-          delay: Duration(milliseconds: i * 200),
-          strokeWidth: 3 - i * 0.6,
+          color: incoming ? AppColors.lavender : AppColors.brand,
+          growth: incoming ? _reach : _reach * 0.8,
+          duration: const Duration(milliseconds: 1150),
+          delay: Duration(milliseconds: i * (incoming ? 220 : 280)),
+          strokeWidth: (incoming ? 2.6 : 2.2) - i * 0.5,
           bloom: i == 0,
-        ),
-      );
-    }
+        ));
+      }
+      _beat = incoming ? _receivedBeat : _sentBeat;
+    });
+    _beatCtrl.forward(from: 0);
   }
 
   void _onTap() {
     HapticFeedback.mediumImpact();
-    _scaleCtrl.forward().then((_) => _scaleCtrl.reverse());
-    _spawnSentRipple();
+    _pulse(incoming: false);
 
     final pair = ref.read(currentPairProvider).valueOrNull;
     final userId = ref.read(currentUserIdProvider);
@@ -613,12 +599,11 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     final partnerName =
         partner?.petName ?? partner?.displayName ?? 'Your partner';
 
-    // Incoming partner beat → big lavender ripple, a double-thump on the
-    // heart. Notification delivery is owned by the app root.
+    // Incoming partner beat → the bigger, lavender pulse. Notification
+    // delivery is owned by the app root.
     ref.listen(todayHeartbeatCountsProvider, (prev, next) {
       if (prev == null || next.partner <= prev.partner) return;
-      _spawnIncomingRipples();
-      _beatCtrl.forward(from: 0);
+      _pulse(incoming: true);
     });
 
     ref.watch(homeClockProvider);
@@ -653,25 +638,11 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
       SizedBox(
           width: _stageSize,
           height: _stageHeight,
-          child: Stack(
-              alignment: Alignment.center,
-              clipBehavior: Clip.none,
-              children: [
-            // 🔴 In an OverflowBox: a ring grows past the 64pt stage, and a
-            // Stack holds its children to its own size, so without this
-            // every ring was squashed flat behind the heart and no ripple
-            // showed at all.
-            for (final r in _ripples)
-              OverflowBox(
-                maxWidth: _stageSize + _incomingGrowth,
-                maxHeight: _stageSize + _incomingGrowth,
-                child: _RippleRing(
-                    key: ValueKey(r.id), ripple: r, baseSize: _heartSize),
-              ),
-            AnimatedBuilder(
-                animation: Listenable.merge([_scaleCtrl, _beatCtrl]),
-                builder: (context, child) => Transform.scale(
-                    scale: (1 + _scaleCtrl.value) * _beat.value, child: child),
+          child: Center(
+            child: AnimatedBuilder(
+                animation: _beatCtrl,
+                builder: (context, child) =>
+                    Transform.scale(scale: _beat.value, child: child),
                 child: Semantics(
                     button: true,
                     enabled: enabled,
@@ -690,11 +661,47 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
                               child: const AppIcon(CupertinoIcons.heart_fill,
                                   color: Colors.white, size: 32),
                             ))))),
-          ])),
+          )),
       // 🔴 No "Tap to send" under it. It said what a heart on a card already
       // says, and with the heart's stage it made the right half twice the
       // height of the words beside it, so the card was that tall too.
     ]);
+    // The rings, over the heart's stage but drawn before everything else in
+    // this half of the card, so they go out behind the words.
+    // ⚠️ In an OverflowBox: a ring grows past the 64pt stage, and a Stack
+    // holds its children to its own size, so without one every ring was
+    // squashed flat behind the heart and no ripple showed at all.
+    final ripples = IgnorePointer(
+      child: SizedBox(
+        width: _stageSize,
+        height: _stageHeight,
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            // 🔴 Keyed here, on the Stack's own child. Keyed only on the
+            // ring inside, the boxes were matched by position, so when the
+            // first ring finished and went, the next box took its place
+            // with a new ring's state, and every ring still going started
+            // again from the heart: the pulse stuttered and repeated after
+            // it should have ended.
+            for (final r in _ripples)
+              OverflowBox(
+                key: ValueKey(r.id),
+                maxWidth: _rippleBox,
+                maxHeight: _rippleBox,
+                child: _RippleRing(
+                  ripple: r,
+                  baseSize: _heartSize,
+                  onDone: () {
+                    if (mounted) setState(() => _ripples.remove(r));
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
     // 🔴 One card, holding both halves. The heartbeat and the mood
     // check-in were two separate surfaces asking the same question a few
     // pixels apart; they are now stacked inside a single shell. Neither
@@ -703,23 +710,36 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
     final heartbeat = LayoutBuilder(builder: (context, constraints) {
         final largeText = MediaQuery.textScalerOf(context).scale(14) / 14 > 1.5;
         if (constraints.maxWidth < 250 || largeText) {
-          return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                text,
-                const SizedBox(height: AppSpace.md),
-                Center(child: action),
-              ]);
+          return Stack(clipBehavior: Clip.none, children: [
+            // Where the heart is: at the bottom, centred.
+            Positioned.fill(
+                child: Align(alignment: Alignment.bottomCenter, child: ripples)),
+            Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  text,
+                  const SizedBox(height: AppSpace.md),
+                  Center(child: action),
+                ]),
+          ]);
         }
-        return Row(children: [
-          Expanded(child: text),
-          const SizedBox(width: 12),
-          SizedBox(width: _stageSize, child: action)
+        return Stack(clipBehavior: Clip.none, children: [
+          // Where the heart is: at the right, halfway down.
+          Positioned.fill(
+              child: Align(alignment: Alignment.centerRight, child: ripples)),
+          Row(children: [
+            Expanded(child: text),
+            const SizedBox(width: 12),
+            SizedBox(width: _stageSize, child: action)
+          ]),
         ]);
       });
 
     return Container(
       key: const ValueKey('home-heartbeat'),
+      // Inside its own rounded edge: the rings go further than the card is
+      // tall, and past its edge they would be drawn over the page round it.
+      clipBehavior: Clip.antiAlias,
       padding: const EdgeInsets.symmetric(
           horizontal: AppSpace.sm, vertical: AppSpace.sm),
       decoration: _homeCardDecoration(),
@@ -732,7 +752,7 @@ class _HeartbeatCardState extends ConsumerState<_HeartbeatCard>
   }
 }
 
-/// One expanding ring. Several of these, staggered, make the incoming pulse.
+/// One expanding ring. Several of these, staggered, make a pulse.
 class _Ripple {
   _Ripple({
     required this.id,
@@ -753,19 +773,22 @@ class _Ripple {
   final double strokeWidth;
   final Duration delay;
 
-  /// Fills the ring with a faint wash as well as stroking it.
+  /// A faint wash of its colour inside it as well.
   final bool bloom;
 }
 
 class _RippleRing extends StatefulWidget {
   const _RippleRing({
-    super.key,
     required this.ripple,
     required this.baseSize,
+    required this.onDone,
   });
 
   final _Ripple ripple;
   final double baseSize;
+
+  /// When it has faded out, so the card can let it go.
+  final VoidCallback onDone;
 
   @override
   State<_RippleRing> createState() => _RippleRingState();
@@ -778,14 +801,14 @@ class _RippleRingState extends State<_RippleRing>
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: widget.ripple.duration);
-    if (widget.ripple.delay == Duration.zero) {
-      _ctrl.forward();
-    } else {
-      Future.delayed(widget.ripple.delay, () {
-        if (mounted) _ctrl.forward();
-      });
-    }
+    final r = widget.ripple;
+    // One controller for its wait and its growing, so nothing is left on
+    // a timer if the card goes away mid-pulse.
+    _ctrl = AnimationController(vsync: this, duration: r.delay + r.duration)
+      ..addStatusListener((status) {
+        if (status == AnimationStatus.completed) widget.onDone();
+      })
+      ..forward();
   }
 
   @override
@@ -797,31 +820,75 @@ class _RippleRingState extends State<_RippleRing>
   @override
   Widget build(BuildContext context) {
     final r = widget.ripple;
-    return IgnorePointer(
+    final start = r.delay.inMicroseconds / (r.delay + r.duration).inMicroseconds;
+    return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (context, _) {
-          final v = Curves.easeOut.transform(_ctrl.value);
-          // Fade late rather than linearly, so the ring stays readable most of
-          // the way out instead of vanishing at half radius.
-          final fade = (1 - v * v).clamp(0.0, 1.0);
-          final size = widget.baseSize + r.growth * v;
-          return Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: r.bloom ? r.color.withValues(alpha: 0.14 * fade) : null,
-              border: Border.all(
-                color: r.color.withValues(alpha: fade),
-                width: r.strokeWidth,
-              ),
-            ),
+          final t = ((_ctrl.value - start) / (1 - start)).clamp(0.0, 1.0);
+          if (t <= 0 || t >= 1) return const SizedBox.shrink();
+          final size =
+              widget.baseSize + r.growth * Curves.easeOutCubic.transform(t);
+          return CustomPaint(
+            size: Size.square(size + 24),
+            painter: _RingPainter(t: t, ripple: r, diameter: size),
           );
         },
       ),
     );
   }
+}
+
+/// A ring with a soft glow round it, fading as it goes: a fine line over a
+/// wider blurred one, the way the heartbeat widget's rings are drawn.
+class _RingPainter extends CustomPainter {
+  _RingPainter({required this.t, required this.ripple, required this.diameter});
+
+  final double t;
+  final _Ripple ripple;
+  final double diameter;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final centre = size.center(Offset.zero);
+    final radius = diameter / 2;
+    // Fades late rather than linearly, so the ring stays readable most of
+    // the way out instead of vanishing at half its reach.
+    final fade = (1 - t * t).clamp(0.0, 1.0);
+    final color = ripple.color;
+    if (ripple.bloom) {
+      canvas.drawCircle(
+        centre,
+        radius,
+        Paint()
+          ..shader = RadialGradient(colors: [
+            color.withValues(alpha: 0.16 * fade),
+            color.withValues(alpha: 0),
+          ]).createShader(Rect.fromCircle(center: centre, radius: radius)),
+      );
+    }
+    canvas.drawCircle(
+      centre,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = ripple.strokeWidth * 3
+        ..color = color.withValues(alpha: 0.22 * fade)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
+    );
+    canvas.drawCircle(
+      centre,
+      radius,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = ripple.strokeWidth
+        ..color = color.withValues(alpha: 0.85 * fade),
+    );
+  }
+
+  @override
+  bool shouldRepaint(_RingPainter old) =>
+      old.t != t || old.diameter != diameter || old.ripple != ripple;
 }
 /* ── Header ──────────────────────────────── */
 
