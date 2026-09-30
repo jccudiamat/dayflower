@@ -13,7 +13,7 @@ const sections = [
   ],
   [
     "2. Website and waitlist",
-    "When you join the waitlist, we send your email address to Supabase with a landing-page source label. We use it to send a signup confirmation and notify you when Dayflower is ready. Confirmation emails are delivered through Resend, which processes the recipient address and message for delivery. We store confirmation attempt times and provider acceptance receipts to reduce duplicates; acceptance does not guarantee inbox delivery. Joining the waitlist does not create an app account or enroll your partner. If you choose to email a bouquet, Resend processes the recipient address and gift-link message to deliver it; the recipient address is not stored with the bouquet in our database. Hosting and network providers process connection information, such as IP addresses and request details, to deliver and secure the website."
+    "When you join the waitlist, we send your email address to Supabase with a landing-page source label. We use it to send a signup confirmation and notify you when Dayflower is ready. Confirmation emails are delivered through Resend, which processes the recipient address and message for delivery. For each new signup, we also send your email address through Resend to the Dayflower operator's Gmail inbox so we can monitor the waitlist and handle requests. We store confirmation attempt times and provider acceptance receipts to reduce duplicates; acceptance does not guarantee inbox delivery. Joining the waitlist does not create an app account or enroll your partner. If you choose to email a bouquet, Resend processes the recipient address and gift-link message to deliver it; the recipient address is not stored with the bouquet in our database. Hosting and network providers process connection information, such as IP addresses and request details, to deliver and secure the website."
   ],
   [
     "3. Account and profile information",
@@ -33,7 +33,7 @@ const sections = [
   ],
   [
     "7. Providers and security",
-    "Supabase supports authentication, database storage, and uploaded media. Vercel hosts the website, Cloudflare provides domain/DNS and security-check services, and Resend delivers requested emails. When app notifications and calls are enabled, Firebase Cloud Messaging, platform delivery services, and LiveKit also process data needed for those features. Authorized operators and providers may have access for service operation, support, and security; access is not limited literally to two people. Access controls reduce unauthorized access, but this policy does not promise end-to-end encryption or absolute security. Service processing may occur outside the Philippines."
+    "Supabase supports authentication, database storage, and uploaded media. Vercel hosts the website, Cloudflare provides domain/DNS and security-check services, Resend delivers emails, and Google provides the operator's Gmail inbox for signup alerts and privacy requests. When app notifications and calls are enabled, Firebase Cloud Messaging, platform delivery services, and LiveKit also process data needed for those features. Authorized operators and providers may have access for service operation, support, and security; access is not limited literally to two people. Access controls reduce unauthorized access, but this policy does not promise end-to-end encryption or absolute security. Service processing may occur outside the Philippines."
   ],
   [
     "8. Device storage and tracking",

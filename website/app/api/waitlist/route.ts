@@ -1,4 +1,5 @@
 import { sendConfirmation } from "../../../emails/send-confirmation";
+import { sendSignupNotice } from "../../../emails/send-signup-notice";
 import { subject, html, text } from "../../../emails/waitlist-confirmation";
 import { emailAddress, onlyKeys } from "../../lib/input";
 import { checkRequest, failure, InputError, readJson } from "../../lib/request";
@@ -20,10 +21,14 @@ export async function POST(request: Request) {
     });
     const error = !res.ok ? await res.json().catch(() => null) : null;
     if (!res.ok && !(res.status === 409 && error?.code === "23505")) throw new Error("Waitlist unavailable.");
-    const confirmation = await sendConfirmation(normalized, { subject, html, text }, {
-      supabaseUrl: url, serviceKey: key, resendKey: process.env.RESEND_API_KEY,
-      from: process.env.WAITLIST_EMAIL_FROM, replyTo: process.env.WAITLIST_EMAIL_REPLY_TO,
-    });
+    const [confirmation, ownerNotice] = await Promise.all([
+      sendConfirmation(normalized, { subject, html, text }, {
+        supabaseUrl: url, serviceKey: key, resendKey: process.env.RESEND_API_KEY,
+        from: process.env.WAITLIST_EMAIL_FROM, replyTo: process.env.WAITLIST_EMAIL_REPLY_TO,
+      }),
+      res.ok ? sendSignupNotice(normalized, { resendKey: process.env.RESEND_API_KEY, from: process.env.WAITLIST_EMAIL_FROM }) : Promise.resolve(true),
+    ]);
+    if (!ownerNotice) console.error("Waitlist signup notice: delivery was not accepted.");
     return Response.json({ ok: true, confirmation }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { return failure(error); }
 }
