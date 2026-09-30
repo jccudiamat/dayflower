@@ -3,14 +3,16 @@ import { url } from "../lib/seo";
 import Link from "next/link";
 export const metadata: Metadata = { title: "Terms of Service | Dayflower", description: "Terms for the Dayflower website, waitlist, and private-testing app." , alternates: { canonical: url("/terms") }, robots: { index: true, follow: true } };
 const sections = [
+["Digital bouquet creator", "You can create a bouquet without an account. A shared gift link stores the arrangement, note, and any photos you add so that someone with the link can open it; a private link carries the arrangement in its URL and cannot include photos. Neither type is encrypted or suitable for confidential messages. Check the names, note, and images before sharing. Anyone with the complete link may copy or forward it, and a link you already shared cannot be revoked or changed by editing your draft. Stored gift links stop opening after 400 days. You retain the rights you hold in your original note and uploaded photos and permit Dayflower to store and display them to deliver the gift. Only email gifts to people you have a legitimate reason to contact; do not use the feature for unsolicited messages."],
 ["Public photo booth","The public website photo booth is free to use without an app account or waitlist signup. Use only photos you have permission to use, and obtain the agreement of people whose photos you share. Your images are processed in the browser. Save your export before closing or refreshing the page, because Dayflower does not keep a copy for recovery. Native sharing is subject to the capabilities and terms of the app you select."],
+["External gift links", "The gift guide may link to third-party sellers. Purchases, delivery, refunds, and product claims are handled by the seller under its terms, not by Dayflower. Check the seller's details before buying."],
   [
     "1. About these terms",
-    "Dayflower is a private app for two linked partners, with flowers and messaging, voice and video calls, photos, mood and heartbeat gestures, events, reminders, financial tracking, and monthly Chapters. These terms cover the app, website, and waitlist. The service operator’s legal identity and country are pending confirmation in this review draft."
+    "These terms cover mydayflower.com, its free bouquet creator and photo booth, the app waitlist, and the private-testing Dayflower app. The app is a private space for two linked partners with messaging, calls, photos, activities, financial tracking, and monthly Chapters. Dayflower is an unregistered project operated from the Philippines. For questions, email app.dayflower@gmail.com."
   ],
   [
     "2. Eligibility and accounts",
-    "You must be at least 18 years old to use Dayflower. Provide accurate account information, keep credentials secure, and use only accounts you are authorized to access. Pair only with someone who agrees to connect. A pairing invitation is not permission to access someone else’s account or device."
+    "You must be at least 16 years old to use the website, including its bouquet creator, photo booth, and app waitlist. You must be at least 18 years old to use the app. Provide accurate account information, keep credentials secure, and use only accounts you are authorized to access. Pair only with someone who agrees to connect. A pairing invitation is not permission to access someone else’s account or device."
   ],
   [
     "3. Your content and permissions",
@@ -38,7 +40,7 @@ const sections = [
   ],
   [
     "9. Leaving and shared data",
-    "You may stop using the service. Signing out, uninstalling, disconnecting a pair, and erasing an account are different actions. Disconnecting can affect shared content for both partners. Review in-app confirmations before deleting or disconnecting. Retention, export, and complete account-erasure procedures are described in the Privacy Policy draft and require operational confirmation before publication."
+    "You may stop using the service. Signing out, uninstalling, disconnecting a pair, and deleting an account are different actions. Disconnecting can affect shared content for both partners. Review in-app confirmations before deleting or disconnecting. There is currently no in-app account-deletion tool. Email app.dayflower@gmail.com to request waitlist removal, account deletion, or a copy of your data. The Privacy Policy explains how requests and retained information are handled."
   ],
   [
     "10. Responsibility and your legal rights",
@@ -46,16 +48,16 @@ const sections = [
   ],
   [
     "11. Changes and contact",
-    "Revised terms will carry an updated date. Material changes should be communicated before they take effect where required by law. The operator identity and a verified support contact must be completed before publication; the previously listed hello@mydayflower.com address is not yet verified."
+    "Revised terms will carry an updated date. We will communicate material changes where required by law. Questions or requests can be sent to app.dayflower@gmail.com. These terms do not limit rights that cannot be waived under applicable law."
   ]
 ];
 export default function PolicyPage() {
 return <main className="site-page mx-auto max-w-3xl px-5 py-16">
 <Link href="/" className="text-sm font-semibold text-brand-dark hover:underline">← Dayflower</Link>
 <h1 className="mt-8 text-4xl font-bold">Terms of Service</h1>
-<p className="mt-3 text-sm text-body">Review draft · Updated September 6, 2026</p>
+<p className="mt-3 text-sm text-body">Updated September 30, 2026</p>
 <p className="mt-6 text-lg leading-relaxed text-body">Terms for the Dayflower website, waitlist, and private-testing app.</p>
-<aside className="mt-6 rounded-2xl border border-border-soft bg-surface-subtle p-5 text-sm leading-relaxed text-body"><strong>Draft for review.</strong> Operator details, a working contact address, and retention/deletion procedures still need confirmation before publication.</aside>
+<p className="mt-4 text-sm text-body">Questions and requests: <a className="font-semibold text-brand-dark hover:underline" href="mailto:app.dayflower@gmail.com">app.dayflower@gmail.com</a></p>
 <nav aria-label="On this page" className="mt-8 grid gap-2 border-y border-border-soft py-6 text-sm sm:grid-cols-2">{sections.map(([title], i) => <a key={title} href={`#section-${i+1}`} className="text-body hover:underline">{title}</a>)}</nav>
 <div className="mt-10 space-y-9">{sections.map(([title,body],i)=><section key={title} id={`section-${i+1}`} className="scroll-mt-8"><h2 className="text-xl font-bold">{title}</h2><p className="mt-3 text-[15px] leading-7 text-body">{body}</p></section>)}</div>
 <footer className="mt-12 flex gap-6 border-t border-border-soft pt-6 text-sm text-brand-dark"><Link href="/">Back to Dayflower</Link><Link href="/privacy">Privacy Policy</Link></footer>
