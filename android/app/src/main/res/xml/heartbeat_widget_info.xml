@@ -13,10 +13,13 @@
      130dp down (one row is 80 to 125dp, two at least 160). Android 12+
      launchers go by targetCell instead.
 
-     previewLayout: the picker shows the real thing, on the default scene. -->
+     previewLayout: the picker shows the real thing, on the default scene.
+     previewImage is the same, captured, for launchers that cannot draw a
+     live layout (the user's vivo showed a grid with an old logo). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/heartbeat_widget"
     android:previewLayout="@layout/heartbeat_widget"
+    android:previewImage="@drawable/widget_preview_heartbeat"
     android:minWidth="110dp"
     android:minHeight="130dp"
     android:targetCellWidth="2"

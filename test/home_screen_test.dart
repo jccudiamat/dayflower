@@ -1738,13 +1738,13 @@ void main() {
             w is Image &&
             w.image is AssetImage &&
             (w.image as AssetImage).assetName ==
-                'assets/images/together/couple_sunset.webp'),
+                'assets/images/sample_day.webp'),
         findsOneWidget);
     expect(find.text('Sunset walk'), findsOneWidget);
     expect(find.text('Set up ›'), findsNothing);
     if (_capture) {
       await tester.runAsync(() => precacheImage(
-          const AssetImage('assets/images/together/couple_sunset.webp'),
+          const AssetImage('assets/images/sample_day.webp'),
           tester.element(find.text('Sunset walk'))));
       await tester.pump();
       await _screenshot(tester, 'home-widget-gallery-sample');

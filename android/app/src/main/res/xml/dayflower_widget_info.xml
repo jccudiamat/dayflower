@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- The adaptive widget: flower, heartbeat or reunion, picked in Settings.
+     previewImage shows it on its default, a day: with none, launchers drew
+     a grid with the app's icon (on the user's vivo, the old logo). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/todays_tulip_widget"
+    android:previewImage="@drawable/widget_preview_dayflower"
     android:minWidth="180dp"
     android:minHeight="110dp"
     android:resizeMode="horizontal|vertical"

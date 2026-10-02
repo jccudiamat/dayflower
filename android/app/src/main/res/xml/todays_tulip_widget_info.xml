@@ -8,10 +8,16 @@
      short of swallowing the whole home screen.
 
      minResize* stay small so the widget can still be squeezed by anyone who
-     wants it that way; the default is what changed, not the range. -->
+     wants it that way; the default is what changed, not the range.
+
+     previewImage, a picture of it with sample content, and no
+     previewLayout: launchers that cannot draw a live layout (the user's
+     vivo) showed a grid with the app's icon instead, and theirs had kept
+     the old logo; and the live layout drew this widget empty. Captured from
+     the real widget on the emulator (drawable-nodpi/widget_preview_*). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/todays_tulip_widget"
-    android:previewLayout="@layout/todays_tulip_widget"
+    android:previewImage="@drawable/widget_preview_my_day"
     android:minWidth="180dp"
     android:minHeight="330dp"
     android:targetCellWidth="3"

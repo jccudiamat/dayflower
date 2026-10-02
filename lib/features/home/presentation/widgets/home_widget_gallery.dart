@@ -277,14 +277,15 @@ class _WidgetPreview extends ConsumerWidget {
 
 /// A made-up day on the My Day widget, so its preview shows what the widget
 /// does rather than whatever they shared today, or an empty box when they
-/// have shared nothing. The picture is one the app already carries
-/// (Together's couple at sunset), so it costs the APK nothing.
+/// have shared nothing. The picture is the one the widget's own preview
+/// image shows (widget_preview_my_day): Together's couple at sunset, which
+/// is a cut-out there, with its sky filled in to make a photo of it.
 class _SampleDay extends StatelessWidget {
   const _SampleDay();
 
   @override
   Widget build(BuildContext context) => Stack(fit: StackFit.expand, children: [
-        Image.asset('assets/images/together/couple_sunset.webp',
+        Image.asset('assets/images/sample_day.webp',
             fit: BoxFit.cover, excludeFromSemantics: true),
         // Dark enough at the foot for the caption, as on the widget.
         const DecoratedBox(

@@ -9,10 +9,17 @@
      updatePeriodMillis is the 30-minute floor Android allows. That is far
      more often than a day-count needs, and the app pushes an update itself
      whenever the reunion changes; this only covers the case where the widget
-     is left alone across midnight. -->
+     is left alone across midnight.
+
+     previewImage, a picture of it with sample content, and no
+     previewLayout: launchers that cannot draw a live layout (the user's
+     vivo) showed a grid with the app's icon instead, and theirs had kept
+     the old logo; and the live layout drew this widget empty. Captured from
+     the real widget on the emulator (drawable-nodpi/widget_preview_*). The sample's date is
+     left out, so the picture does not age. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/reunion_widget"
-    android:previewLayout="@layout/reunion_widget"
+    android:previewImage="@drawable/widget_preview_reunion"
     android:minWidth="250dp"
     android:minHeight="110dp"
     android:targetCellWidth="4"

@@ -13,10 +13,16 @@
      updatePeriodMillis is Android's 30-minute floor. The due label is
      computed on every draw (see StickyNoteWidget.whenLabel), so this only
      covers a note left alone across midnight — "Tomorrow 9am" has to stop
-     saying tomorrow without the app being opened. -->
+     saying tomorrow without the app being opened.
+
+     previewImage, a picture of it with sample content, and no
+     previewLayout: launchers that cannot draw a live layout (the user's
+     vivo) showed a grid with the app's icon instead, and theirs had kept
+     the old logo; and the live layout drew this widget empty. Captured from
+     the real widget on the emulator (drawable-nodpi/widget_preview_*). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/sticky_note_widget"
-    android:previewLayout="@layout/sticky_note_widget"
+    android:previewImage="@drawable/widget_preview_sticky_note"
     android:minWidth="110dp"
     android:minHeight="110dp"
     android:targetCellWidth="2"

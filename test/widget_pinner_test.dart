@@ -28,6 +28,27 @@ void main() {
     expect(read('${kotlin}MainActivity.kt'), contains('WidgetPin.CHANNEL'));
   });
 
+  // 🔴 With no preview picture, launchers that cannot draw a live layout
+  // (the user's vivo, in its "Add to Desktop" window) drew a grid with the
+  // app's icon, and theirs had kept the old logo.
+  test('every widget has a preview picture', () {
+    const res = 'android/app/src/main/res/';
+    final infos = Directory('${res}xml')
+        .listSync()
+        .whereType<File>()
+        .where((f) => f.readAsStringSync().contains('<appwidget-provider'));
+    expect(infos, hasLength(5));
+    for (final info in infos) {
+      final xml = info.readAsStringSync();
+      final image = RegExp(r'android:previewImage="@drawable/(\w+)"')
+          .firstMatch(xml)
+          ?.group(1);
+      expect(image, isNotNull, reason: info.path);
+      expect(File('${res}drawable-nodpi/$image.webp').existsSync(), isTrue,
+          reason: image);
+    }
+  });
+
   test('says no where the launcher cannot be asked', () async {
     const channel = MethodChannel('dayflower/widget_pin');
     var calls = 0;
