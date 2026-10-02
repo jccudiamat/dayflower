@@ -13,13 +13,14 @@
 
 ## Recent app work
 
-### Every widget has a preview picture; the old logo gone from "Add to Desktop" (2026-10-02, not yet published)
+### Every widget has a preview picture; the old logo gone from "Add to Desktop" (2026-10-02, build 132)
 
 - 🔴 **The user's vivo launcher showed the old logo** (the tulip with a stem, the launcher icon before 2026-09-05) in its "Add to Desktop" window for My Day. It is in no file of the app or the APK (checked against every image in build 131): the launcher kept its own copy of the old icon. It cannot draw a live preview layout, and for a widget with no preview picture it draws a grid of the widget's cells with the app's icon in the corner, which is where its saved copy showed. The Pixel launcher drew the adaptive widget the same way.
 - **Every widget now has `android:previewImage`**, a picture of it with sample content captured from the real widget on the emulator (res/drawable-nodpi/widget_preview_*.webp, about 57 KB in all): My Day and the adaptive widget on a sample day ("My love", "Sunset walk"), the heartbeat's moon, a sticky note ("Call me after work", Tomorrow 6:00pm), a reunion 12 days off with its date erased so the picture does not age. Corners are cut at the launcher's own rounding (measured, ~24dp), not widget_background's 20dp, or a rim of wallpaper showed.
 - **previewLayout dropped for My Day, Reunion and the sticky note**: on Android 12+ it wins over the picture, and those layouts drew the widgets empty ("Nothing here yet", a bare countdown, a blank note). The heartbeat keeps it (it draws the real scene) and has the picture too. A test holds that every provider has a picture that exists.
 - **The sample day is a photo now**: Together's couple at sunset is a cut-out, about 40% transparent, so build 131's My Day preview on Home showed it as a sticker. `tool/make_sample_day.py` fills its sky from the sky and crops it 4:5 (assets/images/sample_day.webp, 14 KB), used by Home's preview and the widget's preview picture.
 - 705 tests pass. If the user's launcher still shows the old icon anywhere else (the app icon itself), it is the launcher's saved copy; a restart of the phone usually makes it reload.
+- **Published as build 132.** Patches 0.2 MB (from 131) to 4.4 MB (128), each checked to rebuild 132 byte for byte. APK 52,137,442 bytes, about 285 KB under the ceiling.
 
 ### Widgets added in one tap; a sample day on the My Day preview (2026-10-01, build 131)
 
