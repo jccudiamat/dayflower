@@ -8,12 +8,10 @@ import 'package:intl/intl.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app_router.dart';
 import '../../data/event_repository.dart';
-import '../../../../core/widgets/ios_back_button.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../widgets/reunion_card.dart';
 import '../../../../core/theme/design_tokens.dart';
-import '../../../home/presentation/widgets/clocks_card.dart';
 import '../../../../core/models/user_profile.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
@@ -21,8 +19,6 @@ import '../../../reunion/data/reunion_repository.dart';
 import '../../../reunion/presentation/widgets/reunion_card.dart'
     show showReunionEditor;
 import '../../../us/domain/couple_dates.dart';
-import '../../../../core/widgets/app_bottom_nav.dart';
-import '../../../../core/widgets/feature_screen_header.dart';
 
 // ═══════════════════════════════════════════════════
 //   EVENT MODEL
@@ -199,15 +195,26 @@ _Countdown _countdownTo(DateTime target, DateTime now) {
 // anchor date, so the calendar, the stats and the tips can never
 // disagree with each other the way hardcoded values did.
 
-class EventsScreen extends ConsumerStatefulWidget {
-  const EventsScreen({super.key, this.addOnOpen = false});
+/// The couple's events, on the Us page: what is next, the reunion countdown,
+/// everything else coming up, what has passed, and adding one.
+///
+/// 🔴 **A section of Us, not a screen of its own.** It was the Events
+/// screen, one tap away from Us behind a row that said "Events"; the user
+/// asked for it on Us itself. Every link that went to Events (Home's
+/// "View events", the Together tab, gifts, a widget, a notification) still
+/// says Routes.events, which the router forwards to Us.
+///
+/// Its clocks card went with the move: Home's map card shows both cities,
+/// both clocks and the weather, and Us said the same in "Where you are".
+class EventsSection extends ConsumerStatefulWidget {
+  const EventsSection({super.key, this.addOnOpen = false});
   final bool addOnOpen;
 
   @override
-  ConsumerState<EventsScreen> createState() => _EventsScreenState();
+  ConsumerState<EventsSection> createState() => _EventsSectionState();
 }
 
-class _EventsScreenState extends ConsumerState<EventsScreen> {
+class _EventsSectionState extends ConsumerState<EventsSection> {
   Timer? _timer;
   DateTime _now = DateTime.now();
 
@@ -220,9 +227,8 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
 
   // _myName went with the cycle section, and _partnerName ('Sunshine') went
   // with the mock birthday it titled — birthdays come from the two real
-  // profiles now. The clocks that used to live here moved to the top of
-  // Home; that pair was a mock duplicate of the real ClocksCard, which reads
-  // actual profile timezones.
+  // profiles now. The clocks are gone from here and from Us: Home's map
+  // card shows both cities' times, with their weather.
 
   // Custom events are pair-scoped server data. Profile milestones stay derived.
   List<_Event> get _manual =>
@@ -410,135 +416,88 @@ class _EventsScreenState extends ConsumerState<EventsScreen> {
     final reunion = ref.watch(reunionProvider).valueOrNull;
     final passed = _passed;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                  AppSpace.sm, AppSpace.sm, AppSpace.sm, 0),
-              child: Row(children: [
-                IosBackButton(onTap: () {
-                  if (context.canPop()) {
-                    context.pop();
-                  } else {
-                    context.go(Routes.together);
-                  }
-                }),
-                const SizedBox(width: AppSpace.xs),
-                Expanded(
-                    child: FeatureScreenHeader(
-                  title: 'Events',
-                  subtitle: 'Countdowns, milestones & clocks',
-                  trailing: _AddButton(onTap: () => _openEventSheet(null)),
-                )),
-              ]),
-            ),
-            const SizedBox(height: AppSpace.sm),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                    AppSpace.sm, 0, AppSpace.sm, AppSpace.md),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // ── 0. What time is it where they are ──
-                    // Moved off Home 2026-09-01: the greeting there now
-                    // carries the partner's city and local time, so the
-                    // clocks were saying the same thing twice. Dates is
-                    // where "when" already lives.
-                    const ClocksCard(),
-                    const SizedBox(height: AppSpace.sm),
+    return Column(
+      key: const ValueKey('us-events'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
+          Expanded(child: Text('Events', style: AppText.title())),
+          _AddButton(onTap: () => _openEventSheet(null)),
+        ]),
+        const SizedBox(height: AppSpace.xs),
 
-                    // ── 1. The next thing you're waiting for ──
-                    _NextUpCard(
-                      event: next,
-                      now: _now,
-                      onEdit: () {
-                        if (next != null) _openEventSheet(next);
-                      },
-                      onAdd: () => _openEventSheet(null),
-                    ),
-                    if (next != null)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton.icon(
-                          icon: const AppIcon(CupertinoIcons.gift, size: 18),
-                          label: const Text('Find a gift'),
-                          onPressed: () => context.push(Uri(
-                            path: Routes.gifts,
-                            queryParameters: {'occasion': next.style.label},
-                          ).toString()),
-                        ),
-                      ),
-                    const SizedBox(height: AppSpace.sm),
-
-                    // ── 2. The next time you are in the same place ──
-                    //
-                    // ⚠️ This slot held the cycle calendar, which is out for
-                    // now at the user's request — the code is still here and
-                    // still derives from one anchor date, so putting it back
-                    // is uncommenting a widget rather than rebuilding it.
-                    //
-                    // A reunion already appears in the list below like any
-                    // other event. It gets a card of its own because a
-                    // countdown to seeing somebody is not the same kind of
-                    // fact as a birthday: it is the one on the screen that is
-                    // *moving*.
-                    if (reunion != null) ...[
-                      ReunionCard(
-                        title: reunion.title,
-                        place: reunion.destination,
-                        when: reunion.happensAt,
-                        now: _now,
-                        onTap: () => showReunionEditor(context, ref, reunion),
-                      ),
-                      const SizedBox(height: AppSpace.md),
-                    ] else ...[
-                      // Nothing to count down to yet. A prompt rather than
-                      // an absence: without one there is no way to create
-                      // the first reunion, and the widget has nothing to
-                      // show either.
-                      _AddReunionCard(
-                        onTap: () => showReunionEditor(context, ref, null),
-                      ),
-                      const SizedBox(height: AppSpace.md),
-                    ],
-
-                    // ── 3. Everything else on the calendar ──
-                    if (alsoComing.isNotEmpty) ...[
-                      const _SectionLabel(label: 'Also coming up'),
-                      const SizedBox(height: AppSpace.xs),
-                      ..._monthGroupedRows(alsoComing, dimmed: false),
-                      const SizedBox(height: AppSpace.sm),
-                    ],
-
-                    if (passed.isNotEmpty) ...[
-                      const _SectionLabel(label: 'Passed'),
-                      const SizedBox(height: AppSpace.xs),
-                      ..._monthGroupedRows(passed, dimmed: true),
-                      const SizedBox(height: AppSpace.sm),
-                    ],
-
-                    if (customEvents.isLoading) const LinearProgressIndicator(),
-                    if (customEvents.hasError) ...[
-                      Text('Could not load your saved events.',
-                          style: AppText.body()),
-                      TextButton(
-                          onPressed: () => ref.invalidate(customEventsProvider),
-                          child: const Text('Retry events')),
-                    ],
-                    _AddEventRow(onTap: () => _openEventSheet(null)),
-                  ],
-                ),
-              ),
-            ),
-          ],
+        // ── 1. The next thing you're waiting for ──
+        _NextUpCard(
+          event: next,
+          now: _now,
+          onEdit: () {
+            if (next != null) _openEventSheet(next);
+          },
+          onAdd: () => _openEventSheet(null),
         ),
-      ),
-      bottomNavigationBar: const AppBottomNav(),
+        if (next != null)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              icon: const AppIcon(CupertinoIcons.gift, size: 18),
+              label: const Text('Find a gift'),
+              onPressed: () => context.push(Uri(
+                path: Routes.gifts,
+                queryParameters: {'occasion': next.style.label},
+              ).toString()),
+            ),
+          ),
+        const SizedBox(height: AppSpace.sm),
+
+        // ── 2. The next time you are in the same place ──
+        //
+        // A reunion already appears in the list below like any other event.
+        // It gets a card of its own because a countdown to seeing somebody
+        // is not the same kind of fact as a birthday: it is the one on the
+        // screen that is *moving*.
+        if (reunion != null) ...[
+          ReunionCard(
+            title: reunion.title,
+            place: reunion.destination,
+            when: reunion.happensAt,
+            now: _now,
+            onTap: () => showReunionEditor(context, ref, reunion),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ] else ...[
+          // Nothing to count down to yet. A prompt rather than an absence:
+          // without one there is no way to create the first reunion, and the
+          // widget has nothing to show either.
+          _AddReunionCard(
+            onTap: () => showReunionEditor(context, ref, null),
+          ),
+          const SizedBox(height: AppSpace.md),
+        ],
+
+        // ── 3. Everything else on the calendar ──
+        if (alsoComing.isNotEmpty) ...[
+          const _SectionLabel(label: 'Also coming up'),
+          const SizedBox(height: AppSpace.xs),
+          ..._monthGroupedRows(alsoComing, dimmed: false),
+          const SizedBox(height: AppSpace.sm),
+        ],
+
+        if (passed.isNotEmpty) ...[
+          const _SectionLabel(label: 'Passed'),
+          const SizedBox(height: AppSpace.xs),
+          ..._monthGroupedRows(passed, dimmed: true),
+          const SizedBox(height: AppSpace.sm),
+        ],
+
+        if (customEvents.isLoading) const LinearProgressIndicator(),
+        if (customEvents.hasError) ...[
+          Text('Could not load your saved events.', style: AppText.body()),
+          TextButton(
+              onPressed: () => ref.invalidate(customEventsProvider),
+              child: const Text('Retry events')),
+        ],
+        _AddEventRow(onTap: () => _openEventSheet(null)),
+      ],
     );
   }
 

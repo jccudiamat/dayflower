@@ -148,7 +148,9 @@ void main() {
   testWidgets('events save, reopen, edit, delete, and preserve a failed draft',
       (tester) async {
     final repo = MemoryEvents();
-    Future<void> open() => pumpScreen(tester, const EventsScreen(),
+    Future<void> open() => pumpScreen(
+        tester,
+        const Scaffold(body: SingleChildScrollView(child: EventsSection())),
         [eventRepositoryProvider.overrideWithValue(repo)]);
     await open();
     await tapVisible(tester, find.text('Add event'));

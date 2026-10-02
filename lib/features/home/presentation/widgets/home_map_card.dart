@@ -8,6 +8,7 @@ import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app_router.dart';
 import '../../../../core/models/user_profile.dart';
+import '../../../../core/services/weather.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/map/flight_path.dart';
 import '../../../../core/map/map_tiles.dart';
@@ -15,7 +16,7 @@ import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/time/zones.dart';
 import '../../../../core/utils/zone_distance.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../onboarding/data/user_repository.dart';
+import '../../../location/data/live_location.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../domain/home_moments.dart';
 
@@ -32,8 +33,11 @@ class HomeMapCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final me = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    // Where each of them actually is when they share it (LocationSharing),
+    // their picked city otherwise: the pins, the distance, the flight path
+    // and the weather all follow.
+    final me = ref.watch(placedMeProvider).valueOrNull;
+    final partner = ref.watch(placedPartnerProvider).valueOrNull;
     final pair = ref.watch(currentPairProvider).valueOrNull;
     final now = ref.watch(homeClockProvider).valueOrNull ?? DateTime.now();
 
@@ -44,6 +48,15 @@ class HomeMapCard extends ConsumerWidget {
     // and being trusted about exactly that is this card's whole job.
     if (pair?.isLinked != true || here == null || there == null) {
       return const SizedBox.shrink();
+    }
+
+    // The weather where each of them is, beside their clock. The last
+    // answer stays up while a fresh one is fetched, so a refresh never
+    // blinks it away.
+    final weather = ref.read(weatherServiceProvider);
+    Weather? weatherAt(_Place p) {
+      final spot = WeatherSpot(p.at.latitude, p.at.longitude);
+      return ref.watch(weatherProvider(spot)).valueOrNull ?? weather.peek(spot);
     }
 
     return Container(
@@ -64,6 +77,8 @@ class HomeMapCard extends ConsumerWidget {
           // a picture with a caption bar rather than one window.
           child: _Band(
               here: here, there: there, me: me, partner: partner, now: now,
+              hereWeather: weatherAt(here),
+              thereWeather: weatherAt(there),
               footer: profileDistanceLabel(me, partner) ?? ''),
         ),
       ),
@@ -100,11 +115,23 @@ class _Band extends StatelessWidget {
       required this.me,
       required this.partner,
       required this.now,
-      required this.footer});
+      required this.footer,
+      this.hereWeather,
+      this.thereWeather});
 
   final _Place here, there;
   final UserProfile? me, partner;
   final DateTime now;
+
+  /// Null where it is not known yet, or could not be had: no weather is
+  /// shown then, rather than a guess.
+  final Weather? hereWeather, thereWeather;
+
+  /// Where people read temperatures in Fahrenheit. The phone's own region,
+  /// not the app's language, which is English everywhere.
+  static const _fahrenheit = {'US', 'LR', 'BS', 'KY', 'PW', 'FM', 'MH'};
+  static bool get _inFahrenheit => _fahrenheit.contains(
+      WidgetsBinding.instance.platformDispatcher.locale.countryCode);
 
   /// The distance line, drawn over the map rather than under it.
   final String footer;
@@ -187,8 +214,10 @@ class _Band extends StatelessWidget {
         // over the face that is actually there. It was always "me" on the
         // left: right on a phone in Dubai, and swapped on the one in the
         // Philippines, which showed its own city above the other face.
-        _label(west, Alignment.topLeft),
-        _label(east, Alignment.topRight),
+        _label(west, Alignment.topLeft,
+            identical(west, here) ? hereWeather : thereWeather),
+        _label(east, Alignment.topRight,
+            identical(east, here) ? hereWeather : thereWeather),
         Align(
           alignment: Alignment.bottomCenter,
           child: Padding(
@@ -203,19 +232,24 @@ class _Band extends StatelessWidget {
                       .copyWith(shadows: _halo)),
               const Icon(Icons.chevron_right_rounded,
                   size: 18, color: AppColors.secondary),
+              // The credits as an ⓘ, not a line (MapTiles.attributionButton),
+              // in the corner where small maps keep theirs. It floated alone
+              // between the two cities, which the user found spoiled the
+              // card.
+              MapTiles.attributionButton(
+                  also: const [WeatherService.credit],
+                  padding: const EdgeInsets.fromLTRB(
+                      AppSpace.xxs, AppSpace.xxs, 0, AppSpace.xxs)),
             ]),
           ),
         ),
-        Align(
-            alignment: Alignment.topCenter,
-            child: MapTiles.attribution(
-                padding: const EdgeInsets.only(top: AppSpace.xxs))),
       ]),
     );
   }
 
-  /// A city and its clock, floating straight on the tiles.
-  Widget _label(_Place p, Alignment corner) => Align(
+  /// A city and its clock, and its weather beside the clock, floating
+  /// straight on the tiles.
+  Widget _label(_Place p, Alignment corner, Weather? weather) => Align(
         alignment: corner,
         child: Padding(
           padding: const EdgeInsets.all(AppSpace.xs),
@@ -229,8 +263,20 @@ class _Band extends StatelessWidget {
               children: [
                 Text(p.city,
                     style: AppText.subtitle().copyWith(shadows: _halo)),
-                Text(_time(p.zone),
-                    style: AppText.body().copyWith(shadows: _halo)),
+                Semantics(
+                  label: weather == null
+                      ? null
+                      : '${_time(p.zone)}, ${weather.description}, '
+                          '${weather.temperature(fahrenheit: _inFahrenheit)}',
+                  excludeSemantics: weather != null,
+                  child: Text(
+                      weather == null
+                          ? _time(p.zone)
+                          : '${_time(p.zone)} · ${weather.emoji} '
+                              '${weather.temperature(fahrenheit: _inFahrenheit)}',
+                      key: ValueKey('home-map-time-${p.city}'),
+                      style: AppText.body().copyWith(shadows: _halo)),
+                ),
               ]),
         ),
       );

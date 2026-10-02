@@ -300,8 +300,13 @@ class PlaceMemory {
 
   DateTime get latest => pins.first.createdAt;
 
-  /// Pins that carry a photo.
-  int get photos => pins.where((p) => p.messageId != null).length;
+  /// Pins that carry a photo, their own or one from the chat.
+  int get photos => pins.where((p) => p.hasPhoto).length;
+
+  /// The newest photo uploaded with a pin there (migration 0055), for the
+  /// row's picture when no chat photo is pinned there.
+  String? get photoPath =>
+      pins.where((p) => p.photoPath != null).firstOrNull?.photoPath;
 
   /// The newest photo taken there, for the row's picture.
   String? get photoMessageId =>

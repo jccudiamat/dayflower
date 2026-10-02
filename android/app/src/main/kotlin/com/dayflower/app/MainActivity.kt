@@ -33,6 +33,9 @@ class MainActivity : FlutterActivity() {
     private var callChannel: MethodChannel? = null
     private var screenshotChannel: MethodChannel? = null
 
+    /** A location permission prompt Dart is waiting on - see LocationShare. */
+    private var pendingLocationPermission: MethodChannel.Result? = null
+
     /** A screenshot taken while the app is in front - see ScreenshotWatcher. */
     private val screenshots = ScreenshotWatcher(this) {
         screenshotChannel?.invokeMethod("taken", null)
@@ -114,6 +117,23 @@ class MainActivity : FlutterActivity() {
                                 StickyNoteWidget.pin(applicationContext, note),
                             )
                         }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        // Where this phone is, once, for sharing it with the partner - see
+        // LocationShare. The permission prompt needs this Activity, so the
+        // channel lives here rather than in the object.
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LocationShare.CHANNEL)
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "permission" -> result.success(LocationShare.permission(this))
+                    "request" -> requestLocationPermission(result)
+                    "current" -> LocationShare.current(applicationContext, result)
+                    "openSettings" -> {
+                        LocationShare.openSettings(this)
+                        result.success(null)
                     }
                     else -> result.notImplemented()
                 }
@@ -364,6 +384,34 @@ class MainActivity : FlutterActivity() {
         // ring, from a push service that outlives this Activity.
         CallNotification.inCall = false
         super.onDestroy()
+    }
+
+    /**
+     * Android's "while using the app" prompt. Answers with what was granted
+     * ("precise", "approximate" or "none"), straight away if it already is.
+     */
+    private fun requestLocationPermission(result: MethodChannel.Result) {
+        val now = LocationShare.permission(this)
+        if (now != "none") {
+            result.success(now)
+            return
+        }
+        // A second ask while the first is open answers the first as it stands.
+        pendingLocationPermission?.success(now)
+        pendingLocationPermission = result
+        requestPermissions(LocationShare.permissions, LocationShare.REQUEST_CODE)
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray,
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == LocationShare.REQUEST_CODE) {
+            pendingLocationPermission?.success(LocationShare.permission(this))
+            pendingLocationPermission = null
+        }
     }
 
     override fun onNewIntent(intent: Intent) {

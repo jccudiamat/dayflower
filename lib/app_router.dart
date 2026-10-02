@@ -31,7 +31,6 @@ import 'features/calls/presentation/screens/call_screen.dart';
 import 'features/calls/presentation/widgets/call_video.dart';
 import 'features/chapters/presentation/screens/chapter_detail_screen.dart';
 import 'features/chapters/presentation/screens/chapters_screen.dart';
-import 'features/dates/presentation/screens/events_screen.dart';
 import 'features/finance/presentation/screens/finance_screen.dart';
 import 'features/finance/presentation/screens/insights_screen.dart';
 import 'features/home/presentation/screens/home_screen.dart';
@@ -504,7 +503,11 @@ List<RouteBase> appFeatureRoutes() => [
           builder: (_, state) => FeedbackScreen(initialImages: [
                 if (state.extra case final FeedbackImage shot) shot,
               ])),
-      GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
+      GoRoute(
+          path: Routes.us,
+          builder: (_, state) => UsScreen(
+              addEvent: state.uri.queryParameters['add'] == '1',
+              showEvents: state.uri.queryParameters['at'] == 'events')),
       GoRoute(
           path: Routes.activityFeed,
           builder: (_, __) => const ActivityFeedScreen()),
@@ -545,10 +548,15 @@ List<RouteBase> appFeatureRoutes() => [
       GoRoute(
           path: Routes.chatSearch,
           builder: (_, __) => const ChatSearchScreen()),
+      // 🔴 Events are a section of Us now (EventsSection), not a screen.
+      // Everything that linked here (Home, the Together tab, gifts, a
+      // widget, a notification) lands on Us instead, "add" and all.
       GoRoute(
           path: Routes.events,
-          builder: (_, state) =>
-              EventsScreen(addOnOpen: state.uri.queryParameters['add'] == '1')),
+          redirect: (_, state) => Uri(path: Routes.us, queryParameters: {
+                ...state.uri.queryParameters,
+                'at': 'events',
+              }).toString()),
       GoRoute(
           path: Routes.gifts,
           builder: (_, state) =>

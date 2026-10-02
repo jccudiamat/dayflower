@@ -45,8 +45,18 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
   addTearDown(tester.view.resetDevicePixelRatio);
   final router = GoRouter(initialLocation: route, routes: [
     GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
-    GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
-    GoRoute(path: Routes.events, builder: (_, __) => const EventsScreen()),
+    GoRoute(
+        path: Routes.us,
+        builder: (_, state) => UsScreen(
+            addEvent: state.uri.queryParameters['add'] == '1',
+            showEvents: state.uri.queryParameters['at'] == 'events')),
+    // As in the app: events are a section of Us, and links to them land there.
+    GoRoute(
+        path: Routes.events,
+        redirect: (_, state) => Uri(path: Routes.us, queryParameters: {
+              ...state.uri.queryParameters,
+              'at': 'events',
+            }).toString()),
     GoRoute(
         path: Routes.gifts,
         builder: (_, s) => GiftsScreen(
@@ -137,23 +147,25 @@ void main() {
     }
   });
 
-  testWidgets(
-      'Us opens intact Events with editor, clocks and reunion; back returns Us',
+  // The events are on Us, not a tap away on a screen of their own, and the
+  // cards that said what something else already does are gone.
+  testWidgets('Us carries the events, with their editor, and nothing twice',
       (tester) async {
     final router = await _pump(tester, Routes.us);
     await _screenshot(tester, 'shared-profile');
-    await tester.tap(find.text('Events'));
-    await tester.pumpAndSettle();
-    expect(find.byType(EventsScreen), findsOneWidget);
-    await _screenshot(tester, 'events');
-    expect(find.text('Add event'), findsOneWidget);
+    expect(find.byType(EventsSection), findsOneWidget);
+    expect(find.text('TOGETHER SINCE'), findsOneWidget);
+    for (final gone in ['COMING UP', 'WHERE YOU ARE', 'OUR CLOCKS']) {
+      expect(find.text(gone), findsNothing, reason: gone);
+    }
+    expect(find.text('Your dates, countdowns & clocks'), findsNothing,
+        reason: 'no row to a second screen');
     await tester.ensureVisible(find.text('Add event'));
     await tester.pumpAndSettle();
+    await _screenshot(tester, 'us-events');
     await tester.tap(find.text('Add event'));
     await tester.pumpAndSettle();
     expect(find.text('Add event'), findsNWidgets(2));
-    router.pop();
-    await tester.pump(const Duration(milliseconds: 400));
     router.pop();
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.byType(UsScreen), findsOneWidget);

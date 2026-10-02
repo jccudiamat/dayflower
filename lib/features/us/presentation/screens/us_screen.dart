@@ -4,23 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import 'package:timezone/timezone.dart' as tz;
 
 import '../../../../app_router.dart';
 import '../../../../core/models/pair.dart';
-import '../../../../core/models/user_profile.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/app_bottom_nav.dart';
 import '../../../../core/widgets/ios_back_button.dart';
-import '../../../../core/widgets/timezone_picker.dart';
-import '../../../../core/widgets/user_avatar.dart';
-import '../../../../core/utils/zone_distance.dart';
 import '../../../onboarding/data/user_repository.dart';
+import '../../../dates/presentation/screens/events_screen.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../widgets/calling_card.dart';
 import '../widgets/couple_hero.dart';
-import '../../domain/couple_dates.dart';
 
 /// The couple's own page — the "us" the whole app is about.
 ///
@@ -33,11 +28,46 @@ import '../../domain/couple_dates.dart';
 /// belongs to one person — your name, your flower, your alerts — is in
 /// Settings, and the split is worth keeping: this page should read the same
 /// on both phones.
-class UsScreen extends ConsumerWidget {
-  const UsScreen({super.key});
+///
+/// 🔴 **The events are on this page** (EventsSection), under when you
+/// started: what is next, the reunion countdown, everything coming up and
+/// passed. They were a screen of their own behind an "Events" row, and every
+/// link to them now lands here (Routes.events forwards to Routes.us). Three
+/// cards went with that, each saying what something else already did:
+/// "Coming up" (the monthsary and anniversary, which are in the events),
+/// "Where you are" and the clocks (Home's map card shows both cities, both
+/// clocks and the weather).
+class UsScreen extends ConsumerStatefulWidget {
+  const UsScreen({super.key, this.addEvent = false, this.showEvents = false});
+
+  /// Opens the new-event sheet straight away: links that said "add an event"
+  /// (`/app/events?add=1`, forwarded here).
+  final bool addEvent;
+
+  /// Arrived by a link to the events: opens scrolled down to them, not on
+  /// the couple card above.
+  final bool showEvents;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UsScreen> createState() => _UsScreenState();
+}
+
+class _UsScreenState extends ConsumerState<UsScreen> {
+  final _events = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.showEvents || widget.addEvent) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final target = _events.currentContext;
+        if (target != null) Scrollable.ensureVisible(target);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final pair = ref.watch(currentPairProvider).valueOrNull;
     final me = ref.watch(userProfileProvider).valueOrNull;
     final partner = ref.watch(partnerProfileProvider).valueOrNull;
@@ -54,7 +84,12 @@ class UsScreen extends ConsumerWidget {
                   AppSpace.sm, AppSpace.sm, AppSpace.sm, 0),
               child: Row(
                 children: [
-                  IosBackButton(onTap: () => context.go(Routes.home)),
+                  // Back where they came from: Home's pair pill, or the
+                  // Together tab or wherever an events link was.
+                  IosBackButton(
+                      onTap: () => context.canPop()
+                          ? context.pop()
+                          : context.go(Routes.home)),
                   const SizedBox(width: AppSpace.xs),
                   Expanded(child: Text('Us', style: AppText.hero())),
                   // The one personal thing on a shared page, so it is an
@@ -63,48 +98,32 @@ class UsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            // ⚠️ Not a ListView: that builds what is on screen, and the
+            // events are scrolled to by their key, which needs them built.
             Expanded(
-              child: ListView(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
                     AppSpace.sm, AppSpace.sm, AppSpace.sm, AppSpace.md),
-                children: [
-                  // Hero and stats are one card now — see CoupleHero for
-                  // why six rounded rectangles became one.
-                  CoupleHero(me: me, partner: partner, pair: pair),
-                  const SizedBox(height: AppSpace.md),
-                  Material(
-                    color: AppColors.surface,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.lg),
-                      side: BorderSide(color: AppColors.border),
-                    ),
-                    clipBehavior: Clip.antiAlias,
-                    child: ListTile(
-                      leading: const AppIcon(CupertinoIcons.calendar,
-                          color: AppColors.secondary),
-                      title: Text('Events', style: AppText.subtitle()),
-                      subtitle: Text('Your dates, countdowns & clocks',
-                          style: AppText.caption()),
-                      trailing: AppIcon(CupertinoIcons.chevron_right,
-                          size: 16, color: AppColors.muted),
-                      onTap: () => context.push(Routes.events),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpace.sm),
-                  _TogetherSinceCard(pair: pair),
-                  if (pair?.togetherSince != null) ...[
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Hero and stats are one card now — see CoupleHero for
+                    // why six rounded rectangles became one.
+                    CoupleHero(me: me, partner: partner, pair: pair),
                     const SizedBox(height: AppSpace.sm),
-                    _MilestonesCard(start: pair!.togetherSince!),
+                    // Where the monthsary and the anniversary come from, so
+                    // it sits right above the events they appear in.
+                    _TogetherSinceCard(pair: pair),
+                    const SizedBox(height: AppSpace.md),
+                    EventsSection(key: _events, addOnOpen: widget.addEvent),
+                    // Silent below 70% of the month's allowance, and absent
+                    // entirely on a self-hosted build — it brings its own
+                    // leading gap so this list needs no condition.
+                    const CallingCard(),
+                    const SizedBox(height: AppSpace.md),
+                    const _PremiumCard(),
                   ],
-                  const SizedBox(height: AppSpace.sm),
-                  _WhereYouAreCard(me: me, partner: partner),
-                  // Silent below 70% of the month's allowance, and absent
-                  // entirely on a self-hosted build — it brings its own
-                  // leading gap so this list needs no condition.
-                  const CallingCard(),
-                  const SizedBox(height: AppSpace.md),
-                  const _PremiumCard(),
-                ],
+                ),
               ),
             ),
           ],
@@ -152,8 +171,7 @@ class _TogetherSinceCard extends ConsumerStatefulWidget {
   final Pair? pair;
 
   @override
-  ConsumerState<_TogetherSinceCard> createState() =>
-      _TogetherSinceCardState();
+  ConsumerState<_TogetherSinceCard> createState() => _TogetherSinceCardState();
 }
 
 class _TogetherSinceCardState extends ConsumerState<_TogetherSinceCard> {
@@ -237,183 +255,6 @@ class _TogetherSinceCardState extends ConsumerState<_TogetherSinceCard> {
                 size: 16, color: AppColors.muted),
         ],
       ),
-    );
-  }
-}
-
-/// What the start date implies, without anybody entering it twice.
-class _MilestonesCard extends StatelessWidget {
-  const _MilestonesCard({required this.start});
-  final DateTime start;
-
-  @override
-  Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final monthsary = nextMonthsary(start, now);
-    final anniversary = nextAnniversary(start, now);
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('COMING UP', style: AppText.label()),
-          const SizedBox(height: AppSpace.xs),
-          _MilestoneRow(
-            emoji: '🌷',
-            title: '${monthsBetween(start, monthsary)} month monthsary',
-            date: monthsary,
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          _MilestoneRow(
-            emoji: '💞',
-            title:
-                '${anniversaryNumber(start, anniversary)} year anniversary',
-            date: anniversary,
-          ),
-          const SizedBox(height: AppSpace.xs),
-          Text(
-            'Both are worked out from your start date and appear on '
-            'Events on their own.',
-            style: AppText.caption(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _MilestoneRow extends StatelessWidget {
-  const _MilestoneRow({
-    required this.emoji,
-    required this.title,
-    required this.date,
-  });
-
-  final String emoji;
-  final String title;
-  final DateTime date;
-
-  @override
-  Widget build(BuildContext context) {
-    final days = daysBetween(DateTime.now(), date);
-    final away = days == 0
-        ? 'Today'
-        : days == 1
-            ? 'Tomorrow'
-            : 'in $days days';
-
-    return Row(
-      children: [
-        Text(emoji, style: const TextStyle(fontSize: 20)),
-        const SizedBox(width: AppSpace.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: AppText.subtitle()),
-              Text(DateFormat('EEEE d MMMM').format(date),
-                  style: AppText.caption()),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.blush,
-            borderRadius: BorderRadius.circular(AppRadius.pill),
-          ),
-          child: Text(
-            away,
-            style: AppText.label(AppColors.brandDark),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/* ── Where you both are ──────────────────── */
-
-class _WhereYouAreCard extends ConsumerWidget {
-  const _WhereYouAreCard({required this.me, required this.partner});
-
-  final UserProfile? me;
-  final UserProfile? partner;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final distance = profileDistanceLabel(me, partner);
-
-    return _Card(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(child: Text('WHERE YOU ARE', style: AppText.label())),
-              // Hidden entirely when a zone is unknown rather than guessed
-              // at — same rule as the home greeting.
-              if (distance != null)
-                Text(distance,
-                    style: AppText.caption(AppColors.brandDark)
-                        .copyWith(fontWeight: FontWeight.w600)),
-            ],
-          ),
-          const SizedBox(height: AppSpace.xs),
-          _PersonRow(profile: me, isMe: true),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpace.xs),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
-          _PersonRow(profile: partner, isMe: false),
-        ],
-      ),
-    );
-  }
-}
-
-class _PersonRow extends StatelessWidget {
-  const _PersonRow({required this.profile, required this.isMe});
-
-  final UserProfile? profile;
-  final bool isMe;
-
-  @override
-  Widget build(BuildContext context) {
-    final zone = profile?.timezone;
-    final localTime =
-        zone == null ? null : tz.TZDateTime.now(safeLocation(zone));
-
-    return Row(
-      children: [
-        UserAvatar(profile, size: 38),
-        const SizedBox(width: AppSpace.xs),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                profile?.petName ?? profile?.displayName ?? '…',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppText.subtitle(),
-              ),
-              Text(
-                zone == null ? 'No city set' : zoneCity(zone),
-                style: AppText.caption(),
-              ),
-            ],
-          ),
-        ),
-        if (localTime != null)
-          Text(
-            DateFormat('h:mm a').format(localTime),
-            style: AppText.subtitle(AppColors.body),
-          ),
-      ],
     );
   }
 }

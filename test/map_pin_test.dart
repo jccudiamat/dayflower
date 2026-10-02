@@ -80,4 +80,32 @@ void main() {
       expect(pin.place, isEmpty);
     });
   });
+
+  group('a photo, a date and a few words (0055)', () {
+    test('map across', () {
+      final pin = MapPin.fromMap({
+        ...row(label: 'Moraine Lake', place: 'Banff'),
+        'photo_path': 'pair/pin-abc.jpg',
+        'visited_on': '2026-08-03',
+        'note': '  The bluest water either of us had seen.  ',
+      });
+      expect(pin.photoPath, 'pair/pin-abc.jpg');
+      expect(pin.hasPhoto, isTrue);
+      expect(pin.visitedOn, DateTime(2026, 8, 3),
+          reason: 'a day, not an instant: no timezone shift');
+      expect(pin.note, 'The bluest water either of us had seen.');
+    });
+
+    test('a chat photo still makes it a photo pin', () {
+      expect(MapPin.fromMap(row(messageId: 'm1')).hasPhoto, isTrue);
+      expect(MapPin.fromMap(row()).hasPhoto, isFalse);
+    });
+
+    test('are all optional, and a blank note is no note', () {
+      // Rows from before 0055 have none of the columns at all.
+      final old = MapPin.fromMap(row());
+      expect((old.photoPath, old.visitedOn, old.note), (null, null, null));
+      expect(MapPin.fromMap({...row(), 'note': '   '}).note, isNull);
+    });
+  });
 }

@@ -10,6 +10,7 @@ import 'package:dayflower/core/theme/app_theme.dart';
 import 'package:dayflower/core/widgets/app_bottom_nav.dart';
 import 'package:dayflower/features/home/domain/home_moments.dart';
 import 'package:dayflower/features/home/presentation/widgets/home_map_card.dart';
+import 'package:dayflower/features/location/data/live_location.dart';
 import 'package:dayflower/features/onboarding/data/user_repository.dart';
 import 'package:dayflower/features/pairing/data/pair_repository.dart';
 import 'package:dayflower/features/travel/data/map_pin_repository.dart';
@@ -23,6 +24,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 // Screenshots, opt in:
 //   flutter test test/maps_test.dart --dart-define=CAPTURE_REVIEW=true
@@ -54,8 +56,47 @@ List<Override> get _overrides => [
       homeClockProvider
           .overrideWith((ref) => Stream.value(DateTime.utc(2026, 9, 24, 20))),
       mapPinsProvider.overrideWith((ref) => Stream.value(const [])),
+      liveLocationsProvider.overrideWith((ref) => Stream.value(const {})),
       unreadMessageCountProvider.overrideWithValue(0),
     ];
+
+/// Signs a photo's path into somewhere that never answers: the pins draw
+/// their frame and fall back, with no network in a test.
+class _Photos extends FlowerRepository {
+  _Photos()
+      : super(SupabaseClient('https://example.invalid', 'offline',
+            authOptions: const AuthClientOptions(autoRefreshToken: false)));
+  @override
+  Future<String> signedPhotoUrl(String path,
+          {Duration ttl = const Duration(hours: 1)}) async =>
+      'https://preview.invalid/$path';
+}
+
+/// The travel map on a phone-sized screen, with [extra] overrides.
+Future<void> _pumpTravel(WidgetTester tester, List<Override> extra) async {
+  tester.view.physicalSize = const Size(390, 844);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+  final router = GoRouter(initialLocation: Routes.travel, routes: [
+    GoRoute(path: Routes.travel, builder: (_, __) => const TravelMapScreen()),
+  ]);
+  addTearDown(router.dispose);
+  await tester.pumpWidget(ProviderScope(
+    overrides: [
+      ..._overrides,
+      flowerRepositoryProvider.overrideWithValue(_Photos()),
+      ...extra,
+    ],
+    child: MaterialApp.router(
+      theme: AppTheme.current,
+      debugShowCheckedModeBanner: false,
+      routerConfig: router,
+    ),
+  ));
+  await tester.pump();
+  await tester.pump(const Duration(milliseconds: 100));
+}
 
 Future<void> _shoot(WidgetTester tester, GlobalKey key, String name) =>
     tester.runAsync(() async {
@@ -123,6 +164,39 @@ void main() {
     if (_capture) await _shoot(tester, boundary, 'home-map-wifey');
   });
 
+  testWidgets('Home names the town they are in, when they share it',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 400);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(ProviderScope(
+      overrides: [
+        ..._overrides,
+        liveLocationsProvider.overrideWith((ref) => Stream.value({
+              'them': LiveLocation(
+                userId: 'them',
+                lat: 24.4539,
+                lon: 54.3773,
+                place: 'Abu Dhabi',
+                updatedAt: DateTime.now(),
+              ),
+            })),
+      ],
+      child: MaterialApp(
+        theme: AppTheme.current,
+        home: const Scaffold(
+          body: Padding(padding: EdgeInsets.all(16), child: HomeMapCard()),
+        ),
+      ),
+    ));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Abu Dhabi'), findsOneWidget);
+    expect(find.text('Dubai'), findsNothing, reason: 'not his picked city');
+    expect(find.text('Bulacan'), findsOneWidget, reason: 'she does not share');
+  });
+
   test('the furthest out the map goes is where the world fills it', () {
     // One tile, 256 px, is the whole world at zoom 0; each step doubles it.
     expect(TravelMapScreen.worldFillZoom(512), closeTo(1.01, 1e-9));
@@ -180,6 +254,85 @@ void main() {
       final at = screen(p);
       expect(room.inflate(1).contains(at), isTrue, reason: '$p at $at');
     }
+  });
+
+  // The photo is the pin. Nothing about it is written on the map: what,
+  // where, when and the words are what a tap opens.
+  testWidgets('a pin with a photo is the photo, the rest a tap away',
+      (tester) async {
+    final pins = [
+      MapPin(
+        id: 'lake',
+        pairId: 'pair',
+        createdBy: 'me',
+        label: 'Rice terraces',
+        place: 'Ubud',
+        lat: -8.43,
+        lon: 115.28,
+        visited: true,
+        createdAt: DateTime(2026, 8, 4),
+        photoPath: 'pair/pin-lake.jpg',
+        visitedOn: DateTime(2026, 8, 3),
+        note: 'The bluest water either of us had seen.',
+      ),
+      MapPin(
+        id: 'cafe',
+        pairId: 'pair',
+        createdBy: 'them',
+        label: 'The good noodles',
+        place: 'Dubai',
+        lat: 25.2,
+        lon: 55.27,
+        visited: true,
+        createdAt: DateTime(2026, 8, 5),
+      ),
+    ];
+    await _pumpTravel(
+        tester, [mapPinsProvider.overrideWith((ref) => Stream.value(pins))]);
+
+    expect(find.byKey(const ValueKey('photo-pin-lake')), findsOneWidget);
+    expect(find.text('Rice terraces'), findsNothing, reason: 'no words on it');
+    // A pin with no photo keeps its words.
+    expect(find.text('The good noodles'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('photo-pin-lake')));
+    await tester.pumpAndSettle();
+    expect(find.text('Rice terraces'), findsOneWidget);
+    expect(find.text('Ubud · 3 August 2026'), findsOneWidget);
+    expect(find.text('The bluest water either of us had seen.'),
+        findsOneWidget);
+    expect(find.byKey(const ValueKey('pin-sheet-photo-lake')), findsOneWidget);
+    expect(find.text('Remove from the map'), findsOneWidget);
+  });
+
+  testWidgets('a shared spot moves their face there, and says how fresh',
+      (tester) async {
+    await _pumpTravel(tester, [
+      liveLocationsProvider.overrideWith((ref) => Stream.value({
+            'them': LiveLocation(
+              userId: 'them',
+              lat: 24.4539,
+              lon: 54.3773,
+              place: 'Abu Dhabi',
+              updatedAt: DateTime.now().subtract(const Duration(minutes: 5)),
+            ),
+          })),
+    ]);
+    final points = [
+      for (final layer
+          in tester.widgetList<MarkerLayer>(find.byType(MarkerLayer)))
+        for (final m in layer.markers) m.point,
+    ];
+    expect(points, contains(const LatLng(24.4539, 54.3773)),
+        reason: 'where his phone said');
+    expect(points, isNot(contains(const LatLng(25.2048, 55.2708))),
+        reason: 'not his picked city any more');
+    final age = find.byKey(const ValueKey('shared-at-them'));
+    expect(age, findsOneWidget);
+    expect(find.descendant(of: age, matching: find.text('5m ago')),
+        findsOneWidget);
+    // She does not share hers: her face has no age on it.
+    expect(find.byKey(const ValueKey('shared-at-me')), findsNothing);
   });
 
   testWidgets('the travel map is the whole screen, and stops at the edges',

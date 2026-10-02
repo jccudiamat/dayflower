@@ -33,6 +33,7 @@ import 'features/heartbeat/data/heartbeat_nudge.dart';
 import 'features/heartbeat/data/heartbeat_repository.dart';
 import 'features/reminders/data/reminder_repository.dart';
 import 'features/reminders/data/reminder_scheduler.dart';
+import 'features/location/data/live_location.dart';
 import 'features/tulip/data/chat_shortcut.dart';
 import 'features/tulip/data/flower_repository.dart';
 import 'features/calls/data/call_alerts.dart';
@@ -76,6 +77,11 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   bool get _foreground => _lifecycle == AppLifecycleState.resumed;
 
+  /// A fresh spot every quarter hour while the app stays open, for someone
+  /// sharing their exact location. Only while it is in front: this is not
+  /// background tracking (LocationSharing).
+  Timer? _locationTimer;
+
   /// Android only ever shows the notification prompt once, so asking twice
   /// is harmless — but asking on every rebuild is sloppy, and this makes
   /// the "exactly once per launch" obvious to whoever reads it next.
@@ -99,6 +105,9 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // Native tells us when the floating window opens and closes.
     wirePipMode(ref);
     _wireWidgetLaunches();
+    _locationTimer = Timer.periodic(LocationSharing.refreshEvery, (_) {
+      if (_foreground) _shareLocation();
+    });
     _wireAlarmTaps();
     _wireNotificationRoutes();
     _wireNativeCallButtons();
@@ -110,6 +119,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         _syncReminders(ref.read(pairOpenRemindersProvider));
         _syncHeartbeatNudge();
         _syncBeatReady();
+        _shareLocation();
         ref.read(updateControllerProvider.notifier).check();
         _maybeAskForNotifications(ref.read(currentPairProvider));
       }
@@ -132,6 +142,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
       ref.read(moodProvider.notifier).refresh();
       _syncHeartbeatNudge();
       _syncBeatReady();
+      _shareLocation();
     } else {
       ref.read(presencePingerProvider).stop();
     }
@@ -288,6 +299,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _widgetTaps?.cancel();
+    _locationTimer?.cancel();
     ringingReminderId.removeListener(_openRingingAlarm);
     AppNotifications.pendingRoute.removeListener(_openPendingRoute);
     super.dispose();
@@ -387,6 +399,7 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
         _maybeAskForNotifications(next);
         _syncHeartbeatNudge();
         _syncBeatReady();
+        _shareLocation();
         if (next.valueOrNull?.isLinked != true) _incomingHeartbeats.reset();
       }),
     );
@@ -437,6 +450,13 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // not happening. Only Dart knows one is live.
     _rememberCallerFace();
     _keepChatShortcut();
+
+    // Sharing is read from storage after the first frame, so the spot the
+    // app sends as it opens goes when that answer arrives. A spot just sent
+    // by turning it on is not sent twice (LocationSharing.minInterval).
+    ref.listen<bool>(locationSharingProvider, (previous, on) {
+      if (on && previous != true) _settled(_shareLocation);
+    });
 
     ref.listen<CallSession?>(callNotifierProvider, (_, session) {
       CallPip.setCallActive(
@@ -844,6 +864,12 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
                 : null;
     // Only a pulse: the widget no longer shows counts.
     if (pulseSent != null) DayflowerWidgets.pulse(sent: pulseSent);
+  }
+
+  /// Your spot to your partner, if you share it and the last one was long
+  /// enough ago (LocationSharing.refresh decides; it is a no-op when off).
+  void _shareLocation() {
+    unawaited(ref.read(locationSharingProvider.notifier).refresh());
   }
 
   /// Whether a tap on the heartbeat widget has someone to send as and to.

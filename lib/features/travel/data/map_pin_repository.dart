@@ -1,8 +1,13 @@
+import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers/supabase_provider.dart';
+import '../../../core/widgets/storage_image.dart';
 import '../../pairing/data/pair_repository.dart';
+import '../../tulip/data/flower_repository.dart' show dayPhotoBucket;
 
 /// One place on the couple's map. See migration 0047.
 class MapPin {
@@ -17,6 +22,9 @@ class MapPin {
     required this.visited,
     required this.createdAt,
     this.messageId,
+    this.photoPath,
+    this.visitedOn,
+    this.note,
   });
 
   final String id;
@@ -44,6 +52,19 @@ class MapPin {
   /// rather than taking it down with it.
   final String? messageId;
 
+  /// A photo of its own, uploaded with the pin (migration 0055), in the
+  /// day_photos bucket under the pair's folder. Wins over [messageId].
+  final String? photoPath;
+
+  /// When they were there, when somebody said. A date, not an instant.
+  final DateTime? visitedOn;
+
+  /// What it was, in a few words more than the label.
+  final String? note;
+
+  /// Whether the map draws it as a photo rather than a label.
+  bool get hasPhoto => photoPath != null || messageId != null;
+
   factory MapPin.fromMap(Map<String, dynamic> map) => MapPin(
         id: map['id'] as String,
         pairId: map['pair_id'] as String,
@@ -55,7 +76,18 @@ class MapPin {
         visited: map['visited'] as bool? ?? true,
         createdAt: DateTime.parse(map['created_at'] as String).toLocal(),
         messageId: map['message_id'] as String?,
+        photoPath: map['photo_path'] as String?,
+        visitedOn: _date(map['visited_on']),
+        note: (map['note'] as String?)?.trim().isEmpty ?? true
+            ? null
+            : (map['note'] as String).trim(),
       );
+
+  static DateTime? _date(Object? raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    final at = DateTime.tryParse(raw);
+    return at == null ? null : DateTime(at.year, at.month, at.day);
+  }
 }
 
 class MapPinRepository {
@@ -77,6 +109,12 @@ class MapPinRepository {
         .map((rows) => rows.map(MapPin.fromMap).toList());
   }
 
+  /// Drops a pin. [photo] is uploaded first, as the pin's own picture,
+  /// under the pair's folder in day_photos (0013's policies cover it).
+  ///
+  /// ⚠️ The new columns (0055) are sent only when they have something in
+  /// them, so a pin without a photo, date or note still saves against a
+  /// database that does not have them yet.
   Future<void> add({
     required String pairId,
     required String createdBy,
@@ -86,24 +124,68 @@ class MapPinRepository {
     required double lon,
     bool visited = true,
     String? messageId,
+    Uint8List? photo,
+    DateTime? visitedOn,
+    String? note,
   }) async {
-    await _client.from('map_pins').insert({
-      'pair_id': pairId,
-      'created_by': createdBy,
-      'label': label.trim(),
-      'place': place,
-      'lat': lat,
-      'lon': lon,
-      'visited': visited,
-      if (messageId != null) 'message_id': messageId,
-    });
+    String? photoPath;
+    if (photo != null) {
+      photoPath = '$pairId/pin-${_id()}.jpg';
+      await _client.storage.from(dayPhotoBucket).uploadBinary(photoPath, photo,
+          fileOptions: const FileOptions(contentType: 'image/jpeg'));
+      // Already on this phone: the pin draws from it, not a download.
+      await StorageImageCache.prime(StorageBucket.dayPhotos, photoPath, photo);
+    }
+    final words = note?.trim() ?? '';
+    try {
+      await _client.from('map_pins').insert({
+        'pair_id': pairId,
+        'created_by': createdBy,
+        'label': label.trim(),
+        'place': place,
+        'lat': lat,
+        'lon': lon,
+        'visited': visited,
+        if (messageId != null) 'message_id': messageId,
+        if (photoPath != null) 'photo_path': photoPath,
+        if (visitedOn != null)
+          'visited_on':
+              '${visitedOn.year.toString().padLeft(4, '0')}-${visitedOn.month.toString().padLeft(2, '0')}-${visitedOn.day.toString().padLeft(2, '0')}',
+        if (words.isNotEmpty) 'note': words,
+      });
+    } catch (_) {
+      // No pin to show it: the photo just uploaded would be bytes nobody
+      // can reach, kept and paid for.
+      if (photoPath != null) await _removePhoto(photoPath);
+      rethrow;
+    }
   }
 
   /// ⚠️ Either of them can remove any pin — the map is a thing they build
   /// together, not two private maps drawn on one sheet. See the policies in
   /// 0047.
-  Future<void> remove(String id) async {
-    await _client.from('map_pins').delete().eq('id', id);
+  ///
+  /// Its own photo goes with it, when the one removing it is the one who
+  /// uploaded it (0013 lets only the owner delete). A pin's chat photo
+  /// ([MapPin.messageId]) belongs to the chat and stays.
+  Future<void> remove(MapPin pin) async {
+    await _client.from('map_pins').delete().eq('id', pin.id);
+    final path = pin.photoPath;
+    if (path != null) await _removePhoto(path);
+  }
+
+  Future<void> _removePhoto(String path) async {
+    try {
+      await _client.storage.from(dayPhotoBucket).remove([path]);
+    } catch (_) {
+      // Not theirs to delete, or offline: the bytes stay, the pin is gone.
+    }
+  }
+
+  static String _id() {
+    final r = Random.secure();
+    return List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'))
+        .join();
   }
 
   Future<void> rename({required String id, required String label}) async {

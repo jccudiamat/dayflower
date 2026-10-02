@@ -67,6 +67,35 @@ class UserProfile {
   /// from its timezone.
   bool get hasPlace => cityLat != null && cityLon != null;
 
+  /// This person somewhere else: where their phone last said they were,
+  /// when they share their exact location (live_location.dart). Everything
+  /// that places them (the Home map, the distance, the flight path, the
+  /// weather, the travel map) reads [city], [cityLat] and [cityLon], so it
+  /// all follows without each knowing about sharing. [city] is the town the
+  /// phone named, or their picked city's name when it named none.
+  UserProfile placedAt({required double lat, required double lon, String? city}) =>
+      UserProfile(
+        id: id,
+        displayName: displayName,
+        petName: petName,
+        timezone: timezone,
+        avatar: avatar,
+        avatarPath: avatarPath,
+        gender: gender,
+        mood: mood,
+        moodAt: moodAt,
+        city: city ?? this.city,
+        cityLat: lat,
+        cityLon: lon,
+        birthday: birthday,
+        homeNote: homeNote,
+        homeNoteHeading: homeNoteHeading,
+        homeNoteAt: homeNoteAt,
+        homeNoteBg: homeNoteBg,
+        noteReaction: noteReaction,
+        noteReactionTo: noteReactionTo,
+      );
+
   /// Only ever used to choose the default avatar. Never rendered.
   final String? gender;
 

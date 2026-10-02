@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/providers/supabase_provider.dart';
 import '../../../core/widgets/storage_image.dart';
+import '../../location/data/live_location.dart';
 import '../../tulip/data/chat_shortcut.dart';
 import '../../widget/widget_sync.dart';
 
@@ -47,6 +48,20 @@ class AuthRepository {
   }
 
   Future<void> signOut() async {
+    // Your exact spot off their map first, while there is still a session
+    // allowed to delete it: signing out stops sharing (live_location.dart).
+    // Best effort and brief, so a dead network cannot hold up signing out.
+    final userId = _client.auth.currentUser?.id;
+    if (userId != null) {
+      try {
+        await LiveLocationRepository(_client)
+            .stop(userId)
+            .timeout(const Duration(seconds: 4));
+      } catch (_) {
+        // Offline, or 0055 not applied. The spot ages out on its own
+        // (LiveLocation.freshFor).
+      }
+    }
     await _client.auth.signOut();
     // Every private photo and face this account has seen is on disk now
     // (see StorageImage). Signing out takes them with it, so whoever signs

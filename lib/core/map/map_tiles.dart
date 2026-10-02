@@ -121,4 +121,38 @@ class MapTiles {
               Shadow(color: AppColors.surface, blurRadius: 5),
             ])),
       );
+
+  /// The credit folded into a small ⓘ that shows it when tapped, for a map
+  /// too small to carry the line: Home's card, which the user wanted free of
+  /// it since the map it opens shows it in full. [also] adds other credits
+  /// the same card owes (its weather).
+  ///
+  /// ⚠️ Folded, not removed. CARTO and OpenStreetMap ask for credit wherever
+  /// their tiles are shown, and the full map's line does not cover this
+  /// one; an ⓘ that reveals it is the form both accept on a small map. It
+  /// takes its own tap, so tapping it does not open the map underneath.
+  static Widget attributionButton(
+      {EdgeInsets padding = const EdgeInsets.all(6),
+      List<String> also = const []}) {
+    final credits = [credit, ...also].join(' · ');
+    return Semantics(
+        label: 'Map credits: $credits',
+        excludeSemantics: true,
+        child: Tooltip(
+          message: credits,
+          triggerMode: TooltipTriggerMode.tap,
+          showDuration: const Duration(seconds: 4),
+          child: Padding(
+            padding: padding,
+            child: Icon(Icons.info_outline,
+                size: 14,
+                color: AppColors.muted,
+                shadows: [
+                  Shadow(color: AppColors.surface, blurRadius: 3),
+                  Shadow(color: AppColors.surface, blurRadius: 5),
+                ]),
+          ),
+        ),
+      );
+  }
 }

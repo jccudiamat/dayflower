@@ -234,6 +234,8 @@ class PlaceMemoryRow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final picture = photo;
+    // A chat photo pinned there, else one uploaded with a pin.
+    final path = picture?.imagePath ?? place.photoPath;
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(MemoriesStyle.tileRadius),
@@ -254,10 +256,10 @@ class PlaceMemoryRow extends ConsumerWidget {
               child: SizedBox(
                 width: 68,
                 height: 54,
-                child: picture?.imagePath == null
+                child: path == null
                     ? _NoPhoto()
                     : StorageImage.dayPhoto(
-                        picture!.imagePath!,
+                        path,
                         width: 68,
                         height: 54,
                         fit: BoxFit.cover,

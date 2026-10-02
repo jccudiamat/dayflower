@@ -46,6 +46,8 @@ import '../../../../core/widgets/gradient_button.dart';
 import '../../../../core/widgets/city_picker.dart';
 import '../../../../core/widgets/timezone_picker.dart';
 import '../../../auth/data/auth_repository.dart';
+import '../../../location/data/live_location.dart';
+import '../../../location/presentation/share_location_row.dart';
 import '../../../onboarding/data/user_repository.dart';
 import '../../../pairing/data/pair_repository.dart';
 import '../../../feedback/data/screenshot_events.dart';
@@ -167,6 +169,12 @@ class SettingsScreen extends ConsumerWidget {
                     ref.invalidate(userProfileProvider);
                   },
                 ),
+                // Where they actually are, for whoever turns it on. Android
+                // only: see LocationShare.kt.
+                if (DeviceLocation.supported) ...[
+                  const SettingsLine(),
+                  const ShareLocationRow(),
+                ],
                 const SettingsLine(),
                 SettingsRow(
                   title: 'Timezone',

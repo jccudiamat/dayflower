@@ -4,6 +4,14 @@
          so release builds ship with no network access and every Supabase call
          fails. Required here for release APKs to work at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Sharing your exact spot with your partner, only when you turn it on
+         and only while the app is open (LocationShare.kt). No background
+         location is declared, and none is wanted. Not required, so a phone
+         without GPS can still install the app. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-feature android:name="android.hardware.location" android:required="false"/>
+    <uses-feature android:name="android.hardware.location.gps" android:required="false"/>
 
     <!-- Android 14+: told when a screenshot is taken while the app is in
          front, to offer sending it as a bug report (ScreenshotWatcher).

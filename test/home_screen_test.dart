@@ -13,6 +13,7 @@ import 'package:dayflower/features/memories/presentation/views/all_memories_view
 import 'package:dayflower/features/dayflower/presentation/dayflower_screen.dart';
 import 'package:dayflower/features/travel/data/map_pin_repository.dart';
 import 'package:dayflower/features/memories/presentation/screens/memories_screen.dart';
+import 'package:dayflower/core/services/weather.dart';
 import 'package:dayflower/features/tulip/data/chat_shortcut.dart';
 import 'package:dayflower/features/widget/widget_pinner.dart';
 import 'package:dayflower/features/tulip/data/reaction_repository.dart';
@@ -137,11 +138,18 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
         path: Routes.activityFeed,
         builder: (_, __) => const ActivityFeedScreen()),
     GoRoute(path: Routes.home, builder: (_, __) => const HomeScreen()),
-    GoRoute(path: Routes.us, builder: (_, __) => const UsScreen()),
+    GoRoute(
+        path: Routes.us,
+        builder: (_, state) => UsScreen(
+            addEvent: state.uri.queryParameters['add'] == '1',
+            showEvents: state.uri.queryParameters['at'] == 'events')),
+    // As in the app: events are a section of Us, and links to them land there.
     GoRoute(
         path: Routes.events,
-        builder: (_, state) =>
-            EventsScreen(addOnOpen: state.uri.queryParameters['add'] == '1')),
+        redirect: (_, state) => Uri(path: Routes.us, queryParameters: {
+              ...state.uri.queryParameters,
+              'at': 'events',
+            }).toString()),
     GoRoute(
         path: Routes.gifts,
         builder: (_, s) => GiftsScreen(
@@ -220,6 +228,8 @@ Future<GoRouter> _pump(WidgetTester tester, String route,
             togetherSince: hasStart ? DateTime(2022, 4, 16) : null,
           )),
       userProfileProvider.overrideWith((ref) async => me ?? _me),
+      // Never the network: Dubai sunny, Manila in showers.
+      weatherServiceProvider.overrideWithValue(_FakeWeather()),
       partnerProfileProvider.overrideWith((ref) async => const UserProfile(
           id: 'preview-b', displayName: 'Wifey', timezone: 'Asia/Manila')),
       unreadMessageCountProvider.overrideWithValue(0),
@@ -720,8 +730,18 @@ void main() {
   _homeTest('Together opens persisted tools and Dayflower opens the flower picker',
       (tester) async {
     final router = await _pump(tester, Routes.together, productionRoutes: true);
+    // Events are a section of Us, so its link lands there, out of the
+    // Together tab, and back returns to it.
+    await _reveal(tester, find.text('Events'));
+    await tester.tap(find.text('Events'));
+    await tester.pumpAndSettle();
+    expect(find.byType(UsScreen), findsOneWidget);
+    expect(find.byType(EventsSection), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(ActivitiesScreen), findsOneWidget);
     for (final (label, path, type) in [
-      ('Events', Routes.events, EventsScreen),
       ('Reminders', Routes.reminders, RemindersScreen),
       // Finances has no row of its own since the bento redesign; the
       // savings card is the way in.
@@ -1709,6 +1729,81 @@ void main() {
     expect(_beats.sends, 0);
   });
 
+  // The user asked for the credit line off Home's map, since the map it
+  // opens shows it. CARTO and OpenStreetMap still need it on any map of
+  // theirs, so it is an ⓘ that shows it when tapped.
+  _homeTest('The map card keeps its credit behind an ⓘ', (tester) async {
+    // For the screenshots' real time: the map asks for a cache folder.
+    const paths = MethodChannel('plugins.flutter.io/path_provider');
+    tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, (_) async => Directory.systemTemp.path);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(paths, null));
+    final router = await _pump(tester, Routes.home, filled: true);
+    final card = find.byKey(const ValueKey('home-map'));
+    await _reveal(tester, card);
+    await tester.pumpAndSettle();
+    expect(
+        find.descendant(
+            of: card, matching: find.textContaining('OpenStreetMap')),
+        findsNothing,
+        reason: 'no credit line on the card');
+    await _screenshot(tester, 'home-map-credit-folded');
+    final info = find.descendant(
+        of: card,
+        matching: find.byWidgetPredicate((w) =>
+            w is Semantics &&
+            (w.properties.label ?? '').startsWith('Map credits')));
+    expect(info, findsOneWidget);
+    // In the bottom row's corner, after "See on map", not floating
+    // between the two cities.
+    final link = tester.getRect(find.text('See on map'));
+    final icon = tester.getRect(info);
+    expect(icon.left, greaterThan(link.right), reason: 'after the link');
+    expect(icon.center.dy, closeTo(link.center.dy, 6), reason: 'on its row');
+    expect(tester.getRect(card).right - icon.right, lessThan(24),
+        reason: 'in the corner');
+    await tester.tap(info);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('OpenStreetMap'), findsOneWidget,
+        reason: 'shown on a tap');
+    expect(find.textContaining('MET Norway'), findsOneWidget,
+        reason: 'the weather is credited with the map');
+    await _screenshot(tester, 'home-map-credit-shown');
+    expect(router.routerDelegate.currentConfiguration.uri.path, Routes.home,
+        reason: 'the ⓘ does not open the map');
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  _homeTest('Each of you has your weather beside your clock', (tester) async {
+    // The phone's region decides the unit; the app's language does not.
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'AE');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    await _pump(tester, Routes.home, filled: true);
+    final card = find.byKey(const ValueKey('home-map'));
+    await _reveal(tester, card);
+    await tester.pumpAndSettle();
+    String line(String city) => (tester
+            .widget<Text>(find.byKey(ValueKey('home-map-time-$city'))))
+        .data!;
+    expect(line('Dubai'), '3:00 PM · ☀️ 34°');
+    expect(line('Manila'), '7:00 PM · 🌦️ 31°');
+    expect(
+        find.descendant(
+            of: card,
+            matching: find.byWidgetPredicate((w) =>
+                w is Semantics &&
+                w.properties.label == '7:00 PM, rain showers, 31°')),
+        findsOneWidget);
+
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    await tester.pumpWidget(const SizedBox());
+    await _pump(tester, Routes.home, filled: true);
+    await _reveal(tester, card);
+    await tester.pumpAndSettle();
+    expect(line('Dubai'), '3:00 PM · ☀️ 94°');
+  });
+
   _homeTest('Widgets go on the home screen in one tap, as the chat does',
       (tester) async {
     WidgetPinner.debugSupported = true;
@@ -1765,7 +1860,7 @@ void main() {
         findsOneWidget);
     await tester.tap(find.text('Choose'));
     await tester.pumpAndSettle();
-    expect(find.byType(EventsScreen), findsOneWidget);
+    expect(find.byType(EventsSection), findsOneWidget);
     expect(_beats.sends, 0);
   });
 
@@ -1833,7 +1928,7 @@ void main() {
     expect(find.text('Our monthsary'), findsOneWidget);
     await tester.tap(find.text('View events ›'));
     await tester.pumpAndSettle();
-    expect(find.byType(EventsScreen), findsOneWidget);
+    expect(find.byType(EventsSection), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
     await tester.pump(const Duration(seconds: 6));
     router.pop();
@@ -1865,7 +1960,7 @@ void main() {
     await _reveal(tester, find.text('Add a date ›'));
     await tester.tap(find.text('Add a date ›'));
     await tester.pumpAndSettle();
-    expect(find.byType(EventsScreen), findsOneWidget);
+    expect(find.byType(EventsSection), findsOneWidget);
     expect(find.byType(BottomSheet), findsNothing);
     expect(find.text('Add event'), findsOneWidget);
   });
@@ -1880,6 +1975,17 @@ void _homeTest(String description, WidgetTesterCallback body) {
       debugNetworkImageHttpClientProvider = null;
     }
   });
+}
+
+/// The map card's weather without MET Norway: east of 100°E is Manila.
+class _FakeWeather extends WeatherService {
+  @override
+  Future<Weather?> current(WeatherSpot spot) async => spot.lon > 100
+      ? const Weather(celsius: 30.6, symbol: 'rainshowers_day')
+      : const Weather(celsius: 34.2, symbol: 'clearsky_day');
+
+  @override
+  Weather? peek(WeatherSpot spot) => null;
 }
 
 class _PreviewFlowers extends FlowerRepository {

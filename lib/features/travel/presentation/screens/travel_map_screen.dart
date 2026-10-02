@@ -19,7 +19,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/design_tokens.dart';
 import '../../../../core/widgets/ios_back_button.dart';
 import '../../../../core/widgets/user_avatar.dart';
-import '../../../onboarding/data/user_repository.dart';
+import '../../../location/data/live_location.dart';
 import '../../data/map_pin_repository.dart';
 import '../../domain/journey.dart';
 import '../widgets/add_pin_sheet.dart';
@@ -46,8 +46,13 @@ class TravelMapScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final pins = ref.watch(mapPinsProvider).valueOrNull ?? const <MapPin>[];
-    final me = ref.watch(userProfileProvider).valueOrNull;
-    final partner = ref.watch(partnerProfileProvider).valueOrNull;
+    // Where each of them actually is, when they share it; their picked city
+    // otherwise (LocationSharing). The faces, the arc and the distance all
+    // follow.
+    final me = ref.watch(placedMeProvider).valueOrNull;
+    final partner = ref.watch(placedPartnerProvider).valueOrNull;
+    final live = ref.watch(liveLocationsProvider).valueOrNull ??
+        const <String, LiveLocation>{};
 
     final people = [
       if (me != null && me.hasPlace) me,
@@ -172,22 +177,40 @@ class TravelMapScreen extends ConsumerWidget {
                       for (final person in people)
                         Marker(
                           point: LatLng(person.cityLat!, person.cityLon!),
-                          width: 56,
-                          height: 66,
+                          // Taller by the "5m ago" over a shared spot, which
+                          // grows upwards: the point stays where it was.
+                          width: 72,
+                          height: 66 + _PersonMarker.ageHeight,
                           alignment: Alignment.topCenter,
-                          child: _PersonMarker(person: person),
+                          child: _PersonMarker(
+                            person: person,
+                            sharedAt: live[person.id]?.fresh == true
+                                ? live[person.id]!.updatedAt
+                                : null,
+                          ),
                         ),
                       for (final pin in pins)
-                        Marker(
-                          point: LatLng(pin.lat, pin.lon),
-                          // Generous, because the callout is a pill of text
-                          // whose width depends on the label - Marker needs
-                          // a fixed box and a cramped one clips the words.
-                          width: 220,
-                          height: 64,
-                          alignment: Alignment.topCenter,
-                          child: _PinCallout(pin: pin),
-                        ),
+                        if (pin.hasPhoto)
+                          // The photo is the pin: no words on the map, all of
+                          // them a tap away (showPinSheet).
+                          Marker(
+                            point: LatLng(pin.lat, pin.lon),
+                            width: _PhotoPin.size,
+                            height: _PhotoPin.size + _PhotoPin.tail,
+                            alignment: Alignment.topCenter,
+                            child: _PhotoPin(pin: pin),
+                          )
+                        else
+                          Marker(
+                            point: LatLng(pin.lat, pin.lon),
+                            // Generous, because the callout is a pill of text
+                            // whose width depends on the label - Marker needs
+                            // a fixed box and a cramped one clips the words.
+                            width: 220,
+                            height: 64,
+                            alignment: Alignment.topCenter,
+                            child: _PinCallout(pin: pin),
+                          ),
                     ],
                   ),
                 ],
@@ -389,9 +412,23 @@ class _MissingPlaceNote extends StatelessWidget {
 /// two people here and each of them knows both faces, so the label was
 /// saying something neither of them needed told.
 class _PersonMarker extends StatelessWidget {
-  const _PersonMarker({required this.person});
+  const _PersonMarker({required this.person, this.sharedAt});
 
   final UserProfile person;
+
+  /// When their phone last said where they were, if they share it: shown
+  /// over the face as "5m ago", so a spot from this morning is not taken for
+  /// where they are this minute. Null for a picked city.
+  final DateTime? sharedAt;
+
+  static const ageHeight = 22.0;
+
+  static String age(DateTime at, DateTime now) {
+    final d = now.difference(at);
+    if (d.inMinutes < 2) return 'now';
+    if (d.inMinutes < 60) return '${d.inMinutes}m ago';
+    return '${d.inHours}h ago';
+  }
 
   /// Google's pin shape: a round head over a point, the whole thing
   /// standing *on* the place rather than beside it.
@@ -402,6 +439,26 @@ class _PersonMarker extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        SizedBox(
+          height: ageHeight,
+          child: sharedAt == null
+              ? null
+              : Align(
+                  alignment: Alignment.topCenter,
+                  child: Container(
+                    key: ValueKey('shared-at-${person.id}'),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Text(age(sharedAt!, DateTime.now()),
+                        style: AppText.label().copyWith(fontSize: 10)),
+                  ),
+                ),
+        ),
         Container(
           width: _head,
           height: _head,
@@ -478,7 +535,87 @@ class _JourneyLabel extends StatelessWidget {
   }
 }
 
-/// A place, drawn the way the design asks: the photo, then what it was.
+/// A place with a photo, drawn as the photo: a round picture in a white
+/// rim, standing on its spot by a small point, the way a phone's photo map
+/// draws where pictures were taken. What it was, where and when are a tap
+/// away, in showPinSheet.
+///
+/// A place you mean to go has its rim in the accent colour, the outline
+/// rule the label callouts follow.
+class _PhotoPin extends ConsumerWidget {
+  const _PhotoPin({required this.pin});
+
+  final MapPin pin;
+
+  static const size = 64.0;
+  static const tail = 10.0;
+  static const _rim = 3.5;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final path = pinPhotoPath(ref, pin);
+    final rim = pin.visited ? Colors.white : AppColors.secondary;
+    return Semantics(
+      button: true,
+      label: pin.label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        key: ValueKey('photo-pin-${pin.id}'),
+        onTap: () => showPinSheet(context, pin),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: size,
+              height: size,
+              padding: const EdgeInsets.all(_rim),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: rim,
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x40000000),
+                      blurRadius: 8,
+                      offset: Offset(0, 3)),
+                ],
+              ),
+              child: ClipOval(
+                child: path == null
+                    // Still being found (a chat photo), or gone from the
+                    // chat: the shape stays, so the map does not jump.
+                    ? Container(
+                        color: AppColors.surfaceSubtle,
+                        alignment: Alignment.center,
+                        child: Icon(Icons.photo_outlined,
+                            size: 22, color: AppColors.muted),
+                      )
+                    : StorageImage.dayPhoto(
+                        path,
+                        width: size - 2 * _rim,
+                        height: size - 2 * _rim,
+                        fit: BoxFit.cover,
+                        decodeWidth: size,
+                        error: (_) =>
+                            Container(color: AppColors.surfaceSubtle),
+                      ),
+              ),
+            ),
+            // Tucked under the rim so the two read as one shape.
+            Transform.translate(
+              offset: const Offset(0, -1.5),
+              child: CustomPaint(
+                size: const Size(14, tail),
+                painter: _TailPainter(fill: rim, edge: rim),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A place with no photo: what it was, in a small callout on its spot.
 class _PinCallout extends ConsumerWidget {
   const _PinCallout({required this.pin});
 
@@ -492,7 +629,7 @@ class _PinCallout extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(4, 4, 10, 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: AppColors.surface,
               borderRadius: BorderRadius.circular(AppRadius.pill),
@@ -506,8 +643,6 @@ class _PinCallout extends ConsumerWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (pin.messageId != null) _PinPhoto(messageId: pin.messageId!),
-                if (pin.messageId != null) const SizedBox(width: 6),
                 Flexible(
                   child: Text(
                     pin.label,
@@ -521,35 +656,6 @@ class _PinCallout extends ConsumerWidget {
           ),
           _Tail(color: pin.visited ? AppColors.border : AppColors.secondary),
         ],
-      ),
-    );
-  }
-}
-
-/// The thumbnail on a pin, or nothing at all.
-///
-/// ⚠️ Renders nothing rather than a spinner or a broken-image box. A map
-/// with eight pins on it would otherwise be eight spinners, and the label is
-/// the part that carries the meaning anyway.
-class _PinPhoto extends ConsumerWidget {
-  const _PinPhoto({required this.messageId});
-
-  final String messageId;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final path = ref.watch(pinPhotoPathProvider(messageId)).valueOrNull;
-    if (path == null) return const SizedBox.shrink();
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(6),
-      child: StorageImage.dayPhoto(
-        path,
-        width: 26,
-        height: 26,
-        fit: BoxFit.cover,
-        decodeWidth: 26,
-        error: (_) => const SizedBox.shrink(),
       ),
     );
   }
