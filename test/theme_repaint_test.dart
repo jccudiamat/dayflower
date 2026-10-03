@@ -1,4 +1,5 @@
 import 'package:dayflower/core/theme/app_colors.dart';
+import 'package:dayflower/core/theme/palette_refresh.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -83,6 +84,28 @@ void main() {
     // registered the dependency is const. That is the whole fix.
     expect(colourOf(tester, _ThemedCard), isNot(before),
         reason: 'depending on Theme should have repainted it');
+  });
+
+  // 🔴 Theme reaches what was written to read it. This reaches the rest:
+  // the whole app, once per switch, as app.dart does after the phone (or
+  // the setting) changes the palette. Without it the welcome screen's
+  // wordmark stayed dark ink on a dark page when the phone went dark.
+  testWidgets('rebuildEverything brings a stale const card back',
+      (tester) async {
+    AppColors.use(AppMode.light);
+    final mode = ValueNotifier(AppMode.light);
+    addTearDown(mode.dispose);
+    await pump(tester, mode);
+    final before = colourOf(tester, _GlobalCard);
+
+    mode.value = AppMode.dark;
+    await tester.pumpAndSettle();
+    expect(colourOf(tester, _GlobalCard), before, reason: 'stale, as above');
+
+    rebuildEverything(tester.element(find.byType(MaterialApp)));
+    await tester.pump();
+    expect(colourOf(tester, _GlobalCard), AppColors.surface);
+    expect(colourOf(tester, _GlobalCard), isNot(before));
   });
 }
 

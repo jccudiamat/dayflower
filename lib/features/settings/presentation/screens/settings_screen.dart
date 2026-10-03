@@ -240,7 +240,7 @@ class SettingsScreen extends ConsumerWidget {
             // ── Appearance ───────────────────────────
             Text('APPEARANCE', style: AppText.label()),
             const SizedBox(height: AppSpace.xs),
-            SettingsCard(children: [_AppearanceRow()]),
+            SettingsCard(children: [AppearanceRows()]),
             const SizedBox(height: AppSpace.md),
 
             // ── Notifications and widgets ────────
@@ -1064,32 +1064,99 @@ class _AvatarAction extends StatelessWidget {
 
 /* ── Appearance ───────────────────────────────────── */
 
-/// Dark mode, as one switch.
+/// System, Light or Dark: one of three, System first and the default.
 ///
-/// 🔴 **This was two cards with a sunflower and a jasmine on them.** The
-/// idea was that the artwork says what the setting does better than the words
-/// "Dark mode" do. In practice it was two large tap targets, neither obviously
-/// selected at a glance, for a choice with exactly two states and an obvious
-/// default — and it sat in a row of plain switches that all behaved the other
-/// way. A switch is what the rest of this screen uses and what the setting
-/// actually is.
+/// 🔴 **This was a Dark mode switch**, and before that two cards with a
+/// sunflower and a jasmine on them. A switch had no way to say "do what my
+/// phone does", which is what most people want and what the user asked
+/// for. Three choices drawn like the widget options (one outlined circle),
+/// not a segmented control: each one needs its line of explanation.
 ///
-/// ⚠️ The palette is global, so flipping this repaints the whole app from
-/// the root. See the key on MaterialApp in app.dart, and the test that pins
-/// why it is needed.
-class _AppearanceRow extends ConsumerWidget {
-  const _AppearanceRow();
+/// ⚠️ The palette is global, so a choice that changes it repaints the whole
+/// app from the root. See the key on MaterialApp in app.dart, and the test
+/// that pins why it is needed.
+class AppearanceRows extends ConsumerWidget {
+  const AppearanceRows({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final mode = ref.watch(themeModeProvider);
-    return SettingsSwitchRow(
-      title: 'Dark mode',
-      subtitle: 'Kinder at night. Only on this phone.',
-      value: mode == AppMode.dark,
-      onChanged: (on) => ref
-          .read(themeModeProvider.notifier)
-          .use(on ? AppMode.dark : AppMode.light),
+    final chosen = ref.watch(appearanceProvider);
+    return Column(children: [
+      for (final choice in Appearance.values) ...[
+        if (choice != Appearance.values.first) SettingsLine(),
+        _AppearanceChoice(
+          choice: choice,
+          selected: choice == chosen,
+          onTap: () => ref.read(appearanceProvider.notifier).use(choice),
+        ),
+      ],
+    ]);
+  }
+}
+
+class _AppearanceChoice extends StatelessWidget {
+  const _AppearanceChoice({
+    required this.choice,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Appearance choice;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      key: ValueKey('appearance-${choice.name}'),
+      button: true,
+      selected: selected,
+      inMutuallyExclusiveGroup: true,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpace.sm,
+              vertical: 14,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        choice.title,
+                        style: AppText.body(AppColors.ink)
+                            .copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(choice.line, style: AppText.caption()),
+                    ],
+                  ),
+                ),
+                // Selection reads as an outline, per design.md, as on the
+                // widget options.
+                AnimatedContainer(
+                  duration: AppMotion.micro,
+                  width: 22,
+                  height: 22,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color:
+                          selected ? AppColors.secondary : AppColors.border,
+                      width: selected ? 6 : 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

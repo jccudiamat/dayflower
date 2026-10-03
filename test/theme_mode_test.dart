@@ -1,8 +1,11 @@
 import 'package:dayflower/core/theme/app_colors.dart';
 import 'package:dayflower/core/theme/theme_mode_prefs.dart';
+import 'package:dayflower/features/settings/presentation/screens/settings_screen.dart';
 import 'package:dayflower/features/tulip/domain/flower_catalog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Dark mode is one global palette swapped under ~950 call sites, which is
 /// the cheap way to do it and the easy way to get quietly wrong: nothing
@@ -151,16 +154,123 @@ void main() {
 
   group('what was saved', () {
     test('a stored name comes back', () {
-      expect(ThemeModePrefs.decode('dark'), AppMode.dark);
-      expect(ThemeModePrefs.decode('light'), AppMode.light);
+      expect(ThemeModePrefs.decode('system'), Appearance.system);
+      expect(ThemeModePrefs.decode('dark'), Appearance.dark);
+      expect(ThemeModePrefs.decode('light'), Appearance.light);
     });
 
-    test('a value this build has never heard of reads as light', () {
-      // Lets a newer build add a third palette without a downgrade landing
-      // on a crash. Nothing saved yet lands here too.
-      expect(ThemeModePrefs.decode('sepia'), AppMode.light);
-      expect(ThemeModePrefs.decode(null), AppMode.light);
-      expect(ThemeModePrefs.decode(''), AppMode.light);
+    test('what the old Dark mode switch saved still means the same', () {
+      // Same key, same two names: somebody who turned dark mode on before
+      // there were three choices must not be moved to System by an update.
+      expect(ThemeModePrefs.decode(AppMode.dark.name), Appearance.dark);
+      expect(ThemeModePrefs.decode(AppMode.light.name), Appearance.light);
+    });
+
+    test('nothing saved, or a value this build has never heard of, is System',
+        () {
+      // System is the default. And a newer build that adds a choice must
+      // not land a downgrade on a crash.
+      expect(ThemeModePrefs.decode(null), Appearance.system);
+      expect(ThemeModePrefs.decode(''), Appearance.system);
+      expect(ThemeModePrefs.decode('sepia'), Appearance.system);
+    });
+  });
+
+  group('System, Light, Dark', () {
+    test('System is first, and the default', () {
+      expect(Appearance.values.first, Appearance.system);
+      expect(ThemeModePrefs.startingChoice, Appearance.system);
+    });
+
+    test('System follows the phone; Light and Dark do not', () {
+      for (final phone in Brightness.values) {
+        expect(Appearance.light.resolve(phone), AppMode.light);
+        expect(Appearance.dark.resolve(phone), AppMode.dark);
+      }
+      expect(Appearance.system.resolve(Brightness.light), AppMode.light);
+      expect(Appearance.system.resolve(Brightness.dark), AppMode.dark);
+    });
+
+    test('the palette moves when the phone does, only on System', () async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final phone = container.read(phoneBrightnessProvider.notifier);
+
+      phone.state = Brightness.light;
+      expect(container.read(themeModeProvider), AppMode.light);
+      // Sunset, on a phone set to go dark on a schedule.
+      phone.state = Brightness.dark;
+      expect(container.read(themeModeProvider), AppMode.dark);
+
+      await container.read(appearanceProvider.notifier).use(Appearance.light);
+      expect(container.read(themeModeProvider), AppMode.light,
+          reason: 'Light means light, whatever the phone says');
+
+      await container.read(appearanceProvider.notifier).use(Appearance.dark);
+      phone.state = Brightness.light;
+      expect(container.read(themeModeProvider), AppMode.dark);
+    });
+
+    test('a choice is kept for the next launch', () async {
+      SharedPreferences.setMockInitialValues({});
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await container.read(appearanceProvider.notifier).use(Appearance.dark);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('theme_mode'), 'dark');
+      await ThemeModePrefs.restore();
+      expect(ThemeModePrefs.startingChoice, Appearance.dark);
+      expect(AppColors.isDark, isTrue,
+          reason: 'restored before the first frame, so no white flash');
+      ThemeModePrefs.startingChoice = Appearance.system;
+    });
+
+    testWidgets('Settings shows the three, System chosen until another is',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      late WidgetRef seen;
+      await tester.pumpWidget(ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: Consumer(builder: (_, ref, __) {
+              seen = ref;
+              return const AppearanceRows();
+            }),
+          ),
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      bool chosen(Appearance choice) => tester
+          .widget<Semantics>(find.byKey(ValueKey('appearance-${choice.name}')))
+          .properties
+          .selected!;
+
+      for (final choice in Appearance.values) {
+        expect(find.text(choice.title), findsOneWidget);
+        expect(find.text(choice.line), findsOneWidget);
+      }
+      expect(find.text('System'), findsOneWidget);
+      expect(find.text('Matches your phone (default)'), findsOneWidget);
+      expect(chosen(Appearance.system), isTrue);
+      expect(chosen(Appearance.dark), isFalse);
+      for (final choice in Appearance.values) {
+        for (final line in [choice.title, choice.line]) {
+          expect(line.contains('—'), isFalse, reason: 'no em dash: $line');
+        }
+      }
+
+      await tester.tap(find.text('Dark'));
+      await tester.pumpAndSettle();
+      expect(chosen(Appearance.dark), isTrue);
+      expect(chosen(Appearance.system), isFalse);
+      expect(seen.read(themeModeProvider), AppMode.dark);
+
+      await tester.tap(find.text('Light'));
+      await tester.pumpAndSettle();
+      expect(chosen(Appearance.light), isTrue);
+      expect(seen.read(themeModeProvider), AppMode.light);
     });
   });
 }

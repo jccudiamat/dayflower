@@ -15,6 +15,7 @@ import 'features/heartbeat/data/incoming_heartbeats.dart';
 import 'features/heartbeat/data/pulse_alert_prefs.dart';
 import 'core/theme/app_colors.dart';
 import 'core/theme/app_theme.dart';
+import 'core/theme/palette_refresh.dart';
 import 'core/widgets/app_snack_bars.dart';
 import 'core/theme/theme_mode_prefs.dart';
 import 'core/providers/supabase_provider.dart';
@@ -295,6 +296,15 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     }
   }
 
+  /// The phone went light or dark: at sunset on a schedule, or by hand from
+  /// the quick settings. Under Appearance, System, the app goes with it now
+  /// rather than at the next launch.
+  @override
+  void didChangePlatformBrightness() {
+    ref.read(phoneBrightnessProvider.notifier).state =
+        WidgetsBinding.instance.platformDispatcher.platformBrightness;
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
@@ -545,6 +555,15 @@ class _DayflowerAppState extends ConsumerState<DayflowerApp>
     // Without it the mode changes and half the screen keeps the old one.
     final mode = ref.watch(themeModeProvider);
     AppColors.use(mode);
+    // ⚠️ And what the key does not reach: the page on show, carried across
+    // the rekey by the navigator's GlobalKey. See rebuildEverything.
+    ref.listen<AppMode>(themeModeProvider, (before, now) {
+      if (before == now) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) rebuildEverything(context as Element);
+      });
+      WidgetsBinding.instance.scheduleFrame();
+    });
 
     return MaterialApp.router(
       key: ValueKey(mode),
