@@ -13,13 +13,14 @@
 
 ## Recent app work
 
-### Appearance: System, Light or Dark (2026-10-03, not yet published)
+### Appearance: System, Light or Dark (2026-10-03, build 134)
 
 - **Settings, Appearance is three choices** (the user: "system(default), light mode, darkmode"), drawn like the widget options, one outlined circle: System "Matches your phone (default)", Light "Always light", Dark "Always dark. Kinder at night." Was a single Dark mode switch.
   - `Appearance` (theme_mode_prefs.dart) is the choice; `AppMode` stays the two palettes, so nothing that loops over `AppMode.values` met a palette-less "system". `themeModeProvider` is now the resolved palette: `appearanceProvider` against `phoneBrightnessProvider`, which app.dart keeps current from `didChangePlatformBrightness`. The palette is resolved against the phone before `runApp` too, so no flash on a cold start.
   - Same prefs key, same two old names: whoever turned Dark mode on stays dark, whoever turned it off again stays light. Only a phone that never touched it moves to System. Nothing saved, or a name this build does not know, is System.
 - **Fixed on the way: a switch while the app was open left stale colours on the screen on show.** The MaterialApp rekey does not reach the navigator's pages (GoRouter's GlobalKey carries them across), so their `const` pieces kept the old palette. Seen on the emulator: phone to dark under System, the welcome screen's "Dayflower" stayed dark ink on the dark page. The old switch had the same gap, hidden because it was only flipped on Settings (whose cards read Theme for that reason); following the phone means it can happen on any screen. `rebuildEverything` (palette_refresh.dart) marks every element after a palette change, as hot reload does; theme_repaint_test pins both the bug and the fix. Re-seen on the emulator: light, dark, light again, live, wordmark right each time; a cold start already dark was right before and after.
 - 738 tests pass.
+- **Published as build 134.** Patches 2.4 MB (from 133) to 4.5 MB (130), each checked to rebuild 134 byte for byte. APK 52,203,246 bytes, about 220 KB under the ceiling.
 
 ### Exact location while the app is open; photo pins; events on Us (2026-10-03, build 133)
 
